@@ -3,7 +3,7 @@
 Embroidery-file tools for home machines. Two implementations of the same engine:
 
 - **Website (primary)**: static, no build step, served by GitHub Pages from the repo root
-  (https://4gables.github.io/needleworks/). ES modules in `js/`. Heavy picture digitizing runs in `js/worker.js`.
+  (https://4gables.com/needleworks/). ES modules in `js/`. Heavy picture digitizing runs in `js/worker.js`.
 - **Python (reference + CLI)**: `needleworks/` + `make_bookmark.py`, venv in `.venv` from `requirements.txt`.
   For serving a non-technical user via Claude Code, see `.claude/skills/embroidery/SKILL.md`.
 

@@ -1,6 +1,6 @@
 # Needleworks
 
-Make machine-embroidery files in the browser. **Live: https://4gables.github.io/needleworks/**
+Make machine-embroidery files in the browser. **Live: https://4gables.com/needleworks/**
 
 - **Name bookmark** — type a name, pick a script font and thread, download an in-the-hoop applique
   bookmark (satin border, ribbon hole, flowing script with lead-in and tail swashes).
