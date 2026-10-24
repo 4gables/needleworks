@@ -69,14 +69,15 @@ export function draw(canvas, design, opts = {}) {
   const cxd = (x0 + x1) / 2, cyd = (y0 + y1) / 2;
   const hoop = opts.hoop && opts.showHoop !== false ? opts.hoop : null;
   const spanW = Math.max(x1 - x0, hoop ? hoop.w * 10 : 0), spanH = Math.max(y1 - y0, hoop ? hoop.h * 10 : 0);
-  const pad = 28, fit = Math.min((W - pad * 2) / spanW, (H - pad * 2) / spanH);
+  // leave room at the top for the info chips (they wrap to more rows on a phone)
+  const pad = 24, top = opts.padTop ?? pad, fit = Math.min((W - pad * 2) / spanW, (H - pad - top) / spanH);
   const s = fit * (opts.zoom || 1), pan = opts.pan || [0, 0];
-  const ox = W / 2 - cxd * s + pan[0], oy = H / 2 - cyd * s + pan[1];
+  const ox = W / 2 - cxd * s + pan[0], oy = top + (H - pad - top) / 2 - cyd * s + pan[1];
   const X = (x) => x * s + ox, Y = (y) => y * s + oy;
 
   if (hoop) {   // hoop: wooden ring around the sewable field
     const hw = hoop.w * 10 * s, hh = hoop.h * 10 * s, r = Math.min(hw, hh) * 0.12;
-    const hx = W / 2 - hw / 2 + pan[0] + (cxd * s + ox - W / 2 - pan[0]) * 0, hy = H / 2 - hh / 2 + pan[1];
+    const hx = W / 2 - hw / 2 + pan[0], hy = top + (H - pad - top) / 2 - hh / 2 + pan[1];
     ctx.save();
     ctx.fillStyle = opts.fieldColor || "rgba(255,255,255,0.0)";
     ctx.lineWidth = Math.max(6, 3.2 * s * 10 / 10);

@@ -43,6 +43,7 @@ function paint() {
   draw(canvas, v.pattern, {
     cache: v.cache, fabric: v.fabric, fabricShapeBlock: v.fabricShapeBlock, hide: v.hide, upto: state.upto ?? undefined,
     hoop: hoop(), showHoop: state.showHoop, zoom: state.zoom, pan: state.pan, showNeedle: state.upto != null,
+    padTop: $("facts").offsetHeight + 16,
   });
 }
 new ResizeObserver(() => paint()).observe(canvas);
@@ -51,7 +52,7 @@ function fmtMm(mm) { return `${mm.toFixed(0)} × `; }
 function setView(v) {
   stopPlay();
   state.view = v; state.views[state.mode] = v; state.upto = null; $("progress").value = 1000;
-  if (!v) { $("facts").innerHTML = ""; $("threads").innerHTML = ""; $("download").disabled = true; paint(); return; }
+  if (!v) { $("facts").innerHTML = ""; $("threads").innerHTML = ""; $("download").disabled = true; $("share").disabled = true; paint(); return; }
   v.cache = colorBlocks(v.pattern);
   const st = designStats(v.pattern), h = hoop();
   const fits = st.widthMm <= h.w - 2 * MARGIN && st.heightMm <= h.h - 2 * MARGIN;
@@ -71,7 +72,7 @@ function setView(v) {
       const k = b.color + label; if (seen.has(k)) return ""; seen.add(k);
       return `<li><i style="background:${b.color}"></i><span>${label}<br><small>${b.color}</small></span></li>`;
     }).join("");
-  $("download").disabled = !fits;
+  $("download").disabled = !fits; $("share").disabled = !fits;
   $("download").textContent = fits ? `Download ${v.filename}` : "Too big for this hoop";
   paint();
 }
@@ -131,6 +132,25 @@ $("progress").oninput = (e) => {
 $("show-hoop").checked = state.showHoop;
 $("show-hoop").onchange = (e) => { state.showHoop = e.target.checked; store.set("showHoop", state.showHoop); paint(); };
 
+// iPhone/iPad/Android share sheet: Messages, Mail, AirDrop, Save to Files
+function pesFile(v) { return new File([v.bytes], v.filename, { type: "application/octet-stream" }); }
+function canShareFile() {
+  try { return !!(navigator.canShare && navigator.canShare({ files: [new File([new Uint8Array(1)], "x.pes", { type: "application/octet-stream" })] })); }
+  catch { return false; }
+}
+$("share").hidden = !canShareFile();
+$("share").onclick = async () => {
+  const v = state.view; if (!v) return;
+  const check = validatePES(v.bytes, v.verifyAgainst || null, hoop());
+  if (!check.ok) { showError("Sending stopped: " + check.error); return; }
+  try {
+    await navigator.share({ files: [pesFile(v)], title: v.filename,
+      text: `Embroidery file for a ${hoop().machineName} (${hoop().name}). Copy it to a USB stick to stitch it.` });
+  } catch (err) {
+    if (err && err.name !== "AbortError") showError("Couldn't open the share sheet. Use Download instead.");
+  }
+};
+
 $("download").onclick = () => {
   const v = state.view; if (!v) return;
   // never hand out a file we haven't proven decodes to exactly this design
@@ -161,6 +181,7 @@ const MODES = ["picture", "bookmark", "open"];
 function setMode(mode, push = true) {
   if (!MODES.includes(mode)) mode = "picture";
   state.mode = mode;
+  document.body.dataset.mode = mode;
   for (const m of MODES) { $("tab-" + m).setAttribute("aria-selected", m === mode); $("panel-" + m).hidden = m !== mode; }
   if (push) history.replaceState(null, "", "#" + mode);
   showError("");
@@ -292,11 +313,17 @@ async function loadPicture(file, sample = false) {
     setMode("picture"); makePicture();
   } catch { showError("This picture couldn't be opened. Try saving it as a PNG or JPG."); }
 }
+// OffscreenCanvas where available (iOS 16.4+), a plain canvas otherwise
+function makeCanvas(w, h) {
+  if (typeof OffscreenCanvas !== "undefined") return new OffscreenCanvas(w, h);
+  const c = document.createElement("canvas"); c.width = w; c.height = h; return c;
+}
+
 // bounding box of everything that isn't the border colour (or transparent), so "size" means the design
 function contentBox(bitmap) {
   const S = 256, k = Math.min(1, S / Math.max(bitmap.width, bitmap.height));
   const w = Math.max(1, Math.round(bitmap.width * k)), h = Math.max(1, Math.round(bitmap.height * k));
-  const c = new OffscreenCanvas(w, h), ctx = c.getContext("2d", { willReadFrequently: true });
+  const c = makeCanvas(w, h), ctx = c.getContext("2d", { willReadFrequently: true });
   ctx.drawImage(bitmap, 0, 0, w, h);
   const d = ctx.getImageData(0, 0, w, h).data;
   const border = [];
@@ -319,7 +346,7 @@ function makePicture() {
   const p = state.pic; if (!p.bitmap) return;
   const box = p.bg ? (p.box ||= contentBox(p.bitmap)) : { sx: 0, sy: 0, sw: p.bitmap.width, sh: p.bitmap.height };
   const h = hoop(), sz = workingSize(box.sw, box.sh, p.size, h);
-  const c = new OffscreenCanvas(sz.w, sz.h), ctx = c.getContext("2d", { willReadFrequently: true });
+  const c = makeCanvas(sz.w, sz.h), ctx = c.getContext("2d", { willReadFrequently: true });
   ctx.imageSmoothingQuality = "high";
   ctx.drawImage(p.bitmap, box.sx, box.sy, box.sw, box.sh, 0, 0, sz.w, sz.h);
   const img = ctx.getImageData(0, 0, sz.w, sz.h);

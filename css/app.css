@@ -154,6 +154,10 @@ canvas#view:active { cursor: grabbing; }
   padding: 5px 10px 5px 6px; font-size: 14px; }
 .threads i { width: 22px; height: 22px; border-radius: 6px; border: 1px solid rgba(0,0,0,.12); }
 .threads small { color: var(--muted); }
+.actions { display: flex; gap: 10px; flex-wrap: wrap; }
+.pick { display: none; align-items: center; justify-content: center; font-weight: 700; min-height: 52px; color: var(--accent); }
+.share { font-weight: 700; min-height: 52px; }
+.share:disabled { opacity: .45; }
 .primary { background: var(--accent); color: var(--accent-ink); border: 0; border-radius: 12px; padding: 14px 24px; font-weight: 700;
   font-size: 18px; cursor: pointer; min-height: 52px; box-shadow: 0 6px 18px rgba(179,19,58,.25); }
 .primary:disabled { opacity: .45; cursor: default; box-shadow: none; }
@@ -162,9 +166,24 @@ canvas#view:active { cursor: grabbing; }
 .foot { color: var(--muted); font-size: 14px; padding: 8px max(20px, env(safe-area-inset-left)) 24px; }
 .foot a { color: var(--accent); }
 
+@media (max-width: 600px) {
+  .top { padding-top: 12px; gap: 6px 12px; }
+  .tag { display: none; }
+  .machine label:not(.sr) { display: none; }
+  .machine select { min-height: 38px; padding: 6px 8px; font-size: 15px; }
+  .tabs { width: auto; max-width: none; margin-left: 12px; margin-right: 12px; }
+  .tabs button { flex: 1; padding: 8px 6px; font-size: 15px; white-space: normal; line-height: 1.2; }
+  .work { padding-left: 12px; padding-right: 12px; }
+  .facts { left: 8px; top: 8px; gap: 4px; max-width: calc(100% - 130px); }
+  .facts span { font-size: 11px; padding: 3px 8px; }
+  .zoom { right: 8px; top: 8px; }
+  .zoom button { min-width: 36px; height: 34px; }
+}
 @media (max-width: 860px) {
   .work { grid-template-columns: minmax(0, 1fr); }
   .stage { grid-template-rows: minmax(360px, 62vh) auto auto; order: -1; position: static; height: auto; }
   .logo { font-size: 44px; }
-  .primary { width: 100%; }
+  .actions { width: 100%; }
+  body[data-mode="picture"] #pick-picture, body[data-mode="open"] #pick-design { display: flex; }
+  .actions > * { flex: 1 1 100%; }
 }
