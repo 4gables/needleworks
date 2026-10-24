@@ -83,6 +83,8 @@ function colorBlockCount(st) {
 // pattern: { stitches: [[x, y, cmd]] (0.1mm), threads: [{ color: "#rrggbb", description }] }
 export function writePES(pattern) {
   const st = normalize(pattern);
+  if (!st.some((s) => s[2] === STITCH)) throw new Error("There's nothing to stitch.");
+  if (st.filter((s) => s[2] === COLOR_CHANGE).length > 250) throw new Error("Too many colour changes for a PES file (250 max).");
   const threads = pattern.threads.slice();
   while (threads.length < colorBlockCount(st)) threads.push(threads[threads.length - 1] || { color: "#000000" });
   const w = new Writer();
@@ -244,7 +246,7 @@ function readPES(bytes) {
     r.pos = pecPos;
     readPEC(r, out, chart);
   }
-  return { stitches: out.stitches, threads: out.threads, format: "pes", version };
+  return { stitches: out.stitches, threads: out.threads, format: "pes", version, toggles: out.toggles || [] };
 }
 
 function readThreadChart(r, chart) {
@@ -283,7 +285,7 @@ function readPEC(r, out, chart) {
   for (;;) {
     let v1 = r.u8(), v2 = r.u8();
     if (v2 == null || (v1 === 0xff && v2 === 0x00)) break;
-    if (v1 === 0xfe && v2 === 0xb0) { r.skip(1); out.cmd(COLOR_CHANGE); continue; }
+    if (v1 === 0xfe && v2 === 0xb0) { (out.toggles ||= []).push(r.u8()); out.cmd(COLOR_CHANGE); continue; }
     let jump = false, trim = false, x, y;
     if (v1 & 0x80) {
       if (v1 & 0x20) trim = true;
@@ -377,4 +379,41 @@ export function designStats(d) {
   }
   return { stitches: n, jumps, trims, colorChanges: changes, bounds: b,
     widthMm: (b[2] - b[0]) / 10, heightMm: (b[3] - b[1]) / 10, longestMm: longest / 10 };
+}
+
+// ---------- validation ----------
+// Re-read a PES we're about to hand out and prove it decodes to exactly the stitches we meant.
+// Returns { ok, error, decoded }. `source` (a pattern) is optional; without it the file only has to parse sanely.
+export function validatePES(bytes, source = null, hoop = null) {
+  const fail = (error) => ({ ok: false, error });
+  if (!bytes || bytes.length < 0x200) return fail("The file is too short to be a PES file.");
+  const sig = new TextDecoder("latin1").decode(bytes.slice(0, 8));
+  if (!/^#PES\d{4}$/.test(sig)) return fail("The file doesn't start with a PES signature.");
+  const pecAt = bytes[8] | (bytes[9] << 8) | (bytes[10] << 16) | (bytes[11] << 24);
+  if (pecAt < 12 || pecAt >= bytes.length) return fail("The PES file points to a missing stitch section.");
+  if (new TextDecoder("latin1").decode(bytes.slice(pecAt, pecAt + 3)) !== "LA:") return fail("The stitch section is damaged.");
+  let d;
+  try { d = readEmbroidery(bytes, "check.pes"); } catch (e) { return fail("The file couldn't be read back: " + e.message); }
+  const got = d.stitches.filter((s) => s[2] === STITCH);
+  if (!got.length) return fail("The file has no stitches.");
+  if (d.stitches[d.stitches.length - 1][2] !== END) return fail("The file has no end marker.");
+  const blocks = d.stitches.filter((s) => s[2] === COLOR_CHANGE).length + 1;
+  if (d.toggles.some((t, i) => t !== (i % 2 === 0 ? 2 : 1))) return fail("A colour-change marker in the file is damaged.");
+  if (d.threads.length < blocks) return fail("The file has fewer thread colours than colour changes.");
+  if (source) {
+    // compare needle movements; PEC adds zero-length anchor stitches after jumps, which don't move the needle
+    const moves = (arr) => arr.filter((s, i) => s[2] === STITCH && !(i > 0 && arr[i - 1][0] === s[0] && arr[i - 1][1] === s[1]));
+    const want = moves(normalize(source)), gotMoves = moves(d.stitches);
+    if (want.length !== gotMoves.length) return fail(`Stitch count changed in the file (${gotMoves.length} vs ${want.length}).`);
+    for (let i = 0; i < want.length; i++) {
+      if (want[i][0] !== gotMoves[i][0] || want[i][1] !== gotMoves[i][1]) return fail(`Stitch ${i + 1} moved when written to the file.`);
+    }
+    const wantBlocks = source.stitches.filter((s) => s[2] === COLOR_CHANGE).length + 1;
+    if (wantBlocks !== blocks) return fail("Colour changes were lost when writing the file.");
+  }
+  if (hoop) {
+    const b = bounds(got), w = (b[2] - b[0]) / 10, h = (b[3] - b[1]) / 10;
+    if (w > hoop.w || h > hoop.h) return fail(`The design is ${w.toFixed(0)} × ${h.toFixed(0)} mm, bigger than the ${hoop.name}.`);
+  }
+  return { ok: true, decoded: d };
 }

@@ -1,6 +1,7 @@
 // node tests/formats.test.mjs — JS reader/writer vs pyembroidery oracles
 import { readFileSync, readdirSync, existsSync } from "node:fs";
-import { readEmbroidery, writePES } from "../js/core/formats.js";
+import { readEmbroidery, validatePES, writePES, STITCH, JUMP, TRIM, COLOR_CHANGE, END } from "../js/core/formats.js";
+import { mkdirSync, writeFileSync } from "node:fs";
 
 let fail = 0;
 const ok = (c, m) => { if (!c) { fail++; console.log("FAIL", m); } };
@@ -33,5 +34,70 @@ for (const f of files) {
   ok(colors, `${name}: threads ${d.threads.map((t) => t.color)} vs ${o.threads}`);
   console.log("reader:", name.padEnd(22), !bad && colors ? "match" : "MISMATCH", d.stitches.length);
 }
+// 3. every file the site can hand out must decode to exactly its design
+const outDir = process.env.WRITE_DIR;
+if (outDir) mkdirSync(outDir, { recursive: true });
+for (const f of files) {
+  const name = f.split("/").pop();
+  const raw = new Uint8Array(readFileSync(f));
+  const d = readEmbroidery(raw, name);
+  if (name.endsWith(".pes")) { const o = validatePES(raw); ok(o.ok, `original ${name}: ${o.error}`); }
+  const bytes = writePES(d);
+  const v = validatePES(bytes, d);
+  ok(v.ok, `re-encode ${name}: ${v.error}`);
+  if (outDir) writeFileSync(`${outDir}/${name}.pes`, bytes);
+}
+console.log("re-encode: all samples validate");
+
+// 4. fuzz: random designs with long jumps, over-long stitches and many colours
+let seed = 12345;
+const rnd = () => ((seed = (seed * 1103515245 + 12345) % 2147483648) / 2147483648);
+for (let t = 0; t < 300; t++) {
+  const st = [], threads = [];
+  const colors = 1 + Math.floor(rnd() * 60);
+  let x = 0, y = 0;
+  for (let c = 0; c < colors; c++) {
+    if (c) st.push([0, 0, COLOR_CHANGE]);
+    threads.push({ color: "#" + Math.floor(rnd() * 0xffffff).toString(16).padStart(6, "0"), description: "c" + c });
+    const runs = 1 + Math.floor(rnd() * 4);
+    for (let r = 0; r < runs; r++) {
+      if (r || c) st.push([0, 0, TRIM]);
+      x = (rnd() - 0.5) * 1260; y = (rnd() - 0.5) * 1760;   // anywhere in a 5x7 field (0.1 mm)
+      st.push([x, y, JUMP]);
+      const n = 1 + Math.floor(rnd() * 80);
+      for (let k = 0; k < n; k++) {
+        const L = rnd() < 0.1 ? 150 : 40;                     // some stitches longer than 7 mm
+        x = Math.max(-630, Math.min(630, x + (rnd() - 0.5) * L)); y = Math.max(-880, Math.min(880, y + (rnd() - 0.5) * L));
+        st.push([x, y, STITCH]);
+      }
+    }
+  }
+  st.push([0, 0, END]);
+  const pattern = { stitches: st, threads };
+  const v = validatePES(writePES(pattern), pattern, { w: 130, h: 180, name: "5x7" });
+  ok(v.ok, `fuzz ${t}: ${v.error}`);
+  if (outDir && t < 20) writeFileSync(`${outDir}/fuzz_${t}.pes`, writePES(pattern));
+}
+console.log("fuzz: 300 random designs validate");
+
+// 5. garbage is rejected
+ok(!validatePES(new Uint8Array(4000)).ok, "zeros accepted as PES");
+ok(!validatePES(new TextEncoder().encode("#PES0060" + "x".repeat(5000))).ok, "junk accepted as PES");
+
+// 6. a damaged stitch section is caught (flip bytes inside the PEC stitch data)
+{
+  const src = { stitches: ref.commands, threads: ref.threads };
+  const good = writePES(src);
+  const pec = good[8] | (good[9] << 8) | (good[10] << 16) | (good[11] << 24);
+  let caught = 0;
+  for (let k = 0; k < 50; k++) {
+    const bad = good.slice(), at = pec + 532 + 20 + Math.floor(((k * 7919) % 997) / 997 * 3000);
+    bad[at] ^= 0x05;
+    if (!validatePES(bad, src).ok) caught++;
+  }
+  ok(caught === 50, `corruption caught ${caught}/50`);
+  console.log(`corruption: caught ${caught}/50 damaged files`);
+}
+
 console.log(fail ? `${fail} failures` : "all passed");
 process.exit(fail ? 1 : 0);

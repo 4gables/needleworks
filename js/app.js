@@ -1,5 +1,5 @@
 import { buildBookmark, RED, STEPS } from "./core/bookmark.js";
-import { designStats, readEmbroidery, writePES } from "./core/formats.js";
+import { designStats, readEmbroidery, validatePES, writePES } from "./core/formats.js";
 import { DEFAULT_MACHINE, MACHINES, MARGIN, hoop as getHoop } from "./core/machines.js";
 import { workingSize } from "./core/digitize.js";
 import { nearestBrotherThread } from "./core/threads.js";
@@ -133,6 +133,9 @@ $("show-hoop").onchange = (e) => { state.showHoop = e.target.checked; store.set(
 
 $("download").onclick = () => {
   const v = state.view; if (!v) return;
+  // never hand out a file we haven't proven decodes to exactly this design
+  const check = validatePES(v.bytes, v.verifyAgainst || null, hoop());
+  if (!check.ok) { showError("Download stopped: " + check.error); return; }
   const url = URL.createObjectURL(new Blob([v.bytes], { type: "application/octet-stream" }));
   const a = document.createElement("a"); a.href = url; a.download = v.filename; document.body.append(a); a.click(); a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 2000);
@@ -218,7 +221,7 @@ async function makeBookmark() {
     const d = buildBookmark({ name, family: state.bm.font, color: state.bm.color, hoop: hoop() });
     const pattern = d.pattern();
     if (seq !== bmSeq || state.mode !== "bookmark") { state.views.bookmark = null; return; }
-    setView({ pattern, bytes: writePES(pattern), filename: `${state.bm.name.trim().replace(/[^\p{L}\p{N}_-]+/gu, "_")}_bookmark.pes`,
+    setView({ pattern, verifyAgainst: pattern, bytes: writePES(pattern), filename: `${state.bm.name.trim().replace(/[^\p{L}\p{N}_-]+/gu, "_")}_bookmark.pes`,
       fabricShapeBlock: 0, hide: new Set([0, 1, 3]), fabric: state.bm.fabric, threadLabel: () => `Brother ${nearestBrotherThread(state.bm.color).name} · whole bookmark` });
   } catch (err) { console.error(err); showError(err.message); }
   finally { if (seq === bmSeq) busy(false); }
@@ -236,7 +239,7 @@ worker.onmessage = (e) => {
   state.pic.colorsInfo = r.colors.filter((c) => stitched.has(c.id) || state.pic.skip.includes(c.id));
   paletteUI();
   const base = (state.pic.file?.name || "picture").replace(/\.[^.]+$/, "").replace(/[^\p{L}\p{N}_-]+/gu, "_");
-  const v = { pattern: r.pattern, bytes: r.bytes, filename: `${base}.pes`, fabric: "linen",
+  const v = { pattern: r.pattern, verifyAgainst: r.pattern, bytes: r.bytes, filename: `${base}.pes`, fabric: "linen",
     threadLabel: (b) => `Brother ${nearestBrotherThread(b.color).name}` };
   state.views.picture = v;
   if (state.mode === "picture") setView(v);
@@ -345,7 +348,7 @@ async function openDesign(file) {
       <span>${d.format.toUpperCase()}${pesVersion(d.version)} · ${st.stitches.toLocaleString()} stitches · ${d.threads.length || "no"} thread colours</span>
       ${fits ? `<span class="good">Fits the ${h.machineName} ${h.name}.</span>` : `<span class="warn">Too big for the ${h.name}: it's ${st.widthMm.toFixed(0)} × ${st.heightMm.toFixed(0)} mm.</span>`}
       ${isPes ? "" : `<span>You can download it as a PES file for your machine.</span>`}`;
-    const v = { pattern: d, bytes: out, filename: `${base}.pes`, fabric: "linen",
+    const v = { pattern: d, verifyAgainst: isPes ? null : d, bytes: out, filename: `${base}.pes`, fabric: "linen",
       threadLabel: (b) => (/[a-z]{2}/i.test(b.name || "") ? escapeHtml(b.name) : `Brother ${nearestBrotherThread(b.color).name}${b.name ? " · " + escapeHtml(b.name) : ""}`) };
     state.views.open = v; setMode("open"); setView(v);
   } catch (err) { console.error(err); setMode("open"); showError(err.message || "This file couldn't be read."); }

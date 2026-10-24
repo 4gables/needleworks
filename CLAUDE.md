@@ -30,3 +30,10 @@ Embroidery-file tools for home machines. Two implementations of the same engine:
 - Canvas text and PIL rasterize slightly differently, so JS and Python bookmarks differ by a few stitches; formats are exact.
 - `tests/external/` (gitignored) holds third-party PES/DST samples and Etsy images used for manual testing, with
   pyembroidery read oracles in `tests/external/oracle/`.
+- Every download goes through `validatePES()` (js/core/formats.js): re-reads the bytes and requires the same needle
+  movements as the source design (PEC's zero-length anchor stitches after jumps are ignored), an END marker, enough
+  threads, colour-change toggle bytes alternating 2,1,2… (what Brother writes; real files follow it), and hoop fit.
+  Opened PES files are offered as their original bytes after the same structural checks. Tests: re-encode of all
+  samples, 300 fuzz designs, and 50 byte-flip corruptions must all behave.
+- Hosting: 4gables.com is the `4gables/website` repo's custom domain (a *project* site). Other repos only appear under
+  4gables.com/<repo>/ if the org site repo is named `4gables.github.io` and carries the custom domain.
