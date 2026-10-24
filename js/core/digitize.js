@@ -65,7 +65,19 @@ export function analyze(img, opts = {}) {
   }
   const hasAlpha = opaque.length < n * 0.98;
   const k = Math.max(1, o.colors + (o.removeBackground && !hasAlpha ? 1 : 0));
-  const C = kmeans(lab, opaque, Math.min(k, Math.max(1, opaque.length)));
+  // learn colours from flat pixels only: anti-aliased edges blend two colours and would steal a thread
+  const flat = opaque.filter((i) => {
+    const x = i % w;
+    if (x === 0 || x === w - 1 || i < w || i >= n - w) return true;
+    let m = 0;
+    for (const j of [i - 1, i + 1, i - w, i + w]) {
+      const a = lab[i * 3] - lab[j * 3], b = lab[i * 3 + 1] - lab[j * 3 + 1], e = lab[i * 3 + 2] - lab[j * 3 + 2];
+      m = Math.max(m, a * a + b * b + e * e);
+    }
+    return m < 36;   // ΔE < 6 to every neighbour
+  });
+  const train = flat.length > opaque.length * 0.2 ? flat : opaque;
+  const C = kmeans(lab, train, Math.min(k, Math.max(1, train.length)));
   let labels = new Int16Array(n).fill(-1);
   for (const i of opaque) {
     let best = 0, bd = Infinity;
@@ -74,6 +86,30 @@ export function analyze(img, opts = {}) {
       if (v < bd) { bd = v; best = j; }
     });
     labels[i] = best;
+  }
+  // fold sliver clusters (usually anti-aliased edges) into the nearest real colour
+  {
+    // a fringe cluster is almost all edge: few of its pixels have 4 neighbours of the same colour
+    const cnt = new Array(C.length).fill(0), inner = new Array(C.length).fill(0);
+    for (const i of opaque) {
+      const l = labels[i], x = i % w;
+      cnt[l]++;
+      if (x > 0 && x < w - 1 && i >= w && i < n - w &&
+        labels[i - 1] === l && labels[i + 1] === l && labels[i - w] === l && labels[i + w] === l) inner[l]++;
+    }
+    const tiny = new Set(cnt.map((c, j) => (c < opaque.length * 0.0005 || inner[j] < c * 0.2 ? j : -1)).filter((j) => j >= 0));
+    if (tiny.size && tiny.size < C.length) {
+      const keep = C.map((_, j) => j).filter((j) => !tiny.has(j));
+      for (const i of opaque) {
+        if (!tiny.has(labels[i])) continue;
+        let best = keep[0], bd = Infinity;
+        for (const j of keep) {
+          const a = lab[i * 3] - C[j][0], b = lab[i * 3 + 1] - C[j][1], e = lab[i * 3 + 2] - C[j][2], v = a * a + b * b + e * e;
+          if (v < bd) { bd = v; best = j; }
+        }
+        labels[i] = best;
+      }
+    }
   }
   // majority filter cleans anti-aliased fringes and speckle
   for (let pass = 0; pass < 2; pass++) {

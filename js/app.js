@@ -22,7 +22,7 @@ const FONTS = [
 const THREADS = ["#c8102e", "#e1252f", "#f06292", "#7b2d8e", "#1f3a68", "#2e6b3a", "#c99a2e", "#1a1a1a"];
 
 const state = {
-  mode: "bookmark",
+  mode: "picture",
   machine: store.get("machine", DEFAULT_MACHINE),
   hoopId: store.get("hoop", null),
   view: null,          // { pattern, bytes, filename, fabricShapeBlock, hide, cache }
@@ -154,16 +154,17 @@ $("hoop").onchange = (e) => { state.hoopId = e.target.value; store.set("hoop", s
 function refresh() { if (state.mode === "bookmark") makeBookmark(); else if (state.mode === "picture") makePicture(); else if (state.view) setView(state.view); }
 
 // ---------- tabs ----------
-const MODES = ["bookmark", "picture", "open"];
+const MODES = ["picture", "bookmark", "open"];
 function setMode(mode, push = true) {
-  if (!MODES.includes(mode)) mode = "bookmark";
+  if (!MODES.includes(mode)) mode = "picture";
   state.mode = mode;
   for (const m of MODES) { $("tab-" + m).setAttribute("aria-selected", m === mode); $("panel-" + m).hidden = m !== mode; }
   if (push) history.replaceState(null, "", "#" + mode);
   showError("");
   $("empty").textContent = mode === "picture" ? "Choose a picture to see it as stitches." : mode === "open" ? "Open a PES, PEC or DST file to see it here." : "";
   state.zoom = 1; state.pan = [0, 0];
-  if (mode === "bookmark" && !state.views.bookmark) makeBookmark();
+  if (mode === "picture" && !state.pic.bitmap) loadSample();
+  else if (mode === "bookmark" && !state.views.bookmark) makeBookmark();
   else setView(state.views[mode] || null);
 }
 for (const m of MODES) $("tab-" + m).onclick = () => setMode(m);
@@ -231,7 +232,8 @@ worker.onmessage = (e) => {
   busy(false);
   if (!r.ok) { showError(r.error); return; }
   showError("");
-  state.pic.colorsInfo = r.colors;
+  const stitched = new Set(r.summary.map((c) => c.id));
+  state.pic.colorsInfo = r.colors.filter((c) => stitched.has(c.id) || state.pic.skip.includes(c.id));
   paletteUI();
   const base = (state.pic.file?.name || "picture").replace(/\.[^.]+$/, "").replace(/[^\p{L}\p{N}_-]+/gu, "_");
   const v = { pattern: r.pattern, bytes: r.bytes, filename: `${base}.pes`, fabric: "linen",
@@ -266,13 +268,23 @@ bindRange("pic-size", "size", (v) => `${v} mm · ${(v / 25.4).toFixed(1)} in`);
 bindRange("pic-angle", "angle", (v) => `${v}°`);
 $("pic-bg").onchange = (e) => { state.pic.bg = e.target.checked; state.pic.skip = []; makePicture(); };
 
-async function loadPicture(file) {
+// first visit: show a sample so the page opens on real stitches, not an empty box
+async function loadSample() {
+  try {
+    const blob = await (await fetch("assets/sample-flower.png")).blob();
+    if (state.pic.bitmap) return;
+    await loadPicture(new File([blob], "sample-flower.png", { type: "image/png" }), true);
+  } catch { /* the empty state still explains what to do */ }
+}
+
+async function loadPicture(file, sample = false) {
   if (!file || !file.type.startsWith("image/")) { showError("That doesn't look like a picture. Try a PNG or JPG."); return; }
   try {
     const bitmap = await createImageBitmap(file);
     Object.assign(state.pic, { file, bitmap, box: null, key: state.pic.key + 1, skip: [] });
     const thumb = $("pic-thumb"); thumb.src = URL.createObjectURL(file); thumb.hidden = false;
-    $("pic-drop").querySelector(".drop-text").innerHTML = `<b>${escapeHtml(file.name)}</b> · choose another`;
+    $("pic-drop").querySelector(".drop-text").innerHTML = sample ? "<b>Choose your own picture</b> or drop it here." : `<b>${escapeHtml(file.name)}</b> · choose another`;
+    $("pic-sample-note").hidden = !sample;
     $("pic-settings").hidden = false;
     setMode("picture"); makePicture();
   } catch { showError("This picture couldn't be opened. Try saving it as a PNG or JPG."); }
@@ -365,4 +377,4 @@ document.addEventListener("paste", (e) => {
 // ---------- start ----------
 fillMachines();
 bookmarkUI();
-setMode((location.hash || "#bookmark").slice(1), false);
+setMode((location.hash || "#picture").slice(1), false);

@@ -26,15 +26,15 @@
 </header>
 
 <nav class="tabs" role="tablist" aria-label="What do you want to make?">
-  <button role="tab" id="tab-bookmark" aria-controls="panel-bookmark" aria-selected="true">Name bookmark</button>
-  <button role="tab" id="tab-picture" aria-controls="panel-picture" aria-selected="false">Picture to stitches</button>
+  <button role="tab" id="tab-picture" aria-controls="panel-picture" aria-selected="true">Picture to stitches</button>
+  <button role="tab" id="tab-bookmark" aria-controls="panel-bookmark" aria-selected="false">Name bookmark</button>
   <button role="tab" id="tab-open" aria-controls="panel-open" aria-selected="false">Open a design</button>
 </nav>
 
 <main class="work">
   <section class="controls">
     <!-- name bookmark -->
-    <div class="panel" id="panel-bookmark" role="tabpanel" aria-labelledby="tab-bookmark">
+    <div class="panel" id="panel-bookmark" role="tabpanel" aria-labelledby="tab-bookmark" hidden>
       <h1>A bookmark with any name</h1>
       <p class="lede">An in-the-hoop fabric bookmark with a satin border, a ribbon hole, and the name in flowing script.</p>
       <div class="field">
@@ -63,7 +63,7 @@
     </div>
 
     <!-- picture -->
-    <div class="panel" id="panel-picture" role="tabpanel" aria-labelledby="tab-picture" hidden>
+    <div class="panel" id="panel-picture" role="tabpanel" aria-labelledby="tab-picture">
       <h1>Turn a picture into stitches</h1>
       <p class="lede">Works best with logos, clip art and simple drawings with a few solid colours. Photos won't stitch well.</p>
       <label class="drop" id="pic-drop">
@@ -71,20 +71,21 @@
         <img id="pic-thumb" alt="" hidden>
         <span class="drop-text"><b>Choose a picture</b> or drop it here. You can also paste one.</span>
       </label>
+      <p class="hint" id="pic-sample-note" hidden>Showing a sample flower. Choose your own picture above to stitch it instead.</p>
       <div id="pic-settings" class="settings" hidden>
         <div class="field">
           <label for="pic-colors">Thread colours <output id="pic-colors-out">4</output></label>
-          <input id="pic-colors" type="range" min="1" max="8" value="4">
+          <input id="pic-colors" autocomplete="off" type="range" min="1" max="8" value="4">
         </div>
         <div class="field">
           <label for="pic-size">Size <output id="pic-size-out">100 mm</output></label>
-          <input id="pic-size" type="range" min="20" max="176" value="100">
+          <input id="pic-size" autocomplete="off" type="range" min="20" max="176" value="100">
         </div>
         <div class="field">
           <label for="pic-angle">Fill direction <output id="pic-angle-out">45°</output></label>
-          <input id="pic-angle" type="range" min="0" max="175" step="5" value="45">
+          <input id="pic-angle" autocomplete="off" type="range" min="0" max="175" step="5" value="45">
         </div>
-        <label class="check"><input id="pic-bg" type="checkbox" checked> Leave the background unstitched</label>
+        <label class="check"><input id="pic-bg" autocomplete="off" type="checkbox" checked> Leave the background unstitched</label>
         <fieldset class="field">
           <legend>Threads <span class="hint inline">(tap one to leave it out)</span></legend>
           <div id="pic-palette" class="palette"></div>
@@ -119,7 +120,7 @@
     </div>
     <div class="sew">
       <button type="button" id="play" class="ghost" aria-label="Watch it sew">▶︎ Watch it sew</button>
-      <input id="progress" type="range" min="0" max="1000" value="1000" aria-label="Sewing progress">
+      <input id="progress" autocomplete="off" type="range" min="0" max="1000" value="1000" aria-label="Sewing progress">
       <label class="check small"><input id="show-hoop" type="checkbox" checked> Hoop</label>
     </div>
     <div class="bottom">
