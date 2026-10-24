@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Needleworks</title>
+<meta name="description" content="Make embroidery files for your machine in the browser: name bookmarks, pictures to stitches, and a PES viewer.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='13' fill='none' stroke='%23b3133a' stroke-width='3'/%3E%3Cpath d='M9 20c4-9 10-9 14 0' fill='none' stroke='%23b3133a' stroke-width='2.4' stroke-linecap='round'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=IBM+Plex+Mono:wght@500&family=Sacramento&display=swap">
+<link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+<header class="top">
+  <div class="brand">
+    <span class="logo">Needleworks</span>
+    <span class="tag">Embroidery files, made right here in your browser.</span>
+  </div>
+  <div class="machine">
+    <label for="machine">Machine</label>
+    <select id="machine"></select>
+    <label for="hoop" class="sr">Hoop</label>
+    <select id="hoop"></select>
+  </div>
+</header>
+
+<nav class="tabs" role="tablist" aria-label="What do you want to make?">
+  <button role="tab" id="tab-bookmark" aria-controls="panel-bookmark" aria-selected="true">Name bookmark</button>
+  <button role="tab" id="tab-picture" aria-controls="panel-picture" aria-selected="false">Picture to stitches</button>
+  <button role="tab" id="tab-open" aria-controls="panel-open" aria-selected="false">Open a design</button>
+</nav>
+
+<main class="work">
+  <section class="controls">
+    <!-- name bookmark -->
+    <div class="panel" id="panel-bookmark" role="tabpanel" aria-labelledby="tab-bookmark">
+      <h1>A bookmark with any name</h1>
+      <p class="lede">An in-the-hoop fabric bookmark with a satin border, a ribbon hole, and the name in flowing script.</p>
+      <div class="field">
+        <label for="bm-name">Name</label>
+        <input id="bm-name" type="text" value="Ashley" maxlength="14" autocomplete="off" spellcheck="false">
+        <p class="hint">One word works best. Up to 14 letters.</p>
+      </div>
+      <fieldset class="field">
+        <legend>Lettering</legend>
+        <div id="bm-fonts" class="fonts"></div>
+      </fieldset>
+      <fieldset class="field">
+        <legend>Thread</legend>
+        <div id="bm-colors" class="swatches"></div>
+      </fieldset>
+      <fieldset class="field">
+        <legend>Fabric <span class="hint inline">(preview only)</span></legend>
+        <div id="bm-fabrics" class="chips"></div>
+      </fieldset>
+      <details class="steps" open>
+        <summary>How to stitch it</summary>
+        <p class="hint">Keep the same thread in the whole time. The machine pauses 4 times. Each pause is a fabric step.</p>
+        <ol id="bm-steps"></ol>
+        <p class="hint">Finish: tear away the stabilizer, snip any fuzz, cut out the ribbon hole and loop a ribbon through.</p>
+      </details>
+    </div>
+
+    <!-- picture -->
+    <div class="panel" id="panel-picture" role="tabpanel" aria-labelledby="tab-picture" hidden>
+      <h1>Turn a picture into stitches</h1>
+      <p class="lede">Works best with logos, clip art and simple drawings with a few solid colours. Photos won't stitch well.</p>
+      <label class="drop" id="pic-drop">
+        <input id="pic-file" type="file" accept="image/*" hidden>
+        <img id="pic-thumb" alt="" hidden>
+        <span class="drop-text"><b>Choose a picture</b> or drop it here. You can also paste one.</span>
+      </label>
+      <div id="pic-settings" class="settings" hidden>
+        <div class="field">
+          <label for="pic-colors">Thread colours <output id="pic-colors-out">4</output></label>
+          <input id="pic-colors" type="range" min="1" max="8" value="4">
+        </div>
+        <div class="field">
+          <label for="pic-size">Size <output id="pic-size-out">100 mm</output></label>
+          <input id="pic-size" type="range" min="20" max="176" value="100">
+        </div>
+        <div class="field">
+          <label for="pic-angle">Fill direction <output id="pic-angle-out">45°</output></label>
+          <input id="pic-angle" type="range" min="0" max="175" step="5" value="45">
+        </div>
+        <label class="check"><input id="pic-bg" type="checkbox" checked> Leave the background unstitched</label>
+        <fieldset class="field">
+          <legend>Threads <span class="hint inline">(tap one to leave it out)</span></legend>
+          <div id="pic-palette" class="palette"></div>
+        </fieldset>
+      </div>
+    </div>
+
+    <!-- open -->
+    <div class="panel" id="panel-open" role="tabpanel" aria-labelledby="tab-open" hidden>
+      <h1>See any design before you stitch it</h1>
+      <p class="lede">Open a PES, PEC or DST file to see the stitches, the thread colours and whether it fits your hoop.</p>
+      <label class="drop" id="open-drop">
+        <input id="open-file" type="file" accept=".pes,.pec,.dst,.PES,.PEC,.DST" hidden>
+        <span class="drop-text"><b>Choose a design file</b> or drop it here.</span>
+      </label>
+      <div id="open-info" class="info" hidden></div>
+    </div>
+  </section>
+
+  <section class="stage" aria-label="Preview">
+    <div class="canvas-wrap">
+      <canvas id="view" aria-label="Stitch preview"></canvas>
+      <div class="facts" id="facts" aria-live="polite"></div>
+      <div class="zoom">
+        <button type="button" id="zoom-out" aria-label="Zoom out">−</button>
+        <button type="button" id="zoom-fit">Fit</button>
+        <button type="button" id="zoom-in" aria-label="Zoom in">+</button>
+      </div>
+      <div class="busy" id="busy" hidden><span class="spinner"></span><span id="busy-text">Stitching…</span></div>
+      <div class="empty" id="empty" hidden></div>
+      <div class="error" id="error" role="alert" hidden></div>
+    </div>
+    <div class="sew">
+      <button type="button" id="play" class="ghost" aria-label="Watch it sew">▶︎ Watch it sew</button>
+      <input id="progress" type="range" min="0" max="1000" value="1000" aria-label="Sewing progress">
+      <label class="check small"><input id="show-hoop" type="checkbox" checked> Hoop</label>
+    </div>
+    <div class="bottom">
+      <ul class="threads" id="threads" aria-label="Threads"></ul>
+      <button type="button" id="download" class="primary" disabled>Download PES</button>
+    </div>
+  </section>
+</main>
+
+<footer class="foot">
+  <p>Everything runs in your browser. Your pictures and files never leave your computer. <a href="https://github.com/4gables/needleworks">Source on GitHub</a></p>
+</footer>
+<script type="module" src="js/app.js"></script>
+</body>
+</html>

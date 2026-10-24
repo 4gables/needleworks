@@ -1,0 +1,6 @@
+.venv/
+out/
+dist/
+__pycache__/
+.DS_Store
+tests/external/
