@@ -28,7 +28,7 @@ const state = {
   view: null,          // { pattern, bytes, filename, fabricShapeBlock, hide, cache }
   views: {},           // last view per mode
   zoom: 1, pan: [0, 0], upto: null, showHoop: store.get("showHoop", true),
-  bm: { name: store.get("bm.name", "Ashley"), font: store.get("bm.font", FONTS[0].family), color: store.get("bm.color", RED), fabric: store.get("bm.fabric", "pink") },
+  bm: { name: store.get("bm.name", "ashley"), font: store.get("bm.font", FONTS[0].family), color: store.get("bm.color", RED), fabric: store.get("bm.fabric", "pink") },
   pic: { file: null, bitmap: null, key: 0, skip: [], colors: 4, size: 100, angle: 45, bg: true, req: 0, colorsInfo: [] },
 };
 if (!MACHINES[state.machine]) state.machine = DEFAULT_MACHINE;
@@ -180,7 +180,7 @@ let bmTimer = 0, bmSeq = 0;
 function bookmarkUI() {
   $("bm-name").value = state.bm.name;
   $("bm-fonts").innerHTML = FONTS.map((f) => `<button type="button" data-f="${f.family}" aria-pressed="${f.family === state.bm.font}">
-    <span class="sample" style="font-family:'${f.family}'">${escapeHtml(state.bm.name || "Ashley")}</span>
+    <span class="sample" style="font-family:'${f.family}'">${escapeHtml(stitchedName() || "ashley")}</span>
     <span class="fname">${f.name}${f.note ? " · " + f.note : ""}</span></button>`).join("");
   const custom = !THREADS.includes(state.bm.color);
   $("bm-colors").innerHTML = THREADS.map((c) => `<button type="button" data-c="${c}" style="background:${c}" aria-pressed="${c === state.bm.color}" aria-label="Brother ${nearestBrotherThread(c).name}" title="Brother ${nearestBrotherThread(c).name}"></button>`).join("")
@@ -189,10 +189,12 @@ function bookmarkUI() {
   $("bm-fabrics").innerHTML = Object.entries(FABRICS).map(([k, f]) => `<button type="button" data-fab="${k}" aria-pressed="${k === state.bm.fabric}"><i style="background:${f.solid || `repeating-conic-gradient(${f.cross} 0 25%, ${f.base} 0 50%) 0 0/8px 8px`}"></i>${f.label}</button>`).join("");
   $("bm-steps").innerHTML = STEPS.map((s) => `<li><b>${s.title}</b><span>${s.you || s.machine}</span></li>`).join("");
 }
+// stitched exactly as typed
+const stitchedName = () => state.bm.name.trim();
 function escapeHtml(s) { return s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]); }
 $("bm-name").addEventListener("input", (e) => {
   state.bm.name = e.target.value; store.set("bm.name", state.bm.name);
-  document.querySelectorAll("#bm-fonts .sample").forEach((s) => (s.textContent = state.bm.name || "Ashley"));
+  document.querySelectorAll("#bm-fonts .sample").forEach((s) => (s.textContent = stitchedName() || "ashley"));
   clearTimeout(bmTimer); bmTimer = setTimeout(makeBookmark, 350);
 });
 $("bm-fonts").onclick = (e) => { const b = e.target.closest("button"); if (!b) return; state.bm.font = b.dataset.f; store.set("bm.font", b.dataset.f); bookmarkUI(); makeBookmark(); };
@@ -204,7 +206,7 @@ $("bm-fabrics").onclick = (e) => {
 };
 
 async function makeBookmark() {
-  const seq = ++bmSeq, name = state.bm.name.trim();
+  const seq = ++bmSeq, name = stitchedName();
   showError("");
   if (!name) { setView(null); $("empty").textContent = "Type a name to see the bookmark."; return; }
   busy(true, "Lettering…");
@@ -215,7 +217,7 @@ async function makeBookmark() {
     const d = buildBookmark({ name, family: state.bm.font, color: state.bm.color, hoop: hoop() });
     const pattern = d.pattern();
     if (seq !== bmSeq || state.mode !== "bookmark") { state.views.bookmark = null; return; }
-    setView({ pattern, bytes: writePES(pattern), filename: `${name.replace(/[^\p{L}\p{N}_-]+/gu, "_")}_bookmark.pes`,
+    setView({ pattern, bytes: writePES(pattern), filename: `${state.bm.name.trim().replace(/[^\p{L}\p{N}_-]+/gu, "_")}_bookmark.pes`,
       fabricShapeBlock: 0, hide: new Set([0, 1, 3]), fabric: state.bm.fabric, threadLabel: () => `Brother ${nearestBrotherThread(state.bm.color).name} · whole bookmark` });
   } catch (err) { console.error(err); showError(err.message); }
   finally { if (seq === bmSeq) busy(false); }
