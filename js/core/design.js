@@ -1,4 +1,4 @@
-// Build a stitch pattern block by block (mm in, 0.1 mm out). Port of needleworks/pes.py Design.
+// Build a stitch pattern block by block (mm in, 0.1 mm out).
 import { COLOR_CHANGE, END, JUMP, STITCH, TRIM, writePES } from "./formats.js";
 import { MARGIN } from "./machines.js";
 

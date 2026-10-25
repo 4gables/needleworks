@@ -4,8 +4,9 @@ Embroidery-file tools for home machines. Two implementations of the same engine:
 
 - **Website (primary)**: static, no build step, served by GitHub Pages from the repo root
   (https://4gables.com/needleworks/). ES modules in `js/`. Heavy picture digitizing runs in `js/worker.js`.
-- **Python (reference + CLI)**: `needleworks/` + `make_bookmark.py`, venv in `.venv` from `requirements.txt`.
-  For serving a non-technical user via Claude Code, see `.claude/skills/embroidery/SKILL.md`.
+- JavaScript is the only engine (the Python tools were removed). Python remains only for test tooling:
+  `tests/pe900_check.py` (pyembroidery oracle) and `tests/batch_server.py`, venv in `.venv` from `requirements.txt`.
+  For serving a non-technical user via Claude Code, see `.claude/skills/embroidery/SKILL.md` (it points at the site).
 
 ## Engine notes (both implementations)
 - Units: mm while designing; stitch data is pyembroidery's 0.1 mm, y down. Commands: STITCH 0, JUMP 1, TRIM 2, END 4, COLOR_CHANGE 5.
@@ -19,7 +20,7 @@ Embroidery-file tools for home machines. Two implementations of the same engine:
 - `satin()`: stations spaced by the outer edge so curves don't gap; short stitches on a crowded inner edge.
 - Bookmark: 5 colour blocks of one thread = 4 machine pauses for the in-the-hoop fabric steps. Name is centred on the
   letters' band (swashes excluded) and lengthwise with equal room below the eyelet and above the border.
-- Machines/hoops: `js/core/machines.js` and `needleworks/machines.py` (keep in sync). Designs are checked to fit
+- Machines/hoops: `js/core/machines.js`. Designs are checked to fit
   the hoop field minus a 2 mm margin. Brother PE900 5x7 = 130 x 180 mm, auto-trims jumps.
 
 ## Gotchas
@@ -45,11 +46,10 @@ Embroidery-file tools for home machines. Two implementations of the same engine:
   the machine itself maps to, so a dusty pink can legitimately show as "Gray".
 - The fonts after Meow Script are free (OFL/Apache) lookalikes of popular embroiderydesigns.com samples; the
   sample is named in the font's `note`. The store's own PES letters aren't used (paid, 1–2 letters per sample).
-  `scripts/match_fonts.py "<word>" <dir> out.png [--stitched]` renders candidates for picking more; reject fonts
-  whose stitched skeleton leaves letters unjoined or spurs (Petit Formal, Comforter, Damion did).
+  To try more, add an `@font-face` and look at `tests/browser/fonts.html?name=<word>` (every font, stitched);
+  reject fonts whose stitched letters come out unjoined or with spurs (Petit Formal, Comforter, Damion did).
 - Script fonts render via CSS `@font-face` families named `NW <Font>` (local TTFs in `fonts/`, OFL); the
   lettering engine needs `document.fonts.load()` before drawing.
-- Canvas text and PIL rasterize slightly differently, so JS and Python bookmarks differ by a few stitches; formats are exact.
 - `tests/external/` (gitignored) holds third-party PES/DST samples and Etsy images used for manual testing, with
   pyembroidery read oracles in `tests/external/oracle/`.
 - Every download goes through `validatePES()` (js/core/formats.js): re-reads the bytes and requires the same needle

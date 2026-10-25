@@ -1,4 +1,4 @@
-// In-the-hoop applique bookmark with a script name. Port of needleworks/bookmark.py.
+// In-the-hoop applique bookmark with a script name.
 // Five colour blocks, one thread: each block change is a machine pause for a fabric step.
 import { circle, filletPolygon, run, satin, zigzag } from "./geom.js";
 import { Design } from "./design.js";

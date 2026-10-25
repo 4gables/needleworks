@@ -1,4 +1,4 @@
-// Polyline helpers and stitch generators (mm). Port of needleworks/geom.py.
+// Polyline helpers and stitch generators (mm).
 // A path is an array of [x, y].
 
 export function arclen(p) {

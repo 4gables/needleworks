@@ -7,7 +7,8 @@ import { buildBookmark } from "../../js/core/bookmark.js";
 import { hoop } from "../../js/core/machines.js";
 import { designStats } from "../../js/core/formats.js";
 import { draw, colorBlocks } from "../../js/render.js";
-const fams = ["NW Sacramento","NW Allura","NW Parisienne","NW Corinthia","NW Ephesis","NW Meow Script"];
+const fams = [...document.styleSheets].flatMap((s) => { try { return [...s.cssRules]; } catch { return []; } })
+  .filter((r) => r.type === 5).map((r) => r.style.getPropertyValue("font-family").replace(/"/g, "")).filter((f) => f.startsWith("NW "));
 const name = new URLSearchParams(location.search).get("name") || "Josephine";
 for (const f of fams) {
   await document.fonts.load(`40px "${f}"`);

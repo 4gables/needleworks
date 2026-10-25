@@ -1,5 +1,5 @@
 // Embroidery file formats: write PES (v6, truncated: header + PEC) and read PES / PEC / DST.
-// Ported from pyembroidery so files match what the Python tools write, byte for byte.
+// Ported from pyembroidery so files match what it writes, byte for byte.
 // Units are pyembroidery's: 0.1 mm, y down.
 import { PEC_THREADS, PEC_BLANK_ICON, hexToRgb, nearestIndex, pecThread, pyRound, rgbToHex } from "./threads.js";
 

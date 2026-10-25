@@ -1,5 +1,5 @@
 // Binary-image tools: thinning, distance transform, labelling, and skeleton -> stroke graph.
-// A mask is { w, h, data: Uint8Array } with 1 = ink. Port of needleworks/text.py's graph code.
+// A mask is { w, h, data: Uint8Array } with 1 = ink.
 import { smooth } from "./geom.js";
 
 export function makeMask(w, h) { return { w, h, data: new Uint8Array(w * h) }; }

@@ -6,7 +6,7 @@ import { mkdirSync, writeFileSync } from "node:fs";
 let fail = 0;
 const ok = (c, m) => { if (!c) { fail++; console.log("FAIL", m); } };
 
-// 1. writer: same commands as the Python Design -> identical bytes
+// 1. writer: same commands as the original (pyembroidery-written) fixture -> identical bytes
 const ref = JSON.parse(readFileSync("tests/fixtures/ashley_v3_commands.json"));
 const pyBytes = readFileSync("tests/fixtures/ashley_v3.pes");
 const js = writePES({ stitches: ref.commands, threads: ref.threads.map((t) => ({ color: t.color, description: t.description, brand: "" })) });

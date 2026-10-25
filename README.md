@@ -15,8 +15,8 @@ Everything runs locally in the browser: no uploads, no build step, no server.
 ## Machines
 
 Currently built for the **Brother PE900** with the **5" × 7" (130 × 180 mm)** hoop. Machines and hoops
-live in `js/core/machines.js` (and `needleworks/machines.py` for the Python tools); adding one there
-adds it to the site's picker, the hoop-fit checks and the preview.
+live in `js/core/machines.js`; adding one there adds it to the site's picker, the hoop-fit checks and the
+preview.
 
 ## Accuracy
 
@@ -27,7 +27,8 @@ and checked against it:
 node tests/formats.test.mjs
 ```
 
-- the JS writer produces a **byte-identical** PES to the Python tools for the same stitches
+- the JS writer produces a **byte-identical** PES to pyembroidery for the same stitches
+- `tests/pe900_check.py` independently re-checks PES files for the PE900 (needs `pip install -r requirements.txt`)
 - the JS reader decodes sample files (PES v1, v6, v10, DST) exactly as pyembroidery does
 
 ## Layout
@@ -37,7 +38,6 @@ node tests/formats.test.mjs
 | `index.html`, `css/`, `js/app.js` | the website |
 | `js/core/` | stitch engine: formats, geometry, thinning, lettering, bookmark, picture digitizer |
 | `js/render.js` | draws stitches like real thread from the stitch data |
-| `needleworks/`, `make_bookmark.py` | the original Python tools (CLI, reference implementation) |
 | `tests/` | format tests and fixtures (`tests/external/` holds third-party samples, not committed) |
 
 Run locally: `python3 -m http.server` in the repo, then open http://localhost:8000.

@@ -1,4 +1,4 @@
-// Script text -> centerline strokes. Port of needleworks/text.py.
+// Script text -> centerline strokes.
 // The word is drawn on a canvas, swashes and bridges between unjoined letters are added tangent to
 // real stroke ends, then the ink is thinned to a graph of strokes.
 import { cubic, resample } from "./geom.js";

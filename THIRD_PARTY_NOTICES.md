@@ -4,7 +4,7 @@
 
 `js/core/formats.js` and `js/core/threads.js` are JavaScript ports of parts of
 [pyembroidery](https://github.com/EmbroidePy/pyembroidery) (PES/PEC writer and readers, DST reader,
-Brother PEC thread palette). The Python tools use pyembroidery directly.
+Brother PEC thread palette). The PE900 test (`tests/pe900_check.py`) uses pyembroidery directly.
 
 ```
 MIT License
