@@ -24,8 +24,8 @@ def outline(L):
     return geom.fillet_polygon(verts, 3.0, seg=10)
 
 
-def text_paths(name, font, box_len, box_h):
-    edges, info = text.strokes(name, font, lead_in=2.4, tail=3.8)
+def text_paths(name, font, box_len, box_h, swash=True):
+    edges, info = text.strokes(name, font, **(dict(lead_in=2.4, tail=3.8) if swash else {}))
     comps = text.order(edges)
     allp = np.vstack([e[2] for e in edges])
     mn, mx = allp.min(0), allp.max(0)
@@ -42,7 +42,7 @@ def text_paths(name, font, box_len, box_h):
     return [[(xf(p), mode) for p, mode in comp] for comp in comps]
 
 
-def build(name, font, color=RED, hoop=None):
+def build(name, font, color=RED, hoop=None, swash=True):
     """Returns a finished Design (call .to_bytes() for the machine file)."""
     name = name.strip()
     if not name:
@@ -56,7 +56,7 @@ def build(name, font, color=RED, hoop=None):
     # equal 6 mm breathing room below the eyelet ring and above the inner edge of the border
     top, bottom = eye_c[1] + EYE_R + EYE_W / 2 + 6, L / 2 - BORDER / 2 - 6
     inner_w = W - 2 * BORDER - 6
-    comps = text_paths(name, font, box_len=bottom - top, box_h=inner_w)
+    comps = text_paths(name, font, box_len=bottom - top, box_h=inner_w, swash=swash)
     pts = np.vstack([p for comp in comps for p, _ in comp])
     shift = np.array([0.0, (top + bottom) / 2 - (pts[:, 1].min() + pts[:, 1].max()) / 2])
 

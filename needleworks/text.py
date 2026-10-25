@@ -25,6 +25,21 @@ def _cubic(p0, p1, p2, p3, n=60):
     return [tuple(q) for q in (1 - t) ** 3 * p0 + 3 * (1 - t) ** 2 * t * p1 + 3 * (1 - t) * t ** 2 * p2 + t ** 3 * p3]
 
 
+def _swash(p0, d, length, xh, ybase, s):
+    """Calligraphic swash leaving a stroke end p0 along its own direction d: it sweeps into a shallow
+    cup just under the baseline, then flicks up at the far end. s = -1 runs left (lead-in), +1 right (tail)."""
+    p0, d = np.asarray(p0, float), np.asarray(d, float)
+    cup = np.array([p0[0] + s * 0.45 * length, ybase + 0.15 * xh])
+    tip = np.array([p0[0] + s * length, ybase - 0.4 * xh])
+    r1, r2 = np.linalg.norm(cup - p0), np.linalg.norm(tip - cup)
+    d = d + 0.5 * (cup - p0) / max(r1, 1e-9)  # ease a stroke end that curls away (A's foot) toward the cup
+    d /= max(np.linalg.norm(d), 1e-9)
+    flick = np.array([s * 0.7, -0.7])
+    leg1 = _cubic(p0, p0 + d * min(0.5 * r1, 0.35 * xh), cup - (s * 0.45 * r1, 0), cup)
+    leg2 = _cubic(cup, cup + (s * 0.45 * r2, 0), tip - flick * 0.35 * r2, tip)
+    return leg1 + leg2[1:]
+
+
 def _brush(draw, pts, width):
     """Stamp a round brush along pts; gap-free even for tiny segments, unlike wide ImageDraw.line."""
     p = geom.resample(np.asarray(pts, float), 1.0)
@@ -80,6 +95,16 @@ def render(text, font_path, lead_in=0.0, tail=0.0, join=True):
     adv = [ox + font.getlength(text[:i]) for i in range(len(text) + 1)]
     low = [(p, d) for p, d in ends if baseline - 0.75 * xh <= p[1] <= baseline + 0.2 * xh]
 
+    def bottom(i):
+        """Lowest ink point (above descenders) in letter i's left half, as a stroke centre heading left."""
+        x0, x1 = int(max(adv[i] - 0.4 * xh, 0)), int((adv[i] + adv[i + 1]) / 2)
+        sub = mask[:int(baseline + 0.3 * xh), x0:x1]
+        ys, xs = np.nonzero(sub)
+        if not len(ys):
+            return None
+        k = np.lexsort((xs, -ys))[0]
+        return np.array([x0 + xs[k], ys[k] - stroke / 2]), np.array([-1.0, 0])
+
     def entry(i):
         c = [(p, d) for p, d in low if adv[i] - 0.4 * xh <= p[0] <= (adv[i] + adv[i + 1]) / 2]
         return min(c, key=lambda e: e[0][0]) if c else None
@@ -104,23 +129,17 @@ def render(text, font_path, lead_in=0.0, tail=0.0, join=True):
             _brush(draw, _cubic(ex[0], ex[0] + ex[1] * dist * 0.4, en[0] + en[1] * dist * 0.4, en[0]), sw)
 
     if lead_in:
-        en = entry(0)
+        # first letter's entry stroke; letters without one (E, O) are joined tangentially at their lowest point
+        en = entry(0) or bottom(0)
         p0, d = en if en else (np.array([adv[0], ybase]), np.array([-1.0, 0]))
         span[0] = p0[0]
-        L = lead_in * xh
-        p3 = np.array([p0[0] - L, ybase])
-        d = d + np.array([-1.0, 0])  # lean the entry tangent toward horizontal so the join stays smooth
-        d /= max(np.linalg.norm(d), 1e-9)
-        pts = _cubic(p0, p0 + d * 0.3 * xh, (p0[0] - 0.4 * L, ybase), p3)
-        _brush(draw, [(p3[0] - 0.12 * xh, ybase - 0.12 * xh)] + pts[::-1], sw)
+        _brush(draw, _swash(p0, d, lead_in * xh, xh, ybase, -1), sw)
 
     if tail:
         ex = exit_(len(text) - 1, ends)
         p0, d = ex if ex else (np.array([adv[-1], ybase]), np.array([1.0, 0]))
         span[1] = p0[0]
-        L = tail * xh
-        pts = _cubic(p0, p0 + d * 0.7 * xh, (p0[0] + 0.5 * L, ybase + 0.1 * xh), (p0[0] + L, ybase))
-        _brush(draw, pts, sw)
+        _brush(draw, _swash(p0, d, tail * xh, xh, ybase, 1), sw)
 
     mask = np.array(img) > 127
     return mask, stroke, baseline, xh, span

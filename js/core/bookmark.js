@@ -22,8 +22,8 @@ function outline(L) {
   return filletPolygon([[-h + CHAMFER, t], [h - CHAMFER, t], [h, t + CHAMFER], [h, b], [-h, b], [-h, t + CHAMFER]], 3.0, 10);
 }
 
-function textPaths(name, family, boxLen, boxH) {
-  const { edges, info } = strokes(name, family, { leadIn: 2.4, tail: 3.8 });
+function textPaths(name, family, boxLen, boxH, swash) {
+  const { edges, info } = strokes(name, family, swash ? { leadIn: 2.4, tail: 3.8 } : {});
   const comps = order(edges);
   const all = edges.flatMap((e) => e[2]);
   const mn = [Math.min(...all.map((p) => p[0])), Math.min(...all.map((p) => p[1]))];
@@ -39,14 +39,14 @@ function textPaths(name, family, boxLen, boxH) {
   return comps.map((comp) => comp.map(([p, mode]) => [xf(p), mode]));
 }
 
-export function buildBookmark({ name, family, color = RED, hoop }) {
+export function buildBookmark({ name, family, color = RED, hoop, swash = true }) {
   name = (name || "").trim();
   if (!name) throw new Error("Type a name first.");
   const L = Math.min(MAX_L, hoop.h - 2 * MARGIN - 6);
   if (W + 4 > hoop.w - 2 * MARGIN) throw new Error(`The ${hoop.name} is too narrow for a bookmark.`);
   const edge = outline(L), eye = [0, -L / 2 + 13];
   const top = eye[1] + EYE_R + EYE_W / 2 + 6, bottom = L / 2 - BORDER / 2 - 6, innerW = W - 2 * BORDER - 6;
-  const comps = textPaths(name, family, bottom - top, innerW);
+  const comps = textPaths(name, family, bottom - top, innerW, swash);
   const ys = comps.flatMap((c) => c.flatMap(([p]) => p.map((q) => q[1])));
   const shift = (top + bottom) / 2 - (Math.min(...ys) + Math.max(...ys)) / 2;
 

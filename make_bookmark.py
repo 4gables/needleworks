@@ -1,6 +1,6 @@
 """In-the-hoop applique bookmark with a script name.
 
-usage: .venv/bin/python make_bookmark.py Ashley [--font fonts/Sacramento-Regular.ttf] [--color #c8102e]
+usage: .venv/bin/python make_bookmark.py Ashley [--font fonts/Sacramento-Regular.ttf] [--color #c8102e] [--no-swash]
 """
 import argparse
 import json
@@ -17,9 +17,10 @@ if __name__ == "__main__":
     ap.add_argument("--color", default=bookmark.RED, help="thread colour, e.g. #c8102e")
     ap.add_argument("--machine", default=machines.DEFAULT_MACHINE, choices=list(machines.MACHINES))
     ap.add_argument("--hoop", default=None)
+    ap.add_argument("--no-swash", dest="swash", action="store_false", help="no long lead-in / tail strokes")
     a = ap.parse_args()
     os.makedirs(a.out, exist_ok=True)
-    d = bookmark.build(a.name, a.font, a.color, machines.hoop(a.machine, a.hoop))
+    d = bookmark.build(a.name, a.font, a.color, machines.hoop(a.machine, a.hoop), a.swash)
     base = os.path.join(a.out, f"{a.name}_bookmark")
     with open(base + ".pes", "wb") as f:
         f.write(d.to_bytes())

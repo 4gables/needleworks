@@ -12,6 +12,10 @@ Embroidery-file tools for home machines. Two implementations of the same engine:
 - Lettering: render the word, add swashes tangent to the first letter's entry / last letter's exit stroke, bridge letters
   the font leaves unjoined (e.g. Sacramento A→s), skeletonize, build a stroke graph, prune spurs, then walk it so each
   stroke is a centre-run out and a satin back (no jumps within a connected word).
+- Swashes (lead-in/tail, optional via the "Long swashes" toggle / `--no-swash`): one calligraphic stroke leaving the
+  letter's own stroke end along its tangent, dipping into a shallow cup under the baseline and flicking up at the far
+  end. Letters with no low entry end (E, O) are joined tangentially at their lowest left point. Never let it run flat
+  along the baseline; that reads as a ruled line.
 - `satin()`: stations spaced by the outer edge so curves don't gap; short stitches on a crowded inner edge.
 - Bookmark: 5 colour blocks of one thread = 4 machine pauses for the in-the-hoop fabric steps. Name is centred on the
   letters' band (swashes excluded) and lengthwise with equal room below the eyelet and above the border.
@@ -25,6 +29,10 @@ Embroidery-file tools for home machines. Two implementations of the same engine:
   at full float precision (rounded fixtures caused a false mismatch once).
 - Thread names come from the 64-colour Brother PEC palette with pyembroidery's red-mean distance; that's what
   the machine itself maps to, so a dusty pink can legitimately show as "Gray".
+- The fonts after Meow Script are free (OFL/Apache) lookalikes of popular embroiderydesigns.com samples; the
+  sample is named in the font's `note`. The store's own PES letters aren't used (paid, 1–2 letters per sample).
+  `scripts/match_fonts.py "<word>" <dir> out.png [--stitched]` renders candidates for picking more; reject fonts
+  whose stitched skeleton leaves letters unjoined or spurs (Petit Formal, Comforter, Damion did).
 - Script fonts render via CSS `@font-face` families named `NW <Font>` (local TTFs in `fonts/`, OFL); the
   lettering engine needs `document.fonts.load()` before drawing.
 - Canvas text and PIL rasterize slightly differently, so JS and Python bookmarks differ by a few stitches; formats are exact.

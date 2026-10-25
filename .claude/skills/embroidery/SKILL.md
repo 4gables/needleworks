@@ -18,7 +18,9 @@ technical questions. Do the setup yourself.
 ## Making a name bookmark (the common case)
 1. Look at any inspiration image she gives you: note the lettering style (script? print? thin? bold?),
    thread color, and whether the name has long lead-in/tail lines.
-2. Pick the closest font. Sacramento (`fonts/Sacramento-Regular.ttf`) matches thin monoline scripts.
+2. Pick the closest font. Sacramento (`fonts/Sacramento-Regular.ttf`) matches thin monoline scripts. Also in `fonts/`:
+   Allura, Parisienne, Corinthia, Ephesis, Meow Script, Great Vibes, Alex Brush, Ms Madi, Satisfy, Cookie,
+   Yellowtail, Rouge Script, Italianno. If the long lead-in/tail strokes look wrong for a name, add `--no-swash`.
    If unsure, render a comparison sheet of 3-4 fonts with Pillow, `open` it, and let her choose by number.
 3. Run: `.venv/bin/python make_bookmark.py "<Name>" --font fonts/<font>.ttf --color "#rrggbb"`
    (one word names work best). Output: `out/<Name>_bookmark.pes` and `out/<Name>_bookmark_preview.png`.

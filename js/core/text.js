@@ -42,6 +42,21 @@ function brush(ctx, pts, width) {
   ctx.fill();
 }
 
+// Calligraphic swash leaving a stroke end p0 along its own direction d: it sweeps into a shallow
+// cup just under the baseline, then flicks up at the far end. s = -1 runs left (lead-in), +1 right (tail).
+function swash(p0, d, length, xh, ybase, s) {
+  const cup = [p0[0] + s * 0.45 * length, ybase + 0.15 * xh], tip = [p0[0] + s * length, ybase - 0.4 * xh];
+  const r1 = Math.max(Math.hypot(cup[0] - p0[0], cup[1] - p0[1]), 1e-9), r2 = Math.hypot(tip[0] - cup[0], tip[1] - cup[1]);
+  // ease a stroke end that curls away (A's foot) toward the cup
+  let e = [d[0] + (0.5 * (cup[0] - p0[0])) / r1, d[1] + (0.5 * (cup[1] - p0[1])) / r1];
+  const L = Math.max(Math.hypot(...e), 1e-9), k = Math.min(0.5 * r1, 0.35 * xh);
+  e = [e[0] / L, e[1] / L];
+  const flick = [s * 0.7, -0.7];
+  const leg1 = cubic(p0, [p0[0] + e[0] * k, p0[1] + e[1] * k], [cup[0] - s * 0.45 * r1, cup[1]], cup);
+  const leg2 = cubic(cup, [cup[0] + s * 0.45 * r2, cup[1]], [tip[0] - flick[0] * 0.35 * r2, tip[1] - flick[1] * 0.35 * r2], tip);
+  return [...leg1, ...leg2.slice(1)];
+}
+
 // lengths of lead-in / tail are in x-heights
 export function renderWord(text, family, { leadIn = 0, tail = 0, join = true } = {}) {
   const probe = canvas(10, 10).getContext("2d");
@@ -66,6 +81,13 @@ export function renderWord(text, family, { leadIn = 0, tail = 0, join = true } =
   const { labels } = label(mask);
   const adv = Array.from({ length: text.length + 1 }, (_, i) => ox + probe.measureText(text.slice(0, i)).width);
   const low = ends.filter(([p]) => p[1] >= baseline - 0.75 * xh && p[1] <= baseline + 0.2 * xh);
+  // lowest ink point (above descenders) in letter i's left half, as a stroke centre heading left
+  const bottom = (i) => {
+    const x0 = Math.max(0, Math.floor(adv[i] - 0.4 * xh)), x1 = Math.floor((adv[i] + adv[i + 1]) / 2);
+    for (let y = Math.min(h, Math.floor(baseline + 0.3 * xh)) - 1; y >= 0; y--)
+      for (let x = x0; x < x1; x++) if (mask.data[y * w + x]) return [[x, y - stroke / 2], [-1, 0]];
+    return null;
+  };
   const entry = (i) => {
     const cands = low.filter(([p]) => p[0] >= adv[i] - 0.4 * xh && p[0] <= (adv[i] + adv[i + 1]) / 2);
     return cands.length ? cands.reduce((a, b) => (b[0][0] < a[0][0] ? b : a)) : null;
@@ -95,21 +117,16 @@ export function renderWord(text, family, { leadIn = 0, tail = 0, join = true } =
     }
   }
   if (leadIn) {
-    const en = entry(0);
-    const p0 = en ? en[0] : [adv[0], ybase];
-    let d = en ? [en[1][0] - 1, en[1][1]] : [-1, 0];   // lean toward horizontal so the join stays smooth
-    const L = Math.max(Math.hypot(...d), 1e-9); d = [d[0] / L, d[1] / L];
-    const len = leadIn * xh, p3 = [p0[0] - len, ybase];
-    const pts = cubic(p0, [p0[0] + d[0] * 0.3 * xh, p0[1] + d[1] * 0.3 * xh], [p0[0] - 0.4 * len, ybase], p3);
-    brush(ctx, [[p3[0] - 0.12 * xh, ybase - 0.12 * xh], ...pts.reverse()], sw);
+    // first letter's entry stroke; letters without one (E, O) are joined tangentially at their lowest point
+    const en = entry(0) || bottom(0);
+    const [p0, d] = en || [[adv[0], ybase], [-1, 0]];
+    brush(ctx, swash(p0, d, leadIn * xh, xh, ybase, -1), sw);
     span[0] = p0[0];
   }
   if (tail) {
     const ex = exit(text.length - 1, ends);
-    const p0 = ex ? ex[0] : [adv[text.length], ybase], d = ex ? ex[1] : [1, 0];
-    const len = tail * xh;
-    brush(ctx, cubic(p0, [p0[0] + d[0] * 0.7 * xh, p0[1] + d[1] * 0.7 * xh], [p0[0] + 0.5 * len, ybase + 0.1 * xh],
-      [p0[0] + len, ybase]), sw);
+    const [p0, d] = ex || [[adv[text.length], ybase], [1, 0]];
+    brush(ctx, swash(p0, d, tail * xh, xh, ybase, 1), sw);
     span[1] = p0[0];
   }
   mask = maskOf(ctx, w, h);
