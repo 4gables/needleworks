@@ -13,7 +13,7 @@ Embroidery-file tools for home machines. Two implementations of the same engine:
 - Lettering: render the word, add swashes tangent to the first letter's entry / last letter's exit stroke, bridge letters
   the font leaves unjoined (e.g. Sacramento A→s), skeletonize, build a stroke graph, prune spurs, then walk it so each
   stroke is a centre-run out and a satin back (no jumps within a connected word).
-- Swashes (lead-in/tail, optional via the "Long swashes" toggle / `--no-swash`): one calligraphic stroke leaving the
+- Swashes (lead-in and tail, each with its own on/off checkbox): one calligraphic stroke leaving the
   letter's own stroke end along its tangent, dipping into a shallow cup under the baseline and flicking up at the far
   end. Letters with no low entry end (E, O) are joined tangentially at their lowest left point. Never let it run flat
   along the baseline; that reads as a ruled line.
@@ -31,7 +31,7 @@ Embroidery-file tools for home machines. Two implementations of the same engine:
 - PE900 proof: `tests/pe900_check.py` re-reads PES files with pyembroidery plus its own PEC byte walk (no shared code
   with formats.js) and checks hoop fit, PEC size field, toggle bytes, longest stitch, tiny stitches and needle hits per
   mm² per colour block (limit 24 = densest spot in sold designs; script loops crossing on a tight curve reach 23).
-  `tests/browser/pe900_batch.html` served by `tests/batch_server.py OUT` builds every font × 15 names × swash on/off
+  `tests/browser/pe900_batch.html` served by `tests/batch_server.py OUT` builds every font × 15 names × lead/tail on/off
   and 81 picture settings with the site's own code and saves the PES files for the checker. Run both after any engine
   change. The three files emailed to Ashley are in `tests/external/emailed/`.
 - PEC palette: two colours never share a Brother thread (pyembroidery's rule), so a colour can get its second-closest

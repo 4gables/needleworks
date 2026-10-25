@@ -1,7 +1,7 @@
 <!doctype html><meta charset="utf-8"><title>PE900 batch</title>
 <link rel="stylesheet" href="../../css/app.css">
 <style>body{display:block;padding:12px;font:13px monospace} pre{white-space:pre-wrap}</style>
-<p>Builds every bookmark font × name × swash setting and a set of pictures with the site's own code, then POSTs each
+<p>Builds every bookmark font × name × swash setting (before/after on/off) and a set of pictures with the site's own code, then POSTs each
 PES to <code>/save/&lt;name&gt;</code>. Serve with <code>tests/batch_server.py</code>, then run
 <code>tests/pe900_check.py</code> on the saved files.</p>
 <pre id="log"></pre>
@@ -25,9 +25,9 @@ async function save(name, pattern) {
 const only = new URLSearchParams(location.search).get("only");   // "pic" or "bm" to run half
 for (const f of only === "pic" ? [] : fams) {
   await document.fonts.load(`40px "${f}"`);
-  for (const name of names) for (const swash of [true, false]) {
-    const tag = `bm_${f.slice(3).replace(/ /g, "")}_${name.normalize("NFKD").replace(/[^A-Za-z-]/g, "")}_${swash ? "swash" : "plain"}`;
-    try { await save(tag, buildBookmark({ name, family: f, hoop, swash }).pattern()); }
+  for (const name of names) for (const lead of [true, false]) for (const tail of [true, false]) {
+    const tag = `bm_${f.slice(3).replace(/ /g, "")}_${name.normalize("NFKD").replace(/[^A-Za-z-]/g, "")}_${lead ? "L" : ""}${tail ? "T" : ""}`;
+    try { await save(tag, buildBookmark({ name, family: f, hoop, lead, tail }).pattern()); }
     catch (e) { bad++; log(`ERROR ${tag}: ${e.message}`); }
   }
   log(`${f}: done`);

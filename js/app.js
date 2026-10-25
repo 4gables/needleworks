@@ -36,7 +36,7 @@ const state = {
   view: null,          // { pattern, bytes, filename, fabricShapeBlock, hide, cache }
   views: {},           // last view per mode
   zoom: 1, pan: [0, 0], upto: null, showHoop: store.get("showHoop", true),
-  bm: { name: store.get("bm.name", "ashley"), font: store.get("bm.font", FONTS[0].family), color: store.get("bm.color", RED), fabric: store.get("bm.fabric", "pink"), swash: store.get("bm.swash", true) },
+  bm: { name: store.get("bm.name", "ashley"), font: store.get("bm.font", FONTS[0].family), color: store.get("bm.color", RED), fabric: store.get("bm.fabric", "pink"), lead: store.get("bm.lead", true), tail: store.get("bm.tail", true) },
   pic: { file: null, bitmap: null, key: 0, skip: [], colors: 4, size: 100, angle: 45, bg: true, req: 0, colorsInfo: [] },
 };
 if (!MACHINES[state.machine]) state.machine = DEFAULT_MACHINE;
@@ -222,7 +222,7 @@ document.querySelector(".tabs").addEventListener("keydown", (e) => {
 let bmTimer = 0, bmSeq = 0;
 function bookmarkUI() {
   $("bm-name").value = state.bm.name;
-  $("bm-swash").checked = state.bm.swash;
+  $("bm-lead").checked = state.bm.lead; $("bm-tail").checked = state.bm.tail;
   $("bm-fonts").innerHTML = FONTS.map((f) => `<button type="button" data-f="${f.family}" title="${f.name}${f.note ? " · " + f.note : ""}" aria-pressed="${f.family === state.bm.font}">
     <span class="sample" style="font-family:'${f.family}'">${escapeHtml(stitchedName() || "ashley")}</span>
     <span class="fname">${f.name}${f.note ? " · " + f.note : ""}</span></button>`).join("");
@@ -242,7 +242,7 @@ $("bm-name").addEventListener("input", (e) => {
   clearTimeout(bmTimer); bmTimer = setTimeout(makeBookmark, 350);
 });
 $("bm-fonts").onclick = (e) => { const b = e.target.closest("button"); if (!b) return; state.bm.font = b.dataset.f; store.set("bm.font", b.dataset.f); bookmarkUI(); makeBookmark(); };
-$("bm-swash").onchange = (e) => { state.bm.swash = e.target.checked; store.set("bm.swash", state.bm.swash); makeBookmark(); };
+for (const k of ["lead", "tail"]) $("bm-" + k).onchange = (e) => { state.bm[k] = e.target.checked; store.set("bm." + k, state.bm[k]); makeBookmark(); };
 $("bm-colors").addEventListener("click", (e) => { const b = e.target.closest("button[data-c]"); if (!b) return; state.bm.color = b.dataset.c; store.set("bm.color", b.dataset.c); bookmarkUI(); makeBookmark(); });
 $("bm-colors").addEventListener("change", (e) => { if (e.target.id !== "bm-custom") return; state.bm.color = e.target.value; store.set("bm.color", e.target.value); bookmarkUI(); makeBookmark(); });
 $("bm-fabrics").onclick = (e) => {
@@ -259,7 +259,7 @@ async function makeBookmark() {
     await document.fonts.load(`40px "${state.bm.font}"`);
     await new Promise((r) => setTimeout(r, 0));
     if (seq !== bmSeq) return;
-    const d = buildBookmark({ name, family: state.bm.font, color: state.bm.color, hoop: hoop(), swash: state.bm.swash });
+    const d = buildBookmark({ name, family: state.bm.font, color: state.bm.color, hoop: hoop(), lead: state.bm.lead, tail: state.bm.tail });
     const pattern = d.pattern();
     if (seq !== bmSeq || state.mode !== "bookmark") { state.views.bookmark = null; return; }
     setView({ pattern, verifyAgainst: pattern, bytes: writePES(pattern), filename: `${safeName(state.bm.name, "name")}_bookmark.pes`,

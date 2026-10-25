@@ -16,8 +16,8 @@ browser; nothing to install.
    thread colour, and whether the name has long lead-in/tail lines.
 2. Open the site on **Name bookmark**. Tell her to type the name exactly as she wants it stitched and to
    pick the closest font. Sacramento matches thin monoline scripts; fonts marked "like …" resemble
-   popular embroiderydesigns.com fonts. If the long lines before and after the name look wrong, untick
-   **Long swashes**.
+   popular embroiderydesigns.com fonts. If the long line before or after the name looks wrong, untick
+   **Swash before the name** or **Swash after the name** (either or both).
 3. She picks the thread colour, checks the preview (it can **Watch it sew**), and presses **Download**.
 4. Tell her to copy the downloaded `.pes` file onto a USB stick, not inside a folder.
 5. Give her the stitching steps below, with the name filled in (the site also shows them under
