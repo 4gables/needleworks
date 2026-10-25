@@ -27,6 +27,20 @@ Embroidery-file tools for home machines. Two implementations of the same engine:
   `write_pes(..., {"version": "6t"})`. Coordinates are rounded half-to-even like Python's `round()`;
   `tests/formats.test.mjs` asserts byte-identical output vs `tests/fixtures/ashley_v3.pes`. Regenerate fixtures
   at full float precision (rounded fixtures caused a false mismatch once).
+- PE900 proof: `tests/pe900_check.py` re-reads PES files with pyembroidery plus its own PEC byte walk (no shared code
+  with formats.js) and checks hoop fit, PEC size field, toggle bytes, longest stitch, tiny stitches and needle hits per
+  mm² per colour block (limit 24 = densest spot in sold designs; script loops crossing on a tight curve reach 23).
+  `tests/browser/pe900_batch.html` served by `tests/batch_server.py OUT` builds every font × 15 names × swash on/off
+  and 81 picture settings with the site's own code and saves the PES files for the checker. Run both after any engine
+  change. The three files emailed to Ashley are in `tests/external/emailed/`.
+- PEC palette: two colours never share a Brother thread (pyembroidery's rule), so a colour can get its second-closest
+  thread. Always label threads with `machineThreads()` (or an opened PES's own `pec` bytes), never plain
+  `nearestBrotherThread()`, or the site and the machine's screen name different threads. Our order is block order;
+  pyembroidery's is Python set order, so files with competing colours differ from pyembroidery only in those bytes.
+- Digitize shrinks a picture that lands over the hoop field (fill/satin edges overshoot the image) instead of erroring.
+- Download names are ASCII only (`safeName`): the machine's USB reader may not show accented names.
+- Desktop layout fits the window (min-width 861px): body is 100dvh with no page scroll; only `.controls` may scroll
+  on short screens, and a max-height 900px tier hides ledes/captions. Phones scroll normally.
 - Thread names come from the 64-colour Brother PEC palette with pyembroidery's red-mean distance; that's what
   the machine itself maps to, so a dusty pink can legitimately show as "Gray".
 - The fonts after Meow Script are free (OFL/Apache) lookalikes of popular embroiderydesigns.com samples; the

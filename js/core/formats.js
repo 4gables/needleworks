@@ -1,7 +1,7 @@
 // Embroidery file formats: write PES (v6, truncated: header + PEC) and read PES / PEC / DST.
 // Ported from pyembroidery so files match what the Python tools write, byte for byte.
 // Units are pyembroidery's: 0.1 mm, y down.
-import { PEC_THREADS, PEC_BLANK_ICON, hexToRgb, nearestIndex, pyRound, rgbToHex } from "./threads.js";
+import { PEC_THREADS, PEC_BLANK_ICON, hexToRgb, nearestIndex, pecThread, pyRound, rgbToHex } from "./threads.js";
 
 export const STITCH = 0, JUMP = 1, TRIM = 2, STOP = 3, END = 4, COLOR_CHANGE = 5;
 
@@ -128,6 +128,10 @@ function uniquePalette(threads) {
   return threads.map((t) => nearestIndex(hexToRgb(t.color), chart));
 }
 
+// The Brother thread the machine will show for each colour block: what writePES puts in the PEC palette.
+// Two colours never share a thread there, so the second one to want a thread gets its next-closest.
+export function machineThreads(threads) { return uniquePalette(threads).map(pecThread); }
+
 function writePEC(w, st, threads) {
   const ext = bounds(st);
   w.ascii("LA:" + "Untitled".padEnd(16, " ") + "\r");
@@ -246,7 +250,7 @@ function readPES(bytes) {
     r.pos = pecPos;
     readPEC(r, out, chart);
   }
-  return { stitches: out.stitches, threads: out.threads, format: "pes", version, toggles: out.toggles || [] };
+  return { stitches: out.stitches, threads: out.threads, format: "pes", version, toggles: out.toggles || [], pec: out.pec };
 }
 
 function readThreadChart(r, chart) {
@@ -266,6 +270,7 @@ function readPEC(r, out, chart) {
   r.skip(0xc);
   const changes = r.u8(), count = changes + 1;
   const colorBytes = Array.from(r.b.slice(r.pos, r.pos + count)); r.skip(count);
+  out.pec = colorBytes;   // what the machine itself shows for each block
   const pec = (i) => { const t = PEC_THREADS[i % PEC_THREADS.length]; return t ? { color: rgbToHex([t[1], t[2], t[3]]), name: t[0], brand: "Brother" } : { color: "#000000", name: "Unknown" }; };
   if (!chart.length) colorBytes.forEach((b) => out.threads.push(pec(b)));
   else if (chart.length >= colorBytes.length) chart.forEach((t) => out.threads.push(t));

@@ -1,6 +1,6 @@
 // node tests/formats.test.mjs — JS reader/writer vs pyembroidery oracles
 import { readFileSync, readdirSync, existsSync } from "node:fs";
-import { readEmbroidery, validatePES, writePES, STITCH, JUMP, TRIM, COLOR_CHANGE, END } from "../js/core/formats.js";
+import { machineThreads, readEmbroidery, validatePES, writePES, STITCH, JUMP, TRIM, COLOR_CHANGE, END } from "../js/core/formats.js";
 import { mkdirSync, writeFileSync } from "node:fs";
 
 let fail = 0;
@@ -97,6 +97,22 @@ ok(!validatePES(new TextEncoder().encode("#PES0060" + "x".repeat(5000))).ok, "ju
   }
   ok(caught === 50, `corruption caught ${caught}/50`);
   console.log(`corruption: caught ${caught}/50 damaged files`);
+}
+
+// the thread names the site shows must be the ones the machine reads from the PEC palette
+{
+  let same = 0;
+  for (let k = 0; k < 200; k++) {
+    const n = 1 + (k % 9), threads = Array.from({ length: n }, (_, i) => ({ color: "#" + (((k * 2654435761 + i * 40503) >>> 0) % 0xffffff).toString(16).padStart(6, "0") }));
+    if (k % 3 === 0) threads.push({ ...threads[0] });   // repeated colour, like the bookmark's five blocks
+    const stitches = [];
+    threads.forEach((_, i) => { if (i) stitches.push([0, 0, COLOR_CHANGE]); stitches.push([i * 10, 0, STITCH], [i * 10 + 30, 20, STITCH]); });
+    stitches.push([0, 0, END]);
+    const want = machineThreads(threads).map((t) => t.index), got = readEmbroidery(writePES({ stitches, threads })).pec;
+    if (JSON.stringify(want) === JSON.stringify(got)) same++;
+  }
+  ok(same === 200, `site thread names match the PEC palette ${same}/200`);
+  console.log(`thread names: ${same}/200 match what the machine reads`);
 }
 
 console.log(fail ? `${fail} failures` : "all passed");

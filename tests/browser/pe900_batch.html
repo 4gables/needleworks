@@ -1,0 +1,51 @@
+<!doctype html><meta charset="utf-8"><title>PE900 batch</title>
+<link rel="stylesheet" href="../../css/app.css">
+<style>body{display:block;padding:12px;font:13px monospace} pre{white-space:pre-wrap}</style>
+<p>Builds every bookmark font × name × swash setting and a set of pictures with the site's own code, then POSTs each
+PES to <code>/save/&lt;name&gt;</code>. Serve with <code>tests/batch_server.py</code>, then run
+<code>tests/pe900_check.py</code> on the saved files.</p>
+<pre id="log"></pre>
+<script type="module">
+import { buildBookmark } from "../../js/core/bookmark.js";
+import { hoop as getHoop } from "../../js/core/machines.js";
+import { writePES, validatePES } from "../../js/core/formats.js";
+import { analyze, digitize, workingSize } from "../../js/core/digitize.js";
+
+const hoop = getHoop(), log = (s) => (document.getElementById("log").textContent += s + "\n");
+const fams = [...document.styleSheets].flatMap((s) => { try { return [...s.cssRules]; } catch { return []; } })
+  .filter((r) => r.type === 5).map((r) => r.style.getPropertyValue("font-family").replace(/"/g, "")).filter((f) => f.startsWith("NW "));
+const names = ["ashley", "Ashley", "Emma", "Olivia", "Ann", "bob", "Zoë", "Mia", "Katherine", "Maximiliana", "Jo", "W", "Grace-Lynn", "Quinn", "jayden"];
+let n = 0, bad = 0;
+async function save(name, pattern) {
+  const bytes = writePES(pattern), v = validatePES(bytes, pattern, hoop);
+  if (!v.ok) { bad++; log(`INVALID ${name}: ${v.error}`); }
+  await fetch(`/save/${encodeURIComponent(name)}.pes`, { method: "POST", body: bytes });
+  n++;
+}
+const only = new URLSearchParams(location.search).get("only");   // "pic" or "bm" to run half
+for (const f of only === "pic" ? [] : fams) {
+  await document.fonts.load(`40px "${f}"`);
+  for (const name of names) for (const swash of [true, false]) {
+    const tag = `bm_${f.slice(3).replace(/ /g, "")}_${name.normalize("NFKD").replace(/[^A-Za-z-]/g, "")}_${swash ? "swash" : "plain"}`;
+    try { await save(tag, buildBookmark({ name, family: f, hoop, swash }).pattern()); }
+    catch (e) { bad++; log(`ERROR ${tag}: ${e.message}`); }
+  }
+  log(`${f}: done`);
+}
+const pics = ["../../assets/sample-flower.png", ...Array.from({ length: 8 }, (_, i) => `../external/images/etsy_${i + 1}.jpg`)];
+for (const src of only === "bm" ? [] : pics) {
+  let bmp; try { bmp = await createImageBitmap(await (await fetch(src)).blob()); } catch { log(`skip ${src}`); continue; }
+  for (const colors of [2, 4, 8]) for (const size of [60, 100, 170]) {
+    const sz = workingSize(bmp.width, bmp.height, size, hoop);
+    const c = new OffscreenCanvas(sz.w, sz.h), ctx = c.getContext("2d");
+    ctx.imageSmoothingQuality = "high"; ctx.drawImage(bmp, 0, 0, sz.w, sz.h);
+    const img = ctx.getImageData(0, 0, sz.w, sz.h), opts = { colors, removeBackground: true, fillAngle: 45, skip: [], hoop };
+    const tag = `pic_${src.split("/").pop().split(".")[0]}_c${colors}_s${size}`;
+    try { await save(tag, digitize(img, analyze(img, opts), opts).design.pattern()); }
+    catch (e) { bad++; log(`ERROR ${tag}: ${e.message}`); }
+  }
+  log(`${src}: done`);
+}
+log(`DONE ${n} files, ${bad} problems`);
+document.title = `DONE ${n} ${bad}`;
+</script>

@@ -1,8 +1,8 @@
 import { buildBookmark, RED, STEPS } from "./core/bookmark.js";
-import { designStats, readEmbroidery, validatePES, writePES } from "./core/formats.js";
+import { designStats, machineThreads, readEmbroidery, validatePES, writePES } from "./core/formats.js";
 import { DEFAULT_MACHINE, MACHINES, MARGIN, hoop as getHoop } from "./core/machines.js";
 import { workingSize } from "./core/digitize.js";
-import { nearestBrotherThread } from "./core/threads.js";
+import { nearestBrotherThread, pecThread } from "./core/threads.js";
 import { FABRICS, colorBlocks, draw } from "./render.js";
 
 const $ = (id) => document.getElementById(id);
@@ -73,16 +73,21 @@ function setView(v) {
     `<span>≈ ${minutes} min</span>`,
     fits ? "" : `<span class="bad">Too big for the ${h.name}</span>`,
   ].join("");
-  const seen = new Set();
+  const seen = new Set(), mt = machineThreadList(v);
   $("threads").innerHTML = v.cache.blocks.filter((b) => !(v.hide && v.hide.has(b.index)))
     .map((b) => {
-      const t = nearestBrotherThread(b.color), label = v.threadLabel ? v.threadLabel(b) : `Brother ${t.name}`;
+      const t = mt[b.index] || nearestBrotherThread(b.color), label = v.threadLabel ? v.threadLabel(b, t) : `Brother ${t.name}`;
       const k = b.color + label; if (seen.has(k)) return ""; seen.add(k);
       return `<li><i style="background:${b.color}"></i><span>${label}<br><small>${b.color}</small></span></li>`;
     }).join("");
   $("download").disabled = !fits; $("share").disabled = !fits;
   $("download").textContent = fits ? `Download ${v.filename}` : "Too big for this hoop";
   paint();
+}
+// thread names exactly as the machine will show them: an opened PES's own palette, else what writePES will write
+function machineThreadList(v) {
+  const p = v.pattern;
+  return p.pec && v.bytes === v.source ? p.pec.map(pecThread) : machineThreads(p.threads);
 }
 function showError(msg) { const e = $("error"); e.textContent = msg; e.hidden = !msg; }
 function busy(on, text = "Stitching…") { $("busy").hidden = !on; $("busy-text").textContent = text; }
@@ -141,6 +146,11 @@ $("show-hoop").checked = state.showHoop;
 $("show-hoop").onchange = (e) => { state.showHoop = e.target.checked; store.set("showHoop", state.showHoop); paint(); };
 
 // iPhone/iPad/Android share sheet: Messages, Mail, AirDrop, Save to Files
+// USB file names the machine can show: plain ASCII (José -> Jose), nothing else, never empty
+function safeName(s, fallback) {
+  const t = s.normalize("NFKD").replace(/[\u0300-\u036f]/g, "").replace(/[^A-Za-z0-9_-]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 40);
+  return t || fallback;
+}
 function pesFile(v) { return new File([v.bytes], v.filename, { type: "application/octet-stream" }); }
 function canShareFile() {
   try { return !!(navigator.canShare && navigator.canShare({ files: [new File([new Uint8Array(1)], "x.pes", { type: "application/octet-stream" })] })); }
@@ -213,12 +223,12 @@ let bmTimer = 0, bmSeq = 0;
 function bookmarkUI() {
   $("bm-name").value = state.bm.name;
   $("bm-swash").checked = state.bm.swash;
-  $("bm-fonts").innerHTML = FONTS.map((f) => `<button type="button" data-f="${f.family}" aria-pressed="${f.family === state.bm.font}">
+  $("bm-fonts").innerHTML = FONTS.map((f) => `<button type="button" data-f="${f.family}" title="${f.name}${f.note ? " · " + f.note : ""}" aria-pressed="${f.family === state.bm.font}">
     <span class="sample" style="font-family:'${f.family}'">${escapeHtml(stitchedName() || "ashley")}</span>
     <span class="fname">${f.name}${f.note ? " · " + f.note : ""}</span></button>`).join("");
   const custom = !THREADS.includes(state.bm.color);
   $("bm-colors").innerHTML = THREADS.map((c) => `<button type="button" data-c="${c}" style="background:${c}" aria-pressed="${c === state.bm.color}" aria-label="Brother ${nearestBrotherThread(c).name}" title="Brother ${nearestBrotherThread(c).name}"></button>`).join("")
-    + `<span class="custom" style="width:40px;height:40px;border-radius:50%;display:inline-block;position:relative;box-shadow:0 0 0 ${custom ? "2.5px var(--ink)" : "1.5px var(--line)"}" title="Any colour"><input type="color" id="bm-custom" value="${state.bm.color}" aria-label="Any colour"></span>`
+    + `<span class="custom" style="box-shadow:0 0 0 ${custom ? "2.5px var(--ink)" : "1.5px var(--line)"}" title="Any colour"><input type="color" id="bm-custom" value="${state.bm.color}" aria-label="Any colour"></span>`
     + `<span class="swatch-name">Closest Brother thread: <b>${nearestBrotherThread(state.bm.color).name}</b></span>`;
   $("bm-fabrics").innerHTML = Object.entries(FABRICS).map(([k, f]) => `<button type="button" data-fab="${k}" aria-pressed="${k === state.bm.fabric}"><i style="background:${f.solid || `repeating-conic-gradient(${f.cross} 0 25%, ${f.base} 0 50%) 0 0/8px 8px`}"></i>${f.label}</button>`).join("");
   $("bm-steps").innerHTML = STEPS.map((s) => `<li><b>${s.title}</b><span>${s.you || s.machine}</span></li>`).join("");
@@ -252,7 +262,7 @@ async function makeBookmark() {
     const d = buildBookmark({ name, family: state.bm.font, color: state.bm.color, hoop: hoop(), swash: state.bm.swash });
     const pattern = d.pattern();
     if (seq !== bmSeq || state.mode !== "bookmark") { state.views.bookmark = null; return; }
-    setView({ pattern, verifyAgainst: pattern, bytes: writePES(pattern), filename: `${state.bm.name.trim().replace(/[^\p{L}\p{N}_-]+/gu, "_")}_bookmark.pes`,
+    setView({ pattern, verifyAgainst: pattern, bytes: writePES(pattern), filename: `${safeName(state.bm.name, "name")}_bookmark.pes`,
       fabricShapeBlock: 0, hide: new Set([0, 1, 3]), fabric: state.bm.fabric, threadLabel: () => `Brother ${nearestBrotherThread(state.bm.color).name} · whole bookmark` });
   } catch (err) { console.error(err); showError(err.message); }
   finally { if (seq === bmSeq) busy(false); }
@@ -268,10 +278,12 @@ worker.onmessage = (e) => {
   showError("");
   const stitched = new Set(r.summary.map((c) => c.id));
   state.pic.colorsInfo = r.colors.filter((c) => stitched.has(c.id) || state.pic.skip.includes(c.id));
+  const mt = machineThreads(r.pattern.threads);
+  state.pic.machineName = new Map(r.pattern.threads.map((t, i) => [t.color, mt[i].name]));
   paletteUI();
-  const base = (state.pic.file?.name || "picture").replace(/\.[^.]+$/, "").replace(/[^\p{L}\p{N}_-]+/gu, "_");
+  const base = safeName((state.pic.file?.name || "picture").replace(/\.[^.]+$/, ""), "picture");
   const v = { pattern: r.pattern, verifyAgainst: r.pattern, bytes: r.bytes, filename: `${base}.pes`, fabric: "linen",
-    threadLabel: (b) => `Brother ${nearestBrotherThread(b.color).name}` };
+  };
   state.views.picture = v;
   if (state.mode === "picture") setView(v);
 };
@@ -280,7 +292,7 @@ worker.onerror = (e) => { busy(false); showError("Something went wrong while sti
 function paletteUI() {
   const cols = state.pic.colorsInfo.filter((c) => !c.background && c.area > 0);
   $("pic-palette").innerHTML = cols.map((c) => `<button type="button" data-id="${c.id}" aria-pressed="${!state.pic.skip.includes(c.id)}">
-    <i style="background:${c.hex}"></i><span>Brother ${c.thread.name}<small>${c.hex}</small></span></button>`).join("");
+    <i style="background:${c.hex}"></i><span>Brother ${state.pic.machineName?.get(c.hex) || c.thread.name}<small>${c.hex}</small></span></button>`).join("");
 }
 $("pic-palette").onclick = (e) => {
   const b = e.target.closest("button"); if (!b) return;
@@ -379,14 +391,15 @@ async function openDesign(file) {
     const out = isPes ? bytes : writePES(d);
     const st = designStats(d), h = hoop();
     const fits = st.widthMm <= h.w - 2 * MARGIN && st.heightMm <= h.h - 2 * MARGIN;
-    const base = file.name.replace(/\.[^.]+$/, "");
+    const base = safeName(file.name.replace(/\.[^.]+$/, ""), "design");
     $("open-info").hidden = false;
     $("open-info").innerHTML = `<b>${escapeHtml(file.name)}</b>
       <span>${d.format.toUpperCase()}${pesVersion(d.version)} · ${st.stitches.toLocaleString()} stitches · ${d.threads.length || "no"} thread colours</span>
       ${fits ? `<span class="good">Fits the ${h.machineName} ${h.name}.</span>` : `<span class="warn">Too big for the ${h.name}: it's ${st.widthMm.toFixed(0)} × ${st.heightMm.toFixed(0)} mm.</span>`}
       ${isPes ? "" : `<span>You can download it as a PES file for your machine.</span>`}`;
     const v = { pattern: d, verifyAgainst: isPes ? null : d, bytes: out, filename: `${base}.pes`, fabric: "linen",
-      threadLabel: (b) => (/[a-z]{2}/i.test(b.name || "") ? escapeHtml(b.name) : `Brother ${nearestBrotherThread(b.color).name}${b.name ? " · " + escapeHtml(b.name) : ""}`) };
+      source: isPes ? bytes : null,
+      threadLabel: (b, t) => (/[a-z]{2}/i.test(b.name || "") ? escapeHtml(b.name) : `Brother ${t.name}${b.name ? " · " + escapeHtml(b.name) : ""}`) };
     state.views.open = v; setMode("open"); setView(v);
   } catch (err) { console.error(err); setMode("open"); showError(err.message || "This file couldn't be read."); }
 }

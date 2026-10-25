@@ -17,6 +17,11 @@
     <span class="logo">Needleworks</span>
     <span class="tag">Embroidery files, made right here in your browser.</span>
   </div>
+  <nav class="tabs" role="tablist" aria-label="What do you want to make?">
+    <button role="tab" id="tab-picture" aria-controls="panel-picture" aria-selected="true">Picture to stitches</button>
+    <button role="tab" id="tab-bookmark" aria-controls="panel-bookmark" aria-selected="false">Name bookmark</button>
+    <button role="tab" id="tab-open" aria-controls="panel-open" aria-selected="false">Open a design</button>
+  </nav>
   <div class="machine">
     <label for="machine">Machine</label>
     <select id="machine"></select>
@@ -24,12 +29,6 @@
     <select id="hoop"></select>
   </div>
 </header>
-
-<nav class="tabs" role="tablist" aria-label="What do you want to make?">
-  <button role="tab" id="tab-picture" aria-controls="panel-picture" aria-selected="true">Picture to stitches</button>
-  <button role="tab" id="tab-bookmark" aria-controls="panel-bookmark" aria-selected="false">Name bookmark</button>
-  <button role="tab" id="tab-open" aria-controls="panel-open" aria-selected="false">Open a design</button>
-</nav>
 
 <main class="work">
   <section class="controls">
@@ -55,8 +54,8 @@
         <legend>Fabric <span class="hint inline">(preview only)</span></legend>
         <div id="bm-fabrics" class="chips"></div>
       </fieldset>
-      <details class="steps" open>
-        <summary>How to stitch it</summary>
+      <details class="steps">
+        <summary>How to stitch it <span class="hint inline">· 5 steps, 4 pauses</span></summary>
         <p class="hint">Keep the same thread in the whole time. The machine pauses 4 times. Each pause is a fabric step.</p>
         <ol id="bm-steps"></ol>
         <p class="hint">Finish: tear away the stabilizer, snip any fuzz, cut out the ribbon hole and loop a ribbon through.</p>

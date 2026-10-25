@@ -201,7 +201,17 @@ function tatami(mask, comp, res, { angle, spacing, stitch, inset = 0, pull = 0.1
 }
 
 // ---------- build ----------
+// Fill edges and satin outlines reach a little past the picture, so a picture sized to the hoop's edge can land
+// just over it; shrink to fit (more pixels per mm) rather than refuse.
 export function digitize(img, analysis, opts = {}) {
+  let res = opts.res || DEFAULTS.res;
+  for (let tries = 0; ; tries++) {
+    try { return build(img, analysis, { ...opts, res }); }
+    catch (e) { if (!e.overBy || tries === 3) throw e; res *= e.overBy * 1.01; }
+  }
+}
+
+function build(img, analysis, opts) {
   const o = { ...DEFAULTS, ...opts };
   const { w, h, labels, colors } = analysis;
   const res = o.res;

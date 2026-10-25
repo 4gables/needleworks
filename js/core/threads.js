@@ -97,10 +97,13 @@ export function nearestIndex(rgb, values) {
   return best;
 }
 
-export function nearestBrotherThread(hex) {
-  const i = nearestIndex(hexToRgb(hex), PEC_THREADS);
+export function pecThread(i) {
   const t = PEC_THREADS[i];
-  return { index: i, name: t[0], hex: rgbToHex([t[1], t[2], t[3]]) };
+  return t ? { index: i, name: t[0], hex: rgbToHex([t[1], t[2], t[3]]) } : { index: i, name: "Unknown", hex: "#000000" };
+}
+
+export function nearestBrotherThread(hex) {
+  return pecThread(nearestIndex(hexToRgb(hex), PEC_THREADS));
 }
 
 // Python's round(): half to even

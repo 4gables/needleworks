@@ -52,7 +52,11 @@ export class Design {
   check() {
     const [x0, y0, x1, y1] = this.bounds(), w = x1 - x0, h = y1 - y0;
     const lw = this.hoop.w - 2 * MARGIN, lh = this.hoop.h - 2 * MARGIN;
-    if (w > lw || h > lh) throw new Error(`This design is ${w.toFixed(0)} × ${h.toFixed(0)} mm, but the ${this.hoop.name} fits ${lw} × ${lh} mm.`);
+    if (w > lw || h > lh) {
+      const err = new Error(`This design is ${w.toFixed(1)} × ${h.toFixed(1)} mm, but the ${this.hoop.name} fits ${lw} × ${lh} mm.`);
+      err.overBy = Math.max(w / lw, h / lh);
+      throw err;
+    }
   }
 
   pattern() { return { stitches: this.stitches, threads: this.threads }; }
