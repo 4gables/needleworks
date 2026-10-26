@@ -7,16 +7,17 @@ import { buildBookmark } from "../../js/core/bookmark.js";
 import { hoop } from "../../js/core/machines.js";
 import { designStats } from "../../js/core/formats.js";
 import { draw, colorBlocks } from "../../js/render.js";
-const fams = [...document.styleSheets].flatMap((s) => { try { return [...s.cssRules]; } catch { return []; } })
-  .filter((r) => r.type === 5).map((r) => r.style.getPropertyValue("font-family").replace(/"/g, "")).filter((f) => f.startsWith("NW "));
-const name = new URLSearchParams(location.search).get("name") || "Josephine";
-for (const f of fams) {
+import { FONTS } from "../../js/core/fonts.js";
+// ?name=<word>&lead=0&tail=0 (decorations on by default)
+const q = new URLSearchParams(location.search), name = q.get("name") || "Josephine";
+const lead = q.get("lead") !== "0", tail = q.get("tail") !== "0";
+for (const { family: f, print } of FONTS) {
   await document.fonts.load(`40px "${f}"`);
   const div = document.createElement("div"); const c = document.createElement("canvas"); const p = document.createElement("p");
   div.append(c, p); g.append(div);
   const t0 = performance.now();
   try {
-    const d = buildBookmark({ name, family: f, hoop: hoop() }).pattern();
+    const d = buildBookmark({ name, family: f, hoop: hoop(), lead, tail, print }).pattern();
     const st = designStats(d);
     p.textContent = `${f.slice(3)}: ${st.stitches} st, ${(performance.now()-t0).toFixed(0)} ms`;
     draw(c, d, { fabric: "pink", fabricShapeBlock: 0, hide: new Set([0,1,3]), cache: colorBlocks(d) });

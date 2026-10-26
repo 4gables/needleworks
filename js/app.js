@@ -1,4 +1,6 @@
-import { buildBookmark, RED, STEPS } from "./core/bookmark.js";
+import { buildBookmark, hiddenBlocks, RED, stepsFor } from "./core/bookmark.js";
+import { turnPattern } from "./core/design.js";
+import { FONTS, fontOf } from "./core/fonts.js";
 import { designStats, machineThreads, readEmbroidery, validatePES, writePES } from "./core/formats.js";
 import { DEFAULT_MACHINE, MACHINES, MARGIN, hoop as getHoop } from "./core/machines.js";
 import { workingSize } from "./core/digitize.js";
@@ -11,22 +13,6 @@ const store = {
   set(k, v) { try { localStorage.setItem("nw:" + k, JSON.stringify(v)); } catch {} },
 };
 
-const FONTS = [
-  { family: "NW Sacramento", name: "Sacramento", note: "like the photo" },
-  { family: "NW Allura", name: "Allura" },
-  { family: "NW Parisienne", name: "Parisienne" },
-  { family: "NW Corinthia", name: "Corinthia" },
-  { family: "NW Ephesis", name: "Ephesis" },
-  { family: "NW Meow Script", name: "Meow Script" },
-  { family: "NW Great Vibes", name: "Great Vibes", note: "like Cinderella" },
-  { family: "NW Alex Brush", name: "Alex Brush", note: "like Birds of Paradise" },
-  { family: "NW Ms Madi", name: "Ms Madi", note: "like Southampton" },
-  { family: "NW Satisfy", name: "Satisfy", note: "like Amarillo" },
-  { family: "NW Cookie", name: "Cookie", note: "like Cream Candy" },
-  { family: "NW Yellowtail", name: "Yellowtail", note: "like Moon Time" },
-  { family: "NW Rouge Script", name: "Rouge Script", note: "like Chopin Script" },
-  { family: "NW Italianno", name: "Italianno", note: "like Bickley Script" },
-];
 const THREADS = ["#c8102e", "#e1252f", "#f06292", "#7b2d8e", "#1f3a68", "#2e6b3a", "#c99a2e", "#1a1a1a"];
 
 const state = {
@@ -36,11 +22,16 @@ const state = {
   view: null,          // { pattern, bytes, filename, fabricShapeBlock, hide, cache }
   views: {},           // last view per mode
   zoom: 1, pan: [0, 0], upto: null, showHoop: store.get("showHoop", true),
-  bm: { name: store.get("bm.name", "ashley"), font: store.get("bm.font", FONTS[0].family), color: store.get("bm.color", RED), fabric: store.get("bm.fabric", "pink"), lead: store.get("bm.lead", true), tail: store.get("bm.tail", true) },
+  // hoop turned sideways on screen, per tab; the bookmark reads best lying down
+  turn: { picture: false, bookmark: true, open: false, ...store.get("turn", {}) },
+  bm: { name: store.get("bm.name", "ashley"), font: store.get("bm.font", FONTS[0].family), color: store.get("bm.color", RED), fabric: store.get("bm.fabric", "pink"), lead: store.get("bm.lead", true), tail: store.get("bm.tail", true), blank: store.get("bm.blank", false) },
   pic: { file: null, bitmap: null, key: 0, skip: [], colors: 4, size: 100, angle: 45, bg: true, req: 0, colorsInfo: [] },
 };
 if (!MACHINES[state.machine]) state.machine = DEFAULT_MACHINE;
 const hoop = () => getHoop(state.machine, state.hoopId);
+const turned = () => !!state.turn[state.mode];
+// the hoop as it looks on screen
+const shownHoop = () => { const h = hoop(); return turned() ? { ...h, w: h.h, h: h.w } : h; };
 
 // ---------- preview ----------
 const canvas = $("view");
@@ -48,9 +39,9 @@ function paint() {
   const v = state.view;
   $("empty").hidden = !!v;
   if (!v) { draw(canvas, null); return; }
-  draw(canvas, v.pattern, {
+  draw(canvas, v.shown, {
     cache: v.cache, fabric: v.fabric, fabricShapeBlock: v.fabricShapeBlock, hide: v.hide, upto: state.upto ?? undefined,
-    hoop: hoop(), showHoop: state.showHoop, zoom: state.zoom, pan: state.pan, showNeedle: state.upto != null,
+    hoop: shownHoop(), showHoop: state.showHoop, zoom: state.zoom, pan: state.pan, showNeedle: state.upto != null,
     padTop: $("facts").offsetHeight + 16,
   });
 }
@@ -60,14 +51,21 @@ function fmtMm(mm) { return `${mm.toFixed(0)} × `; }
 function setView(v) {
   stopPlay();
   state.view = v; state.views[state.mode] = v; state.upto = null; $("progress").value = 1000;
+  $("turn").setAttribute("aria-pressed", turned());
   if (!v) { $("facts").innerHTML = ""; $("threads").innerHTML = ""; $("download").disabled = true; $("share").disabled = true; paint(); return; }
-  v.cache = colorBlocks(v.pattern);
-  const st = designStats(v.pattern), h = hoop();
+  // the preview is the file: decode the PES bytes and draw those, not the design they were made from
+  if (!v.file) {
+    try { v.file = v.source ? v.pattern : readEmbroidery(v.bytes, v.filename); }
+    catch (err) { v.file = null; showError("This file didn't read back: " + err.message); $("download").disabled = true; $("share").disabled = true; return; }
+  }
+  v.shown = turned() ? turnPattern(v.file, false) : v.file;
+  v.cache = colorBlocks(v.shown);
+  const st = designStats(v.file), h = hoop(), shown = designStats(v.shown);
   const fits = st.widthMm <= h.w - 2 * MARGIN && st.heightMm <= h.h - 2 * MARGIN;
   const inch = (mm) => (mm / 25.4).toFixed(1);
   const minutes = Math.max(1, Math.round(st.stitches / 550 + st.colorChanges * 0.5));
   $("facts").innerHTML = [
-    `<span>${st.widthMm.toFixed(0)} × ${st.heightMm.toFixed(0)} mm · ${inch(st.widthMm)} × ${inch(st.heightMm)} in</span>`,
+    `<span>${shown.widthMm.toFixed(0)} × ${shown.heightMm.toFixed(0)} mm · ${inch(shown.widthMm)} × ${inch(shown.heightMm)} in</span>`,
     `<span>${st.stitches.toLocaleString()} stitches</span>`,
     st.colorChanges ? `<span>${st.colorChanges} ${st.colorChanges === 1 ? "pause" : "pauses"}</span>` : "",
     `<span>≈ ${minutes} min</span>`,
@@ -84,10 +82,10 @@ function setView(v) {
   $("download").textContent = fits ? `Download ${v.filename}` : "Too big for this hoop";
   paint();
 }
-// thread names exactly as the machine will show them: an opened PES's own palette, else what writePES will write
+// thread names exactly as the machine will show them: the file's own PEC palette
 function machineThreadList(v) {
-  const p = v.pattern;
-  return p.pec && v.bytes === v.source ? p.pec.map(pecThread) : machineThreads(p.threads);
+  const p = v.file;
+  return p.pec ? p.pec.map(pecThread) : machineThreads(p.threads);
 }
 function showError(msg) { const e = $("error"); e.textContent = msg; e.hidden = !msg; }
 function busy(on, text = "Stitching…") { $("busy").hidden = !on; $("busy-text").textContent = text; }
@@ -144,6 +142,11 @@ $("progress").oninput = (e) => {
 };
 $("show-hoop").checked = state.showHoop;
 $("show-hoop").onchange = (e) => { state.showHoop = e.target.checked; store.set("showHoop", state.showHoop); paint(); };
+$("turn").onclick = () => {
+  state.turn[state.mode] = !turned(); store.set("turn", state.turn);
+  state.zoom = 1; state.pan = [0, 0];
+  if (state.mode === "picture") makePicture(); else setView(state.view);
+};
 
 // iPhone/iPad/Android share sheet: Messages, Mail, AirDrop, Save to Files
 // USB file names the machine can show: plain ASCII (José -> Jose), nothing else, never empty
@@ -188,7 +191,9 @@ function fillMachines() {
   $("hoop").innerHTML = Object.entries(m.hoops).map(([k, h]) => `<option value="${k}">${h.name}</option>`).join("");
   $("hoop").value = state.hoopId;
   const h = hoop();
-  $("pic-size").max = Math.floor(Math.max(h.w, h.h) - 2 * MARGIN - 2);
+  const max = Math.floor(Math.max(h.w, h.h) - 2 * MARGIN - 2);
+  $("pic-size").max = max;
+  if (state.pic.size > max) { state.pic.size = max; $("pic-size").value = max; $("pic-size").dispatchEvent(new Event("input")); }
 }
 $("machine").onchange = (e) => { state.machine = e.target.value; state.hoopId = null; store.set("machine", state.machine); fillMachines(); refresh(); };
 $("hoop").onchange = (e) => { state.hoopId = e.target.value; store.set("hoop", state.hoopId); fillMachines(); refresh(); };
@@ -222,7 +227,10 @@ document.querySelector(".tabs").addEventListener("keydown", (e) => {
 let bmTimer = 0, bmSeq = 0;
 function bookmarkUI() {
   $("bm-name").value = state.bm.name;
-  $("bm-lead").checked = state.bm.lead; $("bm-tail").checked = state.bm.tail;
+  $("bm-lead").checked = state.bm.lead; $("bm-tail").checked = state.bm.tail; $("bm-blank").checked = state.bm.blank;
+  const kind = fontOf(state.bm.font).print ? "Dash" : "Swash";
+  $("bm-lead-text").textContent = `${kind} before the name`; $("bm-tail-text").textContent = `${kind} after the name`;
+  $("bm-name").disabled = state.bm.blank; $("bm-lettering").classList.toggle("off", state.bm.blank);
   $("bm-fonts").innerHTML = FONTS.map((f) => `<button type="button" data-f="${f.family}" title="${f.name}${f.note ? " · " + f.note : ""}" aria-pressed="${f.family === state.bm.font}">
     <span class="sample" style="font-family:'${f.family}'">${escapeHtml(stitchedName() || "ashley")}</span>
     <span class="fname">${f.name}${f.note ? " · " + f.note : ""}</span></button>`).join("");
@@ -231,7 +239,10 @@ function bookmarkUI() {
     + `<span class="custom" style="box-shadow:0 0 0 ${custom ? "2.5px var(--ink)" : "1.5px var(--line)"}" title="Any colour"><input type="color" id="bm-custom" value="${state.bm.color}" aria-label="Any colour"></span>`
     + `<span class="swatch-name">Closest Brother thread: <b>${nearestBrotherThread(state.bm.color).name}</b></span>`;
   $("bm-fabrics").innerHTML = Object.entries(FABRICS).map(([k, f]) => `<button type="button" data-fab="${k}" aria-pressed="${k === state.bm.fabric}"><i style="background:${f.solid || `repeating-conic-gradient(${f.cross} 0 25%, ${f.base} 0 50%) 0 0/8px 8px`}"></i>${f.label}</button>`).join("");
-  $("bm-steps").innerHTML = STEPS.map((s) => `<li><b>${s.title}</b><span>${s.you || s.machine}</span></li>`).join("");
+  const steps = stepsFor(state.bm.blank), pauses = steps.length - 1;
+  $("bm-steps-count").textContent = `· ${steps.length} steps, ${pauses} pauses`;
+  $("bm-steps-lede").textContent = `Keep the same thread in the whole time. The machine pauses ${pauses} times. Each pause is a fabric step.`;
+  $("bm-steps").innerHTML = steps.map((s) => `<li><b>${s.title}</b><span>${s.you || s.machine}</span></li>`).join("");
 }
 // stitched exactly as typed
 const stitchedName = () => state.bm.name.trim();
@@ -242,7 +253,7 @@ $("bm-name").addEventListener("input", (e) => {
   clearTimeout(bmTimer); bmTimer = setTimeout(makeBookmark, 350);
 });
 $("bm-fonts").onclick = (e) => { const b = e.target.closest("button"); if (!b) return; state.bm.font = b.dataset.f; store.set("bm.font", b.dataset.f); bookmarkUI(); makeBookmark(); };
-for (const k of ["lead", "tail"]) $("bm-" + k).onchange = (e) => { state.bm[k] = e.target.checked; store.set("bm." + k, state.bm[k]); makeBookmark(); };
+for (const k of ["lead", "tail", "blank"]) $("bm-" + k).onchange = (e) => { state.bm[k] = e.target.checked; store.set("bm." + k, state.bm[k]); bookmarkUI(); makeBookmark(); };
 $("bm-colors").addEventListener("click", (e) => { const b = e.target.closest("button[data-c]"); if (!b) return; state.bm.color = b.dataset.c; store.set("bm.color", b.dataset.c); bookmarkUI(); makeBookmark(); });
 $("bm-colors").addEventListener("change", (e) => { if (e.target.id !== "bm-custom") return; state.bm.color = e.target.value; store.set("bm.color", e.target.value); bookmarkUI(); makeBookmark(); });
 $("bm-fabrics").onclick = (e) => {
@@ -251,20 +262,21 @@ $("bm-fabrics").onclick = (e) => {
 };
 
 async function makeBookmark() {
-  const seq = ++bmSeq, name = stitchedName();
+  const seq = ++bmSeq, name = stitchedName(), blank = state.bm.blank;
   showError("");
-  if (!name) { setView(null); $("empty").textContent = "Type a name to see the bookmark."; return; }
+  if (!name && !blank) { setView(null); $("empty").textContent = "Type a name to see the bookmark."; return; }
   busy(true, "Lettering…");
   try {
     await document.fonts.load(`40px "${state.bm.font}"`);
     await new Promise((r) => setTimeout(r, 0));
     if (seq !== bmSeq) return;
-    const d = buildBookmark({ name, family: state.bm.font, color: state.bm.color, hoop: hoop(), lead: state.bm.lead, tail: state.bm.tail });
+    const d = buildBookmark({ name, family: state.bm.font, color: state.bm.color, hoop: hoop(), lead: state.bm.lead, tail: state.bm.tail,
+      print: !!fontOf(state.bm.font).print, blank });
     const pattern = d.pattern();
     if (seq !== bmSeq || state.mode !== "bookmark") { state.views.bookmark = null; return; }
-    setView({ pattern, verifyAgainst: pattern, bytes: writePES(pattern), filename: `${safeName(state.bm.name, "name")}_bookmark.pes`,
-      fabricShapeBlock: 0, hide: new Set([0, 1, 3]), fabric: state.bm.fabric, threadLabel: () => `Brother ${nearestBrotherThread(state.bm.color).name} · whole bookmark` });
-  } catch (err) { console.error(err); showError(err.message); }
+    setView({ pattern, verifyAgainst: pattern, bytes: writePES(pattern), filename: blank ? "blank_bookmark.pes" : `${safeName(state.bm.name, "name")}_bookmark.pes`,
+      fabricShapeBlock: 0, hide: hiddenBlocks(blank), fabric: state.bm.fabric, threadLabel: () => `Brother ${nearestBrotherThread(state.bm.color).name} · whole bookmark` });
+  } catch (err) { console.error(err); setView(null); $("empty").textContent = ""; showError(err.message); }
   finally { if (seq === bmSeq) busy(false); }
 }
 
@@ -328,7 +340,7 @@ async function loadPicture(file, sample = false) {
   try {
     const bitmap = await createImageBitmap(file);
     Object.assign(state.pic, { file, bitmap, box: null, key: state.pic.key + 1, skip: [] });
-    const thumb = $("pic-thumb"); thumb.src = URL.createObjectURL(file); thumb.hidden = false;
+    setThumb(file); $("pic-rotate").hidden = false;
     $("pic-drop").querySelector(".drop-text").innerHTML = sample ? "<b>Choose your own picture</b> or drop it here." : `<b>${escapeHtml(file.name)}</b> · choose another`;
     $("pic-sample-note").hidden = !sample;
     $("pic-settings").hidden = false;
@@ -367,15 +379,30 @@ function contentBox(bitmap) {
 function makePicture() {
   const p = state.pic; if (!p.bitmap) return;
   const box = p.bg ? (p.box ||= contentBox(p.bitmap)) : { sx: 0, sy: 0, sw: p.bitmap.width, sh: p.bitmap.height };
-  const h = hoop(), sz = workingSize(box.sw, box.sh, p.size, h);
+  const h = shownHoop(), sz = workingSize(box.sw, box.sh, p.size, h);
   const c = makeCanvas(sz.w, sz.h), ctx = c.getContext("2d", { willReadFrequently: true });
   ctx.imageSmoothingQuality = "high";
   ctx.drawImage(p.bitmap, box.sx, box.sy, box.sw, box.sh, 0, 0, sz.w, sz.h);
   const img = ctx.getImageData(0, 0, sz.w, sz.h);
   p.req++; busy(true, "Stitching your picture…");
-  worker.postMessage({ id: p.req, img, opts: { colors: p.colors, removeBackground: p.bg, fillAngle: p.angle, skip: p.skip, hoop: h, imageKey: p.key } });
+  worker.postMessage({ id: p.req, img, opts: { colors: p.colors, removeBackground: p.bg, fillAngle: p.angle, skip: p.skip, hoop: h, turn: turned(), imageKey: p.key } });
 }
 $("pic-file").onchange = (e) => loadPicture(e.target.files[0]);
+
+function setThumb(blob) {
+  const thumb = $("pic-thumb");
+  if (thumb.src) URL.revokeObjectURL(thumb.src);
+  thumb.src = URL.createObjectURL(blob); thumb.hidden = false;
+}
+// a quarter turn clockwise; the turned picture is what gets stitched (and shown in the thumbnail)
+$("pic-rotate").onclick = async () => {
+  const p = state.pic, b = p.bitmap; if (!b) return;
+  const c = makeCanvas(b.height, b.width), ctx = c.getContext("2d");
+  ctx.translate(b.height, 0); ctx.rotate(Math.PI / 2); ctx.drawImage(b, 0, 0);
+  Object.assign(p, { bitmap: await createImageBitmap(c), box: null, key: p.key + 1, skip: [] });
+  setThumb(c.convertToBlob ? await c.convertToBlob() : await new Promise((r) => c.toBlob(r)));
+  makePicture();
+};
 
 // ---------- open a design ----------
 function pesVersion(v) {

@@ -17,7 +17,9 @@ browser; nothing to install.
 2. Open the site on **Name bookmark**. Tell her to type the name exactly as she wants it stitched and to
    pick the closest font. Sacramento matches thin monoline scripts; fonts marked "like …" resemble
    popular embroiderydesigns.com fonts. If the long line before or after the name looks wrong, untick
-   **Swash before the name** or **Swash after the name** (either or both).
+   **Swash before the name** or **Swash after the name** (either or both). Quicksand and Josefin Sans are print
+   (non-cursive) fonts; their lines are straight dashes. **Blank bookmark, no name** makes one with no lettering
+   (3 pauses instead of 4). The bookmark needs the 5x7 hoop.
 3. She picks the thread colour, checks the preview (it can **Watch it sew**), and presses **Download**.
 4. Tell her to copy the downloaded `.pes` file onto a USB stick, not inside a folder.
 5. Give her the stitching steps below, with the name filled in (the site also shows them under
@@ -25,6 +27,8 @@ browser; nothing to install.
 
 ## Other designs
 - **Picture to stitches**: logos, clip art and simple drawings with a few solid colours (not photos).
+  **Rotate picture** turns it a quarter turn; **Turn hoop** lays the hoop sideways so a wide design can use the
+  long side (the file still loads the right way on the machine). The 4x4 hoop can be picked at the top.
 - **Open a design**: preview any PES/PEC/DST she already has, check it fits the 5x7 hoop, or convert DST to PES.
 
 ## Stitching steps to give her (bookmark)

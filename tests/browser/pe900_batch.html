@@ -12,8 +12,8 @@ import { writePES, validatePES } from "../../js/core/formats.js";
 import { analyze, digitize, workingSize } from "../../js/core/digitize.js";
 
 const hoop = getHoop(), log = (s) => (document.getElementById("log").textContent += s + "\n");
-const fams = [...document.styleSheets].flatMap((s) => { try { return [...s.cssRules]; } catch { return []; } })
-  .filter((r) => r.type === 5).map((r) => r.style.getPropertyValue("font-family").replace(/"/g, "")).filter((f) => f.startsWith("NW "));
+import { FONTS } from "../../js/core/fonts.js";
+import { turnPattern } from "../../js/core/design.js";
 const names = ["ashley", "Ashley", "Emma", "Olivia", "Ann", "bob", "Zoë", "Mia", "Katherine", "Maximiliana", "Jo", "W", "Grace-Lynn", "Quinn", "jayden"];
 let n = 0, bad = 0;
 async function save(name, pattern) {
@@ -23,11 +23,13 @@ async function save(name, pattern) {
   n++;
 }
 const only = new URLSearchParams(location.search).get("only");   // "pic" or "bm" to run half
-for (const f of only === "pic" ? [] : fams) {
+if (only !== "pic") await save("bm_blank", buildBookmark({ blank: true, hoop }).pattern());
+for (const { family: f, print } of only === "pic" ? [] : FONTS) {
   await document.fonts.load(`40px "${f}"`);
-  for (const name of names) for (const lead of [true, false]) for (const tail of [true, false]) {
-    const tag = `bm_${f.slice(3).replace(/ /g, "")}_${name.normalize("NFKD").replace(/[^A-Za-z-]/g, "")}_${lead ? "L" : ""}${tail ? "T" : ""}`;
-    try { await save(tag, buildBookmark({ name, family: f, hoop, lead, tail }).pattern()); }
+  // index in the tag: "ashley" and "Ashley" would share a file on a case-insensitive disk
+  for (const [ni, name] of names.entries()) for (const lead of [true, false]) for (const tail of [true, false]) {
+    const tag = `bm_${f.slice(3).replace(/ /g, "")}_${ni}${name.normalize("NFKD").replace(/[^A-Za-z-]/g, "")}_${lead ? "L" : ""}${tail ? "T" : ""}`;
+    try { await save(tag, buildBookmark({ name, family: f, hoop, lead, tail, print }).pattern()); }
     catch (e) { bad++; log(`ERROR ${tag}: ${e.message}`); }
   }
   log(`${f}: done`);
@@ -35,13 +37,14 @@ for (const f of only === "pic" ? [] : fams) {
 const pics = ["../../assets/sample-flower.png", ...Array.from({ length: 8 }, (_, i) => `../external/images/etsy_${i + 1}.jpg`)];
 for (const src of only === "bm" ? [] : pics) {
   let bmp; try { bmp = await createImageBitmap(await (await fetch(src)).blob()); } catch { log(`skip ${src}`); continue; }
-  for (const colors of [2, 4, 8]) for (const size of [60, 100, 170]) {
-    const sz = workingSize(bmp.width, bmp.height, size, hoop);
+  // turned: digitized in the sideways hoop, then turned into the machine's orientation like the site does
+  for (const colors of [2, 4, 8]) for (const size of [60, 100, 170]) for (const turn of size === 170 ? [false, true] : [false]) {
+    const field = turn ? { ...hoop, w: hoop.h, h: hoop.w } : hoop, sz = workingSize(bmp.width, bmp.height, size, field);
     const c = new OffscreenCanvas(sz.w, sz.h), ctx = c.getContext("2d");
     ctx.imageSmoothingQuality = "high"; ctx.drawImage(bmp, 0, 0, sz.w, sz.h);
-    const img = ctx.getImageData(0, 0, sz.w, sz.h), opts = { colors, removeBackground: true, fillAngle: 45, skip: [], hoop };
-    const tag = `pic_${src.split("/").pop().split(".")[0]}_c${colors}_s${size}`;
-    try { await save(tag, digitize(img, analyze(img, opts), opts).design.pattern()); }
+    const img = ctx.getImageData(0, 0, sz.w, sz.h), opts = { colors, removeBackground: true, fillAngle: 45, skip: [], hoop: field };
+    const tag = `pic_${src.split("/").pop().split(".")[0]}_c${colors}_s${size}${turn ? "_turned" : ""}`;
+    try { const p = digitize(img, analyze(img, opts), opts).design.pattern(); await save(tag, turn ? turnPattern(p) : p); }
     catch (e) { bad++; log(`ERROR ${tag}: ${e.message}`); }
   }
   log(`${src}: done`);

@@ -32,10 +32,10 @@ SOFTWARE.
 
 ## Fonts (SIL Open Font License 1.1)
 
-The script fonts in `fonts/` come from [Google Fonts](https://fonts.google.com) and are licensed under
+The fonts in `fonts/` come from [Google Fonts](https://fonts.google.com) and are licensed under
 the SIL Open Font License 1.1. Each font's license is next to it as `fonts/OFL-<family>.txt`:
 Sacramento, Allura, Parisienne, Corinthia, Ephesis, Meow Script, Great Vibes, Alex Brush, Ms Madi,
-Cookie, Rouge Script, Italianno.
+Cookie, Rouge Script, Italianno, Quicksand, Josefin Sans.
 
 Satisfy and Yellowtail are licensed under the Apache License 2.0; their licenses are in
 `fonts/LICENSE-satisfy.txt` and `fonts/LICENSE-yellowtail.txt`.

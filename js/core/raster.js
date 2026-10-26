@@ -192,13 +192,29 @@ export function prune(edges, minLen) {
 }
 
 // centerline strokes of a mask, smoothed: [[a, b, [[x, y], ...]]] in pixels
-export function skeletonEdges(mask, stroke) {
+// spur: dead ends shorter than this many stroke widths are thinning noise and get cut.
+// dots: also stitch blobs that thin to a lone point (lettering's i dots)
+export function skeletonEdges(mask, stroke, { spur = 1.3, dots = false } = {}) {
   const { pos, edges } = skeletonGraph(skeletonize(mask));
-  return prune(edges, stroke * 1.3).map(([a, b, path]) => {
+  const out = prune(edges, stroke * spur).map(([a, b, path]) => {
     const pts = path.map((q) => q.slice());
     pts[0] = pos.get(a).slice(); pts[pts.length - 1] = pos.get(b).slice();
     return [a, b, smooth(pts, Math.max(3, Math.floor(stroke * 0.8) | 1))];
   });
+  if (!dots) return out;
+  // a dot (the i's, a full stop) thins to a lone point with no edge: give it a short stroke so it's stitched
+  const { labels, count } = label(mask), hit = new Uint8Array(count + 1), sum = new Float64Array((count + 1) * 3);
+  for (const [, , p] of out) for (const [x, y] of p) hit[labels[Math.round(y) * mask.w + Math.round(x)]] = 1;
+  for (let i = 0; i < labels.length; i++) if (labels[i]) {
+    const k = labels[i] * 3; sum[k] += i % mask.w; sum[k + 1] += Math.floor(i / mask.w); sum[k + 2]++;
+  }
+  for (let c = 1; c <= count; c++) {
+    const n = sum[c * 3 + 2];
+    if (hit[c] || n < stroke * stroke * 0.5) continue;   // already stitched, or a speck
+    const x = sum[c * 3] / n, y = sum[c * 3 + 1] / n, r = stroke * 0.3;
+    out.push([`dot${c}a`, `dot${c}b`, [[x - r, y], [x, y], [x + r, y]]]);
+  }
+  return out;
 }
 
 export function strokeWidth(mask) {

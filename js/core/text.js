@@ -57,8 +57,9 @@ function swash(p0, d, length, xh, ybase, s) {
   return [...leg1, ...leg2.slice(1)];
 }
 
-// lengths of lead-in / tail are in x-heights
-export function renderWord(text, family, { leadIn = 0, tail = 0, join = true } = {}) {
+// lengths of lead-in / tail are in x-heights. deco "swash" curls off the letters; "dash" is a straight
+// rule on the middle of the x-height, apart from the letters (print fonts, which are also left unjoined).
+export function renderWord(text, family, { leadIn = 0, tail = 0, join = true, deco = "swash" } = {}) {
   const probe = canvas(10, 10).getContext("2d");
   const font = `${PX}px "${family}"`;
   probe.font = font;
@@ -116,18 +117,26 @@ export function renderWord(text, family, { leadIn = 0, tail = 0, join = true } =
         [en[0][0] + en[1][0] * dist * 0.4, en[0][1] + en[1][1] * dist * 0.4], en[0]), sw);
     }
   }
-  if (leadIn) {
-    // first letter's entry stroke; letters without one (E, O) are joined tangentially at their lowest point
-    const en = entry(0) || bottom(0);
-    const [p0, d] = en || [[adv[0], ybase], [-1, 0]];
-    brush(ctx, swash(p0, d, leadIn * xh, xh, ybase, -1), sw);
-    span[0] = p0[0];
-  }
-  if (tail) {
-    const ex = exit(text.length - 1, ends);
-    const [p0, d] = ex || [[adv[text.length], ybase], [1, 0]];
-    brush(ctx, swash(p0, d, tail * xh, xh, ybase, 1), sw);
-    span[1] = p0[0];
+  if (deco === "dash") {
+    // middle of the x-height, or of the capitals for an all-caps name
+    const mid = /\p{Ll}/u.test(text) ? xh : probe.measureText("H").actualBoundingBoxAscent;
+    const y = baseline - mid / 2, gap = 0.6 * mid;
+    if (leadIn) brush(ctx, [[span[0] - gap - leadIn * xh, y], [span[0] - gap, y]], sw);
+    if (tail) brush(ctx, [[span[1] + gap, y], [span[1] + gap + tail * xh, y]], sw);
+  } else {
+    if (leadIn) {
+      // first letter's entry stroke; letters without one (E, O) are joined tangentially at their lowest point
+      const en = entry(0) || bottom(0);
+      const [p0, d] = en || [[adv[0], ybase], [-1, 0]];
+      brush(ctx, swash(p0, d, leadIn * xh, xh, ybase, -1), sw);
+      span[0] = p0[0];
+    }
+    if (tail) {
+      const ex = exit(text.length - 1, ends);
+      const [p0, d] = ex || [[adv[text.length], ybase], [1, 0]];
+      brush(ctx, swash(p0, d, tail * xh, xh, ybase, 1), sw);
+      span[1] = p0[0];
+    }
   }
   mask = maskOf(ctx, w, h);
   return { mask, stroke, baseline, xh, span };
@@ -135,5 +144,6 @@ export function renderWord(text, family, { leadIn = 0, tail = 0, join = true } =
 
 export function strokes(text, family, opts) {
   const r = renderWord(text, family, opts);
-  return { edges: skeletonEdges(r.mask, r.stroke), info: { ...r, firstX: r.span[0], lastX: r.span[1] } };
+  // print letters have real short strokes (t's crossbar, a's stem) that script-sized pruning would cut
+  return { edges: skeletonEdges(r.mask, r.stroke, { spur: opts?.deco === "dash" ? 0.45 : 1.3, dots: true }), info: { ...r, firstX: r.span[0], lastX: r.span[1] } };
 }

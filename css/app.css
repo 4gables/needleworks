@@ -14,6 +14,8 @@
 @font-face { font-family: "NW Yellowtail"; src: url("../fonts/Yellowtail-Regular.ttf") format("truetype"); font-display: block; }
 @font-face { font-family: "NW Rouge Script"; src: url("../fonts/RougeScript-Regular.ttf") format("truetype"); font-display: block; }
 @font-face { font-family: "NW Italianno"; src: url("../fonts/Italianno-Regular.ttf") format("truetype"); font-display: block; }
+@font-face { font-family: "NW Quicksand"; src: url("../fonts/Quicksand-SemiBold.ttf") format("truetype"); font-display: block; }
+@font-face { font-family: "NW Josefin Sans"; src: url("../fonts/JosefinSans-SemiBold.ttf") format("truetype"); font-display: block; }
 
 :root {
   --bg: #fcfbfa;
@@ -90,6 +92,10 @@ input[type="range"] { width: 100%; accent-color: var(--accent); min-height: 32px
 .check { display: flex; gap: 10px; align-items: center; cursor: pointer; }
 .check input { width: 20px; height: 20px; accent-color: var(--accent); }
 .check.small { font-size: 14px; color: var(--muted); }
+.turn { min-height: 34px; padding: 4px 10px; font-size: 14px; }
+.turn[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); }
+#pic-rotate { justify-self: start; }
+.off { opacity: .4; pointer-events: none; }
 
 .fonts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
 .fonts button { background: var(--panel); border: 1.5px solid var(--line); border-radius: var(--radius); padding: 8px 10px 6px;

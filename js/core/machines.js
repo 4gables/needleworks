@@ -5,7 +5,10 @@ export const MACHINES = {
     name: "Brother PE900",
     format: "pes",
     autoTrim: true,
-    hoops: { "5x7": { name: '5" × 7" hoop', w: 130, h: 180 } },
+    hoops: {
+      "5x7": { name: '5" × 7" hoop', w: 130, h: 180 },
+      "4x4": { name: '4" × 4" hoop', w: 100, h: 100 },
+    },
     defaultHoop: "5x7",
   },
 };

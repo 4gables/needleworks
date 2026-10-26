@@ -35,18 +35,19 @@
     <!-- name bookmark -->
     <div class="panel" id="panel-bookmark" role="tabpanel" aria-labelledby="tab-bookmark" hidden>
       <h1>A bookmark with any name</h1>
-      <p class="lede">An in-the-hoop fabric bookmark with a satin border, a ribbon hole, and the name in flowing script.</p>
+      <p class="lede">An in-the-hoop fabric bookmark with a satin border, a ribbon hole, and the name in flowing script or print, or no name at all.</p>
       <div class="field">
         <label for="bm-name">Name</label>
         <input id="bm-name" type="text" value="ashley" maxlength="14" autocomplete="off" spellcheck="false">
         <p class="hint">One word works best. Type it the way you want it stitched: all lowercase looks like the photo.</p>
       </div>
-      <fieldset class="field">
+      <label class="check"><input id="bm-blank" autocomplete="off" type="checkbox"> Blank bookmark, no name</label>
+      <fieldset class="field" id="bm-lettering">
         <legend>Lettering</legend>
         <div id="bm-fonts" class="fonts"></div>
         <div class="checks">
-          <label class="check"><input id="bm-lead" autocomplete="off" type="checkbox" checked> Swash before the name</label>
-          <label class="check"><input id="bm-tail" autocomplete="off" type="checkbox" checked> Swash after the name</label>
+          <label class="check"><input id="bm-lead" autocomplete="off" type="checkbox" checked> <span id="bm-lead-text">Swash before the name</span></label>
+          <label class="check"><input id="bm-tail" autocomplete="off" type="checkbox" checked> <span id="bm-tail-text">Swash after the name</span></label>
         </div>
       </fieldset>
       <fieldset class="field">
@@ -58,8 +59,8 @@
         <div id="bm-fabrics" class="chips"></div>
       </fieldset>
       <details class="steps">
-        <summary>How to stitch it <span class="hint inline">· 5 steps, 4 pauses</span></summary>
-        <p class="hint">Keep the same thread in the whole time. The machine pauses 4 times. Each pause is a fabric step.</p>
+        <summary>How to stitch it <span class="hint inline" id="bm-steps-count">· 5 steps, 4 pauses</span></summary>
+        <p class="hint" id="bm-steps-lede">Keep the same thread in the whole time. The machine pauses 4 times. Each pause is a fabric step.</p>
         <ol id="bm-steps"></ol>
         <p class="hint">Finish: tear away the stabilizer, snip any fuzz, cut out the ribbon hole and loop a ribbon through.</p>
       </details>
@@ -74,6 +75,7 @@
         <img id="pic-thumb" alt="" hidden>
         <span class="drop-text"><b>Choose a picture</b> or drop it here. You can also paste one.</span>
       </label>
+      <button type="button" id="pic-rotate" class="ghost" hidden>⟳ Rotate picture</button>
       <p class="hint" id="pic-sample-note" hidden>Showing a sample flower. Choose your own picture above to stitch it instead.</p>
       <div id="pic-settings" class="settings" hidden>
         <div class="field">
@@ -125,6 +127,7 @@
       <button type="button" id="play" class="ghost" aria-label="Watch it sew">▶︎ Watch it sew</button>
       <input id="progress" autocomplete="off" type="range" min="0" max="1000" value="1000" aria-label="Sewing progress">
       <label class="check small"><input id="show-hoop" type="checkbox" checked> Hoop</label>
+      <button type="button" id="turn" class="ghost turn" aria-pressed="false" title="Turn the hoop sideways on screen. The file still loads the right way on the machine.">⟲ Turn hoop</button>
     </div>
     <div class="bottom">
       <ul class="threads" id="threads" aria-label="Threads"></ul>

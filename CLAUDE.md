@@ -18,10 +18,24 @@ Embroidery-file tools for home machines. Two implementations of the same engine:
   end. Letters with no low entry end (E, O) are joined tangentially at their lowest left point. Never let it run flat
   along the baseline; that reads as a ruled line.
 - `satin()`: stations spaced by the outer edge so curves don't gap; short stitches on a crowded inner edge.
-- Bookmark: 5 colour blocks of one thread = 4 machine pauses for the in-the-hoop fabric steps. Name is centred on the
-  letters' band (swashes excluded) and lengthwise with equal room below the eyelet and above the border.
+- `Design.finish()` runs `relieve()`: no 1 mm square (at any 0.1 mm grid offset, since the checker's grid is the
+  file's) gets more than 24 needle hits per colour block; interior points at satin junctions are dropped, tie-ins kept.
+  Added when a turned 172 mm picture hit 26.
+- Bookmark: 5 colour blocks of one thread = 4 machine pauses for the in-the-hoop fabric steps (blank = no name block,
+  4 blocks / 3 pauses). Name is centred on the letters' band (decorations excluded) and lengthwise with equal room below
+  the eyelet and above the border. Letters are sized so their band fills `LETTERS` (72%) of the inner width, the same with
+  or without decorations; only a word too long for the bookmark shrinks. Needs the 5x7 hoop.
+- Print fonts (`print: true` in `js/core/fonts.js`): letters aren't bridged (each is its own piece, the machine trims
+  between them), decorations are straight dashes on the middle of the x-height (cap height for all-caps), and spur
+  pruning is gentler (0.45 vs 1.3 stroke widths) so t crossbars and a's stems survive. Dots (i, j) that thin to a lone
+  point get a short stroke (`skeletonEdges(..., { dots: true })`).
 - Machines/hoops: `js/core/machines.js`. Designs are checked to fit
-  the hoop field minus a 2 mm margin. Brother PE900 5x7 = 130 x 180 mm, auto-trims jumps.
+  the hoop field minus a 2 mm margin. Brother PE900 5x7 = 130 x 180 mm and 4x4 = 100 x 100 mm, auto-trims jumps.
+- "Turn hoop" (per tab, bookmark defaults on) only turns the preview; the PES is always written in machine orientation
+  (the hoop clips on one way). A turned picture is digitized in the sideways field and `turnPattern()`ed clockwise
+  before `writePES`; the preview turns the file back.
+- The preview is the file: `setView` decodes `v.bytes` with `readEmbroidery` and draws/counts/fit-checks that, and
+  thread labels come from the file's own PEC palette.
 
 ## Gotchas
 - PES is written as truncated v6 ("6t": v6 header with thread chart + PEC block), same as pyembroidery

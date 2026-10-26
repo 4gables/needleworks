@@ -37,6 +37,7 @@ export class Design {
       for (const r of [[c[0] + 0.3, c[1]], c, [c[0], c[1] + 0.3], c]) this.st(STITCH, r);
     }
     this.stitches.push([0, 0, END]);
+    this.stitches = relieve(this.stitches);
     this.check();
     return this;
   }
@@ -61,4 +62,49 @@ export class Design {
 
   pattern() { return { stitches: this.stitches, threads: this.threads }; }
   toBytes() { return writePES(this.pattern()); }
+}
+
+// No 1 x 1 mm square may take more than `limit` needle hits within one colour block (nest / broken needle risk;
+// tests/pe900_check.py enforces the same). Where strokes pile up (satin junctions), drop interior stitch points:
+// two stitches become one slightly longer one. Tie-ins and tie-offs (3 points around any jump/trim/colour change)
+// are kept. The machine's grid can sit at any 0.1 mm offset from ours, so every offset is checked.
+export function relieve(st, limit = 24) {
+  const n = st.length, keep = new Uint8Array(n).fill(1), blk = new Int32Array(n);
+  for (let i = 0, b = 0; i < n; i++) { if (st[i][2] === COLOR_CHANGE) b++; blk[i] = b; }
+  const X = (i) => Math.round(st[i][0]), Y = (i) => Math.round(st[i][1]);
+  const removable = (i) => { for (let j = i - 3; j <= i + 3; j++) if (j < 0 || j >= n || st[j][2] !== STITCH) return false; return true; };
+  const near = (i, d) => { let j = i + d; while (j >= 0 && j < n && !keep[j]) j += d; return j; };
+  const cells = new Map(), key = (b, cx, cy) => `${b},${cx},${cy}`;
+  for (let i = 0; i < n; i++) if (st[i][2] === STITCH) {
+    const k = key(blk[i], Math.floor(X(i) / 10), Math.floor(Y(i) / 10));
+    if (!cells.has(k)) cells.set(k, []); cells.get(k).push(i);
+  }
+  for (const [k, own] of cells) {
+    const [b, cx, cy] = k.split(",").map(Number);
+    // every 1 mm window whose corner lies in this cell is inside this cell and its right/lower neighbours
+    const pts = [own, cells.get(key(b, cx + 1, cy)), cells.get(key(b, cx, cy + 1)), cells.get(key(b, cx + 1, cy + 1))].flatMap((c) => c || []);
+    if (pts.length <= limit) continue;
+    for (let ox = 0; ox < 10; ox++) for (let oy = 0; oy < 10; oy++) {
+      const x0 = cx * 10 + ox, y0 = cy * 10 + oy;
+      const inside = pts.filter((i) => keep[i] && X(i) >= x0 && X(i) < x0 + 10 && Y(i) >= y0 && Y(i) < y0 + 10);
+      while (inside.length > limit) {
+        let best = -1, bestD = 30;   // merged stitch stays under 3 mm
+        for (const i of inside) {
+          if (!removable(i)) continue;
+          const a = near(i, -1), c = near(i, 1);
+          if (a < 0 || c >= n || st[a][2] !== STITCH || st[c][2] !== STITCH) continue;
+          const d = Math.hypot(X(c) - X(a), Y(c) - Y(a));
+          if (d < bestD) { bestD = d; best = i; }
+        }
+        if (best < 0) break;
+        keep[best] = 0; inside.splice(inside.indexOf(best), 1);
+      }
+    }
+  }
+  return st.filter((_, i) => keep[i]);
+}
+
+// A quarter turn of a pattern (y down): clockwise turns a sideways design into the machine's hoop, and back.
+export function turnPattern(p, clockwise = true) {
+  return { ...p, stitches: p.stitches.map(([x, y, c]) => (clockwise ? [-y, x, c] : [y, -x, c])) };
 }
