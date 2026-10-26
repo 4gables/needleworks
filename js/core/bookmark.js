@@ -36,11 +36,12 @@ function textPaths(name, family, boxLen, boxH, lead, tail, print) {
   const all = edges.flatMap((e) => e[2]);
   const mn = [Math.min(...all.map((p) => p[0])), Math.min(...all.map((p) => p[1]))];
   const mx = [Math.max(...all.map((p) => p[0])), Math.max(...all.map((p) => p[1]))];
-  // lengthwise: centre the whole word. Across: centre the letters' own band (decorations excluded)
+  // lengthwise: centre the whole word. Across: centre the bulk of the letters (the x-height band), so loops
+  // above and below may reach further one way than the other
   const body = all.filter((p) => p[0] >= info.firstX && p[0] <= info.lastX);
   const by = body.length ? body.map((p) => p[1]) : all.map((p) => p[1]);
   const b0 = Math.min(...by), b1 = Math.max(...by);
-  const c = [(mn[0] + mx[0]) / 2, (b0 + b1) / 2];
+  const c = [(mn[0] + mx[0]) / 2, info.baseline - info.mid / 2];
   const half = Math.max(c[1] - mn[1], mx[1] - c[1]), halfBody = Math.max((b1 - b0) / 2, 1e-9);
   const s = Math.min((LETTERS * boxH) / (2 * halfBody), boxH / (2 * half), boxLen / (mx[0] - mn[0]));
   // px -> mm, rotate 90° clockwise so the word reads top-to-bottom with letter tops to the right

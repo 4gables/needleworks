@@ -13,10 +13,11 @@ export class Design {
 
   st(cmd, [x, y]) { this.stitches.push([x * 10, y * 10, cmd]); }
 
-  // stitch a run of points; jumps (with a trim) if it starts away from the needle
-  path(pts, lock = true) {
+  // stitch a run of points; jumps (with a trim) if it starts away from the needle, or when told the way there
+  // would show (it crosses open fabric)
+  path(pts, lock = true, jump = false) {
     if (!pts.length) return;
-    const far = !this.cur || Math.hypot(pts[0][0] - this.cur[0], pts[0][1] - this.cur[1]) > 2.0;
+    const far = !this.cur || jump || Math.hypot(pts[0][0] - this.cur[0], pts[0][1] - this.cur[1]) > 2.0;
     if (this.cur && far) this.stitches.push([0, 0, TRIM]);
     if (far) {
       this.st(JUMP, pts[0]);

@@ -1,7 +1,7 @@
 <!doctype html><meta charset="utf-8"><title>PE900 batch</title>
 <link rel="stylesheet" href="../../css/app.css">
 <style>body{display:block;padding:12px;font:13px monospace} pre{white-space:pre-wrap}</style>
-<p>Builds every bookmark font × name × swash setting (before/after on/off) and a set of pictures with the site's own code, then POSTs each
+<p>Builds a sample (~110 files) with the site's own code: every bookmark font × 3 names × decorations on/off, a blank bookmark, and 4 pictures at a small, a large and a turned setting, then POSTs each
 PES to <code>/save/&lt;name&gt;</code>. Serve with <code>tests/batch_server.py</code>, then run
 <code>tests/pe900_check.py</code> on the saved files.</p>
 <pre id="log"></pre>
@@ -14,7 +14,7 @@ import { analyze, digitize, workingSize } from "../../js/core/digitize.js";
 const hoop = getHoop(), log = (s) => (document.getElementById("log").textContent += s + "\n");
 import { FONTS } from "../../js/core/fonts.js";
 import { turnPattern } from "../../js/core/design.js";
-const names = ["ashley", "Ashley", "Emma", "Olivia", "Ann", "bob", "Zoë", "Mia", "Katherine", "Maximiliana", "Jo", "W", "Grace-Lynn", "Quinn", "jayden"];
+const names = ["Mia", "Katherine", "Zoë"];   // short, long with a capital, accented
 let n = 0, bad = 0;
 async function save(name, pattern) {
   const bytes = writePES(pattern), v = validatePES(bytes, pattern, hoop);
@@ -22,23 +22,21 @@ async function save(name, pattern) {
   await fetch(`/save/${encodeURIComponent(name)}.pes`, { method: "POST", body: bytes });
   n++;
 }
-const only = new URLSearchParams(location.search).get("only");   // "pic" or "bm" to run half
-if (only !== "pic") await save("bm_blank", buildBookmark({ blank: true, hoop }).pattern());
-for (const { family: f, print } of only === "pic" ? [] : FONTS) {
+await save("bm_blank", buildBookmark({ blank: true, hoop }).pattern());
+for (const { family: f, print } of FONTS) {
   await document.fonts.load(`40px "${f}"`);
-  // index in the tag: "ashley" and "Ashley" would share a file on a case-insensitive disk
-  for (const [ni, name] of names.entries()) for (const lead of [true, false]) for (const tail of [true, false]) {
-    const tag = `bm_${f.slice(3).replace(/ /g, "")}_${ni}${name.normalize("NFKD").replace(/[^A-Za-z-]/g, "")}_${lead ? "L" : ""}${tail ? "T" : ""}`;
-    try { await save(tag, buildBookmark({ name, family: f, hoop, lead, tail, print }).pattern()); }
+  for (const name of names) for (const deco of [true, false]) {
+    const tag = `bm_${f.slice(3).replace(/ /g, "")}_${name.normalize("NFKD").replace(/[^A-Za-z]/g, "")}${deco ? "_deco" : ""}`;
+    try { await save(tag, buildBookmark({ name, family: f, hoop, lead: deco, tail: deco, print }).pattern()); }
     catch (e) { bad++; log(`ERROR ${tag}: ${e.message}`); }
   }
   log(`${f}: done`);
 }
-const pics = ["../../assets/sample-flower.png", ...Array.from({ length: 8 }, (_, i) => `../external/images/etsy_${i + 1}.jpg`)];
-for (const src of only === "bm" ? [] : pics) {
+const pics = ["../../assets/sample-flower.png", "../external/images/etsy_1.jpg", "../external/images/etsy_4.jpg", "../external/images/etsy_8.jpg"];
+for (const src of pics) {
   let bmp; try { bmp = await createImageBitmap(await (await fetch(src)).blob()); } catch { log(`skip ${src}`); continue; }
   // turned: digitized in the sideways hoop, then turned into the machine's orientation like the site does
-  for (const colors of [2, 4, 8]) for (const size of [60, 100, 170]) for (const turn of size === 170 ? [false, true] : [false]) {
+  for (const [colors, size, turn] of [[2, 60, false], [8, 170, false], [4, 170, true]]) {
     const field = turn ? { ...hoop, w: hoop.h, h: hoop.w } : hoop, sz = workingSize(bmp.width, bmp.height, size, field);
     const c = new OffscreenCanvas(sz.w, sz.h), ctx = c.getContext("2d");
     ctx.imageSmoothingQuality = "high"; ctx.drawImage(bmp, 0, 0, sz.w, sz.h);

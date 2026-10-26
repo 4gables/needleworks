@@ -67,6 +67,8 @@ export function renderWord(text, family, { leadIn = 0, tail = 0, join = true, de
   const inkL = -m.actualBoundingBoxLeft, inkR = m.actualBoundingBoxRight;
   const asc = m.actualBoundingBoxAscent, desc = m.actualBoundingBoxDescent;
   const xh = mx.actualBoundingBoxAscent + mx.actualBoundingBoxDescent;
+  // height of the bulk of the letters: the x-height, or the capitals for an all-caps name
+  const mid = /\p{Ll}/u.test(text) ? xh : probe.measureText("H").actualBoundingBoxAscent;
   const pad = Math.ceil(PX * (0.2 + leadIn + tail));
   const w = Math.ceil(inkR - inkL + 2 * pad), h = Math.ceil(asc + desc + PX);
   const ox = pad - inkL, baseline = PX / 2 + asc;
@@ -118,8 +120,6 @@ export function renderWord(text, family, { leadIn = 0, tail = 0, join = true, de
     }
   }
   if (deco === "dash") {
-    // middle of the x-height, or of the capitals for an all-caps name
-    const mid = /\p{Ll}/u.test(text) ? xh : probe.measureText("H").actualBoundingBoxAscent;
     const y = baseline - mid / 2, gap = 0.6 * mid;
     if (leadIn) brush(ctx, [[span[0] - gap - leadIn * xh, y], [span[0] - gap, y]], sw);
     if (tail) brush(ctx, [[span[1] + gap, y], [span[1] + gap + tail * xh, y]], sw);
@@ -139,7 +139,7 @@ export function renderWord(text, family, { leadIn = 0, tail = 0, join = true, de
     }
   }
   mask = maskOf(ctx, w, h);
-  return { mask, stroke, baseline, xh, span };
+  return { mask, stroke, baseline, xh, mid, span };
 }
 
 export function strokes(text, family, opts) {

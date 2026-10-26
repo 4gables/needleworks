@@ -1,7 +1,7 @@
 // Picture -> embroidery. Reduce to a few thread colours, then stitch each shape by its width:
-// hairlines get a double running stitch, strokes get satin along their centre, areas get tatami fill.
+// hairlines get a double running stitch along their centre; every shape with width gets a solid tatami fill.
 import { Design } from "./design.js";
-import { run, satin } from "./geom.js";
+import { run } from "./geom.js";
 import { MARGIN } from "./machines.js";
 import { distanceTransform, label, order, skeletonEdges } from "./raster.js";
 import { nearestBrotherThread, rgbToHex } from "./threads.js";
@@ -11,7 +11,7 @@ export const DEFAULTS = {
   sizeMm: 100,        // longest side of the finished design
   removeBackground: true,
   fillAngle: 45,      // degrees
-  density: 0.4,       // mm between fill rows / satin stitches
+  density: 0.4,       // mm between fill rows
   res: 5,             // working pixels per mm
 };
 
@@ -77,7 +77,10 @@ export function analyze(img, opts = {}) {
     return m < 36;   // ΔE < 6 to every neighbour
   });
   const train = flat.length > opaque.length * 0.2 ? flat : opaque;
-  const C = kmeans(lab, train, Math.min(k, Math.max(1, train.length)));
+  // more clusters than the picture has colours split one colour into near-identical shades: merge those
+  const C = [];
+  for (const c of kmeans(lab, train, Math.min(k, Math.max(1, train.length))))
+    if (!C.some((d) => (c[0] - d[0]) ** 2 + (c[1] - d[1]) ** 2 + (c[2] - d[2]) ** 2 < 36)) C.push(c);   // ΔE < 6
   let labels = new Int16Array(n).fill(-1);
   for (const i of opaque) {
     let best = 0, bd = Infinity;
@@ -131,6 +134,8 @@ export function analyze(img, opts = {}) {
     for (let y = 0; y < h; y++) { add(y * w); add(y * w + w - 1); }
     bg = [...cnt.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? -1;
   }
+  // shades of the background (a white box on an off-white page, paper texture) are background too
+  const isBg = (j) => bg >= 0 && (j === bg || (C[j][0] - C[bg][0]) ** 2 + (C[j][1] - C[bg][1]) ** 2 + (C[j][2] - C[bg][2]) ** 2 < 64);   // ΔE < 8: a pale design colour is further off
   const area = new Array(C.length).fill(0), rgb = C.map(() => [0, 0, 0]);
   for (let i = 0; i < n; i++) {
     const l = labels[i]; if (l < 0) continue;
@@ -139,7 +144,7 @@ export function analyze(img, opts = {}) {
   const colors = C.map((c, j) => {
     const col = area[j] ? rgb[j].map((v) => Math.round(v / area[j])) : [0, 0, 0];
     const hex = rgbToHex(col);
-    return { id: j, hex, lightness: c[0], area: area[j], background: j === bg, thread: nearestBrotherThread(hex) };
+    return { id: j, hex, lightness: c[0], area: area[j], background: isBg(j), thread: nearestBrotherThread(hex) };
   });
   return { w, h, labels, colors };
 }
@@ -187,16 +192,27 @@ function tatami(mask, comp, res, { angle, spacing, stitch, inset = 0, pull = 0.1
     prev = cur;
   }
   const toXY = (u, v) => [u * U[0] + v * V[0], u * U[1] + v * V[1]];
-  return regions.map((reg) => {
-    const pts = [];
+  // the step from one row's end to the next row's start runs along the edge; where the edge curves in (the S's
+  // counter) that step would cross open fabric, so the path is split there and the needle jumps instead
+  const leaves = (p, q) => {
+    const n = Math.ceil(Math.hypot(q[0] - p[0], q[1] - p[1]) / (0.2 * res));
+    for (let i = 1; i < n; i++) {
+      const x = p[0] + ((q[0] - p[0]) * i) / n, y = p[1] + ((q[1] - p[1]) * i) / n;
+      if (!inside(x, y) && !inside(x + 1, y) && !inside(x - 1, y) && !inside(x, y + 1) && !inside(x, y - 1)) return true;
+    }
+    return false;
+  };
+  return regions.flatMap((reg) => {
+    const paths = [[]];
     reg.rows.forEach((row, k) => {
       let [a, b] = row.iv;
       const fwd = k % 2 === 0, off = ((row.r % 4) * L) / 4, line = [a];
       for (let u = Math.ceil((a - off) / L) * L + off; u < b; u += L) if (u - a > L * 0.3 && b - u > L * 0.3) line.push(u);
       line.push(b);
-      (fwd ? line : line.reverse()).forEach((u) => pts.push(toXY(u, row.v)));
+      const pts = (fwd ? line : line.reverse()).map((u) => toXY(u, row.v)), cur = paths[paths.length - 1];
+      if (cur.length && leaves(cur[cur.length - 1], pts[0])) paths.push(pts); else cur.push(...pts);
     });
-    return pts;
+    return paths;
   });
 }
 
@@ -236,7 +252,8 @@ function build(img, analysis, opts) {
       let maxDt = 0, sx = 0, sy = 0;
       for (const i of comp.pixels) { maxDt = Math.max(maxDt, dt[i]); sx += i % w; sy += Math.floor(i / w); }
       const widthMm = (2 * maxDt) / res, centre = [sx / comp.pixels.length, sy / comp.pixels.length];
-      if (widthMm <= 4.2) {
+      // only hairlines follow a centre line; anything with width is a solid fill that matches its outline exactly
+      if (widthMm < 1.0) {
         const cm = { w, h, data: new Uint8Array(w * h) };
         for (const i of comp.pixels) cm.data[i] = 1;
         const edges = skeletonEdges(cm, Math.max(2, maxDt));
@@ -245,14 +262,10 @@ function build(img, analysis, opts) {
           continue;
         }
         const paths = [];
-        for (const seq of order(edges)) for (const [p, mode] of seq) {
-          const ws = p.map(([x, y]) => dt[Math.round(y) * w + Math.round(x)] || 1).sort((a, b) => a - b);
-          const sw = (2 * ws[Math.floor(ws.length / 2)]) / res;
-          const mm = toMm(p);
-          if (widthMm < 1.0) paths.push(run(mm, 1.5));
-          else paths.push(mode === "run" ? run(mm, 1.5) : satin(mm, Math.min(4.5, Math.max(1.0, sw)), o.density, 0.2));
+        for (const seq of order(edges)) for (const [p] of seq) {
+          paths.push(run(toMm(p), 1.5));
         }
-        blocks.push({ centre, paths, kind: widthMm < 1.0 ? "run" : "satin" });
+        blocks.push({ centre, paths, kind: "run" });
       } else {
         const under = tatami(mask, comp, res, { angle: o.fillAngle + 90, spacing: 2.5, stitch: 3, inset: 0.4, pull: 0 });
         const fill = tatami(mask, comp, res, { angle: o.fillAngle, spacing: o.density, stitch: 3.5 });
@@ -269,7 +282,19 @@ function build(img, analysis, opts) {
       const b = blocks.splice(bi, 1)[0]; ordered.push(b); at = b.centre;
     }
     d.color(col.hex, col.thread.name);
-    for (const b of ordered) for (const p of b.paths) if (p.length) d.path(p);
+    // a short move to the next piece is sewn straight unless it would cross fabric this colour doesn't cover
+    const covered = ([x, y]) => mask.data[Math.round(y * res + cy) * w + Math.round(x * res + cx)] === 1;
+    // (fill rows end a little past the shape's edge, so the last 0.3 mm at each end isn't checked)
+    const crosses = (a, b) => {
+      const L = Math.hypot(b[0] - a[0], b[1] - a[1]), n = Math.ceil(L / 0.2);
+      for (let i = 1; i < n; i++) {
+        const t = i / n;
+        if (t * L < 0.3 || (1 - t) * L < 0.3) continue;
+        if (!covered([a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t])) return true;
+      }
+      return false;
+    };
+    for (const b of ordered) for (const p of b.paths) if (p.length) d.path(p, true, !!d.cur && crosses(d.cur, p[0]));
     summary.push({ ...col, shapes: ordered.length, kinds: [...new Set(ordered.map((b) => b.kind))] });
   }
   if (!d.stitches.length) throw new Error("Nothing to stitch. Try more colours or turn off background removal.");

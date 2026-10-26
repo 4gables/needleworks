@@ -22,7 +22,8 @@ Embroidery-file tools for home machines. Two implementations of the same engine:
   file's) gets more than 24 needle hits per colour block; interior points at satin junctions are dropped, tie-ins kept.
   Added when a turned 172 mm picture hit 26.
 - Bookmark: 5 colour blocks of one thread = 4 machine pauses for the in-the-hoop fabric steps (blank = no name block,
-  4 blocks / 3 pauses). Name is centred on the letters' band (decorations excluded) and lengthwise with equal room below
+  4 blocks / 3 pauses). Name is centred across on the middle of the x-height (cap height for all-caps), so the bulk of the letters is
+  centred and loops may reach further one way; lengthwise it's centred with equal room below
   the eyelet and above the border. Letters are sized so their band fills `LETTERS` (72%) of the inner width, the same with
   or without decorations; only a word too long for the bookmark shrinks. Needs the 5x7 hoop.
 - Print fonts (`print: true` in `js/core/fonts.js`): letters aren't bridged (each is its own piece, the machine trims
@@ -45,14 +46,18 @@ Embroidery-file tools for home machines. Two implementations of the same engine:
 - PE900 proof: `tests/pe900_check.py` re-reads PES files with pyembroidery plus its own PEC byte walk (no shared code
   with formats.js) and checks hoop fit, PEC size field, toggle bytes, longest stitch, tiny stitches and needle hits per
   mm² per colour block (limit 24 = densest spot in sold designs; script loops crossing on a tight curve reach 23).
-  `tests/browser/pe900_batch.html` served by `tests/batch_server.py OUT` builds every font × 15 names × lead/tail on/off
-  and 81 picture settings with the site's own code and saves the PES files for the checker. Run both after any engine
+  `tests/browser/pe900_batch.html` served by `tests/batch_server.py OUT` builds a ~110-file sample (every font × 3 names × decorations
+  on/off, blank, 4 pictures × 3 settings incl. turned) with the site's own code and saves the PES files for the checker. Run both after any engine
   change. The three files emailed to Ashley are in `tests/external/emailed/`.
 - PEC palette: two colours never share a Brother thread (pyembroidery's rule), so a colour can get its second-closest
   thread. Always label threads with `machineThreads()` (or an opened PES's own `pec` bytes), never plain
   `nearestBrotherThread()`, or the site and the machine's screen name different threads. Our order is block order;
   pyembroidery's is Python set order, so files with competing colours differ from pyembroidery only in those bytes.
 - Digitize shrinks a picture that lands over the hoop field (fill/satin edges overshoot the image) instead of erroring.
+- Pictures: every shape 1 mm wide or more is a solid tatami fill that follows its outline (skeleton satin broke letter
+  corners into ragged columns); only hairlines under 1 mm get a centre-line run. k-means clusters within ΔE 6 are
+  merged, and any colour within ΔE 8 of the border colour is background (a white logo box on an off-white page was
+  stitched as "Brother White"). Fill row links and moves between pieces jump instead of sewing across open fabric.
 - Download names are ASCII only (`safeName`): the machine's USB reader may not show accented names.
 - Desktop layout fits the window (min-width 861px): body is 100dvh with no page scroll; only `.controls` may scroll
   on short screens, and a max-height 900px tier hides ledes/captions. Phones scroll normally.
