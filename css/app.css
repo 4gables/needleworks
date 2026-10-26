@@ -138,6 +138,8 @@ input[type="range"] { width: 100%; accent-color: var(--accent); min-height: 32px
 .info { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px 16px; display: grid; gap: 6px; }
 .info .warn { color: #a5521a; font-weight: 700; }
 .info .good { color: #2f7d4a; font-weight: 700; }
+.fine-warn { margin: 0; padding: 10px 12px; border-radius: 10px; background: #fdf3e7; color: #7a3f12; font-size: 15px; }
+#pic-density button { padding: 6px 14px; }
 
 /* preview stage */
 .stage { min-width: 0; display: grid; grid-template-rows: minmax(360px, 1fr) auto auto; gap: 10px;

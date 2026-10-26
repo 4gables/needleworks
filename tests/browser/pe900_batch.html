@@ -9,7 +9,7 @@ PES to <code>/save/&lt;name&gt;</code>. Serve with <code>tests/batch_server.py</
 import { buildBookmark } from "../../js/core/bookmark.js";
 import { hoop as getHoop } from "../../js/core/machines.js";
 import { writePES, validatePES } from "../../js/core/formats.js";
-import { analyze, digitize, workingSize } from "../../js/core/digitize.js";
+import { DENSITY, analyze, digitize, workingSize } from "../../js/core/digitize.js";
 
 const hoop = getHoop(), log = (s) => (document.getElementById("log").textContent += s + "\n");
 import { FONTS } from "../../js/core/fonts.js";
@@ -36,12 +36,12 @@ const pics = ["../../assets/sample-flower.png", "../external/images/etsy_1.jpg",
 for (const src of pics) {
   let bmp; try { bmp = await createImageBitmap(await (await fetch(src)).blob()); } catch { log(`skip ${src}`); continue; }
   // turned: digitized in the sideways hoop, then turned into the machine's orientation like the site does
-  for (const [colors, size, turn] of [[2, 60, false], [8, 170, false], [4, 170, true]]) {
+  for (const [colors, size, turn, fill] of [[2, 60, false, "solid"], [8, 170, false, "standard"], [4, 170, true, "solid"]]) {
     const field = turn ? { ...hoop, w: hoop.h, h: hoop.w } : hoop, sz = workingSize(bmp.width, bmp.height, size, field);
     const c = new OffscreenCanvas(sz.w, sz.h), ctx = c.getContext("2d");
     ctx.imageSmoothingQuality = "high"; ctx.drawImage(bmp, 0, 0, sz.w, sz.h);
-    const img = ctx.getImageData(0, 0, sz.w, sz.h), opts = { colors, removeBackground: true, fillAngle: 45, skip: [], hoop: field };
-    const tag = `pic_${src.split("/").pop().split(".")[0]}_c${colors}_s${size}${turn ? "_turned" : ""}`;
+    const img = ctx.getImageData(0, 0, sz.w, sz.h), opts = { colors, removeBackground: true, fillAngle: 45, density: DENSITY[fill], skip: [], hoop: field };
+    const tag = `pic_${src.split("/").pop().split(".")[0]}_c${colors}_s${size}_${fill}${turn ? "_turned" : ""}`;
     try { const p = digitize(img, analyze(img, opts), opts).design.pattern(); await save(tag, turn ? turnPattern(p) : p); }
     catch (e) { bad++; log(`ERROR ${tag}: ${e.message}`); }
   }

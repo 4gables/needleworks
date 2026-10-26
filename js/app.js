@@ -3,7 +3,7 @@ import { turnPattern } from "./core/design.js";
 import { FONTS, fontOf } from "./core/fonts.js";
 import { designStats, machineThreads, readEmbroidery, validatePES, writePES } from "./core/formats.js";
 import { DEFAULT_MACHINE, MACHINES, MARGIN, hoop as getHoop } from "./core/machines.js";
-import { workingSize } from "./core/digitize.js";
+import { DENSITY, workingSize } from "./core/digitize.js";
 import { nearestBrotherThread, pecThread } from "./core/threads.js";
 import { FABRICS, colorBlocks, draw } from "./render.js";
 
@@ -25,7 +25,7 @@ const state = {
   // hoop turned sideways on screen, per tab; the bookmark reads best lying down
   turn: { picture: false, bookmark: true, open: false, ...store.get("turn", {}) },
   bm: { name: store.get("bm.name", "ashley"), font: store.get("bm.font", FONTS[0].family), color: store.get("bm.color", RED), fabric: store.get("bm.fabric", "pink"), lead: store.get("bm.lead", true), tail: store.get("bm.tail", true), blank: store.get("bm.blank", false) },
-  pic: { file: null, bitmap: null, key: 0, skip: [], colors: 4, size: 100, angle: 45, bg: true, req: 0, colorsInfo: [] },
+  pic: { file: null, bitmap: null, key: 0, skip: [], colors: 4, size: 100, angle: 45, bg: true, density: store.get("pic.density", "solid"), req: 0, colorsInfo: [] },
 };
 if (!MACHINES[state.machine]) state.machine = DEFAULT_MACHINE;
 const hoop = () => getHoop(state.machine, state.hoopId);
@@ -293,6 +293,7 @@ worker.onmessage = (e) => {
   const mt = machineThreads(r.pattern.threads);
   state.pic.machineName = new Map(r.pattern.threads.map((t, i) => [t.color, mt[i].name]));
   paletteUI();
+  fineUI(r.fine);
   const base = safeName((state.pic.file?.name || "picture").replace(/\.[^.]+$/, ""), "picture");
   const v = { pattern: r.pattern, verifyAgainst: r.pattern, bytes: r.bytes, filename: `${base}.pes`, fabric: "linen",
   };
@@ -324,6 +325,21 @@ const bindRange = (id, key, fmt) => {
 bindRange("pic-colors", "colors", (v) => String(v));
 bindRange("pic-size", "size", (v) => `${v} mm · ${(v / 25.4).toFixed(1)} in`);
 bindRange("pic-angle", "angle", (v) => `${v}°`);
+// warn when parts of the picture are finer than thread can show (they'd close up or turn into a single line)
+function fineUI(fine) {
+  const issues = [];
+  if (fine?.narrowMm2 >= 0.8) issues.push("some gaps (like inside or between small letters) are narrower than ½ mm and will close up");
+  if (fine?.hairlines >= 5) issues.push("some lines are thinner than 1 mm and will be a single thread, not solid");
+  $("pic-fine").hidden = !issues.length;
+  $("pic-fine").textContent = issues.length
+    ? `Some details are too small to stitch cleanly: ${issues.join(", and ")}. Make it bigger with Size, or try fewer thread colours.` : "";
+}
+const densityUI = () => document.querySelectorAll("#pic-density button").forEach((b) => b.setAttribute("aria-pressed", b.dataset.d === state.pic.density));
+densityUI();
+$("pic-density").onclick = (e) => {
+  const b = e.target.closest("button"); if (!b) return;
+  state.pic.density = b.dataset.d; store.set("pic.density", state.pic.density); densityUI(); makePicture();
+};
 $("pic-bg").onchange = (e) => { state.pic.bg = e.target.checked; state.pic.skip = []; makePicture(); };
 
 // first visit: show a sample so the page opens on real stitches, not an empty box
@@ -385,7 +401,7 @@ function makePicture() {
   ctx.drawImage(p.bitmap, box.sx, box.sy, box.sw, box.sh, 0, 0, sz.w, sz.h);
   const img = ctx.getImageData(0, 0, sz.w, sz.h);
   p.req++; busy(true, "Stitching your picture…");
-  worker.postMessage({ id: p.req, img, opts: { colors: p.colors, removeBackground: p.bg, fillAngle: p.angle, skip: p.skip, hoop: h, turn: turned(), imageKey: p.key } });
+  worker.postMessage({ id: p.req, img, opts: { colors: p.colors, removeBackground: p.bg, fillAngle: p.angle, density: DENSITY[p.density] || DENSITY.solid, skip: p.skip, hoop: h, turn: turned(), imageKey: p.key } });
 }
 $("pic-file").onchange = (e) => loadPicture(e.target.files[0]);
 

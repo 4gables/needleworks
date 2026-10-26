@@ -11,9 +11,32 @@ export const DEFAULTS = {
   sizeMm: 100,        // longest side of the finished design
   removeBackground: true,
   fillAngle: 45,      // degrees
-  density: 0.4,       // mm between fill rows
+  density: 0.35,      // mm between fill rows (DENSITY.solid)
   res: 8,             // working pixels per mm (5 lost the narrow notches of small lettering, e.g. an M)
 };
+
+// fill row spacing in mm. Solid covers the fabric; standard is lighter and faster. 0.3 fails the PE900 check:
+// the links between rows become stitches under 0.3 mm, which nest.
+export const DENSITY = { solid: 0.35, standard: 0.4 };
+
+// Gaps narrower than 0.5 mm between parts of one colour (between small letters, inside an M's notch) close up once
+// sewn. Returns their area in mm²: a morphological closing of the colour, minus the colour, counted only where the
+// fabric would show (not where another stitched colour fills the gap), ignoring corner tips.
+const MIN_GAP = 0.5;
+function narrowGaps(mask, res, open) {
+  const { w, h, data } = mask, r = (MIN_GAP / 2) * res, n = w * h;
+  const out = distanceTransform({ w, h, data: data.map((v) => 1 - v) });
+  const dil = { w, h, data: new Uint8Array(n) };
+  for (let i = 0; i < n; i++) dil.data[i] = data[i] || out[i] <= r ? 1 : 0;
+  const inn = distanceTransform(dil), gap = { w, h, data: new Uint8Array(n) };
+  for (let i = 0; i < n; i++) gap.data[i] = !data[i] && open(i) && inn[i] > r ? 1 : 0;
+  // every sharp inside corner (an N's, a V's) narrows to a point: only a gap that stays narrow over a length counts
+  const { labels, count } = label(gap), size = new Array(count + 1).fill(0);
+  for (let i = 0; i < n; i++) size[labels[i]]++;
+  let mm2 = 0;
+  for (let c = 1; c <= count; c++) if (size[c] / (res * res) >= 0.3) mm2 += size[c] / (res * res);
+  return mm2;
+}
 
 // ---------- colour ----------
 function srgbToLab(r, g, b) {
@@ -236,10 +259,12 @@ function build(img, analysis, opts) {
   const d = new Design(hoop);
   const used = colors.filter((c) => !c.background && c.area > 0 && !(o.skip || []).includes(c.id))
     .sort((a, b) => b.lightness - a.lightness);   // light first, dark details on top
-  const summary = [];
+  const summary = [], stitched = new Set(used.map((c) => c.id));
+  const fine = { narrowMm2: 0, hairlines: 0 };   // details too small to stitch cleanly (shown as a hint)
   for (const col of used) {
     const mask = { w, h, data: new Uint8Array(w * h) };
     for (let i = 0; i < w * h; i++) mask.data[i] = labels[i] === col.id ? 1 : 0;
+    fine.narrowMm2 += narrowGaps(mask, res, (i) => !stitched.has(labels[i]));
     const { labels: cl, count } = label(mask);
     const dt = distanceTransform(mask);
     const comps = [];
@@ -254,6 +279,7 @@ function build(img, analysis, opts) {
       const widthMm = (2 * maxDt) / res, centre = [sx / comp.pixels.length, sy / comp.pixels.length];
       // only hairlines follow a centre line; anything with width is a solid fill that matches its outline exactly
       if (widthMm < 1.0) {
+        fine.hairlines++;
         const cm = { w, h, data: new Uint8Array(w * h) };
         for (const i of comp.pixels) cm.data[i] = 1;
         const edges = skeletonEdges(cm, Math.max(2, maxDt));
@@ -304,7 +330,7 @@ function build(img, analysis, opts) {
   }
   if (!d.stitches.length) throw new Error("Nothing to stitch. Try more colours or turn off background removal.");
   d.finish();
-  return { design: d, summary };
+  return { design: d, summary, fine };
 }
 
 // fit the picture's longest side to sizeMm, capped by the hoop

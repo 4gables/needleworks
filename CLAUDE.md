@@ -61,6 +61,10 @@ Embroidery-file tools for home machines. Two implementations of the same engine:
   and any move over 1 mm between sections of one fill jumps (it would lie on top of finished stitches). Pictures are
   sampled at 8 px/mm (5 lost the notches of small lettering); thin shapes (< 2 mm) get 0.05 mm pull, not 0.15, so the
   gaps between small letters stay open. Notches under ~0.5 mm can't be kept by any thread: open them in the artwork.
+- Fill density (`DENSITY` in digitize.js): Solid 0.35 mm rows (default) or Lighter 0.4. 0.3 fails the PE900 check
+  (row links become < 0.3 mm stitches). `digitize()` also returns `fine`: area of gaps < 0.5 mm that stay narrow over a
+  length (clusters >= 0.3 mm²; corner tips don't count) and the count of hairline (< 1 mm) shapes. The site warns at
+  >= 0.8 mm² or >= 5 hairlines.
 - Download names are ASCII only (`safeName`): the machine's USB reader may not show accented names.
 - Desktop layout fits the window (min-width 861px): body is 100dvh with no page scroll; only `.controls` may scroll
   on short screens, and a max-height 900px tier hides ledes/captions. Phones scroll normally.

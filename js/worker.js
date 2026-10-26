@@ -10,11 +10,11 @@ self.onmessage = (e) => {
     const key = `${img.width}x${img.height}:${opts.colors}:${opts.removeBackground}:${opts.imageKey}`;
     const analysis = last && last.key === key ? last.analysis : analyze(img, opts);
     last = { key, analysis };
-    const { design, summary } = digitize(img, analysis, opts);
+    const { design, summary, fine } = digitize(img, analysis, opts);
     // digitized in the sideways hoop when turned; the file always loads in the machine's orientation
     const pattern = opts.turn ? turnPattern(design.pattern()) : design.pattern();
     const bytes = writePES(pattern);
-    self.postMessage({ id, ok: true, pattern, bytes, summary, stats: designStats(pattern),
+    self.postMessage({ id, ok: true, pattern, bytes, summary, fine, stats: designStats(pattern),
       colors: analysis.colors, labels: analysis.labels, w: analysis.w, h: analysis.h }, [bytes.buffer]);
   } catch (err) {
     self.postMessage({ id, ok: false, error: err.message || String(err) });
