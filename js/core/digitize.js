@@ -12,7 +12,7 @@ export const DEFAULTS = {
   removeBackground: true,
   fillAngle: 45,      // degrees
   density: 0.4,       // mm between fill rows
-  res: 5,             // working pixels per mm
+  res: 8,             // working pixels per mm (5 lost the narrow notches of small lettering, e.g. an M)
 };
 
 // ---------- colour ----------
@@ -268,7 +268,8 @@ function build(img, analysis, opts) {
         blocks.push({ centre, paths, kind: "run" });
       } else {
         const under = tatami(mask, comp, res, { angle: o.fillAngle + 90, spacing: 2.5, stitch: 3, inset: 0.4, pull: 0 });
-        const fill = tatami(mask, comp, res, { angle: o.fillAngle, spacing: o.density, stitch: 3.5 });
+        // pull compensation widens a fill past its edge; on thin letters that closes the gaps between them
+        const fill = tatami(mask, comp, res, { angle: o.fillAngle, spacing: o.density, stitch: 3.5, pull: widthMm < 2 ? 0.05 : 0.15 });
         blocks.push({ centre, paths: [...under, ...fill].map(toMm), kind: "fill" });
       }
     }
@@ -294,7 +295,11 @@ function build(img, analysis, opts) {
       }
       return false;
     };
-    for (const b of ordered) for (const p of b.paths) if (p.length) d.path(p, true, !!d.cur && crosses(d.cur, p[0]));
+    // inside a fill, a move of more than 1 mm between sections would lie on top of finished stitches: jump it (trimmed)
+    for (const b of ordered) for (const p of b.paths) if (p.length) {
+      const far = !!d.cur && b.kind === "fill" && Math.hypot(p[0][0] - d.cur[0], p[0][1] - d.cur[1]) > 1.0;
+      d.path(p, true, !!d.cur && (far || crosses(d.cur, p[0])));
+    }
     summary.push({ ...col, shapes: ordered.length, kinds: [...new Set(ordered.map((b) => b.kind))] });
   }
   if (!d.stitches.length) throw new Error("Nothing to stitch. Try more colours or turn off background removal.");

@@ -57,7 +57,10 @@ Embroidery-file tools for home machines. Two implementations of the same engine:
 - Pictures: every shape 1 mm wide or more is a solid tatami fill that follows its outline (skeleton satin broke letter
   corners into ragged columns); only hairlines under 1 mm get a centre-line run. k-means clusters within ΔE 6 are
   merged, and any colour within ΔE 8 of the border colour is background (a white logo box on an off-white page was
-  stitched as "Brother White"). Fill row links and moves between pieces jump instead of sewing across open fabric.
+  stitched as "Brother White"). Fill row links and moves between pieces jump instead of sewing across open fabric,
+  and any move over 1 mm between sections of one fill jumps (it would lie on top of finished stitches). Pictures are
+  sampled at 8 px/mm (5 lost the notches of small lettering); thin shapes (< 2 mm) get 0.05 mm pull, not 0.15, so the
+  gaps between small letters stay open. Notches under ~0.5 mm can't be kept by any thread: open them in the artwork.
 - Download names are ASCII only (`safeName`): the machine's USB reader may not show accented names.
 - Desktop layout fits the window (min-width 861px): body is 100dvh with no page scroll; only `.controls` may scroll
   on short screens, and a max-height 900px tier hides ledes/captions. Phones scroll normally.
