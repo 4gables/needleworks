@@ -38,6 +38,13 @@ def raw_pec(b):
     blen = b[blk + 2] | b[blk + 3] << 8 | b[blk + 4] << 16
     w, h = struct.unpack_from("<HH", b, blk + 8)
     out["pec_wh"] = (w / 10, h / 10)
+    # Brother machines read the two fields after 0x1E0/0x1B0 as the design box's top-left relative to the origin
+    # (0x9000 | -left, 0x9000 | -top) and decode stitches after them. pyembroidery writes its opening jump there,
+    # which a machine drops: Ashley's PE900 showed those files shifted and clipped to about half (2026-10-27).
+    p1, p2 = struct.unpack_from(">HH", b, blk + 16)
+    s12 = lambda v: (v & 0xFFF) - 0x1000 if v & 0x800 else v & 0xFFF  # noqa: E731
+    out["box"] = (-s12(p1), -s12(p2), w, h)
+    out["box_flags"] = (p1 >> 12, p2 >> 12)
     i, x, y, cmds, toggles = blk + 20, 0, 0, [], []
     end = blk + blen
     while i < end:
@@ -65,6 +72,40 @@ def raw_pec(b):
     return out
 
 
+def raw_sewseg(b):
+    """Walk the PES section's CEmbOne/CSewSeg design block by hand (what PE-Design opens; machines sew the PEC block).
+    Returns (w, h, transform, moves), or None for a PEC-only (truncated) PES."""
+    pec = struct.unpack_from("<I", b, 8)[0]
+    one = b.find(b"\x07\x00CEmbOne", 12, pec)
+    seg = b.find(b"\x07\x00CSewSeg", one, pec) if one >= 0 else -1
+    if seg < 0:
+        return None
+    o = one + 9
+    transform = struct.unpack_from("<6f", b, o + 16)
+    w, h = struct.unpack_from("<HH", b, o + 46)
+    i, moves = seg + 9, []
+    while True:
+        flag, _color, n = struct.unpack_from("<HHH", b, i)
+        pts = [struct.unpack_from("<hh", b, i + 6 + 4 * k) for k in range(n)]
+        i += 6 + 4 * n
+        moves += [("JUMP", *pts[-1])] if flag == 1 else [("STITCH", *q) for q in pts]
+        if struct.unpack_from("<H", b, i)[0] != 0x8003:
+            break
+        i += 2
+    return w, h, transform, moves
+
+
+def needle_moves(cmds):
+    """Stitch positions, dropping the zero-length anchors PEC puts after jumps."""
+    out, last = [], None
+    for k, x, y in cmds:
+        if k == "STITCH" and (x, y) != last:
+            out.append((x, y))
+        if k in ("STITCH", "JUMP", "TRIM"):
+            last = (x, y)
+    return out
+
+
 def check(path):
     b = open(path, "rb").read()
     errs, info = [], {}
@@ -85,13 +126,56 @@ def check(path):
     if blocks > MAX_BLOCKS:
         errs.append(f"{blocks} colour blocks")
 
-    # 2. pyembroidery reads it and writes back the exact same bytes
-    p = pe.read_pes(path)
+    # 1a. every stitch inside the design box the machine reads from the PEC block
+    bx, by, bw, bh = r["box"]
+    pts0 = [(x, y) for k, x, y in cmds if k in ("STITCH", "JUMP")]
+    if r["box_flags"] != (9, 9):
+        errs.append(f"design box fields aren't Brother's 0x9000 form: flags {r['box_flags']}")
+    if any(x < bx - 1 or x > bx + bw + 1 or y < by - 1 or y > by + bh + 1 for x, y in pts0):
+        vx = max(0, min(bx + bw, max(x for x, _ in pts0)) - max(bx, min(x for x, _ in pts0)))
+        vy = max(0, min(by + bh, max(y for _, y in pts0)) - max(by, min(y for _, y in pts0)))
+        errs.append(f"stitches fall outside the design box: a Brother machine loads it shifted and clipped "
+                    f"(about {vx / 10:.1f} x {vy / 10:.1f} mm = {vx / 254:.2f}\" x {vy / 254:.2f}\" shown)")
+
+    # 1b. a PES design block, if present, must and hold the same stitches as the PEC block, inside the 130x180 hoop page
+    try:
+        sew = raw_sewseg(b)
+    except struct.error:
+        sew = False   # a layout we don't know (PE-Design v10's CSewSeg differs); only ours (v6) must parse
+        if b[:8] == b"#PES0060":
+            errs.append("PES design block is damaged")
+    if sew is False:
+        pass
+    elif sew is None:
+        info["pes_block_mm"] = "none (PEC only)"
+    else:
+        sw, sh, tf, smoves = sew
+        a, bm = needle_moves(cmds), needle_moves(smoves)
+        if len(a) != len(bm) or not a:
+            errs.append(f"PES design block has {len(bm)} stitches, PEC has {len(a)}")
+        else:
+            ox, oy = a[0][0] - bm[0][0], a[0][1] - bm[0][1]
+            if any((p[0] - q[0], p[1] - q[1]) != (ox, oy) for p, q in zip(a, bm)):
+                errs.append("PES design block stitches differ from the PEC stitches")
+        info["pes_block_mm"] = (sw / 10, sh / 10)
+        if (abs(sw / 10 - r["pec_wh"][0]) > 0.15) or (abs(sh / 10 - r["pec_wh"][1]) > 0.15):
+            errs.append(f"PES design block size {sw / 10} x {sh / 10} doesn't match PEC {r['pec_wh']}")
+        # translation puts the block's bottom-left on the 130x180 page, offset by (350, 100) like pyembroidery/PE-Design
+        if not (350 <= tf[4] <= 350 + 1300 and 100 <= tf[5] <= 100 + 1800 + sh):
+            errs.append(f"PES design block placed off the hoop page: {tf}")
+
+    # 2. pyembroidery reads it (box fields removed, so it decodes from the origin like the machine) and writes
+    #    back the exact same bytes
+    blk = struct.unpack_from("<I", b, 8)[0] + 512
+    nb = bytearray(b[:blk + 16] + b[blk + 20:])
+    nlen = (nb[blk + 2] | nb[blk + 3] << 8 | nb[blk + 4] << 16) - 4
+    nb[blk + 2:blk + 5] = bytes([nlen & 0xFF, nlen >> 8 & 0xFF, nlen >> 16 & 0xFF])
+    p = pe.read_pes(io.BytesIO(bytes(nb)))
     if p is None or not p.stitches:
         return errs + ["pyembroidery could not read it"], info
     buf = io.BytesIO()
-    pe.write_pes(p, buf, {"version": "6t"})
-    info["identical_to_pyembroidery"] = buf.getvalue() == b
+    pe.write_pes(p, buf, {"version": 6})
+    info["identical_to_pyembroidery"] = buf.getvalue() == bytes(nb)
     sts = [(x / 10, y / 10, c & pe.COMMAND_MASK) for x, y, c in p.stitches]
 
     # 3. size against the hoop, and the PEC header's own size field
@@ -121,6 +205,9 @@ def check(path):
         if c in (pe.STITCH, pe.JUMP):
             prev = (x, y)
         run += 1
+    first = next(k for k, s in enumerate(sts) if s[2] == pe.STITCH)
+    tie = [math.hypot(sts[k][0] - sts[k - 1][0], sts[k][1] - sts[k - 1][1]) for k in range(first + 1, first + 5)]
+    info["start_tie_in_mm"] = round(max(tie), 2) if tie else 0
     info["longest_stitch_mm"] = round(longest, 2)
     info["tiny_stitches"] = tiny
     if longest > MAX_STITCH:

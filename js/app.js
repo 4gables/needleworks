@@ -430,7 +430,8 @@ async function openDesign(file) {
   try {
     const bytes = new Uint8Array(await file.arrayBuffer());
     const d = readEmbroidery(bytes, file.name);
-    const isPes = d.format === "pes";
+    const repair = d.format === "pes" && d.misplaced;
+    const isPes = d.format === "pes" && !repair;
     const out = isPes ? bytes : writePES(d);
     const st = designStats(d), h = hoop();
     const fits = st.widthMm <= h.w - 2 * MARGIN && st.heightMm <= h.h - 2 * MARGIN;
@@ -439,7 +440,8 @@ async function openDesign(file) {
     $("open-info").innerHTML = `<b>${escapeHtml(file.name)}</b>
       <span>${d.format.toUpperCase()}${pesVersion(d.version)} · ${st.stitches.toLocaleString()} stitches · ${d.threads.length || "no"} thread colours</span>
       ${fits ? `<span class="good">Fits the ${h.machineName} ${h.name}.</span>` : `<span class="warn">Too big for the ${h.name}: it's ${st.widthMm.toFixed(0)} × ${st.heightMm.toFixed(0)} mm.</span>`}
-      ${isPes ? "" : `<span>You can download it as a PES file for your machine.</span>`}`;
+      ${repair ? `<span class="warn">As it is, this file would load cut off on a Brother machine (shifted, about half shown). The download here is fixed.</span>`
+        : isPes ? "" : `<span>You can download it as a PES file for your machine.</span>`}`;
     const v = { pattern: d, verifyAgainst: isPes ? null : d, bytes: out, filename: `${base}.pes`, fabric: "linen",
       source: isPes ? bytes : null,
       threadLabel: (b, t) => (/[a-z]{2}/i.test(b.name || "") ? escapeHtml(b.name) : `Brother ${t.name}${b.name ? " · " + escapeHtml(b.name) : ""}`) };

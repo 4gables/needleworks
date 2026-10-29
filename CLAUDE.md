@@ -39,12 +39,24 @@ Embroidery-file tools for home machines. Two implementations of the same engine:
   thread labels come from the file's own PEC palette.
 
 ## Gotchas
-- PES is written as truncated v6 ("6t": v6 header with thread chart + PEC block), same as pyembroidery
-  `write_pes(..., {"version": "6t"})`. Coordinates are rounded half-to-even like Python's `round()`;
-  `tests/formats.test.mjs` asserts byte-identical output vs `tests/fixtures/ashley_v3.pes`. Regenerate fixtures
-  at full float precision (rounded fixtures caused a false mismatch once).
+- PEC design box (the cause of Ashley's clipped files, 2026-10-27): Brother machines read the two 16-bit fields after
+  `0x1E0, 0x1B0` in the PEC stitch block as the design box's top-left relative to the origin, big-endian
+  `0x9000 | -minX`, `0x9000 | -minY`, and start decoding stitches after them. pyembroidery writes its opening jump
+  there instead, so machines drop that jump and show the design shifted, clipped to about half (her PE900 showed the
+  94.9 x 36 mm School of Medicine file as 1.84" x 0.69"). We write the box, then the opening jump. `readPEC` decodes
+  the machine's way; files whose stitches leave the box get `misplaced` (decoded as meant), `validatePES` refuses
+  them, and opened ones are rewritten fixed. Every Brother-made sample fits its box; flower_ludd, star_badge, wreath
+  and pyembroidery's own output don't. Same bug, verified on hardware: kircherlabs/embroidery-studio#4,
+  nkymut/p5.embroider#42.
+- PES is written as full v6 (header + thread chart + `CEmbOne`/`CSewSeg` design block + PEC + colour addendum) like
+  pyembroidery `write_pes(..., {"version": 6})` plus the box above. The design block is what PE-Design opens; the
+  machine sews the PEC block, and PEC-only (truncated) files are fine on it if the box is right. Coordinates are
+  rounded half-to-even like Python's `round()`; `tests/formats.test.mjs` asserts output byte-identical to
+  `tests/fixtures/ashley_v3.pes` and `multi.pes` once the 4 box bytes are stripped (fixtures written by
+  `tests/make_fixture.py` from the `*_commands.json`, full float precision). We split jumps over 121 mm
+  (pyembroidery allows 204), so fixtures keep jumps shorter.
 - PE900 proof: `tests/pe900_check.py` re-reads PES files with pyembroidery plus its own PEC byte walk (no shared code
-  with formats.js) and checks hoop fit, PEC size field, toggle bytes, longest stitch, tiny stitches and needle hits per
+  with formats.js) and checks every stitch sits inside the PEC design box (decoded the machine's way), the PES design block matches the PEC stitches, hoop fit, PEC size field, toggle bytes, longest stitch, tiny stitches and needle hits per
   mm² per colour block (limit 24 = densest spot in sold designs; script loops crossing on a tight curve reach 23).
   `tests/browser/pe900_batch.html` served by `tests/batch_server.py OUT` builds a ~110-file sample (every font × 3 names × decorations
   on/off, blank, 4 pictures × 3 settings incl. turned) with the site's own code and saves the PES files for the checker. Run both after any engine

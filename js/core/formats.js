@@ -1,4 +1,4 @@
-// Embroidery file formats: write PES (v6, truncated: header + PEC) and read PES / PEC / DST.
+// Embroidery file formats: write PES (v6: header + CEmbOne/CSewSeg blocks + PEC) and read PES / PEC / DST.
 // Ported from pyembroidery so files match what it writes, byte for byte.
 // Units are pyembroidery's: 0.1 mm, y down.
 import { PEC_THREADS, PEC_BLANK_ICON, hexToRgb, nearestIndex, pecThread, pyRound, rgbToHex } from "./threads.js";
@@ -81,6 +81,8 @@ function colorBlockCount(st) {
 
 // ---------- PES writer ----------
 // pattern: { stitches: [[x, y, cmd]] (0.1mm), threads: [{ color: "#rrggbb", description }] }
+// Full v6 (pyembroidery write_pes version 6): PES header + CEmbOne/CSewSeg design blocks + PEC. The PE900 sizes and
+// places the design from the PES blocks; a truncated file (PEC only) loaded half-size and off-centre on Ashley's machine.
 export function writePES(pattern) {
   const st = normalize(pattern);
   if (!st.some((s) => s[2] === STITCH)) throw new Error("There's nothing to stitch.");
@@ -90,7 +92,6 @@ export function writePES(pattern) {
   const w = new Writer();
   w.ascii("#PES0060");
   const pecPtr = w.pos; w.u32(0);
-  // v6 header (truncated: no PES stitch blocks, the machine reads the PEC section)
   w.u16(0x01); w.ascii("02");
   for (let i = 0; i < 5; i++) w.pesString(null);   // name, category, author, keywords, comments
   for (const v of [0, 0, 0x64, 0x64, 0, 0xc8, 0xc8, 0x64, 0x64, 0x64, 0x07, 0x13, 1, 1, 0, 100, 1, 0]) w.u16(v);
@@ -101,16 +102,64 @@ export function writePES(pattern) {
   for (const t of threads) {
     const [r, g, b] = hexToRgb(t.color);
     w.pesString(t.catalog ?? null); w.u8(r); w.u8(g); w.u8(b); w.u8(0); w.u32(0xa);
-    w.pesString(t.description ?? null); w.pesString(t.brand ?? null); w.pesString(null);
+    w.pesString(t.description ?? t.name ?? null); w.pesString(t.brand ?? null); w.pesString(null);
   }
-  w.u16(0);
-  w.bytes(new Uint8Array(5)); w.u16(0); w.u16(0);
+  w.u16(1);                     // one design block
+  w.u16(0xffff); w.u16(0);
+  const log = writePESBlocks(w, st, threads);
+  w.u32(0); w.u32(0);           // v6 node list
+  log.forEach((_, i) => { w.u32(i); w.u32(0); });
   const pos = w.pos;
   w.at(pecPtr, () => w.u32(pos));
-  writePEC(w, st, threads);
-  w.u8(0xff); w.bytes(new Uint8Array(127).fill(0x20));
+  const idx = writePEC(w, st, threads);
+  // addendum: PEC colour list (with its count byte), then the thread colours
+  w.u8(idx.length - 1); w.bytes(idx); w.bytes(new Uint8Array(127 - idx.length).fill(0x20));
+  w.bytes(new Uint8Array(0x90 * threads.length));
+  for (const t of threads) { const [r, g, b] = hexToRgb(t.color); w.u24((r << 16) | (g << 8) | b); }
   w.u16(0);
   return w.result();
+}
+
+function pesString16(w, s) { w.u16(s.length); w.ascii(s); }
+
+// CEmbOne header + one CSewSeg holding every stitch run and jump, in coordinates from the design's bottom-left
+function writePESBlocks(w, st, threads) {
+  const [x0, y0, x1, y1] = bounds(st);
+  const width = x1 - x0, height = y1 - y0;
+  pesString16(w, "CEmbOne");
+  for (let i = 0; i < 8; i++) w.u16(0);
+  for (const v of [1, 0, 0, 1, 350 + 650 - width / 2, 100 + height + 900 - height / 2]) w.f32(v);  // 130x180 hoop
+  w.u16(1); w.u16(0); w.u16(0); w.u16(Math.trunc(width)); w.u16(Math.trunc(height));
+  w.bytes(new Uint8Array(8));
+  const sectionsAt = w.pos; w.u16(0);
+  w.u16(0xffff); w.u16(0);
+  pesString16(w, "CSewSeg");
+  const chart = threads.map((t) => [null, ...hexToRgb(t.color)]);
+  const code = (i) => nearestIndex(hexToRgb((threads[i] || threads[threads.length - 1]).color), chart);
+  let colorIndex = 0, colorCode = code(colorIndex++), sx = 0, sy = 0;
+  let section = 0, flag = -1, previous = -1;
+  const log = [];
+  const emit = (pts, f) => {
+    if (flag !== -1) w.u16(0x8003);
+    flag = f;
+    if (previous !== colorCode) { log.push([section, colorCode]); previous = colorCode; }
+    w.u16(f); w.u16(colorCode); w.u16(pts.length);
+    for (const [x, y] of pts) { w.u16(Math.trunc(x - x0)); w.u16(Math.trunc(y - y1)); }
+    section++;
+  };
+  for (let i = 0; i < st.length;) {
+    const c = st[i][2];
+    let j = i; while (j < st.length && st[j][2] === c) j++;
+    const run = st.slice(i, j); i = j;
+    if (c === JUMP) emit([[sx, sy], run[run.length - 1]], 1);
+    else if (c === COLOR_CHANGE) colorCode = code(colorIndex++);
+    else if (c === STITCH) { [sx, sy] = run[run.length - 1]; emit(run, 0); }
+  }
+  w.u16(log.length);
+  for (const [s, c] of log) { w.u16(s); w.u16(c); }
+  w.at(sectionsAt, () => w.u16(section));
+  w.u16(0); w.u16(0);
+  return log;
 }
 
 function uniquePalette(threads) {
@@ -146,6 +195,10 @@ function writePEC(w, st, threads) {
   w.u8(0); w.u8(0); w.u24(0); w.bytes([0x31, 0xff, 0xf0]);
   w.u16(Math.round(ext[2] - ext[0])); w.u16(Math.round(ext[3] - ext[1]));
   w.u16(0x1e0); w.u16(0x1b0);
+  // Brother machines read these two fields as the design box's top-left relative to the stitch origin and start
+  // decoding after them. pyembroidery puts the opening jump here instead, so the machine dropped that jump and
+  // showed Ashley's designs shifted and clipped to half size.
+  for (const v of [-ext[0], -ext[1]]) { const b = 0x9000 | (v & 0xfff); w.u8(b >> 8); w.u8(b); }
   pecEncode(w, st);
   const len = w.pos - start;
   w.at(start + 2, () => w.u24(len));
@@ -164,6 +217,7 @@ function writePEC(w, st, threads) {
     if (s[2] === COLOR_CHANGE) { icon = PEC_BLANK_ICON.slice(); drawIcon(ext, block, icon, 5); w.bytes(icon); block = []; }
   }
   icon = PEC_BLANK_ICON.slice(); drawIcon(ext, block, icon, 5); w.bytes(icon);
+  return idx;
 }
 
 function drawIcon(ext, pts, g, buffer) {
@@ -250,7 +304,8 @@ function readPES(bytes) {
     r.pos = pecPos;
     readPEC(r, out, chart);
   }
-  return { stitches: out.stitches, threads: out.threads, format: "pes", version, toggles: out.toggles || [], pec: out.pec };
+  return { stitches: out.stitches, threads: out.threads, format: "pes", version, toggles: out.toggles || [], pec: out.pec,
+    misplaced: out.misplaced };
 }
 
 function readThreadChart(r, chart) {
@@ -284,8 +339,12 @@ function readPEC(r, out, chart) {
   }
   r.skip(0x1d0 - changes);
   const blockEnd = r.u24() - 5 + r.pos;
-  r.skip(0x0b);
+  r.skip(3);
+  const w = r.u16(), h = r.u16();
+  r.skip(4);                  // 0x1e0, 0x1b0
   const s12 = (v) => { v &= 0xfff; return v > 0x7ff ? v - 0x1000 : v; };
+  // design box offset (-left, -top), read the way Brother machines read it: not a stitch
+  const px = s12((r.u8() << 8) | r.u8()), py = s12((r.u8() << 8) | r.u8());
   const s7 = (v) => (v > 63 ? v - 128 : v);
   for (;;) {
     let v1 = r.u8(), v2 = r.u8();
@@ -310,6 +369,12 @@ function readPEC(r, out, chart) {
   }
   out.cmd(END);
   r.pos = blockEnd;
+  // stitches outside the box: a pyembroidery-style file whose box fields are really its opening jump. The machine
+  // loads it shifted and clipped; what was meant is that jump followed by the rest.
+  const x0 = -px, y0 = -py;
+  out.misplaced = out.stitches.some(([x, y, c]) => (c === STITCH || c === JUMP) &&
+    (x < x0 - 1 || x > x0 + w + 1 || y < y0 - 1 || y > y0 + h + 1));
+  if (out.misplaced) out.stitches = [[px, py, JUMP], ...out.stitches.map(([x, y, c]) => [x + px, y + py, c])];
 }
 
 function readDST(bytes) {
@@ -386,6 +451,36 @@ export function designStats(d) {
     widthMm: (b[2] - b[0]) / 10, heightMm: (b[3] - b[1]) / 10, longestMm: longest / 10 };
 }
 
+function findAscii(bytes, name, from, end) {
+  const pat = new TextEncoder().encode(name);
+  outer: for (let i = from; i + pat.length <= end; i++) {
+    for (let k = 0; k < pat.length; k++) if (bytes[i + k] !== pat[k]) continue outer;
+    return i;
+  }
+  return -1;
+}
+
+// The PES section's design block: { w, h, stitches: [[x, y, cmd]] } in its own coordinates (from the design's
+// bottom-left), or null when the file has none (truncated PES).
+function readSewSeg(bytes, end) {
+  const one = findAscii(bytes, "CEmbOne", 12, end), seg = one < 0 ? -1 : findAscii(bytes, "CSewSeg", one, end);
+  if (seg < 0) return null;
+  const r = new Reader(bytes.subarray(0, end)), s16 = (v) => (v > 0x7fff ? v - 0x10000 : v);
+  r.pos = one + 7 + 46; const w = r.u16(), h = r.u16();
+  r.pos = seg + 7;
+  const stitches = [];
+  for (;;) {
+    const flag = r.u16(); r.u16(); const n = r.u16();
+    if (n == null || r.pos + n * 4 > end) return null;
+    const pts = [];
+    for (let i = 0; i < n; i++) pts.push([s16(r.u16()), s16(r.u16())]);
+    if (flag === 1) stitches.push([...pts[pts.length - 1], JUMP]);
+    else pts.forEach(([x, y]) => stitches.push([x, y, STITCH]));
+    if (r.u16() !== 0x8003) break;
+  }
+  return { w, h, stitches };
+}
+
 // ---------- validation ----------
 // Re-read a PES we're about to hand out and prove it decodes to exactly the stitches we meant.
 // Returns { ok, error, decoded }. `source` (a pattern) is optional; without it the file only has to parse sanely.
@@ -401,6 +496,7 @@ export function validatePES(bytes, source = null, hoop = null) {
   try { d = readEmbroidery(bytes, "check.pes"); } catch (e) { return fail("The file couldn't be read back: " + e.message); }
   const got = d.stitches.filter((s) => s[2] === STITCH);
   if (!got.length) return fail("The file has no stitches.");
+  if (d.misplaced) return fail("This file would load cut off on Brother machines (its design box doesn't match its stitches).");
   if (d.stitches[d.stitches.length - 1][2] !== END) return fail("The file has no end marker.");
   const blocks = d.stitches.filter((s) => s[2] === COLOR_CHANGE).length + 1;
   if (d.toggles.some((t, i) => t !== (i % 2 === 0 ? 2 : 1))) return fail("A colour-change marker in the file is damaged.");
@@ -415,6 +511,17 @@ export function validatePES(bytes, source = null, hoop = null) {
     }
     const wantBlocks = source.stitches.filter((s) => s[2] === COLOR_CHANGE).length + 1;
     if (wantBlocks !== blocks) return fail("Colour changes were lost when writing the file.");
+    // the PES design block (what the PE900 sizes and places the design from) must hold the same stitches
+    const seg = readSewSeg(bytes, pecAt);
+    if (!seg) return fail("The file is missing its PES design block.");
+    const segMoves = moves(seg.stitches);
+    if (segMoves.length !== gotMoves.length) return fail("The PES design block doesn't match the stitches.");
+    const ox = gotMoves[0][0] - segMoves[0][0], oy = gotMoves[0][1] - segMoves[0][1];
+    if (segMoves.some((s, i) => s[0] + ox !== gotMoves[i][0] || s[1] + oy !== gotMoves[i][1]))
+      return fail("The PES design block doesn't match the stitches.");
+    const b = bounds(normalize(source));
+    if (seg.w !== b[2] - b[0] || seg.h !== b[3] - b[1] || ox !== b[0] || oy !== b[3])
+      return fail("The PES design block has the wrong size or position.");
   }
   if (hoop) {
     const b = bounds(got), w = (b[2] - b[0]) / 10, h = (b[3] - b[1]) / 10;
