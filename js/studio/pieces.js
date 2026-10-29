@@ -249,7 +249,29 @@ export function fileBlocks(design) {
 // needs a pause. A stage in a thread used earlier moves up to join it (one pause fewer) when it overlaps nothing
 // it would jump ahead of, so what lies on top of what never changes; appliqué stages never move.
 // Returns the design and the steps to show (what the machine sews, what the person does at pauses).
+// Straight lettering whose centre sits inside an earlier frame shrinks to fit across it (a long name typed into
+// "Name in a frame" would otherwise run over the border). Returns id -> the size it's stitched at.
+export function fittedSizes(pieces) {
+  const out = new Map();
+  pieces.forEach((p, i) => {
+    if (p.kind !== "text" || (p.shape && p.shape !== "straight") || (p.rot || 0) % 180) return;
+    const frame = pieces.slice(0, i).reverse().find((f) => f.kind === "frame" && !(f.rot || 0)
+      && Math.abs(p.x - f.x) < f.w / 2 && Math.abs(p.y - f.y) < (f.shape === "circle" ? f.w : f.h) / 2);
+    if (!frame) return;
+    const b = pieceBounds({ ...p, x: 0, y: 0 }); if (!b) return;
+    const fh = frame.shape === "circle" ? frame.w : frame.h, dy = (p.y - frame.y) / (fh / 2);
+    // room across the frame at the lettering's height (narrower toward the top and bottom of round shapes)
+    const round = ["circle", "oval", "scallop", "heart"].includes(frame.shape) ? Math.sqrt(Math.max(0.2, 1 - dy * dy)) : 1;
+    const room = frame.w * round * (frame.shape === "diamond" ? 0.55 : 0.82) - (frame.border === "line" ? 4 : 8);
+    const w = b[2] - b[0];
+    if (w > room && room > 5) out.set(p.id, Math.max(5, Math.floor(p.size * (room / w) * 2) / 2));
+  });
+  return out;
+}
+
 export function compose(pieces, hoop) {
+  const fit = fittedSizes(pieces);
+  pieces = pieces.map((p) => (fit.has(p.id) ? { ...p, size: fit.get(p.id) } : p));
   const box = (paths) => {
     let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
     for (const q of paths) for (const [x, y] of q) { x0 = Math.min(x0, x); y0 = Math.min(y0, y); x1 = Math.max(x1, x); y1 = Math.max(y1, y); }

@@ -3,7 +3,7 @@ import { FONTS } from "../core/fonts.js";
 import { nearestBrotherThread } from "../core/threads.js";
 import { readEmbroidery } from "../core/formats.js";
 import { draw } from "../render.js";
-import { BORDERS, SHAPES, compose, fileBlocks, label, minSize, pieceBounds } from "./pieces.js";
+import { BORDERS, SHAPES, compose, fileBlocks, fittedSizes, label, minSize, pieceBounds } from "./pieces.js";
 
 const SCRIPT = "NW Great Vibes", PRINT = "NW Josefin Sans";
 // exact Brother PEC thread colours, so the name on screen is the one the machine shows
@@ -62,7 +62,7 @@ export function initStudio(api) {
   const current = () => pieces.find((p) => p.id === sel);
 
   function cards() {
-    $("st-cards").innerHTML = STARTERS.map((s) => `<button type="button" data-start="${s.id}"><canvas aria-hidden="true"></canvas><b>${s.name}</b><small>${s.note}</small></button>`).join("");
+    $("st-cards").innerHTML = STARTERS.map((s) => `<button type="button" data-start="${s.id}" title="${s.note}"><canvas aria-hidden="true"></canvas><b>${s.name}</b><small>${s.note}</small></button>`).join("");
   }
   // a small stitched preview of each starter (drawn once the tab is on screen and has a size)
   let thumbed = false;
@@ -123,6 +123,7 @@ export function initStudio(api) {
     } else {
       h += `<p class="hint">${api.escapeHtml(p.name)}: its stitches are used exactly as they are, so it can be moved and turned but not resized.</p>`;
     }
+    if (p.kind === "text") h += `<p class="hint" data-fit hidden></p>`;
     if (p.kind === "text" || p.kind === "monogram") h += `<p class="hint warn" data-warn hidden></p>`;
     h += range("rot", "Turn", -180, 180, p.rot || 0, "°", 5);
     if (p.kind !== "file") h += `<div class="field"><span>Thread</span><div class="swatches">${swatches(p)}</div><p class="hint">Brother ${nearestBrotherThread(p.color).name}</p></div>`;
@@ -134,13 +135,16 @@ export function initStudio(api) {
   async function warn() {
     const w = $("st-edit").querySelector("[data-warn]"), p = current(); if (!w || !p) return;
     await document.fonts.load(`40px "${p.font}"`);
-    const m = minSize(p);
+    const fit = $("st-edit").querySelector("[data-fit]"), fs = fittedSizes(pieces).get(p.id);
+    if (fit) { fit.hidden = !fs; fit.textContent = fs ? `Shrunk to ${fs} mm so it fits inside the frame.` : ""; }
+    const m = minSize(fs ? { ...p, size: fs } : p);
     w.hidden = !m; w.textContent = m ? `These letters are too small to stitch cleanly. Make the height ${m} mm or more.` : "";
   }
 
   function change(fn, now = false) {
     const p = current(); if (!p) return;
     remember(!now); fn(p); save(); list();
+    clearTimeout(warnTimer); warnTimer = setTimeout(warn, 300);
     clearTimeout(timer); timer = setTimeout(make, now ? 0 : 160);
   }
 

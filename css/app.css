@@ -256,12 +256,13 @@ canvas#view:active { cursor: grabbing; }
 }
 
 /* design your own */
-.cards { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
-.cards button { text-align: left; background: var(--panel); border: 1.5px solid var(--line); border-radius: var(--radius); padding: 10px 12px;
-  cursor: pointer; display: grid; gap: 2px; color: var(--ink); font: inherit; }
+/* one scrolling row, so the pieces and the editor stay in view */
+.cards { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 6px; scroll-snap-type: x proximity; }
+.cards button { flex: 0 0 112px; scroll-snap-align: start; text-align: left; background: var(--panel); border: 1.5px solid var(--line);
+  border-radius: var(--radius); padding: 8px; cursor: pointer; display: grid; gap: 2px; color: var(--ink); font: inherit; }
 .cards button:hover { border-color: var(--accent); }
-.cards b { font-size: 15px; }
-.cards small { font-size: 13px; color: var(--muted); }
+.cards b { font-size: 14px; line-height: 1.2; }
+.cards small { display: none; }
 .pieces { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
 .pieces li { display: flex; align-items: center; gap: 6px; background: var(--panel); border: 1.5px solid var(--line); border-radius: var(--radius); padding: 4px 6px; }
 .pieces li[aria-selected="true"] { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
@@ -288,5 +289,5 @@ body[data-mode="design"] #view { cursor: grab; }
 .st-steps b i { width: 12px; height: 12px; border-radius: 50%; border: 1px solid rgba(0,0,0,.15); }
 .st-steps .you { color: var(--accent); }
 .edit .warn { color: #a5521a; font-weight: 700; }
-.cards canvas { width: 100%; height: 92px; display: block; margin-bottom: 4px; }
-.st-load { display: inline-flex; align-items: center; cursor: pointer; }
+.cards canvas { width: 100%; height: 72px; display: block; margin-bottom: 2px; }
+.st-load { display: inline-flex; align-items: center; cursor: pointer; font-weight: 400; color: var(--ink); }

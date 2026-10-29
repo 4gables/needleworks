@@ -45,7 +45,9 @@ Embroidery-file tools for home machines. Two implementations of the same engine:
   rasterises a frame (inset 1 mm) and returns the picture tool's underlay + tatami, then a satin edge covers the
   row ends. `compose` moves a stage up to join an earlier block in the same thread (one pause fewer) only if it
   overlaps nothing it would jump ahead of (bbox + 1 mm) and isn't an appliqué stage. Save design / Open saved write
-  and read `{ needleworks: 1, pieces }` JSON (editable pieces, not stitches). `tests/browser/studio_batch.html` builds ~70 Design-tab files
+  and read `{ needleworks: 1, pieces }` JSON (editable pieces, not stitches). Straight lettering centred inside an
+  earlier frame shrinks to fit across it (`fittedSizes`), and the editor says so. Starter cards are one scrolling
+  row so the pieces and editor stay in view at desktop height (checked at 1413 x 717 and 390 x 844). `tests/browser/studio_batch.html` builds ~70 Design-tab files
   (starters x hoops, shapes x borders, every font as monogram and arcs, turns, a file combo) for `pe900_check.py`;
   look at a rendered contact sheet too, the checker can't see mush.
 - Lessons from other open-source projects (researched 2026-10-29), now handled:
