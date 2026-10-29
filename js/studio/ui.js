@@ -2,6 +2,7 @@
 import { FONTS } from "../core/fonts.js";
 import { nearestBrotherThread } from "../core/threads.js";
 import { readEmbroidery } from "../core/formats.js";
+import { draw } from "../render.js";
 import { BORDERS, SHAPES, compose, fileBlocks, label, minSize, pieceBounds } from "./pieces.js";
 
 const SCRIPT = "NW Great Vibes", PRINT = "NW Josefin Sans";
@@ -28,7 +29,7 @@ export const STARTERS = [
     text({ text: "Made by", font: PRINT, size: 7, y: -13, color: BLACK }),
     text({ text: "Ashley", size: 20, y: 6, color: RED })] },
   { id: "applique", name: "Appliqué", note: "a fabric shape with a name", make: () => [
-    frame({ shape: "heart", w: 80, h: 72, border: "applique", y: -4 }), text({ size: 15, y: -6, color: NAVY })] },
+    frame({ shape: "heart", w: 84, h: 76, border: "applique", y: -4 }), text({ size: 18, y: -6, color: NAVY })] },
   { id: "words", name: "Just lettering", note: "a word or name on its own", make: () => [text({ size: 24 })] },
 ];
 
@@ -58,7 +59,24 @@ export function initStudio(api) {
   const current = () => pieces.find((p) => p.id === sel);
 
   function cards() {
-    $("st-cards").innerHTML = STARTERS.map((s) => `<button type="button" data-start="${s.id}"><b>${s.name}</b><small>${s.note}</small></button>`).join("");
+    $("st-cards").innerHTML = STARTERS.map((s) => `<button type="button" data-start="${s.id}"><canvas aria-hidden="true"></canvas><b>${s.name}</b><small>${s.note}</small></button>`).join("");
+  }
+  // a small stitched preview of each starter (drawn once the tab is on screen and has a size)
+  let thumbed = false;
+  async function thumbs() {
+    if (thumbed || !$("st-cards").offsetWidth) return;
+    thumbed = true;
+    const fonts = [...new Set(STARTERS.flatMap((s) => s.make()).filter((p) => p.font).map((p) => p.font))];
+    await Promise.all(fonts.map((f) => document.fonts.load(`40px "${f}"`)));
+    for (const s of STARTERS) {
+      const c = $("st-cards").querySelector(`[data-start="${s.id}"] canvas`);
+      try {
+        const { design, steps } = compose(s.make(), { w: 1000, h: 1000, name: "" });
+        const fab = steps.findIndex((st) => st.fabric);
+        draw(c, design.pattern(), { pad: 4, fabricShapeBlock: fab >= 0 ? fab : undefined, fabric: "pink", hide: new Set(steps.flatMap((st, i) => (st.under ? [i] : []))) });
+      } catch { c.remove(); }
+      await new Promise((r) => setTimeout(r, 0));
+    }
   }
   function list() {
     $("st-pieces").innerHTML = pieces.map((p, i) => `<li data-id="${p.id}" aria-selected="${p.id === sel}">
@@ -84,12 +102,14 @@ export function initStudio(api) {
       h += `<label class="field"><span>Font</span>${fontSelect(p)}</label>`;
       h += range("size", "Height", 5, 60, p.size);
       h += seg("shape", { straight: "Straight", up: "Arch up", down: "Arch down" }, p.shape);
+      h += seg("style", { auto: "Stitch: automatic", satin: "Satin", line: "Fine line" }, p.style || "auto");
       if (p.shape !== "straight") h += range("radius", "Curve size", 15, 80, p.radius);
     } else if (p.kind === "monogram") {
       h += `<label class="field"><span>Initials</span><input type="text" data-k="letters" value="${api.escapeHtml(p.letters)}" maxlength="3" autocomplete="off" spellcheck="false"></label>`;
       h += `<p class="hint">Traditional order: first, LAST, middle. The middle letter is stitched biggest.</p>`;
       h += `<label class="field"><span>Font</span>${fontSelect(p)}</label>`;
       h += range("size", "Height", 15, 90, p.size);
+      h += seg("style", { auto: "Stitch: automatic", satin: "Satin", line: "Fine line" }, p.style || "auto");
     } else if (p.kind === "frame") {
       h += seg("shape", Object.fromEntries(Object.entries(SHAPES).map(([k, s]) => [k, s.name])), p.shape);
       h += range("w", p.shape === "circle" ? "Size" : "Width", 20, 170, p.w);
@@ -121,6 +141,7 @@ export function initStudio(api) {
   }
 
   async function make() {
+    thumbs();
     const s = ++seq;
     api.showError("");
     try {

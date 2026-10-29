@@ -21,7 +21,7 @@ function letterStrokes(text, family) {
 }
 
 // Letters as [pts, "run"|"satin"] in mm: `size` is the height of the lettering, baseline at y = 0, centred across.
-function letters(text, family, size) {
+function letters(text, family, size, style = "auto") {
   text = (text || "").trim();
   if (!text) return { parts: [], satinW: 0 };
   const { comps, info } = letterStrokes(text, family);
@@ -33,8 +33,13 @@ function letters(text, family, size) {
   const parts = comps.flatMap((c) => c.map(([p, mode]) => [p.map(([x, y]) => [(x - cx) * s, (y - info.baseline) * s]), mode]));
   // satin as wide as the font's own stroke, within what sews well; a stroke thinner than ~1 mm can't take a satin
   // (it fills the counters and small script turns to mush), so it's a bean stitch: three runs along the line
-  const stroke = info.stroke * s, satinW = stroke < 0.95 ? 0 : Math.min(3.2, Math.max(1.2, stroke));
-  return { parts, satinW, xh: info.mid * s, top: (y0 - info.baseline) * s, bottom: (y1 - info.baseline) * s };
+  // A satin column no wider than the font's own stroke, and never more than a fifth of the x-height (a sixth for
+  // thin monoline fonts, which get a satin sized to the letters like the bookmark). Under 1 mm a satin can't be sewn
+  // cleanly and fills small loops, so those letters get a fine line instead.
+  const stroke = info.stroke * s, xh = info.mid * s;
+  const w = stroke >= 0.95 ? Math.min(3.2, stroke, xh * 0.2) : Math.min(2.0, xh * 0.17);
+  const satinW = style === "line" ? 0 : style === "satin" ? Math.max(1.0, w) : w >= 1.0 ? Math.max(1.2, w) : 0;
+  return { parts, satinW, xh, top: (y0 - info.baseline) * s, bottom: (y1 - info.baseline) * s };
 }
 
 // Bend straight lettering onto a circle of radius R around (0, 0): "up" reads over the top, letters pointing out;
@@ -79,7 +84,7 @@ function spaced(p, min = 0.4) {
 export function minSize(p) {
   if (p.kind !== "text" && p.kind !== "monogram") return 0;
   const t = p.kind === "text" ? p.text : [...(p.letters || "")][1] || p.letters, size = p.kind === "monogram" && [...(p.letters || "")].length === 3 ? p.size * 0.68 : p.size;
-  const l = letters(t, p.font, size);
+  const l = letters(t, p.font, size, p.style);
   if (!l.parts.length || l.xh >= 4) return 0;
   return Math.ceil((p.size * 4) / l.xh);
 }
@@ -130,7 +135,7 @@ export const BORDERS = { line: "Thin line", bold: "Bold line", satin: "Satin bor
 export function pieceStages(p) {
   let stages = [];
   if (p.kind === "text") {
-    const { parts, satinW, top, bottom } = letters(p.text, p.font, p.size);
+    const { parts, satinW, top, bottom } = letters(p.text, p.font, p.size, p.style);
     if (parts.length) {
       const paths = p.shape === "up" || p.shape === "down" ? stitchLetters(bend(parts, p.shape, Math.max(p.radius, 8)), satinW)
         : stitchLetters(parts.map(([q, m]) => [q.map(([x, y]) => [x, y - (top + bottom) / 2]), m]), satinW);
@@ -172,7 +177,7 @@ function monogram(p) {
   if (!chars.length) return [];
   const big = p.size, small = p.size * 0.68, gap = p.size * 0.04;
   const sizes = chars.length === 3 ? [small, big, small] : chars.map(() => big);
-  const ls = chars.map((c, i) => letters(c, p.font, sizes[i]));
+  const ls = chars.map((c, i) => letters(c, p.font, sizes[i], p.style));
   const widths = ls.map((l) => { const xs = l.parts.flatMap(([q]) => q.map((v) => v[0])); return xs.length ? Math.max(...xs) - Math.min(...xs) : 0; });
   let x = -(widths.reduce((a, b) => a + b, 0) + gap * (chars.length - 1)) / 2;
   const out = [];

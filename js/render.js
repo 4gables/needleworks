@@ -71,7 +71,7 @@ export function draw(canvas, design, opts = {}) {
   const hoop = opts.hoop && opts.showHoop !== false ? opts.hoop : null;
   const spanW = Math.max(x1 - x0, hoop ? hoop.w * 10 : 0), spanH = Math.max(y1 - y0, hoop ? hoop.h * 10 : 0);
   // leave room at the top for the info chips (they wrap to more rows on a phone)
-  const pad = 24, top = opts.padTop ?? pad, fit = Math.min((W - pad * 2) / spanW, (H - pad - top) / spanH);
+  const pad = opts.pad ?? 24, top = opts.padTop ?? pad, fit = Math.min((W - pad * 2) / spanW, (H - pad - top) / spanH);
   const s = fit * (opts.zoom || 1), pan = opts.pan || [0, 0];
   const ox = W / 2 - cxd * s + pan[0], oy = top + (H - pad - top) / 2 - cyd * s + pan[1];
   const X = (x) => x * s + ox, Y = (y) => y * s + oy;

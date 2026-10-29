@@ -37,9 +37,11 @@ Embroidery-file tools for home machines. Two implementations of the same engine:
   so on-screen names match the machine (a near-black hex showed as "Olive Green").
   Pieces sew in stages (`pieceStages`): an appliqué frame is placement line, pause (lay fabric, trim), tack-down,
   pause, satin; `compose` returns the steps shown under "How to stitch it". Opened PES/DST files become pieces
-  (stitches as is: move/turn, no resize). Lettering whose stroke is under ~0.95 mm can't take a satin (small script
-  turned to mush), so it's bean-stitched (three runs), strokes under 0.6 mm skipped, points kept 0.4 mm apart; the
-  editor warns when the x-height is under 4 mm. `tests/browser/studio_batch.html` builds ~70 Design-tab files
+  (stitches as is: move/turn, no resize). Lettering satin width = the font's stroke, capped at 1/5 of the x-height
+  (1/6 for thin monoline fonts, which get a satin sized to the letters); under 1 mm it's a fine line instead
+  (bean stitch: three runs, strokes under 0.6 mm skipped, points 0.4 mm apart), because satin on small script fills
+  the loops. Each text/monogram has Stitch: automatic / Satin / Fine line; the editor warns under a 4 mm x-height.
+  Starter cards draw their own stitched thumbnails (`draw(..., { pad })`). `tests/browser/studio_batch.html` builds ~70 Design-tab files
   (starters x hoops, shapes x borders, every font as monogram and arcs, turns, a file combo) for `pe900_check.py`;
   look at a rendered contact sheet too, the checker can't see mush.
 - Lessons from other open-source projects (researched 2026-10-29), now handled:
