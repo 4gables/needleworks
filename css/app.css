@@ -289,3 +289,4 @@ body[data-mode="design"] #view { cursor: grab; }
 .st-steps .you { color: var(--accent); }
 .edit .warn { color: #a5521a; font-weight: 700; }
 .cards canvas { width: 100%; height: 92px; display: block; margin-bottom: 4px; }
+.st-load { display: inline-flex; align-items: center; cursor: pointer; }

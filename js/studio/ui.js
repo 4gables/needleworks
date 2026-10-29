@@ -253,6 +253,25 @@ export function initStudio(api) {
   };
 
   $("st-undo").onclick = undo;
+  // a design file to keep and change later (the pieces, not the stitches)
+  $("st-save").onclick = () => {
+    const blob = new Blob([JSON.stringify({ needleworks: 1, pieces }, null, 1)], { type: "application/json" });
+    const a = document.createElement("a"); a.href = URL.createObjectURL(blob);
+    a.download = `${api.safeName(firstWords(), "design")}.needleworks.json`; document.body.append(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+  };
+  $("st-load").onchange = async (e) => {
+    const f = e.target.files[0]; e.target.value = ""; if (!f) return;
+    try {
+      const data = JSON.parse(await f.text());
+      if (!data || data.needleworks !== 1 || !Array.isArray(data.pieces)) throw new Error("it isn't a design saved from this page");
+      const kinds = new Set(["text", "monogram", "frame", "file"]);
+      const loaded = data.pieces.filter((p) => p && kinds.has(p.kind) && Number.isFinite(p.x) && Number.isFinite(p.y));
+      if (!loaded.length) throw new Error("it has no pieces");
+      remember(); nextId = 1; pieces = loaded.map((p) => ({ ...p, id: nextId++ })); sel = pieces[pieces.length - 1].id;
+      save(); ui(); make();
+    } catch (err) { api.showError("That design couldn't be opened: " + err.message); }
+  };
   document.addEventListener("keydown", (e) => {
     if (document.body.dataset.mode !== "design" || e.target.matches("input[type=text]")) return;
     if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "z") { e.preventDefault(); undo(); }
