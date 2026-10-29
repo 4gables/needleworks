@@ -39,6 +39,11 @@ Embroidery-file tools for home machines. Two implementations of the same engine:
   thread labels come from the file's own PEC palette.
 
 ## Gotchas
+- **PES writer is locked** (2026-10-29, after Ashley's PE900 failure). `writePES`/`writePEC`/`pecEncode` output is
+  frozen by `tests/fixtures/golden/*.pes` (byte-for-byte, checked in CI along with `pe900_check.py`). Browser and
+  Node produce identical bytes (verified in Chrome). New features (design tools, UI) build stitch patterns and hand
+  them to `writePES`; they never touch `js/core/formats.js`. Only change the writer to fix a proven machine problem,
+  then redo the Brother checks below before regenerating the golden files.
 - PEC design box (the cause of Ashley's clipped files, 2026-10-27): Brother machines read the two 16-bit fields after
   `0x1E0, 0x1B0` in the PEC stitch block as the design box's top-left relative to the origin, big-endian
   `0x9000 | -minX`, `0x9000 | -minY`, and start decoding stitches after them. pyembroidery writes its opening jump

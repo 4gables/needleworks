@@ -32,6 +32,11 @@ for (const name of ["ashley_v3", "multi"]) {
   const d = readEmbroidery(full, "w.pes");
   ok(!d.misplaced, `writer ${name}: stitches fall outside the design box`);
   console.log("writer:", name, diff === -1 ? "byte-identical apart from the box prefix" : `first diff @${diff}`, d.misplaced ? "MISPLACED" : "box ok");
+  // 0. LOCK: the exact bytes checked against Brother's own files and PE-DESIGN 11 (2026-10-29) and sent to Ashley.
+  //    Any writer change that moves a byte fails here. Only regenerate tests/fixtures/golden/ after re-running the
+  //    Brother checks in CLAUDE.md ("PEC design box") and the PE900 checker.
+  const golden = new Uint8Array(readFileSync(`tests/fixtures/golden/${name}.pes`));
+  ok(golden.length === full.length && golden.every((b, i) => b === full[i]), `writer ${name}: output changed from the locked golden file`);
 }
 
 // 2. reader: every sample reads like pyembroidery. Brother-made files: pyembroidery reads the box prefix as a

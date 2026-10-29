@@ -9,3 +9,9 @@ jobs:
         with:
           node-version: 22
       - run: node tests/formats.test.mjs
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements.txt
+      # independent check (no shared code with formats.js): design box, PES block, hoop fit, stitch rules
+      - run: python tests/pe900_check.py tests/fixtures/golden/*.pes
