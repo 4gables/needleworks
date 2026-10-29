@@ -87,6 +87,7 @@ export function initStudio(api) {
       <span class="ops">
         <button type="button" data-op="up" data-id="${p.id}" aria-label="Sew earlier" ${i ? "" : "disabled"}>↑</button>
         <button type="button" data-op="down" data-id="${p.id}" aria-label="Sew later" ${i < pieces.length - 1 ? "" : "disabled"}>↓</button>
+        <button type="button" data-op="dup" data-id="${p.id}" aria-label="Duplicate" title="Duplicate">⧉</button>
         <button type="button" data-op="del" data-id="${p.id}" aria-label="Remove">✕</button>
       </span></li>`).join("");
   }
@@ -192,6 +193,11 @@ export function initStudio(api) {
     const id = +b.dataset.id, i = pieces.findIndex((p) => p.id === id);
     if (b.dataset.op) remember();
     if (b.dataset.op === "del") { pieces.splice(i, 1); if (sel === id) sel = pieces[Math.max(0, i - 1)]?.id; }
+    else if (b.dataset.op === "dup") {
+      // the copy goes just below the original
+      const bb = pieceBounds(pieces[i]), c = { ...structuredClone(pieces[i]), id: nextId++, y: pieces[i].y + (bb ? bb[3] - bb[1] + 4 : 10) };
+      pieces.splice(i + 1, 0, c); sel = c.id;
+    }
     else if (b.dataset.op === "up" && i > 0) [pieces[i - 1], pieces[i]] = [pieces[i], pieces[i - 1]];
     else if (b.dataset.op === "down" && i < pieces.length - 1) [pieces[i + 1], pieces[i]] = [pieces[i], pieces[i + 1]];
     else sel = id;
