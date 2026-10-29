@@ -6,6 +6,7 @@ import { DEFAULT_MACHINE, MACHINES, MARGIN, hoop as getHoop } from "./core/machi
 import { DENSITY, workingSize } from "./core/digitize.js";
 import { nearestBrotherThread, pecThread } from "./core/threads.js";
 import { FABRICS, colorBlocks, draw } from "./render.js";
+import { initStudio } from "./studio/ui.js";
 
 const $ = (id) => document.getElementById(id);
 const store = {
@@ -23,7 +24,7 @@ const state = {
   views: {},           // last view per mode
   zoom: 1, pan: [0, 0], upto: null, showHoop: store.get("showHoop", true),
   // hoop turned sideways on screen, per tab; the bookmark reads best lying down
-  turn: { picture: false, bookmark: true, open: false, ...store.get("turn", {}) },
+  turn: { picture: false, bookmark: true, design: false, open: false, ...store.get("turn", {}) },
   bm: { name: store.get("bm.name", "ashley"), font: store.get("bm.font", FONTS[0].family), color: store.get("bm.color", RED), fabric: store.get("bm.fabric", "pink"), lead: store.get("bm.lead", true), tail: store.get("bm.tail", true), blank: store.get("bm.blank", false) },
   pic: { file: null, bitmap: null, key: 0, skip: [], colors: 4, size: 100, angle: 45, bg: true, density: store.get("pic.density", "solid"), req: 0, colorsInfo: [] },
 };
@@ -39,7 +40,8 @@ function paint() {
   const v = state.view;
   $("empty").hidden = !!v;
   if (!v) { draw(canvas, null); return; }
-  draw(canvas, v.shown, {
+  state.tf = draw(canvas, v.shown, {
+    center: state.mode === "design" ? [0, 0] : undefined,
     cache: v.cache, fabric: v.fabric, fabricShapeBlock: v.fabricShapeBlock, hide: v.hide, upto: state.upto ?? undefined,
     hoop: shownHoop(), showHoop: state.showHoop, zoom: state.zoom, pan: state.pan, showNeedle: state.upto != null,
     padTop: $("facts").offsetHeight + 16,
@@ -102,9 +104,22 @@ canvas.addEventListener("wheel", (e) => {
   state.pan = [mx - (mx - state.pan[0]) * k, my - (my - state.pan[1]) * k]; state.zoom = nz; paint();
 }, { passive: false });
 const pointers = new Map();
-canvas.addEventListener("pointerdown", (e) => { canvas.setPointerCapture(e.pointerId); pointers.set(e.pointerId, [e.clientX, e.clientY]); });
+// screen point -> design mm (undoing the on-screen hoop turn)
+function toMm(e) {
+  const tf = state.tf, r = canvas.getBoundingClientRect();
+  if (!tf) return null;
+  const sx = (e.clientX - r.left - tf.ox) / tf.scale / 10, sy = (e.clientY - r.top - tf.oy) / tf.scale / 10;
+  return turned() ? [-sy, sx] : [sx, sy];
+}
+let dragging = false;
+canvas.addEventListener("pointerdown", (e) => {
+  canvas.setPointerCapture(e.pointerId);
+  if (state.mode === "design" && !pointers.size) { const mm = toMm(e); dragging = !!(mm && studio.start(mm)); }
+  pointers.set(e.pointerId, [e.clientX, e.clientY]);
+});
 canvas.addEventListener("pointermove", (e) => {
   if (!pointers.has(e.pointerId)) return;
+  if (dragging && pointers.size === 1) { const mm = toMm(e); if (mm) studio.move(mm); return; }
   const prev = pointers.get(e.pointerId);
   if (pointers.size === 2) {
     const [a, b] = [...pointers.values()], d0 = Math.hypot(a[0] - b[0], a[1] - b[1]);
@@ -116,7 +131,7 @@ canvas.addEventListener("pointermove", (e) => {
   state.pan = [state.pan[0] + e.clientX - prev[0], state.pan[1] + e.clientY - prev[1]];
   pointers.set(e.pointerId, [e.clientX, e.clientY]); paint();
 });
-const up = (e) => pointers.delete(e.pointerId);
+const up = (e) => { pointers.delete(e.pointerId); if (dragging && !pointers.size) { dragging = false; studio.end(); } };
 canvas.addEventListener("pointerup", up); canvas.addEventListener("pointercancel", up);
 canvas.addEventListener("dblclick", () => $("zoom-fit").click());
 
@@ -197,10 +212,10 @@ function fillMachines() {
 }
 $("machine").onchange = (e) => { state.machine = e.target.value; state.hoopId = null; store.set("machine", state.machine); fillMachines(); refresh(); };
 $("hoop").onchange = (e) => { state.hoopId = e.target.value; store.set("hoop", state.hoopId); fillMachines(); refresh(); };
-function refresh() { if (state.mode === "bookmark") makeBookmark(); else if (state.mode === "picture") makePicture(); else if (state.view) setView(state.view); }
+function refresh() { if (state.mode === "bookmark") makeBookmark(); else if (state.mode === "picture") makePicture(); else if (state.mode === "design") studio.make(); else if (state.view) setView(state.view); }
 
 // ---------- tabs ----------
-const MODES = ["picture", "bookmark", "open"];
+const MODES = ["picture", "bookmark", "design", "open"];
 function setMode(mode, push = true) {
   if (!MODES.includes(mode)) mode = "picture";
   state.mode = mode;
@@ -212,6 +227,7 @@ function setMode(mode, push = true) {
   state.zoom = 1; state.pan = [0, 0];
   if (mode === "picture" && !state.pic.bitmap) loadSample();
   else if (mode === "bookmark" && !state.views.bookmark) makeBookmark();
+  else if (mode === "design" && !state.views.design) studio.make();
   else setView(state.views[mode] || null);
 }
 for (const m of MODES) $("tab-" + m).onclick = () => setMode(m);
@@ -475,4 +491,14 @@ document.addEventListener("paste", (e) => {
 // ---------- start ----------
 fillMachines();
 bookmarkUI();
+// ---------- design your own ----------
+const studio = initStudio({
+  hoop, store, showError, busy, safeName, escapeHtml,
+  setView(pattern, filename) {
+    const v = { pattern, verifyAgainst: pattern, bytes: writePES(pattern), filename, fabric: "linen" };
+    state.views.design = v;
+    if (state.mode === "design") { const keep = [state.zoom, state.pan]; setView(v); [state.zoom, state.pan] = keep; paint(); }
+  },
+});
+
 setMode((location.hash || "#picture").slice(1), false);

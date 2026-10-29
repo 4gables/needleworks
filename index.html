@@ -20,6 +20,7 @@
   <nav class="tabs" role="tablist" aria-label="What do you want to make?">
     <button role="tab" id="tab-picture" aria-controls="panel-picture" aria-selected="true">Picture to stitches</button>
     <button role="tab" id="tab-bookmark" aria-controls="panel-bookmark" aria-selected="false">Name bookmark</button>
+    <button role="tab" id="tab-design" aria-controls="panel-design" aria-selected="false">Design your own</button>
     <button role="tab" id="tab-open" aria-controls="panel-open" aria-selected="false">Open a design</button>
   </nav>
   <div class="machine">
@@ -107,6 +108,30 @@
     </div>
 
     <!-- open -->
+    <!-- design your own -->
+    <div class="panel" id="panel-design" role="tabpanel" aria-labelledby="tab-design" hidden>
+      <h1>Design your own</h1>
+      <p class="lede">Start from an idea, then change the words, fonts, frames and threads. Drag pieces on the preview to move them.</p>
+      <fieldset class="field">
+        <legend>Start from</legend>
+        <div id="st-cards" class="cards"></div>
+      </fieldset>
+      <fieldset class="field">
+        <legend>Pieces <span class="hint inline">(sewn top to bottom)</span></legend>
+        <ul id="st-pieces" class="pieces"></ul>
+        <div id="st-add" class="add">
+          <button type="button" class="ghost" data-add="text">+ Lettering</button>
+          <button type="button" class="ghost" data-add="monogram">+ Monogram</button>
+          <button type="button" class="ghost" data-add="frame">+ Frame</button>
+          <button type="button" class="ghost" id="st-fit" title="Make the whole design as big as the hoop allows">Fit to hoop</button>
+        </div>
+      </fieldset>
+      <fieldset class="field">
+        <legend>Selected piece <button type="button" id="st-center" class="link">Centre it</button></legend>
+        <div id="st-edit" class="edit"></div>
+      </fieldset>
+    </div>
+
     <div class="panel" id="panel-open" role="tabpanel" aria-labelledby="tab-open" hidden>
       <h1>See any design before you stitch it</h1>
       <p class="lede">Open a PES, PEC or DST file to see the stitches, the thread colours and whether it fits your hoop.</p>

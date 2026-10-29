@@ -254,3 +254,32 @@ canvas#view:active { cursor: grabbing; }
   body[data-mode="picture"] #pick-picture, body[data-mode="open"] #pick-design { display: flex; }
   .actions > * { flex: 1 1 100%; }
 }
+
+/* design your own */
+.cards { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.cards button { text-align: left; background: var(--panel); border: 1.5px solid var(--line); border-radius: var(--radius); padding: 10px 12px;
+  cursor: pointer; display: grid; gap: 2px; color: var(--ink); font: inherit; }
+.cards button:hover { border-color: var(--accent); }
+.cards b { font-size: 15px; }
+.cards small { font-size: 13px; color: var(--muted); }
+.pieces { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.pieces li { display: flex; align-items: center; gap: 6px; background: var(--panel); border: 1.5px solid var(--line); border-radius: var(--radius); padding: 4px 6px; }
+.pieces li[aria-selected="true"] { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.pieces .pick { flex: 1; min-width: 0; text-align: left; background: none; border: 0; color: var(--ink); font: inherit; padding: 6px 4px; cursor: pointer;
+  display: flex; align-items: center; gap: 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pieces .pick i { width: 16px; height: 16px; border-radius: 50%; flex: none; border: 1px solid rgba(0,0,0,.15); }
+.pieces .ops { display: flex; gap: 2px; }
+.pieces .ops button { width: 32px; height: 32px; border-radius: 8px; border: 0; background: none; color: var(--muted); cursor: pointer; font-size: 15px; }
+.pieces .ops button:hover:not(:disabled) { background: var(--accent-soft); color: var(--ink); }
+.pieces .ops button:disabled { opacity: .3; cursor: default; }
+.add { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+.edit { display: grid; gap: 14px; }
+.edit .field > span, .edit .range > span { font-weight: 700; }
+.edit select { width: 100%; }
+.range { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 10px; }
+.range output { font-size: 14px; color: var(--muted); min-width: 52px; text-align: right; }
+.seg { display: flex; flex-wrap: wrap; gap: 6px; }
+.seg button { border: 1.5px solid var(--line); background: var(--panel); color: var(--ink); border-radius: 999px; padding: 6px 12px; cursor: pointer; font: inherit; font-size: 14px; }
+.seg button[aria-pressed="true"] { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.link { background: none; border: 0; color: var(--accent); font: inherit; font-size: 14px; font-weight: 400; cursor: pointer; padding: 0; }
+body[data-mode="design"] #view { cursor: grab; }

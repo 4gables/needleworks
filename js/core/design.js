@@ -22,7 +22,9 @@ export class Design {
     if (far) {
       this.st(JUMP, pts[0]);
       if (lock) {
-        let d = pts.length > 1 ? [pts[1][0] - pts[0][0], pts[1][1] - pts[0][1]] : [1, 0];
+        // toward the first point that isn't on top of the start (repeated points would make a 0 mm tie-in)
+        const ahead = pts.find((q) => Math.hypot(q[0] - pts[0][0], q[1] - pts[0][1]) > 0.3);
+        let d = ahead ? [ahead[0] - pts[0][0], ahead[1] - pts[0][1]] : [1, 0];
         // 0.7 mm tie-in, mid-range of sold designs (0.5-0.8); shorter ones can pull out before the bobbin thread catches
         const L = Math.max(Math.hypot(...d), 1e-9); d = [(d[0] / L) * 0.7, (d[1] / L) * 0.7];
         const p = pts[0], q = [p[0] + d[0], p[1] + d[1]];

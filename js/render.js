@@ -53,7 +53,7 @@ export const FABRICS = {
   black: { label: "Black", solid: "#232022" },
 };
 
-// opts: { fabric, fabricShapeBlock, hide: Set, upto, hoop: {w,h} (mm), showHoop, zoom, pan: [x,y] }
+// opts: { fabric, fabricShapeBlock, hide: Set, upto, hoop: {w,h} (mm), showHoop, zoom, pan: [x,y], center: [x,y] (0.1 mm) }
 export function draw(canvas, design, opts = {}) {
   const dpr = window.devicePixelRatio || 1;
   const W = canvas.clientWidth, H = canvas.clientHeight;
@@ -66,7 +66,8 @@ export function draw(canvas, design, opts = {}) {
   if (!design) return null;
   const { blocks, total } = opts.cache || colorBlocks(design);
   const [x0, y0, x1, y1] = bbox(blocks);
-  const cxd = (x0 + x1) / 2, cyd = (y0 + y1) / 2;
+  // centred on the design, or on a fixed point (the Design tab keeps the hoop centre still while pieces move)
+  const cxd = opts.center ? opts.center[0] : (x0 + x1) / 2, cyd = opts.center ? opts.center[1] : (y0 + y1) / 2;
   const hoop = opts.hoop && opts.showHoop !== false ? opts.hoop : null;
   const spanW = Math.max(x1 - x0, hoop ? hoop.w * 10 : 0), spanH = Math.max(y1 - y0, hoop ? hoop.h * 10 : 0);
   // leave room at the top for the info chips (they wrap to more rows on a phone)
@@ -130,7 +131,7 @@ export function draw(canvas, design, opts = {}) {
       ctx.fillStyle = "#222"; ctx.beginPath(); ctx.arc(X(p[0]), Y(p[1]), 3.5, 0, Math.PI * 2); ctx.fill();
     }
   }
-  return { scale: s, total };
+  return { scale: s, total, ox, oy };
 }
 
 function strokeSegs(ctx, segs, X, Y, upto, off) {

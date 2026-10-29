@@ -30,6 +30,13 @@ Embroidery-file tools for home machines. Two implementations of the same engine:
   between them), decorations are straight dashes on the middle of the x-height (cap height for all-caps), and spur
   pruning is gentler (0.45 vs 1.3 stroke widths) so t crossbars and a's stems survive. Dots (i, j) that thin to a lone
   point get a short stroke (`skeletonEdges(..., { dots: true })`).
+- Design tab (`js/studio/`): pieces (lettering straight or arched on a circle, 1/3-letter monogram, frames) are built
+  from the shared lettering/satin engines in mm around the hoop centre, composed in list order (neighbours in one
+  thread share a block), then handed to `writePES`. The preview keeps the hoop centre fixed (`draw(..., { center })`)
+  so dragged pieces stay put; the machine centres the whole design anyway. Swatches are exact Brother PEC colours
+  so on-screen names match the machine (a near-black hex showed as "Olive Green").
+- Tie-ins point at the first point more than 0.3 mm from the start: strokes often begin with repeated points, which
+  made 143 zero-length tie-ins (5 hits in one hole) across the 109-file batch before 2026-10-29.
 - Machines/hoops: `js/core/machines.js`. Designs are checked to fit
   the hoop field minus a 2 mm margin. Brother PE900 5x7 = 130 x 180 mm and 4x4 = 100 x 100 mm, auto-trims jumps.
 - "Turn hoop" (per tab, bookmark defaults on) only turns the preview; the PES is always written in machine orientation
