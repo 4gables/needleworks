@@ -101,6 +101,17 @@ export function satin(p, width, density = 0.4, pullComp = 0.2, closed = false) {
   return out;
 }
 
+// Edge-walk underlay for a satin 2.5-4 mm wide: a run just inside each edge (0.4 mm in), out along one side and back
+// along the other, so the satin's edges sit on a firm line (Ink/Stitch "contour underlay", Lilo's 2.5-4 mm band).
+export function edgeWalk(p, width, closed = false, inset = 0.4) {
+  let c = resample(p, 0.5, closed);
+  let n = normals(c, closed);
+  if (closed) { c = [...c, c[0]]; n = [...n, n[0]]; }
+  const d = width / 2 - inset;
+  const side = (s) => c.map((q, i) => [q[0] + n[i][0] * d * s, q[1] + n[i][1] * d * s]);
+  return [...run(side(1), 2.5), ...run(side(-1).reverse(), 2.5)];
+}
+
 // open zigzag (underlay): `spacing` between hits on the same edge
 export const zigzag = (p, width, spacing = 2.0, closed = false) => satin(p, width, spacing, 0, closed);
 

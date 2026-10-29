@@ -1,6 +1,6 @@
 // In-the-hoop applique bookmark with a name (or blank).
 // Five colour blocks, one thread: each block change is a machine pause for a fabric step. Blank skips the name block.
-import { circle, filletPolygon, run, satin, zigzag } from "./geom.js";
+import { circle, edgeWalk, filletPolygon, run, satin, zigzag } from "./geom.js";
 import { Design } from "./design.js";
 import { MARGIN } from "./machines.js";
 import { order } from "./raster.js";
@@ -77,6 +77,7 @@ export function buildBookmark({ name, family, color = RED, hoop, lead = true, ta
   d.path(run(ring, 1.0, true));
   d.path(zigzag(ring, EYE_W * 0.6, 1.2, true));
   d.path(satin(ring, EYE_W, 0.35, 0.2, true));
+  d.path(edgeWalk(edge, BORDER, true));
   d.path(zigzag(edge, BORDER * 0.7, 2.0, true));
   d.path(satin(edge, BORDER, 0.4, 0.3, true));
   return d.finish();

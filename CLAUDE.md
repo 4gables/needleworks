@@ -64,7 +64,9 @@ Embroidery-file tools for home machines. Two implementations of the same engine:
   edge was hit every 0.8 mm: half the coverage, fabric showing through (found by the cross-library study; the
   bookmark Ashley was sent has it). Satin samples the line every 0.02 mm (0.05 rounded every setting up to 0.4).
   `zigzag(p, w, spacing)` is unchanged (same-edge gap = spacing). Lettering pull comp 0.15 mm a side on satins
-  >= 1.5 mm. Measure with the same-edge statistic, not by eye on a PNG.
+  >= 1.5 mm. Measure with the same-edge statistic, not by eye on a PNG. Satin borders 2.5-4 mm (frames, patch and
+  appliqué edges, the bookmark border) sew `edgeWalk` first: a run 0.4 mm inside each edge, then the zigzag, then
+  the satin (Ink/Stitch contour underlay), for a firm edge on felt.
 - Tie-ins point at the first point more than 0.3 mm from the start: strokes often begin with repeated points, which
   made 143 zero-length tie-ins (5 hits in one hole) across the 109-file batch before 2026-10-29.
 - Machines/hoops: `js/core/machines.js`. Designs are checked to fit

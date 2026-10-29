@@ -4,7 +4,7 @@
 import { Design } from "../core/design.js";
 import { fillPolygon } from "../core/digitize.js";
 import { fontOf } from "../core/fonts.js";
-import { filletPolygon, run, satin, zigzag } from "../core/geom.js";
+import { edgeWalk, filletPolygon, run, satin, zigzag } from "../core/geom.js";
 import { order } from "../core/raster.js";
 import { strokes } from "../core/text.js";
 
@@ -167,17 +167,17 @@ function localStages(p) {
         { color: p.color, pause: true, paths: [loop(run(edge, 2.0, true)), loop(run(edge.slice().reverse(), 2.0, true))],
           you: `Lay the appliqué fabric over the ${name} outline, right side up, covering it by ½ in. Press Start. Then take the hoop off (leave everything hooped), trim the appliqué fabric close to the stitching, and put the hoop back.`,
           sews: "Tacks the appliqué fabric down.", under: true },
-        { color: p.color, pause: true, paths: [loop(zigzag(edge, 2.6, 2.0, true)), loop(satin(edge, 3.6, 0.4, 0.3, true))],
+        { color: p.color, pause: true, paths: [edgeWalk(edge, 3.6, true), loop(zigzag(edge, 2.6, 2.0, true)), loop(satin(edge, 3.6, 0.4, 0.3, true))],
           you: "Press Start.", sews: "Covers the raw edge with a satin border." },
       ];
     } else if (p.border === "patch") {
       // solid tatami fill (inset so the satin edge covers its ragged ends), then the satin edge over it
       stages = [
         { color: p.fill || p.color, paths: fillPolygon(inset(edge, 1.0)), sews: `Fills the ${name} patch.` },
-        { color: p.color, paths: [loop(zigzag(edge, 2.6, 2.0, true)), loop(satin(edge, 3.6, 0.4, 0.3, true))], sews: `Sews the patch's satin edge.` },
+        { color: p.color, paths: [edgeWalk(edge, 3.6, true), loop(zigzag(edge, 2.6, 2.0, true)), loop(satin(edge, 3.6, 0.4, 0.3, true))], sews: `Sews the patch's satin edge.` },
       ];
     } else {
-      const paths = p.border === "satin" ? [zigzag(edge, 2.1, 2.0, true), satin(edge, 3.0, 0.4, 0.3, true)]
+      const paths = p.border === "satin" ? [edgeWalk(edge, 3.0, true), zigzag(edge, 2.1, 2.0, true), satin(edge, 3.0, 0.4, 0.3, true)]
         : p.border === "bold" ? [run(edge, 2.0, true), run(edge.slice().reverse(), 2.0, true), run(edge, 2.0, true)]
         : [run(edge, 2.2, true)];
       stages = [{ color: p.color, paths: paths.map(loop), sews: `Sews the ${name} frame.` }];
