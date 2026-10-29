@@ -46,7 +46,11 @@ Embroidery-file tools for home machines. Two implementations of the same engine:
   94.9 x 36 mm School of Medicine file as 1.84" x 0.69"). We write the box, then the opening jump. `readPEC` decodes
   the machine's way; files whose stitches leave the box get `misplaced` (decoded as meant), `validatePES` refuses
   them, and opened ones are rewritten fixed. Every Brother-made sample fits its box; flower_ludd, star_badge, wreath
-  and pyembroidery's own output don't. Same bug, verified on hardware: kircherlabs/embroidery-studio#4,
+  and pyembroidery's own output don't. Checked 2026-10-29 in a Windows VM: all 380 PES files that ship with Brother's
+  PE-DESIGN 11 trial have the box exactly at the stitch minimum, as ours now do; only our 3 old files failed.
+  PE-DESIGN itself reads only the PES design block (PEC-only files open as an empty page, and an old file with a
+  good design block but a bad box opens fine), so it can check the CEmbOne/CSewSeg block but not the PEC bytes the
+  machine sews. Same bug, verified on hardware: kircherlabs/embroidery-studio#4,
   nkymut/p5.embroider#42.
 - PES is written as full v6 (header + thread chart + `CEmbOne`/`CSewSeg` design block + PEC + colour addendum) like
   pyembroidery `write_pes(..., {"version": 6})` plus the box above. The design block is what PE-Design opens; the
