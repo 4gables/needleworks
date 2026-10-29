@@ -517,3 +517,5 @@ const studio = initStudio({
 });
 
 setMode((location.hash || "#picture").slice(1), false);
+// a link to another tab on this page (#bookmark, #design...) switches to it
+addEventListener("hashchange", () => { const m = location.hash.slice(1); if (m !== state.mode && MODES.includes(m)) setMode(m, false); });
