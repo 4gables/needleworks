@@ -104,7 +104,7 @@ export function relieve(st, limit = 24) {
       const x0 = cx * 10 + ox, y0 = cy * 10 + oy;
       const inside = pts.filter((i) => keep[i] && X(i) >= x0 && X(i) < x0 + 10 && Y(i) >= y0 && Y(i) < y0 + 10);
       while (inside.length > limit) {
-        let best = -1, bestD = 30;   // merged stitch stays under 3 mm
+        let best = -1, bestD = 40;   // merged stitch stays under 4 mm (fill stitches are 3.5)
         for (const i of inside) {
           if (!removable(i)) continue;
           const a = near(i, -1), c = near(i, 1);

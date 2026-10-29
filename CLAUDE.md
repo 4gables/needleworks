@@ -115,8 +115,11 @@ Embroidery-file tools for home machines. Two implementations of the same engine:
 - Pictures: every shape 1 mm wide or more is a solid tatami fill that follows its outline (skeleton satin broke letter
   corners into ragged columns); only hairlines under 1 mm get a centre-line run. k-means clusters within ΔE 6 are
   merged, and any colour within ΔE 8 of the border colour is background (a white logo box on an off-white page was
-  stitched as "Brother White"). Fill row links and moves between pieces jump instead of sewing across open fabric,
-  and any move over 1 mm between sections of one fill jumps (it would lie on top of finished stitches). Pictures are
+  stitched as "Brother White"). Moves between pieces jump instead of sewing across open fabric. Within one fill,
+  `routeFill` connects the sections with travel run inside the shape through rows not sewn yet (A* on 0.5 mm
+  cells, finished rows cost 6x, at most 2 mm on top of finished rows; sections in row order with a lookahead that
+  may reverse one), so the fill covers it (Ink/Stitch's tatami travel): trims -75% and short jumps -82% across the
+  batch pictures, thread coverage unchanged. Travel stitches 0.6-2.5 mm; `relieve()` may merge stitches up to 4 mm. Pictures are
   sampled at 8 px/mm (5 lost the notches of small lettering); thin shapes (< 2 mm) get 0.05 mm pull, not 0.15, so the
   gaps between small letters stay open. Notches under ~0.5 mm can't be kept by any thread: open them in the artwork.
 - Fill density (`DENSITY` in digitize.js): Solid 0.35 mm rows (default) or Lighter 0.4. 0.3 fails the PE900 check

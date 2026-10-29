@@ -239,6 +239,113 @@ function tatami(mask, comp, res, { angle, spacing, stitch, inset = 0, pull = 0.1
   });
 }
 
+// Sew a fill's sections in one go: between sections the needle travels inside the shape, through rows not sewn
+// yet, so the fill covers the travel (Ink/Stitch's tatami travel, heatstitch's travel grid). It only jumps (and
+// trims) when every way would lie on top of finished rows for more than 2 mm. groups: [underlay paths, fill
+// paths] in px; the underlay is covered by the fill, so travel over it is hidden too.
+function routeFill(groups, comp, mask, res) {
+  const { w } = mask, C = Math.max(1, Math.round(res * 0.5));   // 0.5 mm routing cells
+  const gw = Math.ceil(mask.w / C), gh = Math.ceil(mask.h / C), n = gw * gh;
+  const inside = new Uint8Array(n), sewn = new Uint8Array(n);
+  for (let gy = 0; gy < gh; gy++) for (let gx = 0; gx < gw; gx++) {
+    const x = Math.min(mask.w - 1, gx * C + (C >> 1)), y = Math.min(mask.h - 1, gy * C + (C >> 1));
+    inside[gy * gw + gx] = comp.labels[y * w + x] === comp.id ? 1 : 0;
+  }
+  const cellOf = ([x, y]) => Math.min(gh - 1, Math.max(0, Math.floor(y / C))) * gw + Math.min(gw - 1, Math.max(0, Math.floor(x / C)));
+  const centre = (c) => [(c % gw) * C + C / 2, Math.floor(c / gw) * C + C / 2];
+  const along = (a, b, f) => {
+    const steps = Math.max(1, Math.ceil(Math.hypot(b[0] - a[0], b[1] - a[1]) / (C / 2)));
+    for (let k = 0; k <= steps; k++) f(cellOf([a[0] + ((b[0] - a[0]) * k) / steps, a[1] + ((b[1] - a[1]) * k) / steps]));
+  };
+  const markSewn = (p) => { for (let i = 1; i < p.length; i++) along(p[i - 1], p[i], (c) => (sewn[c] = 1)); };
+  // A* over 8-neighbour cells; finished rows cost 6x so travel hides under rows still to come
+  // row ends sit on (or a pull-compensation past) the edge: start from the nearest cell inside
+  const snap = (c) => {
+    if (inside[c]) return c;
+    const cx = c % gw, cy = (c - cx) / gw;
+    let best = -1, bd = Infinity;
+    for (let dy = -3; dy <= 3; dy++) for (let dx = -3; dx <= 3; dx++) {
+      const x = cx + dx, y = cy + dy, m = y * gw + x;
+      if (x >= 0 && y >= 0 && x < gw && y < gh && inside[m] && dx * dx + dy * dy < bd) { bd = dx * dx + dy * dy; best = m; }
+    }
+    return best;
+  };
+  function route(a, b) {
+    const s = snap(cellOf(a)), t = snap(cellOf(b));
+    if (s < 0 || t < 0) return null;
+    const g = new Float64Array(n).fill(Infinity), from = new Int32Array(n).fill(-1), heap = [[0, s]];
+    const hx = (c) => Math.hypot((c % gw) - (t % gw), Math.floor(c / gw) - Math.floor(t / gw));
+    g[s] = 0;
+    while (heap.length) {
+      let bi = 0; for (let i = 1; i < heap.length; i++) if (heap[i][0] < heap[bi][0]) bi = i;
+      const [, c] = heap[bi]; heap[bi] = heap[heap.length - 1]; heap.pop();
+      if (c === t) break;
+      const cx = c % gw, cy = (c - cx) / gw;
+      for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+        if (!dx && !dy) continue;
+        const x = cx + dx, y = cy + dy; if (x < 0 || y < 0 || x >= gw || y >= gh) continue;
+        const m = y * gw + x; if (!inside[m]) continue;
+        const v = g[c] + Math.hypot(dx, dy) * (sewn[m] ? 6 : 1);
+        if (v < g[m]) { g[m] = v; from[m] = c; heap.push([v + hx(m), m]); }
+      }
+      if (heap.length > 20000) return null;
+    }
+    if (from[t] < 0 && s !== t) return null;
+    const cells = [t]; while (cells[cells.length - 1] !== s) cells.push(from[cells[cells.length - 1]]);
+    cells.reverse();
+    let sewnMm = 0;
+    for (let i = 1; i < cells.length; i++) if (sewn[cells[i]]) sewnMm += Math.hypot((cells[i] % gw) - (cells[i - 1] % gw), Math.floor(cells[i] / gw) - Math.floor(cells[i - 1] / gw)) * C / res;
+    // pull the staircase straight where a straight line stays inside (and off finished rows if the route was)
+    const ok = (p, q) => { let good = true; along(p, q, (c) => { if (!inside[c] || (sewn[c] && !sewnMm)) good = false; }); return good; };
+    const pts = [a], cs = cells.map(centre); let i = 0;
+    while (i < cs.length - 1) { let j = cs.length - 1; while (j > i + 1 && !ok(pts[pts.length - 1], cs[j])) j--; pts.push(cs[j]); i = j; }
+    pts.push(b);
+    return { pts, sewnMm };
+  }
+  const out = [];
+  let cur = null;
+  groups.forEach((paths, gi) => {
+    // sections in the fill's own row order (top to bottom of the sweep): each next one begins beside rows still to
+    // sew, so the way there stays hidden. Picking the nearest instead strands earlier sections behind finished rows.
+    // If the next one can only be reached over finished rows, take the first later one with a hidden way there.
+    const left = paths.filter((p) => p.length);
+    while (left.length) {
+      // (a section can also be sewn from its last row back, entering from its far side)
+      let k = 0, r = null, rev = false;
+      if (cur) search: for (let i = 0; i < left.length; i++) for (const back of [false, true]) {
+        const q = back ? left[i][left[i].length - 1] : left[i][0];
+        if (Math.hypot(q[0] - cur[0], q[1] - cur[1]) <= res) { k = i; r = null; rev = back; break search; }
+        const ri = route(cur, q);
+        if (i === 0 && !back) r = ri;
+        if (ri && ri.sewnMm <= 2) { k = i; r = ri; rev = back; break search; }
+      }
+      let p = left.splice(k, 1)[0]; if (rev) p = p.slice().reverse();
+      const d = cur ? Math.hypot(p[0][0] - cur[0], p[0][1] - cur[1]) : Infinity;
+      // within 1 mm: sew straight on (skipping a first point that would make a stitch under 0.4 mm)
+      if (cur && d <= res) out[out.length - 1].push(...(d < 0.4 * res ? p.slice(1) : p));
+      else {
+        if (r && r.sewnMm <= 2) {
+          // travel stitches up to 2.5 mm, none under 0.6 mm (it ends exactly on the section's first point)
+          const travel = [];
+          let at = cur;
+          for (let k = 1; k < r.pts.length; k++) {
+            const [ax, ay] = r.pts[k - 1], [bx, by] = r.pts[k], m = Math.max(1, Math.ceil(Math.hypot(bx - ax, by - ay) / (2.5 * res)));
+            for (let q = 1; q <= m; q++) {
+              const t = [ax + ((bx - ax) * q) / m, ay + ((by - ay) * q) / m];
+              if (Math.hypot(t[0] - at[0], t[1] - at[1]) >= 0.6 * res) { travel.push(t); at = t; }
+            }
+          }
+          while (travel.length && Math.hypot(travel[travel.length - 1][0] - p[0][0], travel[travel.length - 1][1] - p[0][1]) < 0.6 * res) travel.pop();
+          out[out.length - 1].push(...travel, ...p);
+        } else out.push(p.slice());
+      }
+      if (gi === groups.length - 1) markSewn(p);
+      cur = p[p.length - 1];
+    }
+  });
+  return out;
+}
+
 // ---------- build ----------
 // Fill edges and satin outlines reach a little past the picture, so a picture sized to the hoop's edge can land
 // just over it; shrink to fit (more pixels per mm) rather than refuse.
@@ -296,7 +403,7 @@ function build(img, analysis, opts) {
         const under = tatami(mask, comp, res, { angle: o.fillAngle + 90, spacing: 2.5, stitch: 3, inset: 0.4, pull: 0 });
         // pull compensation widens a fill past its edge; on thin letters that closes the gaps between them
         const fill = tatami(mask, comp, res, { angle: o.fillAngle, spacing: o.density, stitch: 3.5, pull: widthMm < 2 ? 0.05 : 0.15 });
-        blocks.push({ centre, paths: [...under, ...fill].map(toMm), kind: "fill" });
+        blocks.push({ centre, paths: routeFill([under, fill], comp, mask, res).map(toMm), kind: "fill" });
       }
     }
     if (!blocks.length) continue;
@@ -367,7 +474,7 @@ export function fillPolygon(poly, { angle = DEFAULTS.fillAngle, density = DENSIT
     if (comp.pixels.length < 1.5 * res * res) continue;
     const under = tatami(mask, comp, res, { angle: angle + 90, spacing: 2.5, stitch: 3, inset: 0.4, pull: 0 });
     const fill = tatami(mask, comp, res, { angle, spacing: density, stitch: 3.5, pull: 0.15 });
-    paths.push(...[...under, ...fill].map(toMm));
+    paths.push(...routeFill([under, fill], comp, mask, res).map(toMm));
   }
   return paths;
 }
