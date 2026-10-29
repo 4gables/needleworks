@@ -65,10 +65,13 @@ export function normals(p, closed = false) {
 
 export const run = (p, length = 2.0, closed = false) => resample(p, length, closed);
 
-// Satin column centred on p. Stations are spaced by the outer edge so curves don't gap;
-// where the inner edge crowds, every other stitch is shortened.
+// Satin column centred on p. `density` is the gap between needle hits on the same edge (0.4 mm: Ink/Stitch's
+// default and what Brother-made files measure, 0.30-0.42). Stitches alternate edges, so stations are density / 2
+// apart, spaced by the outer edge so curves don't gap; where the inner edge crowds, every other stitch is shortened.
+// (Until 2026-10-29 stations were `density` apart: 0.8 mm per edge, half the coverage of sold designs.)
 export function satin(p, width, density = 0.4, pullComp = 0.2, closed = false) {
-  let c = resample(p, 0.05, closed);
+  const station = density / 2;
+  let c = resample(p, 0.02, closed);
   let n = normals(c, closed);
   if (closed) { c = [...c, c[0]]; n = [...n, n[0]]; }
   const half = (width + pullComp) / 2;
@@ -78,7 +81,7 @@ export function satin(p, width, density = 0.4, pullComp = 0.2, closed = false) {
   const idx = [0];
   let last = 0;
   for (let i = 1; i < c.length; i++) {
-    if (Math.max(lens[0][i] - lens[0][last], lens[1][i] - lens[1][last], lens[2][i] - lens[2][last]) >= density) {
+    if (Math.max(lens[0][i] - lens[0][last], lens[1][i] - lens[1][last], lens[2][i] - lens[2][last]) >= station - 1e-6) {   // (steps of 0.02 can sum just under)
       idx.push(i); last = i;
     }
   }
@@ -91,14 +94,15 @@ export function satin(p, width, density = 0.4, pullComp = 0.2, closed = false) {
       const thisSide = sgn > 0 ? A : B, other = sgn > 0 ? B : A, k = idx[j - 1];
       const gThis = Math.hypot(thisSide[i][0] - thisSide[k][0], thisSide[i][1] - thisSide[k][1]);
       const gOther = Math.hypot(other[i][0] - other[k][0], other[i][1] - other[k][1]);
-      if (gThis < density * 0.45 && gOther > gThis * 1.8 && (j % 4 === 2 || j % 4 === 3)) r = half * 0.55;
+      if (gThis < station * 0.45 && gOther > gThis * 1.8 && (j % 4 === 2 || j % 4 === 3)) r = half * 0.55;
     }
     out.push([c[i][0] + n[i][0] * r * sgn, c[i][1] + n[i][1] * r * sgn]);
   });
   return out;
 }
 
-export const zigzag = (p, width, spacing = 2.0, closed = false) => satin(p, width, spacing / 2, 0, closed);
+// open zigzag (underlay): `spacing` between hits on the same edge
+export const zigzag = (p, width, spacing = 2.0, closed = false) => satin(p, width, spacing, 0, closed);
 
 export function filletPolygon(verts, radius, seg = 8) {
   const out = [], n = verts.length;

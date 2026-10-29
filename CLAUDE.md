@@ -59,6 +59,12 @@ Embroidery-file tools for home machines. Two implementations of the same engine:
   - The PE900 never trims a jump at or under its "jump stitch not to trim" setting (5 mm lowest, manual p.38), so
     1-5 mm jumps stay as loose thread. Stitching them as connectors would draw lines between print letters, so
     instead the preview counts them ("N short jumps to snip"); both ends are locked so snipping is safe.
+- Satin density (`geom.satin`): `density` is the gap between needle hits on the SAME edge (0.4 mm, as Ink/Stitch and
+  Brother-made files: ursula 0.36, gnome 0.30, ufront 0.42). Until 2026-10-29 stations were `density` apart, so each
+  edge was hit every 0.8 mm: half the coverage, fabric showing through (found by the cross-library study; the
+  bookmark Ashley was sent has it). Satin samples the line every 0.02 mm (0.05 rounded every setting up to 0.4).
+  `zigzag(p, w, spacing)` is unchanged (same-edge gap = spacing). Lettering pull comp 0.15 mm a side on satins
+  >= 1.5 mm. Measure with the same-edge statistic, not by eye on a PNG.
 - Tie-ins point at the first point more than 0.3 mm from the start: strokes often begin with repeated points, which
   made 143 zero-length tie-ins (5 hits in one hole) across the 109-file batch before 2026-10-29.
 - Machines/hoops: `js/core/machines.js`. Designs are checked to fit

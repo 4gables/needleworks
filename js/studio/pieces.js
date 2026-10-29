@@ -66,7 +66,7 @@ function stitchLetters(parts, satinW) {
     // thin lettering: a stroke under ~0.6 mm is a speck of the skeleton; skip it (the next stroke picks up there)
     if (!satinW && length(p) < 0.6) return [];
     if (mode === "run") return satinW ? run(p, 1.2) : spaced(run(p, 1.6));
-    if (satinW) return satin(p, satinW, 0.38, 0.2);
+    if (satinW) return satin(p, satinW, 0.38, satinW >= 1.5 ? 0.3 : 0.2);   // pull comp 0.15 mm a side (0.1 on thin columns)
     const r = spaced(run(p, 1.6)), back = r.slice().reverse();   // the walk's way back: back, forth and back again
     return r.length > 1 ? [...r, ...back.slice(1), ...r.slice(1)] : r;
   });

@@ -68,7 +68,7 @@ export function buildBookmark({ name, family, color = RED, hoop, lead = true, ta
   if (!blank) d.color(color, "Step 3 - Name");
   for (const comp of comps) for (const [p0, mode] of comp) {
     const p = p0.map(([x, y]) => [x, y + shift]);
-    d.path(mode === "run" ? run(p, 1.2) : satin(p, TEXT_SATIN, 0.38, 0.2));
+    d.path(mode === "run" ? run(p, 1.2) : satin(p, TEXT_SATIN, 0.38, 0.3));
   }
   d.color(color, `Step ${blank ? 3 : 4} - Tack down back`);
   d.path(run(edge, 2.0, true));
@@ -76,7 +76,7 @@ export function buildBookmark({ name, family, color = RED, hoop, lead = true, ta
   const ring = circle(eye, EYE_R, 64);
   d.path(run(ring, 1.0, true));
   d.path(zigzag(ring, EYE_W * 0.6, 1.2, true));
-  d.path(satin(ring, EYE_W, 0.3, 0.2, true));
+  d.path(satin(ring, EYE_W, 0.35, 0.2, true));
   d.path(zigzag(edge, BORDER * 0.7, 2.0, true));
   d.path(satin(edge, BORDER, 0.4, 0.3, true));
   return d.finish();
