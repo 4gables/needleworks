@@ -293,6 +293,9 @@ export function initStudio(api) {
     } catch (err) { api.showError("That file couldn't be added: " + err.message); }
   };
 
+  $("st-guide").hidden = !!api.store.get("studio.guideSeen", false);
+  $("st-guide-close").onclick = () => { $("st-guide").hidden = true; api.store.set("studio.guideSeen", true); };
+
   cards(); ui();
   return { make, start, move, end, nudge };
 }
