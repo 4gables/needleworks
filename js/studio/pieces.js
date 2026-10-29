@@ -246,14 +246,34 @@ export function fileBlocks(design) {
 }
 
 // Sew the pieces in list order. Neighbouring stages in the same thread share one colour block unless a stage
-// needs a pause. Returns the design and the steps to show (what the machine sews, what the person does at pauses).
+// needs a pause. A stage in a thread used earlier moves up to join it (one pause fewer) when it overlaps nothing
+// it would jump ahead of, so what lies on top of what never changes; appliqué stages never move.
+// Returns the design and the steps to show (what the machine sews, what the person does at pauses).
 export function compose(pieces, hoop) {
-  const d = new Design(hoop), steps = [];
-  let last = null;
+  const box = (paths) => {
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    for (const q of paths) for (const [x, y] of q) { x0 = Math.min(x0, x); y0 = Math.min(y0, y); x1 = Math.max(x1, x); y1 = Math.max(y1, y); }
+    return [x0 - 1, y0 - 1, x1 + 1, y1 + 1];
+  };
+  const hits = (a, b) => a[0] < b[2] && b[0] < a[2] && a[1] < b[3] && b[1] < a[3];
+  const order = [];
   for (const p of pieces) for (const st of pieceStages(p)) {
     if (!st.paths.length) continue;
+    const s = { ...st, label: label(p), box: box(st.paths) };
+    let at = order.length;
+    if (!s.pause && !s.fabric) {
+      for (let j = order.length - 1; j >= 0; j--) {
+        if (order[j].color === s.color && !order[j].fabric) { at = j + 1; break; }
+        if (hits(order[j].box, s.box) || order[j].pause) break;
+      }
+    }
+    order.splice(at, 0, s);
+  }
+  const d = new Design(hoop), steps = [];
+  let last = null;
+  for (const st of order) {
     if (st.color !== last || st.pause || st.fabric) {
-      d.color(st.color, label(p)); last = st.color;
+      d.color(st.color, st.label); last = st.color;
       steps.push({ color: st.color, sews: [], you: st.you || (steps.length ? "Change to the next thread and press Start." : null),
         fabric: !!st.fabric, under: !!st.under || !!st.fabric });
     }
