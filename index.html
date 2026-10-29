@@ -123,13 +123,23 @@
           <button type="button" class="ghost" data-add="text">+ Lettering</button>
           <button type="button" class="ghost" data-add="monogram">+ Monogram</button>
           <button type="button" class="ghost" data-add="frame">+ Frame</button>
+          <button type="button" class="ghost" data-add="file">+ Design file</button>
+          <input type="file" id="st-file" accept=".pes,.pec,.dst" hidden>
+        </div>
+        <div class="add">
           <button type="button" class="ghost" id="st-fit" title="Make the whole design as big as the hoop allows">Fit to hoop</button>
+          <button type="button" class="ghost" id="st-undo" disabled title="Undo (⌘Z)">↶ Undo</button>
         </div>
       </fieldset>
       <fieldset class="field">
         <legend>Selected piece <button type="button" id="st-center" class="link">Centre it</button></legend>
         <div id="st-edit" class="edit"></div>
+        <p class="hint">Drag on the preview to move it, or use the arrow keys (Shift for bigger steps).</p>
       </fieldset>
+      <details class="steps">
+        <summary>How to stitch it <span class="hint inline" id="st-steps-count"></span></summary>
+        <ol id="st-steps" class="st-steps"></ol>
+      </details>
     </div>
 
     <div class="panel" id="panel-open" role="tabpanel" aria-labelledby="tab-open" hidden>

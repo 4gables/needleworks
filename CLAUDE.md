@@ -35,6 +35,13 @@ Embroidery-file tools for home machines. Two implementations of the same engine:
   thread share a block), then handed to `writePES`. The preview keeps the hoop centre fixed (`draw(..., { center })`)
   so dragged pieces stay put; the machine centres the whole design anyway. Swatches are exact Brother PEC colours
   so on-screen names match the machine (a near-black hex showed as "Olive Green").
+  Pieces sew in stages (`pieceStages`): an appliqué frame is placement line, pause (lay fabric, trim), tack-down,
+  pause, satin; `compose` returns the steps shown under "How to stitch it". Opened PES/DST files become pieces
+  (stitches as is: move/turn, no resize). Lettering whose stroke is under ~0.95 mm can't take a satin (small script
+  turned to mush), so it's bean-stitched (three runs), strokes under 0.6 mm skipped, points kept 0.4 mm apart; the
+  editor warns when the x-height is under 4 mm. `tests/browser/studio_batch.html` builds ~70 Design-tab files
+  (starters x hoops, shapes x borders, every font as monogram and arcs, turns, a file combo) for `pe900_check.py`;
+  look at a rendered contact sheet too, the checker can't see mush.
 - Lessons from other open-source projects (researched 2026-10-29), now handled:
   - PEC palette 62-64 are applique codes on Brother machines ("Applique Material/Position"), not Orange/Cream Yellow
     as pyembroidery named them: `PEC_MATCH` excludes them (inkstitch/pyembroidery#140, SE700-verified).

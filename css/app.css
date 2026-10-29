@@ -283,3 +283,8 @@ canvas#view:active { cursor: grabbing; }
 .seg button[aria-pressed="true"] { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
 .link { background: none; border: 0; color: var(--accent); font: inherit; font-size: 14px; font-weight: 400; cursor: pointer; padding: 0; }
 body[data-mode="design"] #view { cursor: grab; }
+.st-steps li { display: grid; gap: 2px; margin-bottom: 8px; }
+.st-steps b { display: flex; align-items: center; gap: 6px; }
+.st-steps b i { width: 12px; height: 12px; border-radius: 50%; border: 1px solid rgba(0,0,0,.15); }
+.st-steps .you { color: var(--accent); }
+.edit .warn { color: #a5521a; font-weight: 700; }

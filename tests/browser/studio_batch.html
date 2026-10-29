@@ -1,0 +1,53 @@
+<!doctype html><meta charset="utf-8"><title>Design tab batch</title>
+<link rel="stylesheet" href="../../css/app.css">
+<style>body{display:block;padding:12px;font:13px monospace} pre{white-space:pre-wrap}</style>
+<p>Builds Design-tab files with the site's own code: every starter on both hoops, every frame shape × border
+(appliqué included), arched lettering, monograms in every font, turned pieces, and an opened design combined with
+lettering. Each is checked with <code>validatePES</code> and POSTed to <code>/save/&lt;name&gt;</code>. Serve with
+<code>tests/batch_server.py OUT</code>, then run <code>tests/pe900_check.py OUT/st_*.pes</code>.</p>
+<pre id="log"></pre>
+<script type="module">
+import { hoop as getHoop } from "../../js/core/machines.js";
+import { readEmbroidery, writePES, validatePES } from "../../js/core/formats.js";
+import { FONTS } from "../../js/core/fonts.js";
+import { BORDERS, SHAPES, compose, fileBlocks } from "../../js/studio/pieces.js";
+import { STARTERS } from "../../js/studio/ui.js";
+
+const log = (s) => (document.getElementById("log").textContent += s + "\n");
+let n = 0, bad = 0, id = 1;
+for (const f of FONTS) await document.fonts.load(`40px "${f.family}"`);
+async function save(name, pieces, hoopId = "5x7", expectTooBig = false) {
+  const hoop = getHoop("brother-pe900", hoopId);
+  let pattern;
+  try { pattern = compose(pieces, hoop).design.pattern(); }
+  catch (e) { if (!expectTooBig) { bad++; log(`ERROR ${name}: ${e.message}`); } return; }
+  const bytes = writePES(pattern), v = validatePES(bytes, pattern, hoop);
+  if (!v.ok) { bad++; log(`INVALID ${name}: ${v.error}`); }
+  await fetch(`/save/${name}.pes`, { method: "POST", body: bytes });
+  n++;
+}
+const P = (o) => ({ id: id++, x: 0, y: 0, rot: 0, color: "#0e1f7c", ...o });
+
+for (const s of STARTERS) for (const h of ["5x7", "4x4"]) await save(`st_${s.id}_${h}`, s.make(), h, h === "4x4");
+for (const shape of Object.keys(SHAPES)) for (const border of Object.keys(BORDERS))
+  await save(`st_frame_${shape}_${border}`, [P({ kind: "frame", shape, border, w: 90, h: 70, color: "#ed171f" }),
+    P({ kind: "text", text: "Rosie", font: FONTS[0].family, size: 14, shape: "straight", radius: 30 })]);
+log("frames: done");
+for (const f of FONTS) {
+  const tag = f.family.slice(3).replace(/ /g, "");
+  await save(`st_mono_${tag}`, [P({ kind: "monogram", letters: "eLb", font: f.family, size: 26 })]);
+  await save(`st_arc_${tag}`, [P({ kind: "text", text: "Sunday Best", font: f.family, size: 10, shape: "up", radius: 34 }),
+    P({ kind: "text", text: "since 2026", font: f.family, size: 8, shape: "down", radius: 36, color: "#ed171f" })]);
+}
+log("fonts: done");
+for (const rot of [15, 90, -45, 180])
+  await save(`st_rot_${rot}`, [P({ kind: "frame", shape: "diamond", border: "satin", w: 70, h: 90, rot }), P({ kind: "text", text: "Hello", font: FONTS[6].family, size: 16, rot })]);
+try {
+  const d = readEmbroidery(new Uint8Array(await (await fetch("../external/pes/ursula.pes")).arrayBuffer()), "ursula.pes");
+  await save("st_file_combo", [P({ kind: "frame", shape: "heart", border: "applique", w: 100, h: 90 }),
+    P({ kind: "file", name: "ursula", blocks: fileBlocks(d), x: 0, y: -5, rot: 10 }),
+    P({ kind: "text", text: "Ursula", font: FONTS[1].family, size: 12, y: 40, color: "#ed171f" })]);
+} catch (e) { log(`skip file combo: ${e.message}`); }
+log(`DONE ${n} files, ${bad} problems`);
+document.title = `DONE ${n} ${bad}`;
+</script>

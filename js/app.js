@@ -509,8 +509,8 @@ bookmarkUI();
 // ---------- design your own ----------
 const studio = initStudio({
   hoop, store, showError, busy, safeName, escapeHtml,
-  setView(pattern, filename) {
-    const v = { pattern, verifyAgainst: pattern, bytes: writePES(pattern), filename, fabric: "linen" };
+  setView(pattern, filename, look = {}) {
+    const v = { pattern, verifyAgainst: pattern, bytes: writePES(pattern), filename, fabric: "linen", ...look };
     state.views.design = v;
     if (state.mode === "design") { const keep = [state.zoom, state.pan]; setView(v); [state.zoom, state.pan] = keep; paint(); }
   },
