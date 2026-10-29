@@ -3,7 +3,7 @@
 Uses pyembroidery (the reader/writer Ink/Stitch ships, whose PES files are sewn on Brother machines every day)
 plus a raw byte walk of the PEC block, so it shares no code with js/core/formats.js.
 
-usage: .venv/bin/python tests/pe900_check.py file.pes [more.pes ...]   -> exit 1 if any file fails
+usage: .venv/bin/python tests/pe900_check.py [--writer-only] file.pes [more.pes ...]   -> exit 1 if any file fails
 """
 import io
 import math
@@ -235,13 +235,52 @@ def check(path):
         hot = [k for k, v in cells.items() if v > MAX_PER_MM2]
         errs.append(f"{len(hot)} spots with more than {MAX_PER_MM2} needle hits per mm² (max {info['max_per_mm2']})")
 
+    # 6. satin coverage: in a zigzag across a column, the gap between hits on the same edge. Sold designs measure
+    #    0.30-0.42 mm; ours were 0.8 until 2026-10-29 (fabric showed through). Only judged with enough columns.
+    stitch_pts = [(x, y) for x, y, c in sts if c == pe.STITCH]
+    # (a satin is a long unbroken zigzag; fill rows meeting a near-parallel edge reverse a few times at most)
+    same, run_gaps = [], []
+    for k in range(2, len(stitch_pts)):
+        a, b2, c2 = stitch_pts[k - 2], stitch_pts[k - 1], stitch_pts[k]
+        v1, v2 = (b2[0] - a[0], b2[1] - a[1]), (c2[0] - b2[0], c2[1] - b2[1])
+        l1, l2 = math.hypot(*v1), math.hypot(*v2)
+        if 1.2 <= l1 <= 6 and 1.2 <= l2 <= 6 and (v1[0] * v2[0] + v1[1] * v2[1]) / (l1 * l2) < -0.85:
+            run_gaps.append(math.hypot(c2[0] - a[0], c2[1] - a[1]))
+        else:
+            if len(run_gaps) >= 6:
+                same += run_gaps
+            run_gaps = []
+    if len(run_gaps) >= 6:
+        same += run_gaps
+    if len(same) >= 200:
+        same.sort()
+        info["satin_gap_mm"] = round(same[len(same) // 2], 2)
+        if info["satin_gap_mm"] > 0.6 and not WRITER_ONLY:
+            errs.append(f"sparse satin: {info['satin_gap_mm']} mm between hits on each edge (sold designs 0.30-0.42)")
+    # 7. trims, and jumps of 1-5 mm the PE900 won't trim (left as loose thread)
+    info["trims"] = sum(1 for _, _, c in sts if c == pe.TRIM)
+    short, frm, last = 0, None, None
+    for x, y, c in sts:
+        if c == pe.JUMP:
+            frm = frm or last
+        elif c == pe.STITCH:
+            if frm and 1 < math.hypot(x - frm[0], y - frm[1]) <= 5:
+                short += 1
+            frm, last = None, (x, y)
+        elif c == pe.COLOR_CHANGE:
+            frm = last = None
+    info["short_jumps"] = short
+
     info.update(stitches=len(pts), blocks=blocks, threads=len(p.threadlist))
     return errs, info
 
 
+# --writer-only: judge the file format only, not stitch quality (the golden files freeze old stitches on purpose)
+WRITER_ONLY = "--writer-only" in sys.argv
+
 if __name__ == "__main__":
     bad = 0
-    for f in sys.argv[1:]:
+    for f in [a for a in sys.argv[1:] if a != "--writer-only"]:
         errs, info = check(f)
         bad += bool(errs)
         print(("FAIL " if errs else "ok   ") + f, info)

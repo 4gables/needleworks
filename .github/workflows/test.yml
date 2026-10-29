@@ -14,4 +14,4 @@ jobs:
           python-version: "3.12"
       - run: pip install -r requirements.txt
       # independent check (no shared code with formats.js): design box, PES block, hoop fit, stitch rules
-      - run: python tests/pe900_check.py tests/fixtures/golden/*.pes
+      - run: python tests/pe900_check.py --writer-only tests/fixtures/golden/*.pes

@@ -102,7 +102,7 @@ Embroidery-file tools for home machines. Two implementations of the same engine:
   `tests/make_fixture.py` from the `*_commands.json`, full float precision). We split jumps over 121 mm
   (pyembroidery allows 204), so fixtures keep jumps shorter.
 - PE900 proof: `tests/pe900_check.py` re-reads PES files with pyembroidery plus its own PEC byte walk (no shared code
-  with formats.js) and checks every stitch sits inside the PEC design box (decoded the machine's way), the PES design block matches the PEC stitches, hoop fit, PEC size field, toggle bytes, longest stitch, tiny stitches and needle hits per
+  with formats.js) and checks every stitch sits inside the PEC design box (decoded the machine's way), satin coverage (same-edge gap of long zigzag runs <= 0.6 mm; `--writer-only` skips it for the frozen golden files), trims and short jumps (reported), the PES design block matches the PEC stitches, hoop fit, PEC size field, toggle bytes, longest stitch, tiny stitches and needle hits per
   mm² per colour block (limit 24 = densest spot in sold designs; script loops crossing on a tight curve reach 23).
   `tests/browser/pe900_batch.html` served by `tests/batch_server.py OUT` builds a ~110-file sample (every font × 3 names × decorations
   on/off, blank, 4 pictures × 3 settings incl. turned) with the site's own code and saves the PES files for the checker. Run both after any engine
