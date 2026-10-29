@@ -1,7 +1,7 @@
 // Embroidery file formats: write PES (v6: header + CEmbOne/CSewSeg blocks + PEC) and read PES / PEC / DST.
 // Ported from pyembroidery so files match what it writes, byte for byte.
 // Units are pyembroidery's: 0.1 mm, y down.
-import { PEC_THREADS, PEC_BLANK_ICON, hexToRgb, nearestIndex, pecThread, pyRound, rgbToHex } from "./threads.js";
+import { PEC_MATCH, PEC_THREADS, PEC_BLANK_ICON, hexToRgb, nearestIndex, pecThread, pyRound, rgbToHex } from "./threads.js";
 
 export const STITCH = 0, JUMP = 1, TRIM = 2, STOP = 3, END = 4, COLOR_CHANGE = 5;
 
@@ -163,7 +163,7 @@ function writePESBlocks(w, st, threads) {
 }
 
 function uniquePalette(threads) {
-  const palette = PEC_THREADS.slice(), chart = new Array(palette.length).fill(null);
+  const palette = PEC_MATCH.slice(), chart = new Array(palette.length).fill(null);
   const seen = new Set();
   for (const t of threads) {
     if (seen.has(t.color)) continue;

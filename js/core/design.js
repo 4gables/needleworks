@@ -6,6 +6,7 @@ export class Design {
   constructor(hoop) { this.hoop = hoop; this.stitches = []; this.threads = []; this.cur = null; this.started = false; }
 
   color(hex, description = "") {
+    this.tieOff();
     if (this.started) this.stitches.push([0, 0, COLOR_CHANGE]);
     this.threads.push({ color: hex, description, brand: "" });
     this.cur = null;
@@ -18,7 +19,7 @@ export class Design {
   path(pts, lock = true, jump = false) {
     if (!pts.length) return;
     const far = !this.cur || jump || Math.hypot(pts[0][0] - this.cur[0], pts[0][1] - this.cur[1]) > 2.0;
-    if (this.cur && far) this.stitches.push([0, 0, TRIM]);
+    if (this.cur && far) { this.tieOff(); this.stitches.push([0, 0, TRIM]); }
     if (far) {
       this.st(JUMP, pts[0]);
       if (lock) {
@@ -33,13 +34,24 @@ export class Design {
     } else this.st(STITCH, pts[0]);
     for (let i = 1; i < pts.length; i++) this.st(STITCH, pts[i]);
     this.cur = pts[pts.length - 1]; this.started = true;
+    // where a tie-off can step back to: along the line just sewn, so it hides in those stitches
+    this.back = pts.slice().reverse().find((q) => Math.hypot(q[0] - this.cur[0], q[1] - this.cur[1]) > 0.3) || null;
+  }
+
+  // Lock the thread before it's cut (trim, colour change, end): two 0.7 mm stitches back and forth along the
+  // last line. Without it a trimmed thread can work loose (PEmbroider #105; Ink/Stitch locks every trim).
+  tieOff() {
+    if (!this.cur) return;
+    const c = this.cur;
+    let d = this.back ? [this.back[0] - c[0], this.back[1] - c[1]] : [1, 0];
+    const L = Math.max(Math.hypot(...d), 1e-9); d = [(d[0] / L) * 0.7, (d[1] / L) * 0.7];
+    const q = [c[0] + d[0], c[1] + d[1]];
+    for (const r of [q, c, q, c]) this.st(STITCH, r);
+    this.cur = null;
   }
 
   finish() {
-    if (this.cur) {
-      const c = this.cur;
-      for (const r of [[c[0] + 0.3, c[1]], c, [c[0], c[1] + 0.3], c]) this.st(STITCH, r);
-    }
+    this.tieOff();
     this.stitches.push([0, 0, END]);
     this.stitches = relieve(this.stitches);
     this.check();
@@ -70,13 +82,13 @@ export class Design {
 
 // No 1 x 1 mm square may take more than `limit` needle hits within one colour block (nest / broken needle risk;
 // tests/pe900_check.py enforces the same). Where strokes pile up (satin junctions), drop interior stitch points:
-// two stitches become one slightly longer one. Tie-ins and tie-offs (3 points around any jump/trim/colour change)
+// two stitches become one slightly longer one. Tie-ins and tie-offs (5 points around any jump/trim/colour change)
 // are kept. The machine's grid can sit at any 0.1 mm offset from ours, so every offset is checked.
 export function relieve(st, limit = 24) {
   const n = st.length, keep = new Uint8Array(n).fill(1), blk = new Int32Array(n);
   for (let i = 0, b = 0; i < n; i++) { if (st[i][2] === COLOR_CHANGE) b++; blk[i] = b; }
   const X = (i) => Math.round(st[i][0]), Y = (i) => Math.round(st[i][1]);
-  const removable = (i) => { for (let j = i - 3; j <= i + 3; j++) if (j < 0 || j >= n || st[j][2] !== STITCH) return false; return true; };
+  const removable = (i) => { for (let j = i - 5; j <= i + 5; j++) if (j < 0 || j >= n || st[j][2] !== STITCH) return false; return true; };
   const near = (i, d) => { let j = i + d; while (j >= 0 && j < n && !keep[j]) j += d; return j; };
   const cells = new Map(), key = (b, cx, cy) => `${b},${cx},${cy}`;
   for (let i = 0; i < n; i++) if (st[i][2] === STITCH) {

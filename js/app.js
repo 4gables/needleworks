@@ -1,7 +1,7 @@
 import { buildBookmark, hiddenBlocks, RED, stepsFor } from "./core/bookmark.js";
 import { turnPattern } from "./core/design.js";
 import { FONTS, fontOf } from "./core/fonts.js";
-import { designStats, machineThreads, readEmbroidery, validatePES, writePES } from "./core/formats.js";
+import { COLOR_CHANGE, JUMP, STITCH, designStats, machineThreads, readEmbroidery, validatePES, writePES } from "./core/formats.js";
 import { DEFAULT_MACHINE, MACHINES, MARGIN, hoop as getHoop } from "./core/machines.js";
 import { DENSITY, workingSize } from "./core/digitize.js";
 import { nearestBrotherThread, pecThread } from "./core/threads.js";
@@ -72,6 +72,7 @@ function setView(v) {
     st.colorChanges ? `<span>${st.colorChanges} ${st.colorChanges === 1 ? "pause" : "pauses"}</span>` : "",
     `<span>≈ ${minutes} min</span>`,
     fits ? "" : `<span class="bad">Too big for the ${h.name}</span>`,
+    shortJumps(v.file) ? `<span title="The machine only trims jumps longer than its 'jump stitch not to trim' setting (5 mm at the lowest). The thread is locked at both ends, so these are safe to snip after stitching.">${shortJumps(v.file)} short ${shortJumps(v.file) === 1 ? "jump" : "jumps"} to snip</span>` : "",
   ].join("");
   const seen = new Set(), mt = machineThreadList(v);
   $("threads").innerHTML = v.cache.blocks.filter((b) => !(v.hide && v.hide.has(b.index)))
@@ -83,6 +84,20 @@ function setView(v) {
   $("download").disabled = !fits; $("share").disabled = !fits;
   $("download").textContent = fits ? `Download ${v.filename}` : "Too big for this hoop";
   paint();
+}
+// moves between 1 and 5 mm: too short for the PE900 to trim (its lowest setting is 5 mm), left as loose thread
+function shortJumps(p) {
+  if (p.shortJumps != null) return p.shortJumps;
+  let n = 0, from = null, last = null;
+  for (const [x, y, c] of p.stitches) {
+    if (c === JUMP) { if (!from) from = last; last = [x, y]; continue; }
+    if (c === STITCH) {
+      if (from) { const d = Math.hypot(x - from[0], y - from[1]); if (d > 10 && d <= 50) n++; from = null; }
+      last = [x, y];
+    }
+    if (c === COLOR_CHANGE) { from = null; last = null; }
+  }
+  return (p.shortJumps = n);
 }
 // thread names exactly as the machine will show them: the file's own PEC palette
 function machineThreadList(v) {

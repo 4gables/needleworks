@@ -145,6 +145,16 @@ ok(!validatePES(new TextEncoder().encode("#PES0060" + "x".repeat(5000))).ok, "ju
   console.log("old PES:", v.ok ? "ACCEPTED" : "refused, rewrite fixes it");
 }
 
+// 8. PEC 62-64 are applique codes on Brother machines, never threads: colours that used to land there must not
+{
+  const stitches = [], threads = ["#ff9900", "#fff08d", "#ffc8c8", "#ff9a05"].map((color) => ({ color }));
+  threads.forEach((_, i) => { if (i) stitches.push([0, 0, COLOR_CHANGE]); stitches.push([i * 50, 0, JUMP], [i * 50, 0, STITCH], [i * 50 + 40, 0, STITCH]); });
+  stitches.push([0, 0, END]);
+  const pec = readEmbroidery(writePES({ stitches, threads }), "a.pes").pec;
+  ok(pec.every((i) => i < 62), `colours mapped to applique codes: ${pec}`);
+  console.log("applique codes avoided:", pec.join(","));
+}
+
 // the thread names the site shows must be the ones the machine reads from the PEC palette
 {
   let same = 0;

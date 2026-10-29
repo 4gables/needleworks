@@ -35,6 +35,15 @@ Embroidery-file tools for home machines. Two implementations of the same engine:
   thread share a block), then handed to `writePES`. The preview keeps the hoop centre fixed (`draw(..., { center })`)
   so dragged pieces stay put; the machine centres the whole design anyway. Swatches are exact Brother PEC colours
   so on-screen names match the machine (a near-black hex showed as "Olive Green").
+- Lessons from other open-source projects (researched 2026-10-29), now handled:
+  - PEC palette 62-64 are applique codes on Brother machines ("Applique Material/Position"), not Orange/Cream Yellow
+    as pyembroidery named them: `PEC_MATCH` excludes them (inkstitch/pyembroidery#140, SE700-verified).
+  - Every cut is locked: `Design.tieOff()` sews 0.7 mm back-and-forth along the last line before each trim, colour
+    change and the end (a trimmed thread can work loose otherwise: PEmbroider#105). `relieve()` keeps 5 points
+    around commands so locks survive thinning.
+  - The PE900 never trims a jump at or under its "jump stitch not to trim" setting (5 mm lowest, manual p.38), so
+    1-5 mm jumps stay as loose thread. Stitching them as connectors would draw lines between print letters, so
+    instead the preview counts them ("N short jumps to snip"); both ends are locked so snipping is safe.
 - Tie-ins point at the first point more than 0.3 mm from the start: strokes often begin with repeated points, which
   made 143 zero-length tie-ins (5 hits in one hole) across the 109-file batch before 2026-10-29.
 - Machines/hoops: `js/core/machines.js`. Designs are checked to fit

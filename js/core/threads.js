@@ -63,10 +63,14 @@ export const PEC_THREADS = [
   ["Electric Blue", 9, 91, 166],
   ["Lemon Yellow", 240, 249, 112],
   ["Fresh Green", 227, 243, 91],
-  ["Orange", 255, 153, 0],
-  ["Cream Yellow", 255, 240, 141],
+  ["Applique Material", 255, 153, 0],
+  ["Applique Position", 255, 240, 141],
   ["Applique", 255, 200, 200],
 ];
+// 62-64 aren't threads: Brother machines read them as applique steps and show "Applique Material/Position" instead
+// of a colour (pyembroidery called 62/63 Orange and Cream Yellow; fixed in inkstitch/pyembroidery#140, checked on
+// an SE700 against its manual). Never match a colour to them.
+export const PEC_MATCH = PEC_THREADS.map((t, i) => (i >= 62 ? null : t));
 
 export const PEC_BLANK_ICON = [0, 0, 0, 0, 0, 0, 240, 255, 255, 255, 255, 15, 8, 0, 0, 0, 0, 16, 4, 0, 0, 0, 0, 32, 2, 0, 0, 0, 0, 64, 2, 0, 0, 0, 0, 64, 2, 0, 0, 0, 0, 64, 2, 0, 0, 0, 0, 64, 2, 0, 0, 0, 0, 64, 2, 0, 0, 0, 0, 64, 2, 0, 0, 0, 0, 64, 2, 0, 0, 0, 0, 64, 2, 0, 0, 0, 0, 64, 2, 0, 0, 0, 0, 64, 2, 0, 0, 0, 0, 64, 2, 0, 0, 0, 0, 64, 2, 0, 0, 0, 0, 64, 2, 0, 0, 0, 0, 64, 2, 0, 0, 0, 0, 64, 2, 0, 0, 0, 0, 64, 2, 0, 0, 0, 0, 64, 2, 0, 0, 0, 0, 64, 2, 0, 0, 0, 0, 64, 2, 0, 0, 0, 0, 64, 2, 0, 0, 0, 0, 64, 2, 0, 0, 0, 0, 64, 2, 0, 0, 0, 0, 64, 2, 0, 0, 0, 0, 64, 2, 0, 0, 0, 0, 64, 2, 0, 0, 0, 0, 64, 2, 0, 0, 0, 0, 64, 2, 0, 0, 0, 0, 64, 2, 0, 0, 0, 0, 64, 2, 0, 0, 0, 0, 64, 4, 0, 0, 0, 0, 32, 8, 0, 0, 0, 0, 16, 240, 255, 255, 255, 255, 15, 0, 0, 0, 0, 0, 0];
 
@@ -103,7 +107,7 @@ export function pecThread(i) {
 }
 
 export function nearestBrotherThread(hex) {
-  return pecThread(nearestIndex(hexToRgb(hex), PEC_THREADS));
+  return pecThread(nearestIndex(hexToRgb(hex), PEC_MATCH));
 }
 
 // Python's round(): half to even

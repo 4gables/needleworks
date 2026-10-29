@@ -34,6 +34,7 @@ def raw_pec(b):
     out["pec_colors"] = ncol
     out["pec_palette"] = list(b[pec + 49:pec + 49 + ncol])
     assert all(0 < c <= 64 for c in out["pec_palette"]), "PEC palette index outside Brother's 64 colours"
+    out["applique_codes"] = [c for c in out["pec_palette"] if c >= 62]
     blk = pec + 512
     blen = b[blk + 2] | b[blk + 3] << 8 | b[blk + 4] << 16
     w, h = struct.unpack_from("<HH", b, blk + 8)
@@ -68,7 +69,8 @@ def raw_pec(b):
         kind = "TRIM" if (fx | fy) & 0x20 else "JUMP" if (fx | fy) & 0x10 else "STITCH"
         cmds.append((kind, x, y))
     out["cmds"], out["toggles"] = cmds, toggles
-    out["block_len_ok"] = i == end - 0 or i <= end
+    out["block_len_ok"] = i <= end           # the END byte lies inside what the length field covers (some pad after)
+    out["after_block"] = len(b) - end        # thumbnails (and the v6 addendum) follow
     return out
 
 
@@ -121,6 +123,12 @@ def check(path):
     if any(t != (2 if k % 2 == 0 else 1) for k, t in enumerate(r["toggles"])):
         errs.append(f"colour-change toggle bytes not 2,1,2…: {r['toggles']}")
     blocks = len(r["toggles"]) + 1
+    if not r["block_len_ok"]:
+        errs.append("the stitches run past the PEC stitch block's length field")
+    if r["after_block"] < (blocks + 1) * 228:
+        errs.append(f"room for {r['after_block'] // 228} thumbnails after the stitches, need {blocks + 1}")
+    if r["applique_codes"]:
+        errs.append(f"PEC palette uses {r['applique_codes']}: Brother machines read 62-64 as applique steps, not threads")
     if r["pec_colors"] != blocks:
         errs.append(f"PEC header says {r['pec_colors']} colours but the stitches have {blocks} blocks")
     if blocks > MAX_BLOCKS:
