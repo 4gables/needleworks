@@ -340,3 +340,34 @@ export function workingSize(imgW, imgH, sizeMm, hoop, res = DEFAULTS.res) {
   s = Math.min(s, maxW / imgW, maxH / imgH);
   return { wMm: imgW * s, hMm: imgH * s, w: Math.max(8, Math.round(imgW * s * res)), h: Math.max(8, Math.round(imgH * s * res)) };
 }
+
+// A filled shape (mm polygon, y down) as tatami stitches: underlay across, then the fill, like a picture's colour.
+// Used by the Design tab's patches.
+export function fillPolygon(poly, { angle = DEFAULTS.fillAngle, density = DENSITY.solid, res = DEFAULTS.res } = {}) {
+  const xs = poly.map((p) => p[0]), ys = poly.map((p) => p[1]);
+  const x0 = Math.min(...xs) - 1, y0 = Math.min(...ys) - 1;
+  const w = Math.ceil((Math.max(...xs) - x0 + 1) * res), h = Math.ceil((Math.max(...ys) - y0 + 1) * res);
+  const mask = { w, h, data: new Uint8Array(w * h) };
+  // even-odd scanline fill at pixel centres
+  for (let y = 0; y < h; y++) {
+    const Y = y0 + (y + 0.5) / res, cut = [];
+    for (let i = 0; i < poly.length; i++) {
+      const [ax, ay] = poly[i], [bx, by] = poly[(i + 1) % poly.length];
+      if ((ay <= Y) !== (by <= Y)) cut.push(ax + ((Y - ay) * (bx - ax)) / (by - ay));
+    }
+    cut.sort((a, b) => a - b);
+    for (let k = 0; k + 1 < cut.length; k += 2)
+      for (let x = Math.max(0, Math.ceil((cut[k] - x0) * res - 0.5)); x < Math.min(w, Math.floor((cut[k + 1] - x0) * res - 0.5) + 1); x++) mask.data[y * w + x] = 1;
+  }
+  const { labels, count } = label(mask), dt = distanceTransform(mask), paths = [];
+  const toMm = (p) => p.map(([x, y]) => [x0 + (x + 0.5) / res, y0 + (y + 0.5) / res]);
+  for (let id = 1; id <= count; id++) {
+    const comp = { id, labels, dt, pixels: [] };
+    for (let i = 0; i < w * h; i++) if (labels[i] === id) comp.pixels.push(i);
+    if (comp.pixels.length < 1.5 * res * res) continue;
+    const under = tatami(mask, comp, res, { angle: angle + 90, spacing: 2.5, stitch: 3, inset: 0.4, pull: 0 });
+    const fill = tatami(mask, comp, res, { angle, spacing: density, stitch: 3.5, pull: 0.15 });
+    paths.push(...[...under, ...fill].map(toMm));
+  }
+  return paths;
+}

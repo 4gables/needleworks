@@ -30,6 +30,9 @@ export const STARTERS = [
     text({ text: "Ashley", size: 20, y: 6, color: RED })] },
   { id: "applique", name: "Appliqué", note: "a fabric shape with a name", make: () => [
     frame({ shape: "heart", w: 84, h: 76, border: "applique", y: -4 }), text({ size: 18, y: -6, color: NAVY })] },
+  { id: "patch", name: "Patch", note: "a filled badge with an edge", make: () => [
+    frame({ shape: "circle", w: 76, h: 76, border: "patch", fill: NAVY, color: RED }),
+    mono({ letters: "JD", size: 26, font: PRINT, color: "#f0f0f0" })] },
   { id: "words", name: "Just lettering", note: "a word or name on its own", make: () => [text({ size: 24 })] },
 ];
 
@@ -87,8 +90,8 @@ export function initStudio(api) {
         <button type="button" data-op="del" data-id="${p.id}" aria-label="Remove">✕</button>
       </span></li>`).join("");
   }
-  const swatches = (p) => COLORS.map((c) => `<button type="button" data-color="${c}" style="background:${c}" aria-pressed="${c === p.color}" title="Brother ${nearestBrotherThread(c).name}"></button>`).join("")
-    + `<span class="custom"><input type="color" data-color-any value="${p.color}" aria-label="Any colour"></span>`;
+  const swatches = (p, k = "color") => COLORS.map((c) => `<button type="button" data-${k}="${c}" style="background:${c}" aria-pressed="${c === p[k]}" title="Brother ${nearestBrotherThread(c).name}"></button>`).join("")
+    + `<span class="custom"><input type="color" data-${k}-any value="${p[k]}" aria-label="Any colour"></span>`;
   const fontSelect = (p) => `<select data-k="font">${FONTS.map((f) => `<option value="${f.family}" ${f.family === p.font ? "selected" : ""}>${f.name}${f.print ? " (print)" : ""}</option>`).join("")}</select>`;
   const range = (k, lab, min, max, v, unit = "mm", step = 1) => `<label class="range"><span>${lab}</span><input type="range" data-k="${k}" data-unit="${unit}" min="${min}" max="${max}" step="${step}" value="${v}"><output>${v} ${unit}</output></label>`;
   const seg = (k, opts, v) => `<div class="seg" data-seg="${k}">${Object.entries(opts).map(([key, name]) => `<button type="button" data-v="${key}" aria-pressed="${key === v}">${name}</button>`).join("")}</div>`;
@@ -115,6 +118,7 @@ export function initStudio(api) {
       h += range("w", p.shape === "circle" ? "Size" : "Width", 20, 170, p.w);
       if (p.shape !== "circle") h += range("h", "Height", 20, 170, p.h);
       h += seg("border", BORDERS, p.border);
+      if (p.border === "patch") { p.fill ||= NAVY; h += `<div class="field"><span>Fill thread</span><div class="swatches">${swatches(p, "fill")}</div><p class="hint">Brother ${nearestBrotherThread(p.fill).name}. The edge uses the thread below.</p></div>`; }
       if (p.border === "applique") h += `<p class="hint">Sews an outline, pauses for you to lay fabric on and trim it, then covers the edge in satin. The steps are under “How to stitch it”.</p>`;
     } else {
       h += `<p class="hint">${api.escapeHtml(p.name)}: its stitches are used exactly as they are, so it can be moved and turned but not resized.</p>`;
@@ -193,16 +197,19 @@ export function initStudio(api) {
   edit.addEventListener("input", (e) => {
     const t = e.target, k = t.dataset.k;
     if (t.matches("[data-color-any]")) { change((p) => (p.color = t.value)); return; }
+    if (t.matches("[data-fill-any]")) { change((p) => (p.fill = t.value)); return; }
     if (!k) return;
     if (t.type === "range") t.nextElementSibling.textContent = `${t.value} ${t.dataset.unit}`;
     change((p) => (p[k] = t.type === "range" ? +t.value : t.value));
     if (["size", "text", "letters", "font"].includes(k)) { clearTimeout(warnTimer); warnTimer = setTimeout(warn, 300); }
   });
   let warnTimer = 0;
-  edit.addEventListener("change", (e) => { if (e.target.dataset.k === "font" || e.target.matches("[data-color-any]")) editor(); });
+  edit.addEventListener("change", (e) => { if (e.target.dataset.k === "font" || e.target.matches("[data-color-any], [data-fill-any]")) editor(); });
   edit.addEventListener("click", (e) => {
     const c = e.target.closest("[data-color]");
     if (c) { change((p) => (p.color = c.dataset.color), true); editor(); return; }
+    const f = e.target.closest("[data-fill]");
+    if (f) { change((p) => (p.fill = f.dataset.fill), true); editor(); return; }
     const s = e.target.closest("[data-seg] button");
     if (s) { change((p) => (p[s.closest("[data-seg]").dataset.seg] = s.dataset.v), true); editor(); }
   });

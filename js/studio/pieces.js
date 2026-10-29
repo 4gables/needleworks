@@ -2,6 +2,7 @@
 // Uses the shared lettering and stitch engines and returns a Design; the PES file is written by the locked
 // writer in js/core/formats.js, which nothing here touches.
 import { Design } from "../core/design.js";
+import { fillPolygon } from "../core/digitize.js";
 import { fontOf } from "../core/fonts.js";
 import { filletPolygon, run, satin, zigzag } from "../core/geom.js";
 import { order } from "../core/raster.js";
@@ -110,9 +111,9 @@ function heart(w, h, n = 180) {
 }
 // soft waves, not cusps: a satin border can't turn a sharp inside corner cleanly
 function scallop(rx, ry, n = 360) {
-  const bumps = Math.max(8, Math.round((Math.PI * (rx + ry)) / 11));
+  const bumps = Math.max(8, Math.round((Math.PI * (rx + ry)) / 15));
   return Array.from({ length: n }, (_, i) => {
-    const t = (i / n) * Math.PI * 2, k = 0.95 + 0.05 * Math.cos(bumps * t);
+    const t = (i / n) * Math.PI * 2, k = 0.94 + 0.06 * Math.cos(bumps * t);
     return [rx * k * Math.sin(t), -ry * k * Math.cos(t)];
   });
 }
@@ -122,7 +123,7 @@ function fitBox(pts, w, h) {
   const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2;
   return pts.map(([x, y]) => [((x - cx) / (x1 - x0)) * w, ((y - cy) / (y1 - y0)) * h]);
 }
-export const BORDERS = { line: "Thin line", bold: "Bold line", satin: "Satin border", applique: "Appliqué" };
+export const BORDERS = { line: "Thin line", bold: "Bold line", satin: "Satin border", patch: "Filled patch", applique: "Appliqué" };
 
 // ---------- pieces ----------
 // text:     { kind: "text", text, font, size, shape: "straight"|"up"|"down", radius, x, y, rot, color }
@@ -156,6 +157,12 @@ export function pieceStages(p) {
         { color: p.color, pause: true, paths: [loop(zigzag(edge, 2.6, 2.0, true)), loop(satin(edge, 3.6, 0.4, 0.3, true))],
           you: "Press Start.", sews: "Covers the raw edge with a satin border." },
       ];
+    } else if (p.border === "patch") {
+      // solid tatami fill (inset so the satin edge covers its ragged ends), then the satin edge over it
+      stages = [
+        { color: p.fill || p.color, paths: fillPolygon(inset(edge, 1.0)), sews: `Fills the ${name} patch.` },
+        { color: p.color, paths: [loop(zigzag(edge, 2.6, 2.0, true)), loop(satin(edge, 3.6, 0.4, 0.3, true))], sews: `Sews the patch's satin edge.` },
+      ];
     } else {
       const paths = p.border === "satin" ? [zigzag(edge, 2.1, 2.0, true), satin(edge, 3.0, 0.4, 0.3, true)]
         : p.border === "bold" ? [run(edge, 2.0, true), run(edge.slice().reverse(), 2.0, true), run(edge, 2.0, true)]
@@ -170,12 +177,26 @@ export function pieceStages(p) {
   return stages.map((st) => ({ ...st, paths: st.paths.filter((q) => q.length).map((q) => q.map(place)) }));
 }
 
+// shrink a closed outline toward its centre by d mm (fine for the convex-ish frame shapes)
+function inset(pts, d) {
+  const n = pts.length, out = [];
+  let area = 0;
+  for (let i = 0; i < n; i++) { const [ax, ay] = pts[i], [bx, by] = pts[(i + 1) % n]; area += ax * by - bx * ay; }
+  const sgn = area > 0 ? 1 : -1;
+  for (let i = 0; i < n; i++) {
+    const a = pts[(i - 1 + n) % n], b = pts[(i + 1) % n], tx = b[0] - a[0], ty = b[1] - a[1], L = Math.hypot(tx, ty) || 1;
+    out.push([pts[i][0] - (sgn * ty * d) / L, pts[i][1] + (sgn * tx * d) / L]);
+  }
+  return out;
+}
+
 export const pieceStitches = (p) => pieceStages(p).flatMap((st) => st.paths);
 
 function monogram(p) {
   const chars = [...(p.letters || "").replace(/\s+/g, "")].slice(0, 3);
   if (!chars.length) return [];
-  const big = p.size, small = p.size * 0.68, gap = p.size * 0.04;
+  // three letters sit close (the big middle one carries the shape); one or two need air between them
+  const big = p.size, small = p.size * 0.68, gap = p.size * (chars.length === 3 ? 0.04 : 0.14);
   const sizes = chars.length === 3 ? [small, big, small] : chars.map(() => big);
   const ls = chars.map((c, i) => letters(c, p.font, sizes[i], p.style));
   const widths = ls.map((l) => { const xs = l.parts.flatMap(([q]) => q.map((v) => v[0])); return xs.length ? Math.max(...xs) - Math.min(...xs) : 0; });
