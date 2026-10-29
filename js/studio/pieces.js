@@ -133,7 +133,20 @@ export const BORDERS = { line: "Thin line", bold: "Bold line", satin: "Satin bor
 //
 // A piece sews in stages; each stage is one colour block. `pause` forces a machine stop even in the same thread,
 // with `you` telling the person what to do at it.
+// Stitches don't change when a piece only moves or turns, so they're built once per shape and placed after.
+const built = new Map();
 export function pieceStages(p) {
+  const { x, y, rot, id, ...shape } = p, key = JSON.stringify(shape);
+  if (!built.has(key)) {
+    built.set(key, localStages(p));
+    if (built.size > 80) built.delete(built.keys().next().value);
+  }
+  const a = ((rot || 0) * Math.PI) / 180, c = Math.cos(a), sn = Math.sin(a);
+  const place = ([u, v]) => [u * c - v * sn + x, u * sn + v * c + y];
+  return built.get(key).map((st) => ({ ...st, paths: st.paths.map((q) => q.map(place)) }));
+}
+
+function localStages(p) {
   let stages = [];
   if (p.kind === "text") {
     const { parts, satinW, top, bottom } = letters(p.text, p.font, p.size, p.style);
@@ -172,9 +185,7 @@ export function pieceStages(p) {
   } else if (p.kind === "file") {
     stages = p.blocks.map((b) => ({ color: b.color, paths: b.paths, sews: `Sews ${p.name}${p.blocks.length > 1 ? ` (${b.name || "colour " + (p.blocks.indexOf(b) + 1)})` : ""}.` }));
   }
-  const a = ((p.rot || 0) * Math.PI) / 180, c = Math.cos(a), sn = Math.sin(a);
-  const place = ([x, y]) => [x * c - y * sn + p.x, x * sn + y * c + p.y];
-  return stages.map((st) => ({ ...st, paths: st.paths.filter((q) => q.length).map((q) => q.map(place)) }));
+  return stages.map((st) => ({ ...st, paths: st.paths.filter((q) => q.length) }));
 }
 
 // shrink a closed outline toward its centre by d mm (fine for the convex-ish frame shapes)
