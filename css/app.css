@@ -479,3 +479,9 @@ label:has(> .sr-file:focus-visible), label:has(+ .sr-file:focus-visible) { outli
 select, input[type="text"], .edit textarea, .cards button, .names textarea { border-color: var(--field-line); }
 .dl-warn { margin: 6px 0 0; text-align: right; }
 @media (max-width: 600px) { .dl-warn { text-align: left; } }
+/* the checkup's exact size: mm of the longer side */
+.field .size-mm { display: flex; justify-content: flex-start; align-items: center; gap: 8px; font-size: 14px; font-weight: 400; color: var(--muted); }
+.size-mm input { width: 6em; min-height: 36px; padding: 4px 8px; font: inherit; color: inherit; background: var(--panel);
+  border: 1.5px solid var(--field-line); border-radius: var(--radius); }
+.size-mm input:focus { border-color: var(--accent); outline: none; box-shadow: 0 0 0 4px var(--accent-soft); }
+@media (pointer: coarse) { .size-mm input { min-height: 44px; } }

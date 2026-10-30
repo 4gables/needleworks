@@ -8,7 +8,7 @@ import { nearestBrotherThread, pecThread } from "./core/threads.js";
 import { CLOTHS, colorBlocks, draw } from "./render.js";
 import { cutSVG, sewSheet } from "./sheet.js";
 import { zip } from "./zip.js";
-import { checkup, fix, heat, landJumps, shortJumps, sortedChanges } from "./doctor.js";
+import { checkup, heat, landJumps, shortJumps, sortedChanges } from "./doctor.js";
 import { BRANDS, nearestSpool, spools } from "./core/brands.js";
 import { initStudio } from "./studio/ui.js";
 
@@ -818,7 +818,8 @@ async function openDesign(file) {
       ${fits ? `<span class="good">Fits the ${h.machineName} ${h.name}.</span>` : `<span class="warn">Too big for the ${h.name}: it's ${st.widthMm.toFixed(0)} × ${st.heightMm.toFixed(0)} mm.</span>`}
       ${repair ? `<span class="warn">As it is, this file would load cut off on a Brother machine (shifted, about half shown). The download here is fixed.</span>`
         : isPes ? "" : `<span>You can download it as a PES file for your machine.</span>`}`;
-    state.opened = { d, bytes, out, isPes, repair, base, opts: { scale: 1, tiny: false, thin: false, sort: false, split: false }, sorted: sortedChanges(d) };
+    state.opened = { d, bytes, out, isPes, repair, base, opts: { scale: 1, tiny: false, thin: false, sort: false, split: false, satin: false }, sorted: sortedChanges(d),
+      check: checkup(d), longer: Math.max(st.widthMm, st.heightMm), auto: false };
     $("doctor-fix").innerHTML = ""; setMode("open"); openView();
   } catch (err) {
     // (nothing from an earlier file stays on screen to be saved by mistake)
@@ -827,27 +828,58 @@ async function openDesign(file) {
     showError(err.plain ? err.message : `${file.name} couldn't be read as an embroidery file (PES, PEC or DST). It may be damaged: try downloading it again.`);
   }
 }
+// The fixes run in a worker (re-stitching star_badge.pes at 250 % froze the page for 10 s): one job at a time, only
+// the newest waiting, and a result that's no longer wanted (another size, another file) is dropped.
+// (started on the first fix, not with the page)
+let docWorker = null, docRunning = false, docNext = null, docSeq = 0, docBusy = 0;
+function docJob(msg) {
+  if (!docWorker) {
+    docWorker = new Worker(new URL("./doctor-worker.js", import.meta.url), { type: "module" });
+    docWorker.onmessage = (e) => {
+      const r = e.data;
+      docDone();
+      if (r.id !== docSeq || !state.opened) return;
+      docIdle();
+      if (!r.ok) { showError("This fix didn't work on this design: " + r.error); return; }
+      showError(""); showOpened(r.pattern, r.bytes, r.check, true);
+    };
+    docWorker.onerror = (e) => { docDone(); docIdle(); if (state.mode === "open") showError("Something went wrong while fixing this design. " + (e.message || "")); };
+  }
+  if (docRunning) docNext = msg; else { docRunning = true; docWorker.postMessage(msg); }
+}
+function docDone() { docRunning = false; if (docNext) { const m = docNext; docNext = null; docJob(m); } }
+const docIdle = () => { clearTimeout(docBusy); busy(false); };
 // the opened file as it stands after the checkup's fixes (none: its own bytes, as they came)
 function openView() {
-  const o = state.opened, { scale, tiny, thin, sort, split } = o.opts, changed = scale !== 1 || tiny || thin || sort || split;
-  const p = changed ? fix(o.d, o.opts) : o.d;
-  const v = { pattern: p, verifyAgainst: changed || !o.isPes ? p : null, bytes: changed ? writePES(p) : o.out,
+  const o = state.opened, { scale, tiny, thin, sort, split, satin } = o.opts, changed = scale !== 1 || tiny || thin || sort || split || satin;
+  docSeq++; docIdle();
+  if (!changed) { showOpened(o.d, o.out, o.check, false); return; }
+  // (a quick fix shows no spinner; re-stitching says so)
+  const id = docSeq;
+  docBusy = setTimeout(() => id === docSeq && busy(true, scale < 0.8 || scale > 1.2 ? "Re-stitching…" : "Working…"), 150);
+  docJob({ id, d: o.d, opts: { ...o.opts } });
+}
+function showOpened(p, bytes, check, changed) {
+  const o = state.opened, { scale, tiny, thin, sort, split, satin } = o.opts;
+  const v = { pattern: p, verifyAgainst: changed || !o.isPes ? p : null, bytes,
     filename: `${o.base}${scale !== 1 ? `_${Math.round(scale * 100)}pct` : ""}.pes`, fabric: "linen", source: changed || !o.isPes ? null : o.bytes,
     // (a file she already has: say what the button gives her)
-    action: o.repair || tiny || thin || sort || split ? "Save fixed copy" : changed ? "Save resized copy" : o.isPes ? "Save a copy" : "Save as PES",
+    action: o.repair || tiny || thin || sort || split || satin ? "Save fixed copy" : changed ? "Save resized copy" : o.isPes ? "Save a copy" : "Save as PES",
     // (the machine's name first: a design made here names its threads after its pieces, "peace", "“Sunny”")
     threadLabel: (b, t) => `Brother ${t.name}${b.name && b.name !== t.name ? " · " + escapeHtml(b.name) : ""}` };
-  state.views.open = v; setView(v); doctorUI(p);
+  state.views.open = v; setView(v); doctorUI(p, check);
 }
 // what might go wrong at the machine, in plain words, with the fixes that are safe on a finished design
-function doctorUI(p) {
-  const c = checkup(p), o = state.opened.opts, items = [];
+function doctorUI(p, check) {
+  const c = check || checkup(p), o = state.opened.opts, items = [], src = state.opened.check;
   const say = (ok, text) => items.push(`<li class="${ok ? "good" : "warn"}">${text}</li>`);
   say(!c.hot, c.hot ? `${c.hot} ${c.hot === 1 ? "spot is" : "spots are"} very dense (up to ${c.max} needle hits per mm²; sold designs stay under 25): thread can break or the fabric pucker there. Turn on <b>Thickness</b> under the preview to see ${c.hot === 1 ? "it" : "them"}.`
     : `Thickness is fine: the densest spot has ${c.max} needle hits per mm².`);
   // (a few are normal in sold designs; only many are worth a worry)
   if (c.tiny > Math.max(50, c.stitches * 0.01)) say(false, `${c.tiny} stitches are shorter than 0.3 mm. They pile up thread and can break it.`);
-  if (c.satinGap && c.satinGap > 0.6) say(false, `The satin stitches are far apart (${c.satinGap.toFixed(1)} mm on each edge; well-made designs 0.3–0.4 mm), so fabric may show through.${o.scale > 0.85 ? " Shrinking it a little fills it in." : ""}`);
+  if (c.satinGap && c.satinGap > 0.6) say(false, `The satin stitches are far apart (${c.satinGap.toFixed(1)} mm on each edge; well-made designs 0.3–0.4 mm), so fabric may show through. Tick <b>Even out the satin stitches</b> below.`);
+  // (packed tighter than sold designs: stiff, and the needle can deflect or the thread shred; gnome.pes at 80 %: 0.22)
+  if (c.satinGap && c.satinGap < 0.25) say(false, `The satin stitches are packed very close (${c.satinGap.toFixed(2)} mm on each edge; well-made designs 0.3–0.4 mm): stiff, and thread can shred or the needle break. Tick <b>Even out the satin stitches</b> below.`);
   // (the PE900 sews 12.1 mm at most: pe900_check.py fails a file with a longer one; every fixed copy splits them)
   if (c.over) say(false, `${c.over} ${c.over === 1 ? "stitch is" : "stitches are"} longer than 12 mm (up to ${c.longest.toFixed(1)} mm), more than the machine sews in one stitch. Tick <b>Split long stitches</b> below.`);
   else if (c.long) say(true, `${c.long} ${c.long === 1 ? "stitch is" : "stitches are"} longer than 10 mm. Fine on a wall hanging; on clothes they can snag.`);
@@ -859,31 +891,63 @@ function doctorUI(p) {
   $("doctor").hidden = false; $("doctor-list").innerHTML = items.join("");
   // the fixes are drawn once per file (redrawing the slider mid-drag would drop it); only their state follows
   const changes = Math.max(0, state.opened.d.threads.length - 1), sorted = state.opened.sorted;
+  // (satins out of 0.3-0.5 mm on each edge in the file as it came: offered at full size, done by any resize)
+  const uneven = src.satinGap && (src.satinGap < 0.3 || src.satinGap > 0.5);
   if (!$("doc-scale")) $("doctor-fix").innerHTML = `<label class="range"><span>Size</span><input type="range" id="doc-scale" min="50" max="250" step="5" value="100"><output>100 %</output></label>
+    <label class="size-mm">Longer side <input type="number" id="doc-mm" inputmode="decimal" min="${Math.ceil(state.opened.longer * 0.5)}" max="${Math.floor(state.opened.longer * 2.5)}" step="1"> mm</label>
     <p class="hint" id="doc-scale-hint"></p>
     ${sorted != null ? `<label class="check small"><input type="checkbox" id="doc-sort"> Fewer thread changes (${changes} → ${sorted}): sews each thread's parts together where nothing in between is in the way</label>` : ""}
+    ${uneven ? `<label class="check small"><input type="checkbox" id="doc-satin"> Even out the satin stitches (${src.satinGap.toFixed(2)} mm apart on each edge; 0.3–0.5 mm is right)</label>` : ""}
     <label class="check small"><input type="checkbox" id="doc-tiny"> Remove tiny stitches</label>
-    ${checkup(state.opened.d).over ? `<label class="check small"><input type="checkbox" id="doc-split"> Split long stitches</label>` : ""}
+    ${src.over ? `<label class="check small"><input type="checkbox" id="doc-split"> Split long stitches</label>` : ""}
     <label class="check small"><input type="checkbox" id="doc-thin"> Thin the densest spots to 24 hits per mm²</label>`;
-  $("doc-scale").value = Math.round(o.scale * 100); $("doc-scale").nextElementSibling.textContent = `${Math.round(o.scale * 100)} %`;
-  // within 80-120 % the stitches are scaled as they are; past that they're re-stitched at the new size
-  $("doc-scale-hint").textContent = o.scale >= 0.8 && o.scale <= 1.2 ? "Up to 20 % either way the stitches are scaled as they are (denser smaller, more open bigger)."
-    : "Re-stitched at the new size: satins and fills get the right density again. Check it in the preview: lettering and fine detail can change.";
-  $("doc-tiny").checked = o.tiny; $("doc-thin").checked = o.thin; if ($("doc-split")) { const other = o.scale !== 1 || o.tiny || o.thin || o.sort; $("doc-split").checked = o.split || other; $("doc-split").disabled = other; } if ($("doc-sort")) $("doc-sort").checked = o.sort;
+  sizeUI();
+  $("doc-tiny").checked = o.tiny; $("doc-thin").checked = o.thin; if ($("doc-sort")) $("doc-sort").checked = o.sort;
+  // (any resize splits long stitches and evens out satins itself: shown ticked)
+  const resized = o.scale !== 1;
+  if ($("doc-split")) { const other = resized || o.tiny || o.thin || o.sort; $("doc-split").checked = o.split || other; $("doc-split").disabled = other; }
+  if ($("doc-satin")) { $("doc-satin").checked = o.satin || resized; $("doc-satin").disabled = resized; }
 }
+// the size controls follow o.scale (the slider moves in 5 % steps; the mm box can land anywhere between)
+function sizeUI() {
+  const o = state.opened.opts, pct = Math.round(o.scale * 100);
+  if (document.activeElement !== $("doc-scale")) $("doc-scale").value = pct;
+  $("doc-scale").nextElementSibling.textContent = `${pct} %`;
+  if (document.activeElement !== $("doc-mm")) $("doc-mm").value = Math.round(state.opened.longer * o.scale);
+  // within 80-120 % the stitches are scaled as they are; past that they're re-stitched at the new size
+  $("doc-scale-hint").textContent = o.scale >= 0.8 && o.scale <= 1.2 ? "Up to 20 % either way the stitches are scaled as they are (denser smaller, more open bigger); satins are evened out."
+    : "Re-stitched at the new size: satins and fills keep the file's own density. Check it in the preview: lettering and fine detail can change.";
+}
+// A new size. Shrinking packs short stitches into tiny ones, closer together: it ticks Remove tiny stitches and Thin,
+// and untick them again back at 100 % or more if it was the slider that ticked them (ufront back at 100 % had lost 88
+// stitches and offered "Save fixed copy").
+function setScale(scale) {
+  const s = state.opened, o = s.opts, was = o.scale;
+  o.scale = Math.min(2.5, Math.max(0.5, scale));
+  if (o.scale < 1 && was >= 1 && !o.tiny && !o.thin) { o.tiny = o.thin = true; s.auto = true; }
+  if (o.scale >= 1 && s.auto) { o.tiny = o.thin = false; s.auto = false; }
+  if ($("doc-tiny")) { $("doc-tiny").checked = o.tiny; $("doc-thin").checked = o.thin; }
+  sizeUI();
+}
+// (the slider only shows the size while it moves; the design is made again when it's let go, or 300 ms after the
+// last arrow key: each step re-stitched after every 250 ms pause until then)
 $("doctor-fix").addEventListener("input", (e) => {
-  const o = state.opened.opts;
-  if (e.target.id === "doc-scale") {
-    const was = o.scale; o.scale = +e.target.value / 100; e.target.nextElementSibling.textContent = `${e.target.value} %`;
-    if (o.scale < 1 && was >= 1) o.tiny = o.thin = true;   // shrinking turns short stitches into tiny ones, and packs them closer
-    // (re-stitching a big design takes a moment: say so, and let the screen draw first)
-    clearTimeout(docTimer); docTimer = setTimeout(() => { if (o.scale < 0.8 || o.scale > 1.2) { busy(true, "Re-stitching…"); setTimeout(() => { try { openView(); } finally { busy(false); } }, 30); } else openView(); }, 250); return;
+  if (e.target.id !== "doc-scale") return;
+  e.target.nextElementSibling.textContent = `${e.target.value} %`; $("doc-mm").value = Math.round((state.opened.longer * e.target.value) / 100);
+});
+$("doctor-fix").addEventListener("change", (e) => {
+  const s = state.opened, o = s.opts;
+  if (e.target.id === "doc-scale") setScale(+e.target.value / 100);
+  else if (e.target.id === "doc-mm") { const mm = parseFloat(e.target.value); if (!(mm > 0)) { sizeUI(); return; } setScale(Math.round((mm / s.longer) * 1000) / 1000); }
+  else {
+    if (e.target.id === "doc-tiny") { o.tiny = e.target.checked; s.auto = false; }
+    if (e.target.id === "doc-thin") { o.thin = e.target.checked; s.auto = false; }
+    if (e.target.id === "doc-sort") o.sort = e.target.checked;
+    if (e.target.id === "doc-split") o.split = e.target.checked;
+    if (e.target.id === "doc-satin") o.satin = e.target.checked;
+    openView(); return;
   }
-  if (e.target.id === "doc-tiny") o.tiny = e.target.checked;
-  if (e.target.id === "doc-sort") o.sort = e.target.checked;
-  if (e.target.id === "doc-thin") o.thin = e.target.checked;
-  if (e.target.id === "doc-split") o.split = e.target.checked;
-  openView();
+  clearTimeout(docTimer); docTimer = setTimeout(openView, 300);
 });
 let docTimer = 0;
 $("open-file").onchange = (e) => e.target.files[0] && openDesign(e.target.files[0]);
