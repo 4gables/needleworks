@@ -498,7 +498,9 @@ function localStages(p, fab = "cotton") {
     if (p.style === "applique") stages = appliqued(loops, p.color, `the ${name}`, `the ${name}`, "around it (and inside any holes)");
     else if (loops.length) stages = [{ color: p.color, paths: motifStitches(loops, p.style), sews: `Sews the ${name}${p.style === "outline" ? " outline" : ""}.` }];
   } else if (p.kind === "file") {
-    stages = p.blocks.map((b) => ({ color: b.color, paths: b.paths, sews: `Sews ${p.name}${p.blocks.length > 1 ? ` (${b.name || "colour " + (p.blocks.indexOf(b) + 1)})` : ""}.` }));
+    // (each block keeps the thread name the file gives it: all named after the piece, a combined gnome.pes listed
+    // "gnome" for every thread)
+    stages = p.blocks.map((b) => ({ color: b.color, paths: b.paths, label: b.name || p.name, sews: `Sews ${p.name}${p.blocks.length > 1 ? ` (${b.name || "colour " + (p.blocks.indexOf(b) + 1)})` : ""}.` }));
   }
   return stages.map((st) => ({ ...st, paths: st.paths.filter((q) => q.length) }));
 }
@@ -1017,7 +1019,7 @@ function build(pieces, hoop, opts) {
   pieces = pieces.map((p) => (fit.has(p.id) ? { ...p, size: fit.get(p.id) } : p));
   const box = (paths) => { const [x0, y0, x1, y1] = bounds(paths.flat()); return [x0 - 1, y0 - 1, x1 + 1, y1 + 1]; };
   const hits = (a, b) => a[0] < b[2] && b[0] < a[2] && a[1] < b[3] && b[1] < a[3];
-  const order = [], last = [], edges = [], staged = pieces.map((p) => pieceStages(p, fab).map((st) => ({ ...st, label: label(p) })));
+  const order = [], last = [], edges = [], staged = pieces.map((p) => pieceStages(p, fab).map((st) => ({ label: label(p), ...st })));
   pieces.forEach((p, i) => { if (QUILTED(p)) staged[i] = withQuilt(p, staged[i], staged.filter((_, j) => j !== i).flat().flatMap((s) => s.paths), opts.dragging); });
   // patches: no fill under what's sewn on them (fine-line lettering excepted)
   pieces.forEach((p, i) => {
