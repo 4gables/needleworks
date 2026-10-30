@@ -57,16 +57,16 @@ export const STARTERS = [
     tip: "Hoop sticky (self-adhesive) tear-away stabilizer, score and peel its paper, and press the bib onto it (or float it on plain tear-away with spray adhesive). On terry, lay a water-soluble topper over it so the stitches don't sink." },
   { id: "towel", name: "Towel name", note: "a big name that stands up to terry", make: () => [text({ text: "Emma", size: 32, style: "satin" })], fabric: "towel", baste: true },
   { id: "ornament", name: "Ornament", note: "two-sided, sewn in the hoop", make: () => [
-    frame({ shape: "circle", w: 80, h: 80, border: "ith", color: RED }),
+    frame({ shape: "circle", w: 80, h: 80, border: "ith", hang: true, color: RED }),
     text({ text: "Emma", size: 20, y: -4 }),
     text({ text: "2026", font: PRINT, size: 8, y: 14 })],
     tip: "Made in the hoop, front and back. Have ready: tear-away stabilizer, front and back fabric cut 1 in bigger than the circle, tape, and a 6 in ribbon for hanging. Smaller (Fit to hoop or the size slider) makes a keychain." },
   { id: "mugrug", name: "Mug rug", note: "quilted, sewn in the hoop", make: () => [
-    frame({ shape: "square", w: 120, h: 90, border: "ith", quilt: "stipple", color: NAVY }),
+    frame({ shape: "square", w: 120, h: 90, border: "ith", quilt: "stipple", hang: false, color: NAVY }),
     text({ text: "Tea time", size: 18, color: RED })],
     tip: "Made in the hoop: front fabric with thin batting under it, then backing. Have ready: tear-away stabilizer, front and back fabric and batting 1 in bigger than the rug, and tape." },
   { id: "coaster", name: "Coaster", note: "echo-quilted round a letter", make: () => [
-    frame({ shape: "circle", w: 96, h: 96, border: "ith", quilt: "echo", color: RED }),
+    frame({ shape: "circle", w: 96, h: 96, border: "ith", quilt: "echo", hang: false, color: RED }),
     mono({ letters: "A", size: 34, color: NAVY })],
     tip: "Made in the hoop, front and back. Thin batting under the front fabric makes the echo lines puff up." },
   { id: "quiltblock", name: "Quilt block", note: "a stippled square with a heart", make: () => [
@@ -78,7 +78,7 @@ export const STARTERS = [
     text({ text: "Makeup", size: 16, y: 14, color: RED })],
     tip: "Medium-weight cotton or canvas works best. Use a nylon coil zipper (the needle can't hit metal teeth, so keep the zipper tab past the side while it sews)." },
   { id: "keyfob", name: "Key fob", note: "two-sided, with a ribbon loop", make: () => [
-    frame({ shape: "square", w: 44, h: 80, border: "ith", color: RED }),
+    frame({ shape: "square", w: 44, h: 80, border: "ith", hang: true, color: RED }),
     mono({ letters: "J", size: 30, y: 6, color: NAVY })],
     tip: "Like the ornament: tape a 5 in piece of ribbon or webbing, folded in half, at the top before the back goes on. Felt or vinyl doesn't fray, so it can be cut right up to the satin." },
   { id: "applique", name: "Appliqué", note: "a fabric shape with a name", make: () => [

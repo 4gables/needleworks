@@ -102,7 +102,7 @@ export function draw(canvas, design, opts = {}) {
     // every outline in the placement block (appliqué letters have several, and holes): fabric between them
     // (closed ones only, ends within 5 mm: a zipper pouch's topstitch lines share the block; the bookmark's outline
     // stops a 2.5 mm stitch short of where it began)
-    const outlines = fabBlock.segs.filter((sg) => sg.length > 8 && Math.hypot(sg[0][0] - sg[sg.length - 1][0], sg[0][1] - sg[sg.length - 1][1]) <= 50);
+    const outlines = fabBlock.segs.flatMap(rings).filter((sg) => sg.length > 8 && Math.hypot(sg[0][0] - sg[sg.length - 1][0], sg[0][1] - sg[sg.length - 1][1]) <= 50);
     ctx.save();
     ctx.beginPath();
     for (const outline of outlines) { outline.forEach(([x, y], i) => (i ? ctx.lineTo(X(x), Y(y)) : ctx.moveTo(X(x), Y(y)))); ctx.closePath(); }
@@ -176,6 +176,31 @@ export function draw(canvas, design, opts = {}) {
     }
   }
   return { scale: s, total, ox, oy };
+}
+
+// A run of stitches cut into the closed rings it sews (file units): the appliqué placement line goes round one outline
+// and on to the next, so drawing the whole run as one shape put the moves into the fabric and even-odd lost the holes.
+// A ring ends where the line comes back within 0.3 mm of a point earlier in it, more than 5 mm of line before; what's
+// between rings (the moves) is left out. A run with no ring comes back as it is.
+function rings(seg) {
+  const grid = new Map(), out = [], key = (x, y) => Math.floor(x / 4) * 100003 + Math.floor(y / 4);
+  const len = [0];
+  for (let i = 1; i < seg.length; i++) len.push(len[i - 1] + Math.hypot(seg[i][0] - seg[i - 1][0], seg[i][1] - seg[i - 1][1]));
+  let start = 0;
+  for (let i = 0; i < seg.length; i++) {
+    const [x, y] = seg[i];
+    let hit = -1;
+    for (let dx = -1; dx <= 1 && hit < 0; dx++) for (let dy = -1; dy <= 1; dy++) {
+      for (const j of grid.get(key(x + dx * 4, y + dy * 4)) || []) {
+        if (j >= start && i - j > 8 && len[i] - len[j] > 50 && Math.hypot(seg[j][0] - x, seg[j][1] - y) <= 3 && (hit < 0 || j < hit)) hit = j;
+      }
+    }
+    if (hit >= 0) { out.push(seg.slice(hit, i + 1)); start = i; }
+    const k = key(x, y); (grid.get(k) || grid.set(k, []).get(k)).push(i);
+  }
+  if (!out.length) return [seg];
+  out.push(seg.slice(start));
+  return out;
 }
 
 function strokeSegs(ctx, segs, X, Y, upto, off) {

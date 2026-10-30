@@ -462,7 +462,10 @@ function localStages(p, fab = "cotton") {
       ];
     } else if (p.border === "ith") {
       // in-the-hoop ornament or keychain: an appliqué front, then whatever goes on it (the pieces after it in the list),
-      // then backing fabric taped under the hoop and one satin edge through every layer; cut out when it's done
+      // then backing fabric taped under the hoop and one satin edge through every layer; cut out when it's done.
+      // Only something that hangs (`hang`: the ornament and key fob starters; a quilted frame is a coaster or mug rug)
+      // gets the ribbon loop
+      const hang = p.hang ?? !QUILTED(p);
       stages = [
         { color: p.color, paths: [loop(run(edge, 2.5, true))], sews: `Sews the ${name} outline on the stabilizer.`, fabric: true,
           before: `Fabric: front and back pieces, each ${cut(p.w, p.h)}${p.quilt ? `, thin batting the same size` : ""}, tear-away stabilizer and tape.` },
@@ -471,9 +474,9 @@ function localStages(p, fab = "cotton") {
           sews: "Tacks the front fabric down.", under: true },
         { color: p.color, pause: true, last: true,
           paths: [loop(run(edge, 2.0, true)), ...satinBorder(edge)],
-          you: `Take the hoop off and turn it over. Tape the backing fabric to the back, right side facing you (away from the stabilizer), covering the ${name} by ½ in. For a hanging loop (an ornament or key fob), tape a folded ribbon at the top on the front, loop pointing in, ends ½ in past the outline. Put the hoop back and press Start.`,
+          you: `Take the hoop off and turn it over. Tape the backing fabric to the back, right side facing you (away from the stabilizer), covering the ${name} by ½ in.${hang ? " For a hanging loop, tape a folded ribbon at the top on the front, loop pointing in, ends ½ in past the outline." : ""} Put the hoop back and press Start.`,
           sews: "Tacks the backing on and covers the edge with satin through every layer.",
-          after: `Take it out of the hoop, tear the stabilizer away and cut round the ${name} as close to the satin as you can without nicking it (keep the ribbon loop clear of the scissors). Flip the ribbon loop up.` },
+          after: `Take it out of the hoop, tear the stabilizer away and cut round the ${name} as close to the satin as you can without nicking it${hang ? " (keep the ribbon loop clear of the scissors). Flip the ribbon loop up." : "."}` },
       ];
     } else if (p.border === "patch") {
       // solid tatami fill (inset so the satin edge covers its ragged ends), then the satin edge over it; `compose`
@@ -538,81 +541,212 @@ function outward(loops, d) {
   });
 }
 
-// appliqué from outlines (letters, a motif): one piece of fabric for all of it; placement, tack-down, satin, each stage
-// starting a third further round so the three seams (and their locks) don't stack in one spot
+// appliqué from outlines (letters, a motif): one piece of fabric for all of it; placement, tack-down, satin. The cut
+// file is the outlines themselves (`cut`), each its own closed shape: the placement run goes from one outline to the
+// next where that's hidden, and those moves must never reach a cutter.
 function appliqued(loops, color, what, cover, trim, them = "it") {
   if (!loops.length) return [];
-  const turn = (l, f) => { const k = Math.floor(l.length * f); return [...l.slice(k), ...l.slice(0, k)]; };
-  const placed = chained(loops);
-  loops = placed.loops;
+  const R = applRoutes(loops);
   return [
-    { color, paths: placed.paths, sews: `Sews the outline of ${what} on the base fabric.`, fabric: true },
-    { color, pause: true, paths: loops.map((l) => turn(l, 1 / 3)).flatMap(tack),
+    { color, paths: R.placement, cut: loops, sews: `Sews the outline of ${what} on the base fabric.`, fabric: true },
+    { color, pause: true, paths: R.tack,
       you: `Lay the appliqué fabric over ${cover}, right side up, covering ${them} by ½ in. Press Start. Then take the hoop off (leave everything hooped), trim the fabric close to the stitching ${trim}, and put the hoop back.`,
       sews: "Tacks the appliqué fabric down.", under: true },
-    // the satin sits 0.4 mm out from the placement line, so it reaches 1.8 mm past it and covers a trim of about 1 mm
-    // (centred, it reached 1.4 and holes' narrow satins 0.7); 2 mm at least in a hole, or the cut edge shows
-    { color, pause: true, paths: outward(loops, 0.4).map((l) => turn(l, 2 / 3)).flatMap((l) => edgeSatin(l, 2.8, 2.0)), you: "Press Start.", sews: "Covers the raw edges with satin." },
+    { color, pause: true, paths: R.satin, you: "Press Start.", sews: "Covers the raw edges with satin." },
   ];
 }
 
-// Appliqué outlines in sewing order, each piece (an outline and the holes inside it) together, pieces left to right,
-// every loop turned to start where the last one left off. The placement lines of a piece's holes are reached by a
-// straight run across the piece itself, which the appliqué fabric then covers: "AB" placed with 4 trims, now 1.
-// (Tack-down and satin can't: a run across the piece would sit on top of the fabric.)
-function chained(loops) {
-  const inside = ([x, y]) => {
+// The three appliqué stages, each sewn in as few runs (trims) as hides its moves. A stage goes from one outline to
+// the next only along a line that ends up out of sight:
+//  - placement: under the appliqué fabric (inside a letter) or under a satin still to come (between close letters);
+//  - tack-down: under a satin still to come (it sits on the appliqué fabric, so never across a letter); it first
+//    runs back along its own tack line, which the satin covers too, to the spot nearest the next outline;
+//  - satin: under the satin of an outline not sewn yet. Each satin starts where it will leave for the next outline,
+//    reached by a run along its own centre line (under it), and the move starts on its outer edge.
+// Otherwise it trims. Satin covers 1.0 mm inside the placement line and 1.8 outside (it sits 0.4 mm out, 2.8 wide);
+// a move counts as hidden 0.3 mm short of that. Outlines go nearest first, a piece's holes before the next piece.
+// Until 2026-10-30 only the placement line linked a letter's holes (straight across it), so "BABY" took 19 trims.
+function applRoutes(loops) {
+  const n = loops.length, out = outward(loops, 0.4);
+  const width = out.map((l) => { const [x0, y0, x1, y1] = bounds(l); return Math.max(2.0, Math.min(2.8, Math.min(x1 - x0, y1 - y0) / 3.5)); });
+  const ink = ([x, y]) => {
     let k = false;
     for (const l of loops) for (let i = 0, j = l.length - 1; i < l.length; j = i++)
       if ((l[i][1] > y) !== (l[j][1] > y) && x < ((l[j][0] - l[i][0]) * (y - l[i][1])) / (l[j][1] - l[i][1]) + l[i][0]) k = !k;
     return k;
   };
+  const segDist = (p, a, b) => {
+    const dx = b[0] - a[0], dy = b[1] - a[1], L = dx * dx + dy * dy, t = L ? Math.max(0, Math.min(1, ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / L)) : 0;
+    return Math.hypot(p[0] - a[0] - dx * t, p[1] - a[1] - dy * t);
+  };
+  const box = loops.map((l) => bounds(l));
+  const dist = (j, p) => {
+    const [x0, y0, x1, y1] = box[j];
+    if (p[0] < x0 - 3 || p[0] > x1 + 3 || p[1] < y0 - 3 || p[1] > y1 + 3) return Infinity;
+    const l = loops[j]; let d = Infinity;
+    for (let i = 0; i < l.length; i++) d = Math.min(d, segDist(p, l[i], l[(i + 1) % l.length]));
+    return d;
+  };
+  // under outline j's satin
+  const covers = (j, p) => dist(j, p) <= (width[j] + (width[j] > 2 ? 0.3 : 0.2)) / 2 + (ink(p) ? -0.4 : 0.4) - 0.15;
+  const hidden = (a, b, ok, skip = 0) => {
+    const L = Math.hypot(b[0] - a[0], b[1] - a[1]);
+    for (let s = skip; s <= L; s += 0.25) { const t = L ? s / L : 0; if (!ok([a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t])) return false; }
+    return ok(b);
+  };
+
+  // positions on an outline by arc length (out[i] is point for point with loops[i], so one position serves both)
+  const cum = loops.map((l) => { const c = [0]; for (let i = 0; i < l.length; i++) c.push(c[i] + Math.hypot(l[(i + 1) % l.length][0] - l[i][0], l[(i + 1) % l.length][1] - l[i][1])); return c; });
+  const at = (L, i, s) => {
+    const c = cum[i], T = c[c.length - 1]; s = ((s % T) + T) % T;
+    let k = 0; while (k < L.length - 1 && c[k + 1] < s) k++;
+    const t = c[k + 1] > c[k] ? (s - c[k]) / (c[k + 1] - c[k]) : 0, a = L[k], b = L[(k + 1) % L.length];
+    return { k, p: [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t] };
+  };
+  const from = (L, i, s, rev = false) => {   // the outline as a loop starting at s (no repeated end)
+    const { k, p } = at(L, i, s), o = [p, ...L.slice(k + 1), ...L.slice(0, k + 1)];
+    return rev ? [o[0], ...o.slice(1).reverse()] : o;
+  };
+  const along = (L, i, s0, s1) => {   // the shorter way round from s0 to s1
+    const T = cum[i][cum[i].length - 1], fw = (((s1 - s0) % T) + T) % T;
+    const pts = [at(L, i, s0).p];
+    if (fw <= T / 2) { for (const v of cum[i].slice(1, -1).map((c, k) => [c, k + 1])) { const d = (((v[0] - s0) % T) + T) % T; if (d > 0 && d < fw) pts.push([d, L[v[1]]]); } }
+    else { for (const v of cum[i].slice(1, -1).map((c, k) => [c, k + 1])) { const d = (((s0 - v[0]) % T) + T) % T; if (d > 0 && d < T - fw) pts.push([d, L[v[1]]]); } }
+    const mid = pts.slice(1).sort((a, b) => a[0] - b[0]).map((q) => q[1]);
+    return [pts[0], ...mid, at(L, i, s1).p];
+  };
+  // nearby spots on two outlines, closest first (candidate places to move between them)
+  const near = (i, j, max) => {
+    const c = [], T = cum[i][cum[i].length - 1];
+    for (let s = 0; s < T; s += 0.5) {
+      const p = at(loops[i], i, s).p; let bd = Infinity, bs = 0;
+      const l = loops[j];
+      for (let k = 0; k < l.length; k++) {
+        const a = l[k], b = l[(k + 1) % l.length], dx = b[0] - a[0], dy = b[1] - a[1], L2 = dx * dx + dy * dy;
+        const t = L2 ? Math.max(0, Math.min(1, ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / L2)) : 0, d = Math.hypot(p[0] - a[0] - dx * t, p[1] - a[1] - dy * t);
+        if (d < bd) { bd = d; bs = cum[j][k] + t * (cum[j][k + 1] - cum[j][k]); }
+      }
+      if (bd <= max) c.push({ si: s, sj: bs, d: bd });
+    }
+    c.sort((a, b) => a.d - b.d);
+    const picked = [];   // spread out: one try per 1.5 mm of outline
+    for (const q of c) if (!picked.some((r) => Math.abs(r.si - q.si) < 1.5)) { picked.push(q); if (picked.length >= 8) break; }
+    return picked;
+  };
+  // the holes of the piece an outline belongs to come first (the placement line links them across the letter)
   const contains = (l, [x, y]) => {
     let k = false;
     for (let i = 0, j = l.length - 1; i < l.length; j = i++)
       if ((l[i][1] > y) !== (l[j][1] > y) && x < ((l[j][0] - l[i][0]) * (y - l[i][1])) / (l[j][1] - l[i][1]) + l[i][0]) k = !k;
     return k;
   };
-  // each loop's piece: the outline it sits directly inside (a hole), or itself (an outline: inside an even number)
-  const depth = loops.map((l, i) => loops.filter((m, j) => j !== i && contains(m, l[0])));
-  const pieces = loops.map((l, i) => ({ l, holes: [] })).filter((_, i) => depth[i].length % 2 === 0);
-  loops.forEach((l, i) => {
-    if (depth[i].length % 2 === 0) return;
-    const host = pieces.filter((p) => contains(p.l, l[0])).sort((a, b) => Math.abs(area(a.l)) - Math.abs(area(b.l)))[0];
-    if (host) host.holes.push(l); else pieces.push({ l, holes: [] });
+  const host = loops.map((l, i) => {
+    const around = loops.map((m, j) => j).filter((j) => j !== i && contains(loops[j], l[0]));
+    if (around.length % 2 === 0) return i;
+    return around.sort((a, b) => Math.abs(area(loops[a])) - Math.abs(area(loops[b])))[0];
   });
-  pieces.sort((a, b) => bounds(a.l)[0] - bounds(b.l)[0]);
-  const near = (l, q) => { let bi = 0, bd = Infinity; l.forEach((p, i) => { const d = Math.hypot(p[0] - q[0], p[1] - q[1]); if (d < bd) { bd = d; bi = i; } }); return bi; };
-  const from = (l, i) => [...l.slice(i), ...l.slice(0, i)];
-  const across = (a, b) => {   // a straight run from a to b that stays on the piece (0.3 mm clear of both ends)
-    const L = Math.hypot(b[0] - a[0], b[1] - a[1]);
-    for (let s = 0.3; s < L - 0.3; s += 0.25) if (!inside([a[0] + ((b[0] - a[0]) * s) / L, a[1] + ((b[1] - a[1]) * s) / L])) return null;
-    return run([a, b], 2.5);
-  };
-  const out = [], paths = [];
-  for (const { l, holes } of pieces) {
-    // (the outline starts at its point nearest a hole)
-    let s0 = 0;
-    if (holes.length) {
-      let bd = Infinity;
-      l.forEach((p, i) => { for (const h of holes) for (const q of h) { const d = (p[0] - q[0]) ** 2 + (p[1] - q[1]) ** 2; if (d < bd) { bd = d; s0 = i; } } });
+  const gap = loops.map((_, i) => loops.map((_, j) => {
+    if (i === j) return Infinity;
+    const a = box[i], b = box[j], dx = Math.max(0, a[0] - b[2], b[0] - a[2]), dy = Math.max(0, a[1] - b[3], b[1] - a[3]);
+    return Math.hypot(dx, dy);
+  }));
+
+  function stage(kind, before = null) {   // (before: where the stage before it stopped)
+    const left = new Set(loops.map((_, i) => i)), paths = [], max = kind === "placement" ? 40 : 4;
+    // (placement and tack-down: every satin is still to come; satin: the outlines not sewn yet)
+    const any = (p) => loops.some((_, j) => covers(j, p)), ok = kind === "placement" ? (p) => ink(p) || any(p)
+      : kind === "tack" ? any : (p) => [...left].some((j) => covers(j, p));
+    // where to leave outline i for one of `to`, hidden: the piece's holes first, then the nearest
+    const leave = (i, to) => {
+      for (const j of to.filter((j) => gap[i][j] <= max).sort((a, b) => (host[a] === host[i] ? 0 : 1) - (host[b] === host[i] ? 0 : 1) || gap[i][a] - gap[i][b])) {
+        for (const c of near(i, j, max)) {
+          if (kind !== "satin") {
+            const a = at(loops[i], i, c.si).p, b = at(loops[j], j, c.sj).p;
+            if (hidden(a, b, ok)) return { j, s: c.si, sj: c.sj, bridge: [a, b] };
+            continue;
+          }
+          // satin: sewn from this spot round (either way), it ends on one edge; the move goes from there
+          for (const rev of [false, true]) {
+            const sat = edgeSatin(from(out[i], i, c.si, rev), 2.8, 2.0), e = sat[sat.length - 1][sat[sat.length - 1].length - 1], b = nearestOn(out[j], e);
+            if (hidden(e, b, ok, 0.3)) return { j, s: c.si, sat, bridge: [e, b], sj: arcOf(out[j], j, b) };
+          }
+        }
+      }
+      return null;
+    };
+    const bridge = (path, [a, b]) => { const L = Math.hypot(b[0] - a[0], b[1] - a[1]); path.push(...(L <= 4 ? [b] : run([a, b], 2.5).slice(1))); };
+    let cur = -1, arrive = null, path = null;
+    while (left.size || cur >= 0) {
+      if (cur < 0) {   // a new run: the leftmost outline left (a piece's outline before its holes)
+        cur = [...left].sort((a, b) => (host[a] === a ? 0 : 1) - (host[b] === b ? 0 : 1) || box[a][0] - box[b][0])[0];
+        arrive = null; path = [];
+      }
+      left.delete(cur);
+      let exit = leave(cur, [...left]), back = null;
+      // placement, from a hole with nowhere to go: back across the letter to its outline (under the fabric) and along
+      // that (already sewn) to the spot nearest the next letter
+      if (!exit && kind === "placement" && host[cur] !== cur) {
+        const h = host[cur], on = leave(h, [...left]);
+        if (on) for (const c of near(cur, h, max)) {
+          const a = at(loops[cur], cur, c.si).p, b = at(loops[h], h, c.sj).p;
+          if (hidden(a, b, ok)) { back = { s: c.si, sj: c.sj, bridge: [a, b], on }; break; }
+        }
+      }
+      const T = cum[cur][cum[cur].length - 1];
+      // a new run starts at least 5.5 mm from where the last one stopped: the machine doesn't trim a shorter jump
+      // (it's left as a loose thread), and under 2 mm it's sewn straight across. From there it runs round to its exit.
+      if (arrive == null) {
+        const L = kind === "satin" ? out[cur] : loops[cur], end = paths.length ? paths[paths.length - 1].at(-1) : before;
+        const far = (s) => !end || Math.hypot(at(L, cur, s).p[0] - end[0], at(L, cur, s).p[1] - end[1]) > 5.5;
+        const want = [(exit || back)?.s, kind === "satin" ? T * (2 / 3) : kind === "tack" ? T / 3 : 0].filter((s) => s != null);
+        let s = want.find(far);
+        for (let k = 1; s == null && k < 40; k++) for (const w of [want[0] + (k * T) / 80, want[0] - (k * T) / 80]) if (s == null && far(w)) s = ((w % T) + T) % T;
+        arrive = s ?? want[0];
+      }
+      if (kind === "satin") {
+        const s = exit ? exit.s : arrive ?? T * (2 / 3);   // (a lone outline starts two thirds round: the stages' seams apart)
+        if (arrive != null && Math.abs(arrive - s) > 0.05) path.push(...run(along(out[cur], cur, arrive, s), 2.5).slice(path.length ? 1 : 0));
+        const sat = exit ? exit.sat : edgeSatin(from(out[cur], cur, s), 2.8, 2.0);
+        if (path.length) paths.push(path);
+        paths.push(...sat.slice(0, -1)); path = sat[sat.length - 1].slice();
+      } else {
+        const go = exit || back, s0 = arrive ?? (go ? go.s : kind === "tack" ? T / 3 : 0), l = from(loops[cur], cur, s0);
+        // (tack-down: round and back the other way, ending where it began)
+        const ring = kind === "tack" ? [...loop(run(l, 2.0, true)), ...loop(run([l[0], ...l.slice(1).reverse()], 2.0, true)).slice(1)] : loop(run(l, 2.5, true));
+        path.push(...(path.length ? ring.slice(1) : ring));
+        if (go && Math.abs(go.s - s0) > 0.05) path.push(...run(along(loops[cur], cur, s0, go.s), 2.5).slice(1));
+        if (back) {
+          const h = host[cur];
+          bridge(path, back.bridge);
+          if (Math.abs(back.on.s - back.sj) > 0.05) path.push(...run(along(loops[h], h, back.sj, back.on.s), 2.5).slice(1));
+          exit = back.on;
+        }
+      }
+      if (exit) { bridge(path, exit.bridge); arrive = exit.sj; cur = exit.j; }
+      else { paths.push(path); cur = -1; path = null; }
     }
-    const first = from(l, s0);
-    let cur = first, path = loop(run(first, 2.5, true));
-    out.push(first);
-    const left = holes.slice();
-    while (left.length) {
-      const at = cur[0];
-      left.sort((a, b) => { const p = a[near(a, at)], q = b[near(b, at)]; return Math.hypot(p[0] - at[0], p[1] - at[1]) - Math.hypot(q[0] - at[0], q[1] - at[1]); });
-      const h = left.shift(), hs = from(h, near(h, at)), link = across(at, hs[0]);
-      if (link) path.push(...link.slice(1));
-      else { paths.push(path); path = []; }
-      path.push(...loop(run(hs, 2.5, true)).slice(link ? 1 : 0));
-      out.push(hs); cur = hs;
-    }
-    paths.push(path);
+    return paths.filter((q) => q.length);
   }
-  return { loops: out, paths };
+  const nearestOn = (l, p) => {
+    let bd = Infinity, bq = l[0];
+    for (let k = 0; k < l.length; k++) {
+      const a = l[k], b = l[(k + 1) % l.length], dx = b[0] - a[0], dy = b[1] - a[1], L2 = dx * dx + dy * dy;
+      const t = L2 ? Math.max(0, Math.min(1, ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / L2)) : 0, q = [a[0] + dx * t, a[1] + dy * t], d = Math.hypot(p[0] - q[0], p[1] - q[1]);
+      if (d < bd) { bd = d; bq = q; }
+    }
+    return bq;
+  };
+  const arcOf = (l, j, p) => {
+    let bd = Infinity, bs = 0;
+    for (let k = 0; k < l.length; k++) {
+      const a = l[k], b = l[(k + 1) % l.length], dx = b[0] - a[0], dy = b[1] - a[1], L2 = dx * dx + dy * dy;
+      const t = L2 ? Math.max(0, Math.min(1, ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / L2)) : 0, d = Math.hypot(p[0] - a[0] - dx * t, p[1] - a[1] - dy * t);
+      if (d < bd) { bd = d; bs = cum[j][k] + t * (cum[j][k + 1] - cum[j][k]); }
+    }
+    return bs;
+  };
+  const placement = stage("placement"), tack = stage("tack", placement.at(-1).at(-1));
+  return { placement, tack, satin: stage("satin", tack.at(-1).at(-1)) };
 }
 const area = (l) => l.reduce((a, p, i) => { const q = l[(i + 1) % l.length]; return a + p[0] * q[1] - q[0] * p[1]; }, 0) / 2;
 
@@ -935,7 +1069,7 @@ function build(pieces, hoop, opts) {
       // (the thread's description in the file in plain ASCII: “Noah” in UTF-8 came back as â€œNoahâ€ in readers)
       d.color(st.color, ascii(st.label)); thread = st.color;
       steps.push({ color: st.color, sews: [], you: st.you ? (change ? `Change to the next thread. ${st.you}` : st.you) : steps.length ? "Change to the next thread and press Start." : null,
-        fabric: !!st.fabric, under: !!st.under || !!st.fabric, early: false, cut: st.fabric && !st.nocut ? st.paths : null });
+        fabric: !!st.fabric, under: !!st.under || !!st.fabric, early: false, cut: st.fabric && !st.nocut ? st.cut || st.paths : null });
     }
     steps[steps.length - 1].sews.push(st.sews);
     if (st.early) steps[steps.length - 1].early = true;
