@@ -453,3 +453,17 @@ label:has(> .sr-file:focus-visible), label:has(+ .sr-file:focus-visible) { outli
 }
 /* "Watch it sew" and "Pause" take the same room, so the buttons beside it don't move under a finger */
 #play { min-width: 9.5em; }
+/* narrow desktops (1024 wide): the header row was too full, the machine select covered "Open a design" */
+@media (min-width: 861px) and (max-width: 1240px) {
+  .top { flex-wrap: wrap; row-gap: 6px; }
+  .tabs { order: 3; }
+  .logo { font-size: 32px; }
+  .tag, .machine label:not(.sr) { display: none; }
+  .machine { flex-wrap: nowrap; }
+  .machine select { max-width: 170px; }
+}
+/* an error with a one-tap fix reads as one sentence, wide enough not to wrap the button word by word */
+.error { display: block; width: max-content; max-width: min(90%, 560px); }
+.error .link { display: inline; white-space: nowrap; font-weight: 700; }
+/* dark colour dots (navy, black threads) need an edge on the dark page */
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .pieces .pick i, :root:not([data-theme="light"]) .threads i, :root:not([data-theme="light"]) .st-steps i { border-color: rgba(255,255,255,.45); } }

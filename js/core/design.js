@@ -54,7 +54,7 @@ export class Design {
   finish() {
     this.tieOff();
     this.stitches.push([0, 0, END]);
-    this.stitches = relieve(this.stitches);
+    this.stitches = relieve(dedupe(this.stitches));
     this.check();
     return this;
   }
@@ -81,6 +81,13 @@ export class Design {
   toBytes() { return writePES(this.pattern()); }
 }
 
+// A stitch onto the point the needle is already in (as the file rounds it, 0.1 mm) is a second hit in the same hole
+// and nothing else: line drawings had a quarter of their stitches doubled, lettering 12-47 at satin/run junctions.
+// (A stitch after a jump is the jump's anchor and stays.)
+export function dedupe(st) {
+  return st.filter(([x, y, c], i) => !(c === STITCH && i && st[i - 1][2] === STITCH && Math.round(x) === Math.round(st[i - 1][0]) && Math.round(y) === Math.round(st[i - 1][1])));
+}
+
 // No 1 x 1 mm square may take more than `limit` needle hits within one colour block (nest / broken needle risk;
 // tests/pe900_check.py enforces the same). Where strokes pile up (satin junctions), drop interior stitch points:
 // two stitches become one slightly longer one. Tie-ins and tie-offs (5 points around any jump/trim/colour change)
@@ -104,8 +111,10 @@ export function relieve(st, limit = 24) {
     for (let ox = 0; ox < 10; ox++) for (let oy = 0; oy < 10; oy++) {
       const x0 = cx * 10 + ox, y0 = cy * 10 + oy;
       const inside = pts.filter((i) => keep[i] && X(i) >= x0 && X(i) < x0 + 10 && Y(i) >= y0 && Y(i) < y0 + 10);
-      while (inside.length > limit) {
-        let best = -1, bestD = 40;   // merged stitch stays under 4 mm (fill stitches are 3.5)
+      for (let cap = 40; inside.length > limit && cap <= 70; cap += 30) while (inside.length > limit) {
+        // merged stitch stays under 4 mm (fill stitches are 3.5); where that isn't enough (travel through one spot),
+        // under 7 mm
+        let best = -1, bestD = cap;
         for (const i of inside) {
           if (!removable(i)) continue;
           const a = near(i, -1), c = near(i, 1);

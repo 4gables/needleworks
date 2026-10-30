@@ -245,7 +245,7 @@
           <button type="button" id="item-open" class="ghost" title="See the design at its real size on a photo of the bib, towel or shirt">On my item</button>
         </div>
       </details>
-      <button type="button" id="turn" class="ghost turn" aria-pressed="false" title="Turn the hoop sideways on screen. The file still loads the right way on the machine.">⟲ Turn hoop</button>
+      <button type="button" id="turn" class="ghost turn" aria-pressed="false" title="Turn the hoop sideways, so a long design can use the hoop's long side.">⟲ Turn hoop</button>
     </div>
     <div class="bottom">
       <ul class="threads" id="threads" aria-label="Threads"></ul>
@@ -268,6 +268,8 @@
   <form method="dialog">
     <h2 id="done-title">Saved to your downloads</h2>
     <p class="good" id="done-checked"></p>
+    <p class="warn" id="done-turn" hidden>The hoop is turned: the machine shows this design on its side. Hoop the fabric a quarter turn round, with the top of the design toward the right of the hoop (as the sew sheet shows).</p>
+    <p class="warn" id="done-warn" hidden></p>
     <p class="warn" id="done-zip" hidden>It's a .zip: open it first (double-click it) and copy the .pes files inside, not the .zip. The machine can't read a .zip.</p>
     <ol class="done-steps">
       <li>Copy the file to a USB stick.<span id="done-phone" hidden> On a phone: plug a USB-C (or Lightning) stick into it, then in the Files app move the file from Downloads to the stick. Or email the file to yourself and copy it on a computer.</span></li>

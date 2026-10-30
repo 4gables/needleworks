@@ -296,6 +296,19 @@ Embroidery-file tools for home machines. Two implementations of the same engine:
   file with no stitches says so and clears the old one (it showed -Infinity mm, "Fits"). Have ready (fabric `ready`,
   bookmark `READY`) on the steps, sew sheet and first Sew along screen. Too big: one size everywhere, with a Turn the
   hoop / Fit to hoop button. Byte compares need a fresh no-cache baseline (`out/base` had gone stale by 3 commits).
+  Round 2 (stitches changed, all 396 batch files still pass): `Design.finish` drops a stitch onto the hole the needle
+  is already in (`dedupe`; line drawings had ~25% doubled, lettering 12-47 per file: batch stitches -0.8%, same-hole
+  11,378 -> 107, no file gained a stitch; the bookmark lost its doubles too) and `pe900_check.py` fails files over 1%
+  (`same_hole`). `relieve()` takes a second pass allowing merges up to 7 mm where 4 mm can't get a cell to 24 (a
+  picture's travel funnel sewed 25). Starters set the fabric (cotton unless they say: towel stuck to every later
+  starter, +40-75% stitches). Fit to hoop composes and shrinks again until what's sewn fits (outlines leave out satin
+  and swashes: 142 mm in a 126 mm field). Thread descriptions in the file are ASCII (“Noah” read back as â€œNoahâ€).
+  A step whose thread differs from the last says "Change to the next thread." before its fabric instructions. Turned
+  Design-tab files carry a hooping note (steps, done dialog, sew sheet). Lettering that sews as a fine line says so
+  with a "Make it bold" link; names in a batch say "(smaller, thin line)". Header wraps the tabs to a second row at
+  861-1240 px (the machine select covered "Open a design" at 1024). `tests/cdp.mjs start` disables background timer
+  throttling (headless pages are "hidden": a 300 ms debounce took 57 s). Known, not done: patch border sewn last,
+  picture specks/trims (etsy_2 fill 140 trims), monograms fitting their frame, placing "+ Design file" in free space.
 - The preview is the file: `setView` decodes `v.bytes` with `readEmbroidery` and draws/counts/fit-checks that, and
   thread labels come from the file's own PEC palette.
 

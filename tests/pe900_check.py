@@ -198,7 +198,7 @@ def check(path):
         errs.append(f"PEC size field {r['pec_wh']} doesn't match the stitches {w:.1f} x {h:.1f}")
 
     # 4. needle moves: longest stitch, tiny stitches, trims before long travel
-    longest, tiny, prev, after_jump = 0.0, 0, None, 0
+    longest, tiny, same, prev, after_jump = 0.0, 0, 0, None, 0
     run = 0
     for x, y, c in sts:
         if c == pe.STITCH and prev is not None:
@@ -207,6 +207,9 @@ def check(path):
             # tie-ins after a jump and tie-offs repeat 0.3-0.5 mm on purpose; count tiny ones elsewhere
             if 0 < d < TINY and after_jump > 6:
                 tiny += 1
+            # a second hit in the same hole (line drawings had a quarter of their stitches doubled until 2026-10-30)
+            if d == 0 and after_jump > 6:
+                same += 1
             after_jump += 1
         if c in (pe.JUMP, pe.TRIM, pe.COLOR_CHANGE):
             after_jump = 0
@@ -218,8 +221,11 @@ def check(path):
     info["start_tie_in_mm"] = round(max(tie), 2) if tie else 0
     info["longest_stitch_mm"] = round(longest, 2)
     info["tiny_stitches"] = tiny
+    info["same_hole"] = same
     if longest > MAX_STITCH:
         errs.append(f"a {longest:.1f} mm stitch (limit {MAX_STITCH})")
+    if same > 0.01 * len(pts):
+        errs.append(f"{same} stitches into the hole the needle is already in ({100 * same / len(pts):.1f}%)")
     if tiny > 0.02 * len(pts):
         errs.append(f"{tiny} stitches under {TINY} mm ({100 * tiny / len(pts):.1f}%)")
 

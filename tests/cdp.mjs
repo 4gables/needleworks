@@ -32,7 +32,9 @@ if (cmd === "start") {
   const dir = path.resolve(args[0] || `/tmp/cdp-${port}`);
   fs.mkdirSync(path.join(dir, "downloads"), { recursive: true });
   spawn(CHROME, [`--remote-debugging-port=${port}`, "--headless=new", `--user-data-dir=${dir}/profile`,
-    "--no-first-run", "--no-default-browser-check", "--disable-gpu", "--hide-scrollbars", "about:blank"],
+    "--no-first-run", "--no-default-browser-check", "--disable-gpu", "--hide-scrollbars",
+    // (headless pages count as hidden: without these a 300 ms timer took ~57 s and debounced UI looked hung)
+    "--disable-background-timer-throttling", "--disable-renderer-backgrounding", "--disable-features=IntensiveWakeUpThrottling", "about:blank"],
     { detached: true, stdio: "ignore" }).unref();
   for (let i = 0; i < 50; i++) { try { await fetch(`${base}/json/version`); break; } catch { await sleep(200); } }
   spawn(process.execPath, [process.argv[1], port, "serve", dir], { detached: true, stdio: "ignore" }).unref();

@@ -9,12 +9,13 @@ import { FILL_PATTERNS } from "../core/digitize.js";
 import { draw } from "../render.js";
 import { QUILTS } from "./quilt.js";
 import { MOTIFS } from "./motifs.js";
-import { BORDERS, FABRICS, THREADS, SHAPES, TEXT_SHAPES, splitPieces, archRoom, archTight, touching, towelMin, compose, fileBlocks, fittedSizes, followFrame, label, minSize, pieceBounds, previewLook, smallText } from "./pieces.js";
+import { BORDERS, FABRICS, THREADS, SHAPES, TEXT_SHAPES, splitPieces, archRoom, archTight, touching, towelMin, fineLine, compose, fileBlocks, fittedSizes, followFrame, label, minSize, pieceBounds, previewLook, smallText } from "./pieces.js";
 
 const SCRIPT = "NW Great Vibes", PRINT = "NW Josefin Sans";
 // exact Brother PEC thread colours, so the name on screen is the one the machine shows
 const RED = "#ed171f", NAVY = "#0e1f7c", BLACK = "#000000";
 const PINK = "#f993bc";
+export const TURNED = "The hoop is turned: the machine shows this design on its side. Hoop the fabric a quarter turn round, with the top of the design toward the right of the hoop (as the sew sheet shows).";
 const SMALL_TIP = "Small letters come out crisper with 60 wt thread and a 65/9 or 70/10 needle, and with the machine slowed down.";
 const COLORS = [RED, NAVY, "#00673e", "#770176", "#e8a900", "#f993bc", BLACK, "#f0f0f0"];
 
@@ -50,7 +51,7 @@ export const STARTERS = [
     tip: "Stitch it on cotton backed with tear-away stabilizer, then turn the edges under and hand-sew it to the back of the quilt." },
   { id: "bib", name: "Baby bib", note: "a name over a little heart", make: () => [
     frame({ shape: "heart", w: 46, h: 42, border: "applique", y: 14, color: PINK }),
-    text({ text: "Emma", size: 16, shape: "up", radius: 30, y: 14, color: NAVY })],
+    text({ text: "Emma", size: 16, shape: "up", radius: 32, y: 14, color: NAVY })],   // (30 ran into the heart's dip)
     tip: "Hoop sticky (self-adhesive) tear-away stabilizer, score and peel its paper, and press the bib onto it (or float it on plain tear-away with spray adhesive). On terry, lay a water-soluble topper over it so the stitches don't sink." },
   { id: "towel", name: "Towel name", note: "a big name that stands up to terry", make: () => [text({ text: "Emma", size: 32, style: "satin" })], fabric: "towel", baste: true },
   { id: "ornament", name: "Ornament", note: "two-sided, sewn in the hoop", make: () => [
@@ -203,7 +204,7 @@ export function initStudio(api) {
     if (!family) return [];
     return [...new Set(text.replace(/\s/g, ""))].filter((ch) => {
       const cp = ch.codePointAt(0);
-      if (cp > 0x24f) return !(cp >= 0x2000 && cp <= 0x20cf) && cp !== 0x2122;
+      if (cp > 0x24f && !(cp >= 0x2100 && cp <= 0x214f)) return !(cp >= 0x2000 && cp <= 0x20cf);
       return width(`40px "${family}", monospace`, ch) === width("40px monospace", ch) && width(`40px "${family}", serif`, ch) === width("40px serif", ch);
     });
   }
@@ -312,6 +313,7 @@ export function initStudio(api) {
       room ? `The words wrap most of the way round the curve${room.full ? " and run into themselves" : ""}. <button type="button" class="link" data-room>Widen the curve</button>` : "",
       archTight(p) ? "The curve is too tight for letters this tall: they'd bunch up. Make the curve bigger or the letters smaller." : "",
       near ? `This runs into ${api.escapeHtml(label(near))}. Drag it apart or make it smaller.` : "",
+      !m && !towel && fabric !== "towel" && fineLine(q) ? `At this size it sews as a thin line. <button type="button" class="link" data-seg-set="style:satin">Make it bold</button> (small loops may fill in).` : "",
     ].filter(Boolean).map((t) => `<span>${t}</span>`).join("<br>");
     w.hidden = !w.innerHTML;
   }
@@ -344,7 +346,7 @@ export function initStudio(api) {
       api.setView(design.pattern(), `${api.safeName(firstWords(), "design")}.pes`, {
         ...look, fabric: look.fabricShapeBlock != null ? "pink" : "linen", steps: steps.length,
         sheet: { steps: steps.map((st) => ({ you: st.you, sews: st.sews.join(" ") })), after: done, ready, cut: steps.filter((st) => st.cut).map((st) => st.cut),
-          notes: [...ready.map((b) => "Have ready: " + b), $("st-tip").hidden ? "" : $("st-tip").textContent, tip, thread === "auto" ? "" : THREADS[thread].tip, small ? SMALL_TIP : ""] } });
+          notes: [api.turned() ? TURNED : "", ...ready.map((b) => "Have ready: " + b), $("st-tip").hidden ? "" : $("st-tip").textContent, tip, thread === "auto" ? "" : THREADS[thread].tip, small ? SMALL_TIP : ""] } });
     } catch (err) {
       if (s !== seq) return;
       api.setView(null);
@@ -374,7 +376,9 @@ export function initStudio(api) {
     const built = parts.map((pt, i) => ({ ...compose(pt.pieces, hoop, { ...opts, marks: { pts: pt.marks, end: pt.end } }), filename: `${base}_hooping_${i + 1}_of_2.pes` }));
     // the whole design for the preview (a big pretend hoop), and every step of both hoopings in order
     const all = compose(pieces, { ...hoop, w: 2000, h: 2000 }, opts);
-    const steps = [...built[0].steps, { color: built[1].steps[0].color, sews: ["Nothing: this step is the rehooping."], you: "Take the fabric out and hoop it again for the second half. The next step says how to line it up." }, ...built[1].steps];
+    // (with the hoop turned, the machine's left cross is the bottom one on screen)
+    const where = (st) => (api.turned() && st.you ? { ...st, you: st.you.replace("the left cross", "the left cross as the machine shows it (the bottom one in this preview)") } : st);
+    const steps = [...built[0].steps, { color: built[1].steps[0].color, sews: ["Nothing: this step is the rehooping."], you: "Take the fabric out and hoop it again for the second half. The next step says how to line it up." }, ...built[1].steps.map(where)];
     stepsUI(steps, [...built[0].after, ...built[1].after], false, built[0].before);
     for (const b of $("st-steps").querySelectorAll("[data-step]")) b.disabled = true;   // (the step view follows one file)
     api.setView(all.design.pattern(), `${base}_2_hoopings.zip`, { fabric: "linen", steps: 0,
@@ -394,7 +398,7 @@ export function initStudio(api) {
     const pauses = steps.length - 1;
     $("st-steps-count").textContent = !steps.length ? "" : `· ${steps.length} ${steps.length === 1 ? "step" : "steps"}, ${pauses} ${pauses === 1 ? "pause" : "pauses"}`;
     // each step is a button: the preview shows the design as it is after that step, what's still to come faint
-    $("st-steps").innerHTML = (before.length ? `<li class="after"><b>Have ready</b><span>${api.escapeHtml(before.join(" "))}</span></li>` : "") + steps.map((st, i) => `<li><button type="button" data-step="${i}" aria-pressed="${api.step() === i}">
+    $("st-steps").innerHTML = (api.turned() ? `<li class="after"><b>Hooping</b><span>${TURNED}</span></li>` : "") + (before.length ? `<li class="after"><b>Have ready</b><span>${api.escapeHtml(before.join(" "))}</span></li>` : "") + steps.map((st, i) => `<li><button type="button" data-step="${i}" aria-pressed="${api.step() === i}">
       <b><span class="n">${i + 1}</span><i style="background:${st.color}"></i>Brother ${nearestBrotherThread(st.color).name}${api.spool(st.color) ? ` <small>${api.escapeHtml(api.spool(st.color))}</small>` : ""}</b>
       ${st.you ? `<span class="you">${api.escapeHtml(st.you)}</span>` : ""}<span>${api.escapeHtml(st.sews.join(" "))}</span>
       ${st.early ? `<small>Sewn early, with the other ${api.escapeHtml(nearestBrotherThread(st.color).name)} parts, to save a thread change.</small>` : ""}</button></li>`).join("")
@@ -417,10 +421,12 @@ export function initStudio(api) {
     const s = STARTERS.find((x) => x.id === b.dataset.start);
     if (s.mode) { api.setMode(s.mode); return; }
     remember(); pieces = s.make(); sel = pieces[pieces.length - 1].id;
-    if (s.fabric) fabric = s.fabric;
+    fabric = s.fabric || "cotton";   // (a towel left on made every later starter towel-heavy, +40-75 % stitches)
     baste = !!s.baste;
     $("st-tip").hidden = !s.tip; $("st-tip").textContent = s.tip || "";
     save(); ui(); make();
+    // phones: the preview is above the cards, so the change happened off-screen
+    if (matchMedia("(max-width: 600px)").matches) $("view").scrollIntoView({ block: "center", behavior: "smooth" });
   };
   $("st-add").onclick = (e) => {
     const b = e.target.closest("[data-add]"); if (!b) return;
@@ -486,6 +492,8 @@ export function initStudio(api) {
     const bl = e.target.closest("button[data-blend]");
     if (bl) { change((p) => (p.blend = bl.dataset.blend), true); editor(); return; }
     if (e.target.closest("[data-kern-reset]")) { change((p) => delete p.kern, true); editor(); return; }
+    const ss = e.target.closest("[data-seg-set]");
+    if (ss) { const [k, v] = ss.dataset.segSet.split(":"); change((p) => (p[k] = v), true); editor(); return; }
     const sz = e.target.closest("[data-size]");
     if (sz) { change((p) => (p.size = Math.min(+sz.dataset.size, p.kind === "monogram" ? 90 : 60)), true); editor(); return; }
     if (e.target.closest("[data-room]")) { change((p) => Object.assign(p, archRoom(p) || {}), true); editor(); return; }
@@ -522,7 +530,7 @@ export function initStudio(api) {
     dragFrame ||= requestAnimationFrame(() => { dragFrame = 0; if (drag) make(true); });
   }
   let dragFrame = 0;
-  function end() { if (drag) { const moved = drag.moved; drag = null; save(); if (moved) make(); } }
+  function end() { if (drag) { const moved = drag.moved; drag = null; save(); if (moved) { make(); warn(); } } }
   function nudge(dx, dy) { change((p) => { p.x += dx; p.y += dy; }); }
   function center() { change((p) => { p.x = 0; p.y = 0; }, true); }
   $("st-center").onclick = center;
@@ -531,11 +539,17 @@ export function initStudio(api) {
     const bs = pieces.map(pieceBounds).filter(Boolean);
     if (!bs.length) return;
     const w = Math.max(...bs.map((b) => b[2])) - Math.min(...bs.map((b) => b[0])), h = Math.max(...bs.map((b) => b[3])) - Math.min(...bs.map((b) => b[1]));
-    const hp = api.hoop(), f = Math.min((hp.w - 10) / w, (hp.h - 10) / h);
+    const hp = api.hoop();
     remember();
-    for (const p of pieces) {
+    const scale = (f) => { for (const p of pieces) {
       p.x *= f; p.y *= f;
       if (p.kind !== "file") for (const k of ["size", "radius", "ry", "w", "h"]) if (p[k] != null) p[k] = Math.round(p[k] * f * 2) / 2;
+    } };
+    scale(Math.min((hp.w - 10) / w, (hp.h - 10) / h));
+    // the outlines leave out satin width and swashes: shrink again until what's sewn fits (a few tries at most)
+    for (let i = 0; i < 4; i++) {
+      try { compose(pieces, hp, { fabric, baste, thread }); break; }
+      catch (err) { if (!err.overBy) break; scale(0.98 / err.overBy); }
     }
     save(); ui(); make();
   };
@@ -595,7 +609,13 @@ export function initStudio(api) {
       // shrink: a name too long for the hoop is tried at 90 %, 80 %… down to half its size
       build: (name, shrink = false) => {
         for (let f = 1; ; f -= 0.1) {
-          try { return { pattern: compose(pieces.map((q) => (q.id === p.id ? { ...q, text: name, size: Math.round(p.size * f * 2) / 2 } : q)), api.hoop(), { fabric, baste, thread }).design.pattern(), name, smaller: f < 1 }; }
+          try {
+            const q = { ...p, text: name, size: Math.round(p.size * f * 2) / 2 }, ps = pieces.map((r) => (r.id === p.id ? q : r));
+            const pattern = compose(ps, api.hoop(), { fabric, baste, thread }).design.pattern();
+            // (lettering inside a frame shrinks to fit it, so a long name can come out small without f changing)
+            const was = fittedSizes(pieces).get(p.id) ?? p.size, now = fittedSizes(ps).get(p.id) ?? q.size;
+            return { pattern, name, smaller: f < 1 || now < was - 0.25, thin: fabric !== "towel" && fineLine({ ...q, size: now }) && !fineLine({ ...p, size: was }) };
+          }
           catch (err) { if (!shrink || !err.overBy || f < 0.55) throw err; }
         }
       },

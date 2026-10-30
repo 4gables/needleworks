@@ -167,6 +167,14 @@ function bulk(p) {
   return p.kind === "text" ? letters(p.text, p.font, p.size, p.style) : letters(chars[1] || p.letters, p.font, chars.length === 3 ? p.size * 0.68 : p.size, p.style);
 }
 
+// Automatic lettering this small sews as a fine line (its satin would be under 1 mm): said, since a name shrunk by
+// Fit to hoop or a long name in a batch turned thin without a word.
+export function fineLine(p) {
+  if ((p.style || "auto") !== "auto") return false;
+  const l = bulk(p);
+  return !!l && l.parts.length > 0 && l.satinW === 0;
+}
+
 // Lettering smaller than this blurs: the bulk of the letters (x-height, or caps) under ~4 mm.
 export function minSize(p) {
   const l = bulk(p);
@@ -605,6 +613,8 @@ export function followFrame(p, pieces) {
 }
 
 // what the design is sewn on: changes the stitches (knit, towel) and the stabilizer advice
+const ascii = (s) => (s || "").normalize("NFKD").replace(/[\u0300-\u036f]/g, "").replace(/[‘’]/g, "'").replace(/[“”]/g, "\"").replace(/[^\x20-\x7e]/g, "");
+
 export const FABRICS = {
   cotton: { name: "Cotton", tip: "On woven cotton, hoop it with tear-away stabilizer underneath." },
   knit: { name: "Knit", ready: "Cut-away stabilizer (fusible no-show mesh is easiest) and a 75/11 ballpoint needle.", tip: "Knits stretch: hoop them with cut-away stabilizer (fusible no-show mesh is easiest) and use a 75/11 ballpoint needle. Don't stretch the fabric while hooping." },
@@ -797,8 +807,11 @@ function build(pieces, hoop, opts) {
     if (st.after && !after.includes(st.after)) after.push(st.after);
     if (st.before && !before.includes(st.before)) before.push(st.before);
     if (st.color !== thread || st.pause || st.fabric) {
-      d.color(st.color, st.label); thread = st.color;
-      steps.push({ color: st.color, sews: [], you: st.you || (steps.length ? "Change to the next thread and press Start." : null),
+      // a fabric step in a new thread says so first: "Take the hoop off…" after blue, in red, got sewn in blue
+      const change = steps.length && st.color !== thread;
+      // (the thread's description in the file in plain ASCII: “Noah” in UTF-8 came back as â€œNoahâ€ in readers)
+      d.color(st.color, ascii(st.label)); thread = st.color;
+      steps.push({ color: st.color, sews: [], you: st.you ? (change ? `Change to the next thread. ${st.you}` : st.you) : steps.length ? "Change to the next thread and press Start." : null,
         fabric: !!st.fabric, under: !!st.under || !!st.fabric, early: false, cut: st.fabric && !st.nocut ? st.paths : null });
     }
     steps[steps.length - 1].sews.push(st.sews);

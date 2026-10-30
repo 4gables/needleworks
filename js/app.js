@@ -287,6 +287,10 @@ function downloaded(v, zipped) {
   $("done-checked").textContent = `Checked: it opens on a ${h.machineName} in the ${h.name}${s ? `, ${s.widthMm.toFixed(0)} × ${s.heightMm.toFixed(0)} mm, ${s.colorChanges ? `${s.colorChanges} ${s.colorChanges === 1 ? "pause" : "pauses"}` : "no pauses"}` : ""}.`;
   $("done-zip").hidden = !zipped;
   $("done-phone").hidden = !matchMedia("(pointer: coarse)").matches;
+  $("done-turn").hidden = !(state.mode === "design" && state.turn.design);
+  // (Design-tab warnings still showing: "Checked" shouldn't read as "all good")
+  const warns = state.mode === "design" ? [...document.querySelectorAll("#st-edit [data-warn]:not([hidden])")].map((w) => w.textContent.trim()) : [];
+  $("done-warn").hidden = !warns.length; $("done-warn").textContent = warns.length ? "Still to look at: " + warns.join(" ") : "";
   // (only the Design tab and the bookmark have “How to stitch it”)
   $("done-sew").textContent = state.mode === "design" || state.mode === "bookmark"
     ? "Pick the design, then follow “How to stitch it” (or Sew along) at every pause."
@@ -437,16 +441,16 @@ $("names-make").onclick = async () => {
   for (const name of list) {
     await new Promise((r) => setTimeout(r, 0));
     try {
-      const { pattern, shown, smaller } = n.build(name, $("names-shrink").checked), bytes = writePES(pattern), check = validatePES(bytes, pattern, hoop());
+      const { pattern, shown, smaller, thin } = n.build(name, $("names-shrink").checked), bytes = writePES(pattern), check = validatePES(bytes, pattern, hoop());
       if (!check.ok) throw new Error(check.error);
       let base = safeName(name, "name") + (n.bookmark ? "_bookmark" : ""), f = base, k = 2;
       while (used.has(f)) f = `${base}_${k++}`;
-      used.add(f); files.push({ name: f + ".pes", bytes }); made.push({ name, pattern, shown, smaller });
+      used.add(f); files.push({ name: f + ".pes", bytes }); made.push({ name, pattern, shown, smaller, thin });
     } catch (err) { bad.push(`${name} (${/hoop fits|too big/i.test(err.message) ? "too long for the hoop" : err.message})`); }
   }
   $("names-make").disabled = false;
   // every name as it'll sew, to look over (is one crowded?)
-  $("names-thumbs").innerHTML = made.map((m, i) => `<figure><canvas data-i="${i}"></canvas><figcaption>${escapeHtml(m.name)}${m.smaller ? " (smaller)" : ""}</figcaption></figure>`).join("");
+  $("names-thumbs").innerHTML = made.map((m, i) => `<figure><canvas data-i="${i}"></canvas><figcaption>${escapeHtml(m.name)}${m.thin ? " (smaller, thin line)" : m.smaller ? " (smaller)" : ""}</figcaption></figure>`).join("");
   for (const c of $("names-thumbs").querySelectorAll("canvas")) {
     const m = made[+c.dataset.i]; draw(c, m.shown || (n.bookmark ? turnPattern(m.pattern, false) : m.pattern), { pad: 3, fabric: "white" });
   }
@@ -534,7 +538,8 @@ function setMode(mode, push = true) {
   document.body.dataset.mode = mode;
   for (const m of MODES) $("panel-" + m).hidden = m !== mode;
   // the bookmark is a starting idea inside Design your own, not a tab of its own
-  for (const m of TABS) $("tab-" + m).setAttribute("aria-selected", m === mode || (m === "design" && mode === "bookmark"));
+  // (one tab stop for the tab bar; the arrow keys move between tabs)
+  for (const m of TABS) { const on = m === mode || (m === "design" && mode === "bookmark"); $("tab-" + m).setAttribute("aria-selected", on); $("tab-" + m).tabIndex = on ? 0 : -1; }
   if (push) history.replaceState(null, "", "#" + mode);
   showError(""); busy(false);   // (a picture still stitching from the last tab)
   $("empty").textContent = mode === "picture" ? "Choose a picture to see it as stitches." : mode === "open" ? "Open a PES, PEC or DST file to see it here." : mode === "design" ? "Nothing to stitch yet: type some words, or pick a starting idea." : "";
@@ -549,10 +554,11 @@ const TABS = MODES.filter((m) => m !== "bookmark");
 for (const m of TABS) $("tab-" + m).onclick = () => setMode(m);
 $("bm-back").onclick = () => setMode("design");
 document.querySelector(".tabs").addEventListener("keydown", (e) => {
-  const i = TABS.indexOf(state.mode === "bookmark" ? "design" : state.mode);
+  // (in the order they're shown: MODES' order sent → from Design back to Picture)
+  const tabs = [...document.querySelectorAll(".tabs [role=tab]")], i = tabs.findIndex((t) => t.getAttribute("aria-selected") === "true");
   if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
-    const n = TABS[(i + (e.key === "ArrowRight" ? 1 : TABS.length - 1)) % TABS.length];
-    e.preventDefault(); setMode(n); $("tab-" + n).focus();
+    const n = tabs[(i + (e.key === "ArrowRight" ? 1 : tabs.length - 1)) % tabs.length];
+    e.preventDefault(); n.click(); n.focus();
   }
 });
 
@@ -903,7 +909,7 @@ function showStep(i) {
   state.step = i; document.dispatchEvent(new CustomEvent("nw:step", { detail: i })); paint();
 }
 const studio = initStudio({
-  hoop: designHoop, store, showError, busy, safeName, escapeHtml, saveFile, keepFocus, showStep, step: () => state.step, setMode, spool,
+  hoop: designHoop, turned: () => !!state.turn.design, store, showError, busy, safeName, escapeHtml, saveFile, keepFocus, showStep, step: () => state.step, setMode, spool,
   setView(pattern, filename, look = {}) {
     if (!pattern) { state.views.design = null; if (state.mode === "design") setView(null); return; }
     pattern = toMachine(pattern);
