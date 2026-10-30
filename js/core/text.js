@@ -59,10 +59,13 @@ function swash(p0, d, length, xh, ybase, s) {
 
 // lengths of lead-in / tail are in x-heights. deco "swash" curls off the letters; "dash" is a straight
 // rule on the middle of the x-height, apart from the letters (print fonts, which are also left unjoined).
-export function renderWord(text, family, { leadIn = 0, tail = 0, join = true, deco = "swash" } = {}) {
+// spacing: extra room between letters, as a fraction of the font size (canvas letterSpacing; the joins below bridge
+// script letters it pulls apart)
+export function renderWord(text, family, { leadIn = 0, tail = 0, join = true, deco = "swash", spacing = 0 } = {}) {
   const probe = canvas(10, 10).getContext("2d");
   const font = `${PX}px "${family}"`;
   probe.font = font;
+  if (spacing) probe.letterSpacing = `${spacing * PX}px`;
   const m = probe.measureText(text), mx = probe.measureText("x");
   const inkL = -m.actualBoundingBoxLeft, inkR = m.actualBoundingBoxRight;
   const asc = m.actualBoundingBoxAscent, desc = m.actualBoundingBoxDescent;
@@ -74,6 +77,7 @@ export function renderWord(text, family, { leadIn = 0, tail = 0, join = true, de
   const ox = pad - inkL, baseline = PX / 2 + asc;
   const c = canvas(w, h), ctx = c.getContext("2d", { willReadFrequently: true });
   ctx.font = font; ctx.fillStyle = "#000"; ctx.textBaseline = "alphabetic";
+  if (spacing) ctx.letterSpacing = probe.letterSpacing;
   ctx.fillText(text, ox, baseline);
   let mask = maskOf(ctx, w, h);
 

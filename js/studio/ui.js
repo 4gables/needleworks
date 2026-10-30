@@ -6,7 +6,7 @@ import { hoop as getHoop } from "../core/machines.js";
 import { nearestBrotherThread } from "../core/threads.js";
 import { readEmbroidery } from "../core/formats.js";
 import { draw } from "../render.js";
-import { BORDERS, FABRICS, SHAPES, archTight, compose, fileBlocks, fittedSizes, followFrame, label, minSize, pieceBounds, smallText } from "./pieces.js";
+import { BORDERS, FABRICS, SHAPES, TEXT_SHAPES, archTight, compose, fileBlocks, fittedSizes, followFrame, label, minSize, pieceBounds, smallText } from "./pieces.js";
 
 const SCRIPT = "NW Great Vibes", PRINT = "NW Josefin Sans";
 // exact Brother PEC thread colours, so the name on screen is the one the machine shows
@@ -122,6 +122,7 @@ export function initStudio(api) {
         <button type="button" data-op="up" data-id="${p.id}" aria-label="Sew earlier" ${i ? "" : "disabled"}>↑</button>
         <button type="button" data-op="down" data-id="${p.id}" aria-label="Sew later" ${i < pieces.length - 1 ? "" : "disabled"}>↓</button>
         <button type="button" data-op="dup" data-id="${p.id}" aria-label="Duplicate" title="Duplicate">⧉</button>
+        <button type="button" data-op="flip" data-id="${p.id}" aria-label="Mirror" title="Mirror (flip left to right)" aria-pressed="${!!p.flip}">⇋</button>
         <button type="button" data-op="del" data-id="${p.id}" aria-label="Remove">✕</button>
       </span></li>`).join("");
   }
@@ -131,21 +132,32 @@ export function initStudio(api) {
   const range = (k, lab, min, max, v, unit = "mm", step = 1) => `<label class="range"><span>${lab}</span><input type="range" data-k="${k}" data-unit="${unit}" min="${min}" max="${max}" step="${step}" value="${v}"><output>${v} ${unit}</output></label>`;
   const seg = (k, opts, v) => `<div class="seg" data-seg="${k}">${Object.entries(opts).map(([key, name]) => `<button type="button" data-v="${key}" aria-pressed="${key === v}">${name}</button>`).join("")}</div>`;
 
+  let moreOpen = false;
+  $("st-edit").addEventListener("toggle", (e) => { if (e.target.matches("details.more")) moreOpen = e.target.open; }, true);
   function editor() {
     const p = current();
     if (!p) { $("st-edit").innerHTML = `<p class="hint">Pick a piece above, or add one.</p>`; return; }
     let h = "";
     if (p.kind === "text") {
-      h += `<label class="field"><span>Words</span><input type="text" data-k="text" value="${api.escapeHtml(p.text)}" maxlength="30" autocomplete="off" spellcheck="false"></label>`;
+      const lines = p.text.split("\n").length, arc = p.shape === "up" || p.shape === "down";
+      h += `<label class="field"><span>Words</span><textarea data-k="text" rows="${Math.min(3, lines)}" maxlength="60" autocomplete="off" spellcheck="false">${api.escapeHtml(p.text)}</textarea></label>`;
       h += `<label class="field"><span>Font</span>${fontSelect(p)}</label>`;
       h += range("size", "Height", 5, 60, p.size);
-      h += seg("shape", { straight: "Straight", up: "Arch up", down: "Arch down" }, p.shape);
+      h += seg("shape", TEXT_SHAPES, p.shape);
       h += seg("style", { auto: "Stitch: automatic", satin: "Satin", line: "Fine line" }, p.style || "auto");
-      if (p.shape !== "straight") {
+      if (arc) {
         h += range("radius", "Curve width", 15, 80, p.radius);
         h += range("ry", "Curve height", 15, 80, p.ry ?? p.radius);
         if (followFrame(p, pieces)) h += `<button type="button" class="link" data-follow>Follow the frame</button>`;
       }
+      if (p.shape === "wave") { h += range("amp", "Wave height", 2, 30, p.amp ?? Math.round(p.size * 0.35)); h += range("waves", "Waves", 1, 3, p.waves ?? 1, "", 0.5); }
+      if (p.shape === "bridge") h += range("bulge", "Bulge", 10, 80, p.bulge ?? 30, "%", 5);
+      // the rarer settings, folded away
+      const print = FONTS.find((f) => f.family === p.font)?.print;
+      const more = (print ? range("spacing", "Letter spacing", -10, 40, p.spacing || 0, "%") : "")
+        + (p.shape === "straight" ? `<p class="hint">Press Enter in Words for a new line (up to 3).</p>` : "")
+        + (p.shape === "straight" && lines > 1 ? seg("align", { left: "Left", center: "Centre", right: "Right" }, p.align || "center") + range("leading", "Line spacing", 80, 200, p.leading ?? 130, "%", 5) : "");
+      if (more) h += `<details class="more" ${moreOpen ? "open" : ""}><summary>More</summary>${more}</details>`;
     } else if (p.kind === "monogram") {
       h += `<label class="field"><span>Initials</span><input type="text" data-k="letters" value="${api.escapeHtml(p.letters)}" maxlength="3" autocomplete="off" spellcheck="false"></label>`;
       h += `<p class="hint">Traditional order: first, LAST, middle. The middle letter is stitched biggest.</p>`;
@@ -281,6 +293,7 @@ export function initStudio(api) {
       const bb = pieceBounds(pieces[i]), c = { ...structuredClone(pieces[i]), id: nextId++, y: pieces[i].y + (bb ? bb[3] - bb[1] + 4 : 10) };
       pieces.splice(i + 1, 0, c); sel = c.id;
     }
+    else if (b.dataset.op === "flip") pieces[i].flip = !pieces[i].flip;
     else if (b.dataset.op === "up" && i > 0) [pieces[i - 1], pieces[i]] = [pieces[i], pieces[i - 1]];
     else if (b.dataset.op === "down" && i < pieces.length - 1) [pieces[i + 1], pieces[i]] = [pieces[i], pieces[i + 1]];
     else sel = id;
@@ -294,7 +307,9 @@ export function initStudio(api) {
     if (!k) return;
     if (t.type === "range") t.nextElementSibling.textContent = `${t.value} ${t.dataset.unit}`;
     change((p) => (p[k] = t.type === "range" ? +t.value : t.value));
-    if (["size", "text", "letters", "font", "radius", "ry"].includes(k)) { clearTimeout(warnTimer); warnTimer = setTimeout(warn, 300); }
+    if (["size", "text", "letters", "font", "radius", "ry", "spacing"].includes(k)) { clearTimeout(warnTimer); warnTimer = setTimeout(warn, 300); }
+    // a new line in the words shows the alignment and line spacing
+    if (k === "text" && (t.value.split("\n").length > 1) !== !!edit.querySelector('[data-seg="align"]') && current().shape === "straight") editor();
   });
   let warnTimer = 0;
   edit.addEventListener("change", (e) => { if (e.target.dataset.k === "font" || e.target.matches("[data-color-any], [data-fill-any]")) editor(); });
@@ -368,7 +383,7 @@ export function initStudio(api) {
     } catch (err) { api.showError("That design couldn't be opened: " + err.message); }
   };
   document.addEventListener("keydown", (e) => {
-    if (document.body.dataset.mode !== "design" || e.target.matches("input[type=text]")) return;
+    if (document.body.dataset.mode !== "design" || e.target.matches("input[type=text], textarea")) return;
     if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "z") { e.preventDefault(); undo(); }
     const arrows = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] }[e.key];
     if (arrows && !e.target.matches("input, select")) { e.preventDefault(); nudge(arrows[0] * (e.shiftKey ? 5 : 1), arrows[1] * (e.shiftKey ? 5 : 1)); }
@@ -387,6 +402,16 @@ export function initStudio(api) {
   $("st-guide").hidden = !!api.store.get("studio.guideSeen", false);
   $("st-guide-close").onclick = () => { $("st-guide").hidden = true; api.store.set("studio.guideSeen", true); };
 
+  // one file per name: the biggest lettering (the name, nearly always) gets each name in turn
+  function forNames() {
+    const p = pieces.filter((q) => q.kind === "text").reduce((a, q) => (!a || q.size > a.size ? q : a), null);
+    if (!p) return null;
+    return {
+      what: p.text.replace(/\s*\n\s*/g, " / "),
+      build: (name) => ({ pattern: compose(pieces.map((q) => (q.id === p.id ? { ...q, text: name } : q)), api.hoop(), { fabric, baste }).design.pattern(), name }),
+    };
+  }
+
   cards(); ui();
-  return { make, start, move, end, nudge };
+  return { make, start, move, end, nudge, forNames };
 }

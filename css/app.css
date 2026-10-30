@@ -87,9 +87,9 @@ legend { margin-bottom: 8px; }
 output { font: 500 14px var(--mono); color: var(--muted); }
 .hint { font-size: 14px; color: var(--muted); margin: 0; }
 .hint.inline { font-weight: 400; }
-input[type="text"] { width: 100%; background: var(--panel); border: 1.5px solid var(--line); border-radius: var(--radius);
+input[type="text"], .edit textarea { width: 100%; background: var(--panel); border: 1.5px solid var(--line); border-radius: var(--radius);
   padding: 12px 14px; font: 400 30px/1.2 var(--script); font-family: "NW Sacramento", var(--script); min-height: 56px; }
-input[type="text"]:focus { border-color: var(--accent); outline: none; box-shadow: 0 0 0 4px var(--accent-soft); }
+input[type="text"]:focus, .edit textarea:focus { border-color: var(--accent); outline: none; box-shadow: 0 0 0 4px var(--accent-soft); }
 input[type="range"] { width: 100%; accent-color: var(--accent); min-height: 32px; }
 .checks { display: flex; flex-wrap: wrap; gap: 4px 20px; }
 .check { display: flex; gap: 10px; align-items: center; cursor: pointer; }
@@ -202,7 +202,7 @@ canvas#view:active { cursor: grabbing; }
   .hint { font-size: 13px; line-height: 1.4; }
   .field { gap: 6px; }
   legend { margin-bottom: 6px; }
-  input[type="text"] { font-size: 26px; min-height: 48px; padding: 6px 12px; }
+  input[type="text"], .edit textarea { font-size: 26px; min-height: 48px; padding: 6px 12px; }
   .fonts { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
   .fonts button { min-height: 0; padding: 4px 8px 3px; border-radius: 10px; }
   .fonts .sample { font-size: 22px; line-height: 1.25; }
@@ -344,3 +344,14 @@ body[data-mode="design"] #view { cursor: grab; }
 }
 .chips.plain button { padding: 6px 14px; }
 .field label.check { justify-content: flex-start; align-items: center; font-weight: 400; gap: 10px; }
+.edit textarea { resize: none; field-sizing: content; display: block; }
+.edit details.more > summary { cursor: pointer; color: var(--accent); font-size: 14px; }
+.edit details.more[open] { display: grid; gap: 12px; }
+.pieces .ops [aria-pressed="true"] { color: var(--accent); }
+.names { border: 0; border-radius: 16px; padding: 22px; width: min(440px, 92vw); background: var(--panel); color: var(--ink); box-shadow: 0 20px 60px rgba(0,0,0,.25); }
+.names::backdrop { background: rgba(30,20,20,.35); }
+.names form { display: grid; gap: 12px; }
+.names h2 { margin: 0; font-size: 20px; }
+.names textarea { width: 100%; box-sizing: border-box; font: 18px/1.5 var(--body); padding: 10px 12px; border: 1.5px solid var(--line); border-radius: 10px; background: var(--bg); color: var(--ink); resize: vertical; }
+.names .row { display: flex; gap: 10px; justify-content: flex-end; }
+.names .warn { color: #a5521a; }

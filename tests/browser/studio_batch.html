@@ -59,6 +59,17 @@ await save("st_knit_patch", [P({ kind: "frame", shape: "circle", border: "patch"
 await save("st_baste_applique", [P({ kind: "frame", shape: "heart", border: "applique", w: 84, h: 76 }), P({ kind: "text", text: "Ashley", font: FONTS[0].family, size: 18 })], "5x7", false, { baste: true });
 await save("st_baste_full", [P({ kind: "frame", shape: "square", border: "satin", w: 120, h: 170 })], "5x7", false, { baste: true });
 log("fabrics: done");
+// lettering layout: spacing, lines and alignment, wave, bridge; mirrored pieces
+for (const f of [FONTS[0], FONTS[3], FONTS.find((x) => x.print), FONTS[FONTS.length - 1]]) {
+  const tag = f.family.slice(3).replace(/ /g, "");
+  await save(`st_lines_${tag}`, [P({ kind: "text", text: "Made with love\nby Grandma\n2026", font: f.family, size: 9, align: "left" })]);
+  await save(`st_space_${tag}`, [P({ kind: "text", text: "Rosie", font: f.family, size: 20, spacing: 25 })]);
+  await save(`st_tight_${tag}`, [P({ kind: "text", text: "Rosie", font: f.family, size: 20, spacing: -8 })]);
+  await save(`st_wave_${tag}`, [P({ kind: "text", text: "Happy Birthday", font: f.family, size: 14, shape: "wave", amp: 8, waves: 1.5 })]);
+  await save(`st_bridge_${tag}`, [P({ kind: "text", text: "CHAMPION", font: f.family, size: 10, shape: "bridge", bulge: 50 })]);
+}
+await save("st_flip", [P({ kind: "frame", shape: "heart", border: "satin", w: 60, h: 54, x: -30, rot: 20, flip: true }), P({ kind: "text", text: "Ana", font: FONTS[1].family, size: 16, x: 30, flip: true })]);
+log("layout: done");
 for (const f of APPLIQUE_FONTS) for (const [text, size] of [["AB", 60], ["Mia", 35], ["Q&8", 44]]) {
   const tag = f.family.slice(3).replace(/ /g, "");
   await save(`st_appl_${tag}_${text.replace(/[^A-Za-z0-9]/g, "")}_${size}`, [P({ kind: "letters", text, font: f.family, size })]);

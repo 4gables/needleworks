@@ -7,6 +7,7 @@ import { DENSITY, workingSize } from "./core/digitize.js";
 import { nearestBrotherThread, pecThread } from "./core/threads.js";
 import { FABRICS, colorBlocks, draw } from "./render.js";
 import { cutSVG, sewSheet } from "./sheet.js";
+import { zip } from "./zip.js";
 import { initStudio } from "./studio/ui.js";
 
 const $ = (id) => document.getElementById(id);
@@ -97,7 +98,7 @@ function setView(v) {
   v.facts = [`${st.widthMm.toFixed(0)} × ${st.heightMm.toFixed(0)} mm (${inch(st.widthMm)} × ${inch(st.heightMm)} in)`, `${st.stitches.toLocaleString()} stitches`,
     `${st.colorChanges} ${st.colorChanges === 1 ? "pause" : "pauses"}`, `≈ ${minutes} min`, `${h.machineName} ${h.name}`];
   $("download").disabled = !fits; $("share").disabled = !fits;
-  $("sheet-print").disabled = !fits; $("cut-file").hidden = !v.sheet?.cut?.length;
+  $("sheet-print").disabled = !fits; $("cut-file").hidden = !v.sheet?.cut?.length; $("names-open").hidden = !namesFor();
   $("download").textContent = fits ? `Download ${v.filename}` : "Too big for this hoop";
   paint();
 }
@@ -241,6 +242,48 @@ $("cut-file").onclick = () => {
   const name = v.filename.replace(/\.pes$/i, ""), url = URL.createObjectURL(new Blob([cutSVG(v.sheet.cut, name)], { type: "image/svg+xml" }));
   const a = document.createElement("a"); a.href = url; a.download = `${name}_cut.svg`; document.body.append(a); a.click(); a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 2000);
+};
+
+// one file per name, in a zip: the Design tab swaps its lettering, the bookmark its name
+function namesFor() {
+  if (state.mode === "design") { try { return studio.forNames(); } catch { return null; } }   // (studio is set up further down)
+  if (state.mode !== "bookmark" || state.bm.blank) return null;
+  return { what: state.bm.name, bookmark: true, build: (name) => ({ name, pattern: buildBookmark({ name, family: state.bm.font, color: state.bm.color, hoop: hoop(),
+    lead: state.bm.lead, tail: state.bm.tail, print: !!fontOf(state.bm.font).print }).pattern() }) };
+}
+$("names-open").onclick = () => {
+  const n = namesFor(); if (!n) return;
+  $("names-what").textContent = `Each name takes the place of “${n.what}”. Everything else stays the same.`;
+  $("names-list").value = store.get("names", ""); $("names-note").classList.remove("warn");
+  $("names-note").textContent = "One name per line, up to 40. You get one file for each, in a single .zip.";
+  $("names").showModal();
+};
+$("names-make").onclick = async () => {
+  const n = namesFor(); if (!n) return;
+  const list = [...new Set($("names-list").value.split("\n").map((s) => s.trim()).filter(Boolean))].slice(0, 40);
+  store.set("names", list.join("\n"));
+  if (!list.length) { $("names-note").textContent = "Type at least one name."; return; }
+  $("names-make").disabled = true; $("names-note").textContent = "Making the files…";
+  const files = [], bad = [], used = new Set();
+  for (const name of list) {
+    await new Promise((r) => setTimeout(r, 0));
+    try {
+      const { pattern } = n.build(name), bytes = writePES(pattern), check = validatePES(bytes, pattern, hoop());
+      if (!check.ok) throw new Error(check.error);
+      let base = safeName(name, "name") + (n.bookmark ? "_bookmark" : ""), f = base, k = 2;
+      while (used.has(f)) f = `${base}_${k++}`;
+      used.add(f); files.push({ name: f + ".pes", bytes });
+    } catch (err) { bad.push(`${name} (${/hoop fits|too big/i.test(err.message) ? "too long for the hoop" : err.message})`); }
+  }
+  $("names-make").disabled = false;
+  if (files.length) {
+    const url = URL.createObjectURL(new Blob([zip(files)], { type: "application/zip" }));
+    const a = document.createElement("a"); a.href = url; a.download = `${safeName(n.what, "names")}_names.zip`; document.body.append(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 2000);
+  }
+  if (!bad.length) { $("names").close(); return; }
+  $("names-note").classList.add("warn");
+  $("names-note").textContent = `${files.length ? `Made ${files.length} ${files.length === 1 ? "file" : "files"}. ` : ""}Couldn't make: ${bad.join(", ")}.`;
 };
 
 // ---------- machine & hoop ----------

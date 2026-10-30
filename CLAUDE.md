@@ -120,6 +120,14 @@ Embroidery-file tools for home machines. Two implementations of the same engine:
   junction began on the opposite edge, a column apart (2.4 mm > the 2 mm jump rule), so each was a jump + trim (11
   on "Ashley" in Yellowtail). Across the studio batch trims -14%, none worse; the bookmark has its own engine and
   is unchanged.
+- Lettering layout (`textRows` in pieces.js): straight text takes up to 3 lines (Enter in Words), every line at the
+  first line's x-height, `align` left/centre/right, `leading` % of size; `spacing` % of size via canvas
+  `letterSpacing`, print fonts only (script letters pulled apart came out unjoined); shapes `wave` (sine by arc
+  length, `amp` mm, `waves`) and `bridge` (above-baseline points stretched toward the middle, `bulge` %). The rarer
+  ones sit in the editor's "More". `flip` mirrors a piece at placement (not part of the stitch cache key).
+- One for each name (link under Download, Design tab and bookmark): the biggest lettering (the name, nearly always;
+  starters select their last piece, which was "2026") or the bookmark name is swapped for each line, every file goes
+  through `validatePES`, and they download as one stored ZIP (`js/zip.js`). Names that don't fit are listed.
 - Sew sheet + cut file (`js/sheet.js`, links under Download): "Print a sew sheet" fills a hidden `#sheet` and calls
   `window.print()` (print CSS hides the app). Page 1 is the hoop field at 1:1 (SVG sized in mm) with the design centred
   as the machine centres it, a crosshair and a 5 cm check bar; page 2 the steps with the machine's thread names

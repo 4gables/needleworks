@@ -15,11 +15,11 @@ const lettering = new Map();   // font + text -> centre-line strokes (rendering 
 // Nothing drawn before its font has loaded is cached: it was drawn in the browser's fallback font, and caching it
 // kept that lettering after the font arrived.
 const fontReady = (family) => !family || typeof document === "undefined" || document.fonts.check(`40px "${family}"`);
-function letterStrokes(text, family) {
-  const key = family + "\n" + text;
+function letterStrokes(text, family, spacing = 0) {
+  const key = family + "\n" + text + "\n" + spacing;
   if (lettering.has(key)) return lettering.get(key);
   const print = !!fontOf(family).print;
-  const { edges, info } = strokes(text, family, print ? { deco: "dash", join: false } : {}), out = { comps: order(edges), info };
+  const { edges, info } = strokes(text, family, { ...(print ? { deco: "dash", join: false } : {}), ...(spacing ? { spacing } : {}) }), out = { comps: order(edges), info };
   if (fontReady(family)) {
     lettering.set(key, out);
     if (lettering.size > 60) lettering.delete(lettering.keys().next().value);
@@ -28,10 +28,10 @@ function letterStrokes(text, family) {
 }
 
 // Letters as [pts, "run"|"satin"] in mm: `size` is the height of the lettering, baseline at y = 0, centred across.
-function letters(text, family, size, style = "auto") {
-  text = (text || "").trim();
+function letters(text, family, size, style = "auto", spacing = 0) {
+  text = (text || "").replace(/\s*\n\s*/g, " ").trim();
   if (!text) return { parts: [], satinW: 0 };
-  const { comps, info } = letterStrokes(text, family);
+  const { comps, info } = letterStrokes(text, family, spacing);
   const all = comps.flatMap((c) => c.flatMap(([p]) => p));
   if (!all.length) return { parts: [], satinW: 0 };
   let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
@@ -190,7 +190,7 @@ export const BORDERS = { line: "Thin line", bold: "Bold line", satin: "Satin bor
 // Stitches don't change when a piece only moves or turns, so they're built once per shape and placed after.
 const built = new Map();
 export function pieceStages(p, fab = "cotton") {
-  const { x, y, rot, id, ...shape } = p, key = JSON.stringify(shape) + fab;
+  const { x, y, rot, id, flip, ...shape } = p, key = JSON.stringify(shape) + fab;
   if (!built.has(key)) {
     const st = localStages(p, fab);
     if (!fontReady(p.font)) return st.map((s) => ({ ...s, paths: s.paths.map((q) => q.map(placer(p))) }));
@@ -200,9 +200,69 @@ export function pieceStages(p, fab = "cotton") {
   const place = placer(p);
   return built.get(key).map((st) => ({ ...st, paths: st.paths.map((q) => q.map(place)) }));
 }
-function placer({ x, y, rot }) {
-  const a = ((rot || 0) * Math.PI) / 180, c = Math.cos(a), sn = Math.sin(a);
-  return ([u, v]) => [u * c - v * sn + x, u * sn + v * c + y];
+// mirrored (left to right) before it's turned
+function placer({ x, y, rot, flip }) {
+  const a = ((rot || 0) * Math.PI) / 180, c = Math.cos(a), sn = Math.sin(a), f = flip ? -1 : 1;
+  return ([u, v]) => [f * u * c - v * sn + x, f * u * sn + v * c + y];
+}
+
+// Lettering laid out in mm, centred on (0, 0): straight (up to 3 lines, aligned, every line at the first line's x-height),
+// arched on a circle or oval, along a wave, or as a bridge (taller in the middle, baseline straight).
+export const TEXT_SHAPES = { straight: "Straight", up: "Arch up", down: "Arch down", wave: "Wave", bridge: "Bridge" };
+function textRows(p, fab = "cotton") {
+  // spacing and leading are percentages of the size; spacing only for print fonts (script letters pulled apart came
+  // out unjoined, which reads as broken handwriting)
+  const style = styleOn(p, fab), sp = fontOf(p.font).print ? (p.spacing || 0) / 100 : 0;
+  const lines = (p.text || "").split("\n").map((t) => t.trim()).filter(Boolean).slice(0, 3);
+  if (!lines.length) return [];
+  if (p.shape === "up" || p.shape === "down") {
+    const l = letters(lines.join(" "), p.font, p.size, style, sp);
+    return l.parts.length ? [{ parts: bend(l.parts, p.shape, Math.max(p.radius, 8), Math.max(p.ry ?? p.radius, 8)), satinW: l.satinW }] : [];
+  }
+  if (p.shape === "wave" || p.shape === "bridge") {
+    const l = letters(lines.join(" "), p.font, p.size, style, sp);
+    if (!l.parts.length) return [];
+    const mid = (l.top + l.bottom) / 2;   // (letters come with the baseline at y = 0)
+    return [{ parts: p.shape === "wave" ? wave(l.parts.map(([q, m]) => [q.map(([x, y]) => [x, y - mid]), m]), p) : bridge(l.parts, p), satinW: l.satinW }];
+  }
+  // straight: one size for every line (scaled to the first line's x-height), baselines `leading` x size apart
+  let ls = lines.map((t) => letters(t, p.font, p.size, style, sp));
+  if (ls.length > 1) ls = ls.map((l, i) => (i && l.xh ? letters(lines[i], p.font, (p.size * ls[0].xh) / l.xh, style, sp) : l));
+  ls = ls.filter((l) => l.parts.length);
+  if (!ls.length) return [];
+  const pitch = (p.size * (p.leading ?? 130)) / 100, span = (l) => { const xs = l.parts.flatMap(([q]) => q.map((v) => v[0])); return [Math.min(...xs), Math.max(...xs)]; };
+  const spans = ls.map(span), W = Math.max(...spans.map(([a, b]) => b - a));
+  const top = Math.min(...ls.map((l, i) => l.top + i * pitch)), bottom = Math.max(...ls.map((l, i) => l.bottom + i * pitch));
+  return ls.map((l, i) => {
+    const [a, b] = spans[i], dx = p.align === "left" ? -W / 2 - a : p.align === "right" ? W / 2 - b : -(a + b) / 2, dy = i * pitch - (top + bottom) / 2;
+    return { parts: l.parts.map(([q, m]) => [q.map(([x, y]) => [x + dx, y + dy]), m]), satinW: l.satinW };
+  });
+}
+// along y = amp·sin(waves·2πx/W), letters spaced by arc length and turned with the curve
+function wave(parts, p) {
+  const xs = parts.flatMap(([q]) => q.map((v) => v[0])), x0 = Math.min(...xs), x1 = Math.max(...xs), W = Math.max(x1 - x0, 1);
+  const amp = p.amp ?? p.size * 0.35, k = ((p.waves ?? 1) * 2 * Math.PI) / W, n = 600, pts = [], len = [0];
+  for (let i = 0; i <= n; i++) { const x = x0 - W * 0.6 + (W * 2.2 * i) / n; pts.push([x, amp * Math.sin(k * (x - x0))]); }
+  for (let i = 1; i <= n; i++) len.push(len[i - 1] + Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]));
+  // arc length at x0 (where the word starts), then the point and normal at arc length s past it
+  const s0 = len[Math.round(((W * 0.6) / (W * 2.2)) * n)];
+  const at = (s) => {
+    let i = Math.min(n - 1, Math.max(0, len.findIndex((l) => l >= s) - 1));
+    const t = (s - len[i]) / Math.max(len[i + 1] - len[i], 1e-9), [ax, ay] = pts[i], [bx, by] = pts[i + 1], L = Math.hypot(bx - ax, by - ay);
+    return [ax + (bx - ax) * t, ay + (by - ay) * t, -(by - ay) / L, (bx - ax) / L];
+  };
+  const out = parts.map(([q, m]) => [densify(q, 1).map(([x, y]) => { const [px, py, nx, ny] = at(s0 + x - x0); return [px + y * nx, py + y * ny]; }), m]);
+  const cx = (Math.min(...out.flatMap(([q]) => q.map((v) => v[0]))) + Math.max(...out.flatMap(([q]) => q.map((v) => v[0])))) / 2;
+  const ys = out.flatMap(([q]) => q.map((v) => v[1])), cy = (Math.min(...ys) + Math.max(...ys)) / 2;
+  return out.map(([q, m]) => [q.map(([x, y]) => [x - cx, y - cy]), m]);
+}
+// letters stretched upward toward the middle: the tops make an arch, the baseline stays put
+function bridge(parts, p) {
+  const xs = parts.flatMap(([q]) => q.map((v) => v[0])), x0 = Math.min(...xs), x1 = Math.max(...xs), W = Math.max(x1 - x0, 1);
+  const k = (p.bulge ?? 30) / 100;
+  const out = parts.map(([q, m]) => [densify(q, 1).map(([x, y]) => { const u = (2 * (x - (x0 + x1) / 2)) / W; return [x, y < 0 ? y * (1 + k * (1 - u * u)) : y]; }), m]);
+  const ys2 = out.flatMap(([q]) => q.map((v) => v[1])), cy = (Math.min(...ys2) + Math.max(...ys2)) / 2;
+  return out.map(([q, m]) => [q.map(([x, y]) => [x, y - cy]), m]);
 }
 
 // a towel's loops swallow a fine line, so lettering there is always satin
@@ -229,12 +289,10 @@ function lettersOn(laid, satinW, fab) {
 function localStages(p, fab = "cotton") {
   let stages = [];
   if (p.kind === "text") {
-    const { parts, satinW, top, bottom } = letters(p.text, p.font, p.size, styleOn(p, fab));
-    if (parts.length) {
-      const laid = p.shape === "up" || p.shape === "down" ? bend(parts, p.shape, Math.max(p.radius, 8), Math.max(p.ry ?? p.radius, 8))
-        : parts.map(([q, m]) => [q.map(([x, y]) => [x, y - (top + bottom) / 2]), m]);
-      stages = [{ color: p.color, paths: lettersOn(laid, satinW, fab), sews: fab === "towel" ? `Sews a light base to flatten the towel loops, then “${p.text.trim()}” on it.` : `Sews “${p.text.trim()}”.` }];
-    }
+    const rows = textRows(p, fab), paths = [];
+    for (const { parts, satinW } of rows) paths.push(...lettersOn(parts, satinW, fab));
+    const words = (p.text || "").replace(/\s*\n\s*/g, " / ").trim();
+    if (paths.length) stages = [{ color: p.color, paths, sews: fab === "towel" ? `Sews a light base to flatten the towel loops, then “${words}” on it.` : `Sews “${words}”.` }];
   } else if (p.kind === "monogram") {
     const paths = monogram(p, fab);
     if (paths.length) stages = [{ color: p.color, paths, sews: fab === "towel" ? `Sews a light base to flatten the towel loops, then the monogram ${p.letters}.` : `Sews the monogram ${p.letters}.` }];
@@ -340,7 +398,7 @@ export function pieceBounds(p) {
   return [x0, y0, x1, y1];
 }
 
-export const label = (p) => p.kind === "text" ? `“${p.text}”` : p.kind === "letters" ? `Appliqué ${p.text}` : p.kind === "monogram" ? `Monogram ${p.letters}`
+export const label = (p) => p.kind === "text" ? `“${p.text.replace(/\s*\n\s*/g, " / ")}”` : p.kind === "letters" ? `Appliqué ${p.text}` : p.kind === "monogram" ? `Monogram ${p.letters}`
   : p.kind === "file" ? p.name : `${(SHAPES[p.shape] || SHAPES.circle).name}${p.border === "applique" ? " appliqué" : ""}`;
 
 // An opened design as a piece: its stitches split into runs at jumps/trims, per colour block, centred.
