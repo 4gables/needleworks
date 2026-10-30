@@ -1,14 +1,14 @@
 import { buildBookmark, hiddenBlocks, READY, RED, stepsFor } from "./core/bookmark.js";
 import { turnForMachine, turnPattern } from "./core/design.js";
 import { FONTS, fontOf } from "./core/fonts.js";
-import { COLOR_CHANGE, JUMP, STITCH, designStats, machineThreads, readEmbroidery, validatePES, writePES } from "./core/formats.js";
+import { STITCH, designStats, machineThreads, readEmbroidery, validatePES, writePES } from "./core/formats.js";
 import { DEFAULT_MACHINE, MACHINES, MARGIN, hoop as getHoop } from "./core/machines.js";
 import { DENSITY, workingSize } from "./core/digitize.js";
 import { nearestBrotherThread, pecThread } from "./core/threads.js";
 import { CLOTHS, colorBlocks, draw } from "./render.js";
 import { cutSVG, sewSheet } from "./sheet.js";
 import { zip } from "./zip.js";
-import { checkup, fix, heat, sortedChanges } from "./doctor.js";
+import { checkup, fix, heat, landJumps, shortJumps, sortedChanges } from "./doctor.js";
 import { BRANDS, nearestSpool, spools } from "./core/brands.js";
 import { initStudio } from "./studio/ui.js";
 
@@ -137,20 +137,6 @@ function picSteps(v, st) {
     + blocks.map((b, i) => { const t = mt[b.index] || nearestBrotherThread(b.color);
       return `<li><b><span class="n">${i + 1}</span><i style="background:${b.color}"></i>Brother ${escapeHtml(t.name)}${spool(b.color) ? ` <small>${escapeHtml(spool(b.color))}</small>` : ""}</b><span class="you">${i ? "The machine stops: thread this colour and press Start." : "Hoop the fabric with the stabilizer, thread this colour and press Start."}</span></li>`; }).join("")
     + `<li class="after"><b>When it's done</b><span>Take the hoop off, snip any loose threads between parts, and tear or cut away the stabilizer.</span></li>`;
-}
-// moves between 1 and 5 mm: too short for the PE900 to trim (its lowest setting is 5 mm), left as loose thread
-function shortJumps(p) {
-  if (p.shortJumps != null) return p.shortJumps;
-  let n = 0, from = null, last = null;
-  for (const [x, y, c] of p.stitches) {
-    if (c === JUMP) { if (!from) from = last; last = [x, y]; continue; }
-    if (c === STITCH) {
-      if (from) { const d = Math.hypot(x - from[0], y - from[1]); if (d > 10 && d <= 50) n++; from = null; }
-      last = [x, y];
-    }
-    if (c === COLOR_CHANGE) { from = null; last = null; }
-  }
-  return (p.shortJumps = n);
 }
 // thread names exactly as the machine will show them: the file's own PEC palette
 function machineThreadList(v) {
@@ -817,7 +803,8 @@ function pesVersion(v) {
 async function openDesign(file) {
   try {
     const bytes = new Uint8Array(await file.arrayBuffer());
-    const d = readEmbroidery(bytes, file.name);
+    // (jumps landed on their first stitch: a DST converted here, or a fixed copy, would gain a hole where each ended)
+    const d = landJumps(readEmbroidery(bytes, file.name));
     if (!d.stitches.some((s) => s[2] === STITCH)) throw Object.assign(new Error(`${file.name} has no stitches in it. It may be damaged or not an embroidery file: try downloading it again.`), { plain: true });
     const repair = d.format === "pes" && d.misplaced;
     const isPes = d.format === "pes" && !repair;
@@ -831,7 +818,7 @@ async function openDesign(file) {
       ${fits ? `<span class="good">Fits the ${h.machineName} ${h.name}.</span>` : `<span class="warn">Too big for the ${h.name}: it's ${st.widthMm.toFixed(0)} × ${st.heightMm.toFixed(0)} mm.</span>`}
       ${repair ? `<span class="warn">As it is, this file would load cut off on a Brother machine (shifted, about half shown). The download here is fixed.</span>`
         : isPes ? "" : `<span>You can download it as a PES file for your machine.</span>`}`;
-    state.opened = { d, bytes, out, isPes, repair, base, opts: { scale: 1, tiny: false, thin: false, sort: false }, sorted: sortedChanges(d) };
+    state.opened = { d, bytes, out, isPes, repair, base, opts: { scale: 1, tiny: false, thin: false, sort: false, split: false }, sorted: sortedChanges(d) };
     $("doctor-fix").innerHTML = ""; setMode("open"); openView();
   } catch (err) {
     // (nothing from an earlier file stays on screen to be saved by mistake)
@@ -842,12 +829,12 @@ async function openDesign(file) {
 }
 // the opened file as it stands after the checkup's fixes (none: its own bytes, as they came)
 function openView() {
-  const o = state.opened, { scale, tiny, thin, sort } = o.opts, changed = scale !== 1 || tiny || thin || sort;
+  const o = state.opened, { scale, tiny, thin, sort, split } = o.opts, changed = scale !== 1 || tiny || thin || sort || split;
   const p = changed ? fix(o.d, o.opts) : o.d;
   const v = { pattern: p, verifyAgainst: changed || !o.isPes ? p : null, bytes: changed ? writePES(p) : o.out,
     filename: `${o.base}${scale !== 1 ? `_${Math.round(scale * 100)}pct` : ""}.pes`, fabric: "linen", source: changed || !o.isPes ? null : o.bytes,
     // (a file she already has: say what the button gives her)
-    action: o.repair || tiny || thin || sort ? "Save fixed copy" : changed ? "Save resized copy" : o.isPes ? "Save a copy" : "Save as PES",
+    action: o.repair || tiny || thin || sort || split ? "Save fixed copy" : changed ? "Save resized copy" : o.isPes ? "Save a copy" : "Save as PES",
     // (the machine's name first: a design made here names its threads after its pieces, "peace", "“Sunny”")
     threadLabel: (b, t) => `Brother ${t.name}${b.name && b.name !== t.name ? " · " + escapeHtml(b.name) : ""}` };
   state.views.open = v; setView(v); doctorUI(p);
@@ -861,7 +848,12 @@ function doctorUI(p) {
   // (a few are normal in sold designs; only many are worth a worry)
   if (c.tiny > Math.max(50, c.stitches * 0.01)) say(false, `${c.tiny} stitches are shorter than 0.3 mm. They pile up thread and can break it.`);
   if (c.satinGap && c.satinGap > 0.6) say(false, `The satin stitches are far apart (${c.satinGap.toFixed(1)} mm on each edge; well-made designs 0.3–0.4 mm), so fabric may show through.${o.scale > 0.85 ? " Shrinking it a little fills it in." : ""}`);
-  if (c.long) say(true, `${c.long} ${c.long === 1 ? "stitch is" : "stitches are"} longer than 10 mm. Fine on a wall hanging; on clothes they can snag.`);
+  // (the PE900 sews 12.1 mm at most: pe900_check.py fails a file with a longer one; every fixed copy splits them)
+  if (c.over) say(false, `${c.over} ${c.over === 1 ? "stitch is" : "stitches are"} longer than 12 mm (up to ${c.longest.toFixed(1)} mm), more than the machine sews in one stitch. Tick <b>Split long stitches</b> below.`);
+  else if (c.long) say(true, `${c.long} ${c.long === 1 ? "stitch is" : "stitches are"} longer than 10 mm. Fine on a wall hanging; on clothes they can snag.`);
+  // (shrinking brings jumps under the machine's 5 mm trim setting: they stay as thread to snip)
+  const loose = shortJumps(state.views.open?.file || p) - shortJumps(state.opened.d);
+  if (o.scale < 1 && loose > 0) say(false, `Shrinking brings ${loose} ${loose === 1 ? "jump" : "jumps"} under 5 mm, too short for the machine to trim: ${loose === 1 ? "it stays" : "they stay"} as loose thread to snip after stitching.`);
   say(true, c.perSqIn > 1500 ? `Heavy stitching (about ${c.perSqIn.toLocaleString()} stitches per square inch): use cut-away stabilizer, or two layers of tear-away.`
     : c.perSqIn > 600 ? `Medium stitching: tear-away stabilizer on woven fabric, cut-away on knits.` : `Light stitching: tear-away stabilizer is enough.`);
   $("doctor").hidden = false; $("doctor-list").innerHTML = items.join("");
@@ -871,24 +863,26 @@ function doctorUI(p) {
     <p class="hint" id="doc-scale-hint"></p>
     ${sorted != null ? `<label class="check small"><input type="checkbox" id="doc-sort"> Fewer thread changes (${changes} → ${sorted}): sews each thread's parts together where nothing in between is in the way</label>` : ""}
     <label class="check small"><input type="checkbox" id="doc-tiny"> Remove tiny stitches</label>
+    ${checkup(state.opened.d).over ? `<label class="check small"><input type="checkbox" id="doc-split"> Split long stitches</label>` : ""}
     <label class="check small"><input type="checkbox" id="doc-thin"> Thin the densest spots to 24 hits per mm²</label>`;
   $("doc-scale").value = Math.round(o.scale * 100); $("doc-scale").nextElementSibling.textContent = `${Math.round(o.scale * 100)} %`;
   // within 80-120 % the stitches are scaled as they are; past that they're re-stitched at the new size
   $("doc-scale-hint").textContent = o.scale >= 0.8 && o.scale <= 1.2 ? "Up to 20 % either way the stitches are scaled as they are (denser smaller, more open bigger)."
     : "Re-stitched at the new size: satins and fills get the right density again. Check it in the preview: lettering and fine detail can change.";
-  $("doc-tiny").checked = o.tiny; $("doc-thin").checked = o.thin; if ($("doc-sort")) $("doc-sort").checked = o.sort;
+  $("doc-tiny").checked = o.tiny; $("doc-thin").checked = o.thin; if ($("doc-split")) { const other = o.scale !== 1 || o.tiny || o.thin || o.sort; $("doc-split").checked = o.split || other; $("doc-split").disabled = other; } if ($("doc-sort")) $("doc-sort").checked = o.sort;
 }
 $("doctor-fix").addEventListener("input", (e) => {
   const o = state.opened.opts;
   if (e.target.id === "doc-scale") {
     const was = o.scale; o.scale = +e.target.value / 100; e.target.nextElementSibling.textContent = `${e.target.value} %`;
-    if (o.scale < 1 && was >= 1) o.tiny = true;   // shrinking turns short stitches into tiny ones
+    if (o.scale < 1 && was >= 1) o.tiny = o.thin = true;   // shrinking turns short stitches into tiny ones, and packs them closer
     // (re-stitching a big design takes a moment: say so, and let the screen draw first)
     clearTimeout(docTimer); docTimer = setTimeout(() => { if (o.scale < 0.8 || o.scale > 1.2) { busy(true, "Re-stitching…"); setTimeout(() => { try { openView(); } finally { busy(false); } }, 30); } else openView(); }, 250); return;
   }
   if (e.target.id === "doc-tiny") o.tiny = e.target.checked;
   if (e.target.id === "doc-sort") o.sort = e.target.checked;
   if (e.target.id === "doc-thin") o.thin = e.target.checked;
+  if (e.target.id === "doc-split") o.split = e.target.checked;
   openView();
 });
 let docTimer = 0;

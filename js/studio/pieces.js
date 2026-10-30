@@ -575,7 +575,9 @@ export function fileBlocks(design) {
   design.stitches.forEach(([x, y, c], i) => {
     if (!cur) { cur = { color: design.threads[0]?.color || "#000000", name: design.threads[0]?.name || "", paths: [] }; blocks.push(cur); }
     if (c === 0) run.push([x / 10, y / 10]);
-    else if (c === 1 || c === 2) { flush(); if (c === 1) run = [[x / 10, y / 10]]; }
+    // (a run starts at its first stitch, not where the jump to it stopped: files' jumps often stop a few mm short, and
+    // starting there sewed each one as a 2-5 mm stitch or loose thread: peace.pes had 31 to snip here, 3 opened alone)
+    else if (c === 1 || c === 2) flush();
     else if (c === 5) {
       flush();
       const t = design.threads[blocks.length] || design.threads[design.threads.length - 1] || {};
