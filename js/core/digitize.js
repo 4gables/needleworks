@@ -24,6 +24,10 @@ export const DENSITY = { solid: 0.35, standard: 0.4 };
 const OVERLAP = 0.35;
 // Moves between parts of one colour up to this far (mm) travel under stitches still to come rather than jump
 const TRAVEL = 10;
+// Travel may lie on this colour's finished stitches for this far (mm) in all: a few stitches of the same thread on its
+// own fill against a trim, two locks and often a loose thread to snip (2 mm until 2026-10-30: 3 mm took 5-15% of the
+// trims and a third of the loose threads off the batch pictures)
+const SEWN = 3;
 // Parts of a shape narrower than twice this (mm) get no fill rows and are sewn along their centre instead
 const THIN_PART = 0.35;
 
@@ -441,7 +445,7 @@ function makeRouter(mask, res, cell, hop = null, budget = routeBudget()) {
   }
   // A* state reused between calls (a cell's g/from count only if stamped this call); the open list is a binary heap
   // in typed arrays (a linear scan was most of a busy picture's time)
-  const G = new Float64Array(n), FROM = new Int32Array(n), SW = new Float32Array(n), LN = new Float32Array(n), STAMP = new Uint32Array(n), HK = new Float64Array(20010), HC = new Int32Array(20010);
+  const G = new Float64Array(n), FROM = new Int32Array(n), SW = new Float32Array(n), LN = new Float32Array(n), STAMP = new Uint32Array(n), DONE = new Uint32Array(n), HK = new Float64Array(20010), HC = new Int32Array(20010);
   let hn = 0;
   const push = (k, c) => {
     let i = hn++;
@@ -461,22 +465,22 @@ function makeRouter(mask, res, cell, hop = null, budget = routeBudget()) {
     return top;
   };
   let gen = 0;
-  // the way from a to b (px) as { pts, sewnMm (how much of it lies on finished stitches), mm (its length) }, or null.
-  // Ways with more than maxSewn mm on finished stitches or longer than maxMm aren't followed (a search that can't
-  // succeed stops early instead of flooding the whole shape).
-  function route(a, b, maxSewn = Infinity, maxMm = Infinity) {
-    const s = snap(a), t = snap(b);
-    if (s < 0 || t < 0 || region[s] !== region[t] || mine <= 0 || budget.cells <= 0) return null;
+  // Search from cell s: A* toward cell t, or (t < 0) a flood that stops once a cell in `stop` is reached. Ways with
+  // more than maxSewn mm on finished stitches or longer than maxMm aren't followed (a search that can't succeed stops
+  // early instead of flooding the whole shape). Leaves g/from stamped with `gen` for pathTo.
+  const mmPer = C / res;
+  function search(s, t, maxSewn, maxMm, stop = null) {
     let popped = 0;
     gen++;
-    const g = (c) => (STAMP[c] === gen ? G[c] : Infinity), from = (c) => (STAMP[c] === gen ? FROM[c] : -1);
-    const hx = (c) => Math.hypot((c % gw) - (t % gw), Math.floor(c / gw) - Math.floor(t / gw));
-    const mmPer = C / res;
+    const g = (c) => (STAMP[c] === gen ? G[c] : Infinity);
+    const hx = t < 0 ? () => 0 : (c) => Math.hypot((c % gw) - (t % gw), Math.floor(c / gw) - Math.floor(t / gw));
     STAMP[s] = gen; G[s] = 0; FROM[s] = -1; SW[s] = 0; LN[s] = 0; hn = 0; push(0, s);
     while (hn) {
       const c = pop();
-      if (c === t) break;
-      if (++popped > ROUTE_CELLS) { mine -= popped; budget.cells -= popped; return null; }
+      if (c === t || (stop && stop.has(c))) break;
+      if (DONE[c] === gen) continue;   // (a stale entry: the cell was expanded at its best already)
+      DONE[c] = gen;
+      if (++popped > ROUTE_CELLS || hn > 20000) break;
       const cx = c % gw, cy = (c - cx) / gw;
       for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
         if (!dx && !dy) continue;
@@ -488,9 +492,13 @@ function makeRouter(mask, res, cell, hop = null, budget = routeBudget()) {
         if (sw > maxSewn || ln + hx(m) * mmPer > maxMm) continue;
         STAMP[m] = gen; G[m] = v; FROM[m] = c; SW[m] = sw; LN[m] = ln; push(v + hx(m), m);
       }
-      if (hn > 20000) { mine -= popped; budget.cells -= popped; return null; }
     }
     mine -= popped; budget.cells -= popped;
+  }
+  // the way the last search found from a (cell s) to b (cell t) as { pts, sewnMm (how much of it lies on finished
+  // stitches), mm (its length) }, or null
+  function pathTo(s, t, a, b) {
+    const from = (c) => (STAMP[c] === gen ? FROM[c] : -1);
     if (from(t) < 0 && s !== t) return null;
     const cells = [t]; while (cells[cells.length - 1] !== s) cells.push(from(cells[cells.length - 1]));
     cells.reverse();
@@ -504,6 +512,27 @@ function makeRouter(mask, res, cell, hop = null, budget = routeBudget()) {
     let mm = 0;
     for (let k = 1; k < pts.length; k++) mm += Math.hypot(pts[k][0] - pts[k - 1][0], pts[k][1] - pts[k - 1][1]) / res;
     return { pts, sewnMm, mm };
+  }
+  const spent = () => mine <= 0 || budget.cells <= 0;
+  // the way from a to b (px), or null
+  function route(a, b, maxSewn = Infinity, maxMm = Infinity) {
+    const s = snap(a), t = snap(b);
+    if (s < 0 || t < 0 || region[s] !== region[t] || spent()) return null;
+    search(s, t, maxSewn, maxMm);
+    return pathTo(s, t, a, b);
+  }
+  // One search from a toward many places: way(b) is the way to b, or null. It stops early once it reaches one of
+  // `first` (the places preferred most). One flood per move instead of one search per place tried: a fill of many
+  // sections tried each in turn, and each search that failed flooded the shape.
+  function reach(a, maxSewn, first = []) {
+    const s = snap(a);
+    if (s < 0 || spent()) return () => null;
+    search(s, -1, maxSewn, Infinity, new Set(first.map(snap).filter((c) => c >= 0)));
+    const at = gen;
+    return (b) => {
+      const t = snap(b);
+      return at !== gen || t < 0 || region[s] !== region[t] ? null : pathTo(s, t, a, b);
+    };
   }
   // the route as travel stitches up to 2.5 mm, none under 0.6 mm (ending exactly on b, which isn't included)
   function stitches(r) {
@@ -524,12 +553,12 @@ function makeRouter(mask, res, cell, hop = null, budget = routeBudget()) {
   const markSewn = (p) => { for (let i = 1; i < p.length; i++) along(p[i - 1], p[i], (c) => { if (inside[c] !== 2) sewn[c] = 1; }); };
   // which connected stretch of crossable cells a point starts in (0: none), so a route between two can't exist
   const regionOf = (p) => { const c = snap(p); return c < 0 ? 0 : region[c]; };
-  return { route, stitches, markSewn, regionOf };
+  return { route, reach, stitches, markSewn, regionOf };
 }
 
 // Sew a fill's sections in one go: between sections the needle travels inside the shape, through rows not sewn
 // yet, so the fill covers the travel. It only jumps (and trims) when every way would lie on top of finished rows for
-// more than 2 mm. groups: [underlay paths, fill paths] in px; the underlay is covered by the fill, so travel over it is
+// more than SEWN mm. groups: [underlay paths, fill paths] in px; the underlay is covered by the fill, so travel over it is
 // hidden too.
 function routeFill(groups, comp, mask, res, budget = routeBudget()) {
   const { w } = mask, R = makeRouter(mask, res, (x, y) => (comp.labels[y * w + x] === comp.id ? 1 : 0), null, budget);
@@ -543,18 +572,20 @@ function routeFill(groups, comp, mask, res, budget = routeBudget()) {
     while (left.length) {
       // (a section can also be sewn from its last row back, entering from its far side)
       let k = 0, r = null, rev = false;
-      if (cur) search: for (let i = 0; i < left.length; i++) for (const back of [false, true]) {
-        const q = back ? left[i][left[i].length - 1] : left[i][0];
-        if (Math.hypot(q[0] - cur[0], q[1] - cur[1]) <= res) { k = i; r = null; rev = back; break search; }
-        const ri = R.route(cur, q, 2);
-        if (i === 0 && !back) r = ri;
-        if (ri && ri.sewnMm <= 2) { k = i; r = ri; rev = back; break search; }
+      if (cur) {
+        const way = R.reach(cur, SEWN, [left[0][0], left[0][left[0].length - 1]]);
+        search: for (let i = 0; i < left.length; i++) for (const back of [false, true]) {
+          const q = back ? left[i][left[i].length - 1] : left[i][0];
+          if (Math.hypot(q[0] - cur[0], q[1] - cur[1]) <= res) { k = i; r = null; rev = back; break search; }
+          const ri = way(q);
+          if (ri && ri.sewnMm <= SEWN) { k = i; r = ri; rev = back; break search; }
+        }
       }
       let p = left.splice(k, 1)[0]; if (rev) p = p.slice().reverse();
       const d = cur ? Math.hypot(p[0][0] - cur[0], p[0][1] - cur[1]) : Infinity;
       // within 1 mm: sew straight on (skipping a first point that would make a stitch under 0.4 mm)
       if (cur && d <= res) out[out.length - 1].push(...(d < 0.4 * res ? p.slice(1) : p));
-      else if (r && r.sewnMm <= 2) out[out.length - 1].push(...R.stitches(r), ...p);
+      else if (r && r.sewnMm <= SEWN) out[out.length - 1].push(...R.stitches(r), ...p);
       else out.push(p.slice());
       if (gi === groups.length - 1) R.markSewn(p);
       cur = p[p.length - 1];
@@ -840,8 +871,8 @@ function build(img, analysis, opts) {
       const gap = Math.hypot(p[0][0] - d.cur[0], p[0][1] - d.cur[1]);
       if (gap <= 2 && !crosses(d.cur, p[0])) d.path(p);
       else {
-        const r = gap <= TRAVEL ? R.route(toPx(d.cur), toPx(p[0]), 2, 1.5 * gap + 3) : null;
-        if (r && r.sewnMm <= 2 && r.mm <= 1.5 * gap + 3) d.path([d.cur, ...toMm(R.stitches(r)), ...p]);
+        const r = gap <= TRAVEL ? R.route(toPx(d.cur), toPx(p[0]), SEWN, 1.5 * gap + 3) : null;
+        if (r && r.sewnMm <= SEWN && r.mm <= 1.5 * gap + 3) d.path([d.cur, ...toMm(R.stitches(r)), ...p]);
         else d.path(p, true, gap > 2);
       }
       if (b.kind === "fill") R.markSewn(p.map(toPx));
