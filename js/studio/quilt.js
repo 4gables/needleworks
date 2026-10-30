@@ -3,7 +3,7 @@
 import { followRun, resample, smooth } from "../core/geom.js";
 import { distanceTransform } from "../core/raster.js";
 
-const RES = 4, STRAIGHT = 0.15, SEED = 1.2;
+const RES = 4;
 
 // free space: inside `edge` (closed polygon) by `inset` mm, at least `clear` mm from every point of `obstacles`.
 // Also returns each pixel's distance (px) from the frame's edge (`dtA`) and from the nearest obstacle (`dtB`).
@@ -50,60 +50,94 @@ function sampler(F, field) {
 // a fixed seed, so the meander doesn't change while the design is being edited
 function rng(seed = 7) { return () => { seed |= 0; seed = (seed + 0x6d2b79f5) | 0; let t = Math.imul(seed ^ (seed >>> 15), 1 | seed); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
 
-// Stipple: lines about `space` mm apart. Seeded by free SEED x `space` mm squares, a random spanning tree over them and
-// the closed path that walks round the tree through the 2 x 2 sub-cells (every sub-cell once, never crossing), then
-// relaxed into a smooth meander (`relax`). (Averaging the grid walk's points left a maze of sharp V points where its
-// dead ends turned, and the cells near the lettering and the frame's curves stayed empty.)
+// Stipple: a meander about `space` mm apart that never crosses itself. Its seed is the outline of a tree: knots
+// scattered at random about NODE x `space` apart (no grid, so no direction is favoured), joined by a random spanning
+// tree, each knot a round lobe (the tree's leaves a bigger one) and each branch a narrower neck, outlined as one
+// closed line; then `relax` evens it out without making it uniform. (Until 2026-10-30 the seed was a spanning tree
+// over a grid of squares: its corridors all ran along two directions, and relaxing them to an even spacing everywhere
+// sewed as a maze of parallel corridors; before that its points were only averaged, which left sharp V points.)
+const NODE = 1.5, NECK = 0.32, LOBE = [0.4, 0.8], BULB = 1.4, REACH = 1.7, KNOT = 0.2, PASS = 0.13;
 export function stipple(edge, obstacles, { space = 5, inset = 4, clear = 2.5 } = {}) {
-  const F = freeMask(edge, obstacles, inset, clear), { m, toMm } = F, c = SEED * space * RES, seeds = [];
-  const gw = Math.floor(m.w / c), gh = Math.floor(m.h / c), ok = new Uint8Array(gw * gh), ox = (m.w - gw * c) / 2, oy = (m.h - gh * c) / 2;
-  for (let j = 0; j < gh; j++) for (let i = 0; i < gw; i++) {
-    let all = true;
-    for (const fy of [0.25, 0.75]) for (const fx of [0.25, 0.75]) if (!m.data[Math.floor(oy + (j + fy) * c) * m.w + Math.floor(ox + (i + fx) * c)]) all = false;
-    ok[j * gw + i] = all ? 1 : 0;
-  }
-  const rand = rng(), seen = new Uint8Array(gw * gh), tree = new Set();
-  const nb = (k) => { const i = k % gw, j = (k - i) / gw; return [i > 0 ? k - 1 : -1, i < gw - 1 ? k + 1 : -1, j > 0 ? k - gw : -1, j < gh - 1 ? k + gw : -1].filter((q) => q >= 0 && ok[q]); };
-  for (let s = 0; s < gw * gh; s++) {
-    if (!ok[s] || seen[s]) continue;
-    // random depth-first tree over this patch of free cells that would rather turn than go straight on (STRAIGHT is
-    // the odds against carrying on): long straight corridors sewed as a maze, not a meander
-    const stack = [s], cells = [s], from = new Map(); seen[s] = 1;
-    while (stack.length) {
-      const k = stack[stack.length - 1], next = nb(k).filter((q) => !seen[q]);
-      if (!next.length) { stack.pop(); continue; }
-      const back = from.get(k), wt = next.map((q) => (back != null && q - k === k - back ? STRAIGHT : 1));
-      let r = rand() * wt.reduce((a, b) => a + b, 0), qi = 0;
-      while (qi < next.length - 1 && (r -= wt[qi]) > 0) qi++;
-      const q = next[qi]; from.set(q, k);
-      seen[q] = 1; tree.add(Math.min(k, q) + "," + Math.max(k, q)); stack.push(q); cells.push(q);
+  const F = freeMask(edge, obstacles, inset, clear), { m, toMm } = F, rand = rng();
+  const room = sampler(F, distanceTransform(m).map((d) => d / RES)), M = space / 2, D = NODE * space;
+  // knots: random darts, each kept if it's D from every knot so far and has room for a lobe
+  const W = m.w / RES, H = m.h / RES, cell = D / Math.SQRT2, gw = Math.ceil(W / cell) + 1, gh = Math.ceil(H / cell) + 1;
+  const grid = new Int32Array(gw * gh).fill(-1), knots = [];
+  for (let t = 0, n = Math.ceil(((W * H) / (D * D)) * 60); t < n; t++) {
+    const x = F.x0 + rand() * W, y = F.y0 + rand() * H, e = room(x, y) - M;
+    if (e < KNOT * space) continue;
+    const gx = Math.floor((x - F.x0) / cell), gy = Math.floor((y - F.y0) / cell);
+    let near = false;
+    for (let j = Math.max(0, gy - 2); j <= Math.min(gh - 1, gy + 2) && !near; j++) for (let i = Math.max(0, gx - 2); i <= Math.min(gw - 1, gx + 2); i++) {
+      const k = grid[j * gw + i];
+      if (k >= 0 && Math.hypot(knots[k].x - x, knots[k].y - y) < D) { near = true; break; }
     }
-    if (cells.length < 2) continue;
-    // sub-cell links: round each cell's ring except where the tree leaves it, and across every tree edge
-    const link = new Map(), add = (a, b) => { (link.get(a) || link.set(a, []).get(a)).push(b); (link.get(b) || link.set(b, []).get(b)).push(a); };
-    const id = (x, y) => y * (2 * gw) + x, has = (a, b) => tree.has(Math.min(a, b) + "," + Math.max(a, b));
-    for (const k of cells) {
-      const i = k % gw, j = (k - i) / gw, X = 2 * i, Y = 2 * j;
-      if (!(j > 0 && has(k, k - gw))) add(id(X, Y), id(X + 1, Y)); else add(id(X, Y), id(X, Y - 1)), add(id(X + 1, Y), id(X + 1, Y - 1));
-      if (!(j < gh - 1 && has(k, k + gw))) add(id(X, Y + 1), id(X + 1, Y + 1));
-      if (!(i > 0 && has(k, k - 1))) add(id(X, Y), id(X, Y + 1)); else add(id(X, Y), id(X - 1, Y)), add(id(X, Y + 1), id(X - 1, Y + 1));
-      if (!(i < gw - 1 && has(k, k + 1))) add(id(X + 1, Y), id(X + 1, Y + 1));
-    }
-    const start = id(2 * (s % gw), 2 * Math.floor(s / gw)), loop = [start];
-    let prev = -1, cur = start;
-    for (;;) { const nx = link.get(cur).find((q) => q !== prev); if (nx === start || nx == null) break; loop.push(nx); prev = cur; cur = nx; }
-    const j = c / 2 * 0.2;
-    seeds.push(loop.map((q) => toMm([ox + ((q % (2 * gw)) + 0.5) * (c / 2) - 0.5 + (rand() - 0.5) * j, oy + (Math.floor(q / (2 * gw)) + 0.5) * (c / 2) - 0.5 + (rand() - 0.5) * j])));
+    if (near) continue;
+    grid[gy * gw + gx] = knots.length;
+    knots.push({ x, y, e, r: Math.min(e, space * (LOBE[0] + (LOBE[1] - LOBE[0]) * rand())), deg: 0 });
   }
+  // branches: knots up to REACH x D apart with room for a neck all the way, joined at random (Kruskal on shuffled
+  // lengths): a random tree has many short side branches, the lobes of a stipple
+  const cand = [];
+  for (let a = 0; a < knots.length; a++) for (let b = a + 1; b < knots.length; b++) {
+    const A = knots[a], B = knots[b], L = Math.hypot(A.x - B.x, A.y - B.y);
+    if (L > REACH * D) continue;
+    let ok = true;
+    for (let s = 0.5; s < L && ok; s += 0.5) if (room(A.x + ((B.x - A.x) * s) / L, A.y + ((B.y - A.y) * s) / L) - M < PASS * space) ok = false;
+    if (ok) cand.push([L * (0.4 + rand()), a, b]);
+  }
+  cand.sort((u, v) => u[0] - v[0]);
+  const up = knots.map((_, i) => i), find = (i) => (up[i] === i ? i : (up[i] = find(up[i]))), tree = [];
+  for (const [, a, b] of cand) {
+    const ra = find(a), rb = find(b);
+    if (ra === rb) continue;
+    up[ra] = rb; tree.push([a, b]); knots[a].deg++; knots[b].deg++;
+  }
+  for (const k of knots) if (k.deg <= 1) k.r = Math.min(k.e, k.r * BULB);
+  // the tree drawn on the mask (lobes and necks), holes filled, and outlined
+  const t = { w: m.w, h: m.h, data: new Uint8Array(m.w * m.h) };
+  const stamp = (ax, ay, bx, by, r) => {
+    const X0 = Math.max(0, Math.floor((Math.min(ax, bx) - r - F.x0) * RES)), X1 = Math.min(m.w - 1, Math.ceil((Math.max(ax, bx) + r - F.x0) * RES));
+    const Y0 = Math.max(0, Math.floor((Math.min(ay, by) - r - F.y0) * RES)), Y1 = Math.min(m.h - 1, Math.ceil((Math.max(ay, by) + r - F.y0) * RES));
+    const dx = bx - ax, dy = by - ay, L2 = dx * dx + dy * dy;
+    for (let py = Y0; py <= Y1; py++) for (let px = X0; px <= X1; px++) {
+      const [x, y] = toMm([px, py]), u = L2 ? Math.max(0, Math.min(1, ((x - ax) * dx + (y - ay) * dy) / L2)) : 0;
+      if (Math.hypot(x - ax - dx * u, y - ay - dy * u) <= r) t.data[py * m.w + px] = 1;
+    }
+  };
+  for (const k of knots) if (k.deg) stamp(k.x, k.y, k.x, k.y, k.r);
+  for (const [a, b] of tree) {
+    const A = knots[a], B = knots[b];
+    stamp(A.x, A.y, B.x, B.y, Math.min(A.r, B.r, space * NECK * (0.85 + 0.3 * rand())));
+  }
+  fillHoles(t);
+  const seeds = contours(t).map((l) => resample(l.map(toMm), STEP, true)).filter((l) => Math.abs(area(l)) > 2 * space * space);
   // (a loop under 8 spaces long is a lone blob in a corner: not worth a trim)
   return relax(seeds, F, space).filter((p) => p.length * STEP >= 8 * space).map((p) => followRun([...p, p[0]], 2.5, 0.15, 1.2));
 }
 
-// The tree walk relaxed into a meander: points STEP mm apart along each loop are pushed apart from any other part of
-// the line closer than `space` mm and kept `space`/2 from the edge of the free space; a bending term rounds every
+// background a flood from the border can't reach becomes foreground
+function fillHoles(t) {
+  const { w, h, data } = t, seen = new Uint8Array(w * h), stack = [];
+  for (let x = 0; x < w; x++) stack.push(x, (h - 1) * w + x);
+  for (let y = 0; y < h; y++) stack.push(y * w, y * w + w - 1);
+  while (stack.length) {
+    const i = stack.pop();
+    if (seen[i] || data[i]) continue;
+    seen[i] = 1;
+    const x = i % w;
+    if (x > 0) stack.push(i - 1); if (x < w - 1) stack.push(i + 1); if (i >= w) stack.push(i - w); if (i < w * (h - 1)) stack.push(i + w);
+  }
+  for (let i = 0; i < w * h; i++) if (!data[i] && !seen[i]) data[i] = 1;
+}
+
+// The tree's outline relaxed into a meander: points STEP mm apart along each loop are pushed apart from any other part
+// of the line closer than `space` mm and kept `space`/2 from the edge of the free space; a bending term rounds every
 // turn, and where a point has room (nothing within `space`) the line grows outward, so it buckles into lobes that
-// fill what the tree's grid left empty. No point moves more than 0.25 mm a round, so lines can't pass through each other.
-const STEP = 1.2, BEND = 0.6, GROW = 0.3, WIDE = 3, PUSH = 0.15, CALM = 15;
+// fill what the knots left empty. It stops growing within EDGE x `space` of the free space's edge: lobes pressed
+// against the frame flattened into one line running along it. No point moves more than 0.25 mm a round, so lines
+// can't pass through each other.
+const STEP = 1.2, BEND = 0.6, GROW = 0.3, WIDE = 3, PUSH = 0.15, CALM = 15, EDGE = 0.9;
 function relax(loops, F, space, rounds = 600) {
   const dist = sampler(F, distanceTransform(F.m).map((d) => d / RES)), free = sampler(F, F.m.data);
   const R = space, M = space / 2, skip = Math.ceil((1.7 * R) / STEP);
@@ -135,6 +169,7 @@ function relax(loops, F, space, rounds = 600) {
           const f = (PUSH * (1 - d / R)) / d; fx += ex * f; fy += ey * f;
         }
         const e = dist(q[0], q[1]);
+        if (e < EDGE * R) room = Math.min(room, e);
         if (e < M) {
           room = Math.min(room, 2 * e);
           const gxs = dist(q[0] + 0.25, q[1]) - dist(q[0] - 0.25, q[1]), gys = dist(q[0], q[1] + 0.25) - dist(q[0], q[1] - 0.25), g = Math.hypot(gxs, gys) || 1;

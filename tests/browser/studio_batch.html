@@ -117,10 +117,12 @@ for (const [tag, ps] of [
   }
 }
 log("split: done");
-for (const f of APPLIQUE_FONTS) for (const [text, size] of [["AB", 60], ["Mia", 35], ["Q&8", 44]]) {
+for (const f of APPLIQUE_FONTS) for (const [text, size] of [["AB", 60], ["Mia", 35], ["Q&8", 44], ["BABY", 30]]) {
   const tag = f.family.slice(3).replace(/ /g, "");
   await save(`st_appl_${tag}_${text.replace(/[^A-Za-z0-9]/g, "")}_${size}`, [P({ kind: "letters", text, font: f.family, size })]);
 }
+// (a round 4 tester's: "BABY" in Lilita One fitted to the 5x7 hoop)
+await save("st_appl_LilitaOne_BABY_34", [P({ kind: "letters", text: "BABY", font: APPLIQUE_FONTS.find((f) => /Lilita/.test(f.family)).family, size: 34 })]);
 log("appliqué letters: done");
 for (const rot of [15, 90, -45, 180])
   await save(`st_rot_${rot}`, [P({ kind: "frame", shape: "diamond", border: "satin", w: 70, h: 90, rot }), P({ kind: "text", text: "Hello", font: FONTS[6].family, size: 16, rot })]);
