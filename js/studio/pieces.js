@@ -347,7 +347,7 @@ function localStages(p, fab = "cotton") {
       stages = [
         { color: p.color, paths: [line(yz)], sews: "Sews the zipper line on the stabilizer.", under: true,
           // (folded in half, each front piece has to reach from the zipper past the outline: twice that, plus spare)
-          before: `Fabric: two front pieces, ${cut(p.w, 2 * (a + 15), 25)} for the top and ${cut(p.w, 2 * (b + 15), 25)} for the bottom (each folded in half along its length, wrong sides together), and the back, ${cut(p.w, p.h)}. A #3 nylon coil zipper (it can be sewn and cut through) at least ${Math.ceil((p.w + 50) / 10)} cm (${((p.w + 50) / 25.4).toFixed(0)} in) long, and tape.` },
+          before: `Fabric: two front pieces, ${cut(p.w, 2 * (a + 15), 25)} for the top and ${cut(p.w, 2 * (b + 15), 25)} for the bottom (each folded in half along its length, wrong sides together), and the back, ${cut(p.w, p.h)}. Tear-away stabilizer, a #3 nylon coil zipper (it can be sewn and cut through) at least ${Math.ceil((p.w + 50) / 10)} cm (${((p.w + 50) / 25.4).toFixed(0)} in) long, and tape.` },
         { color: p.color, pause: true, paths: [line(yz - 5), line(yz + 5).reverse()], under: true,   // (±3.5 left 0.5 mm beside a coil's teeth)
           you: "Lay the zipper face up with its teeth on the line and the ends past both sides (pull the zipper tab past the side too). Tape the ends down. Press Start.",
           sews: "Tacks the zipper down along both sides of the teeth." },
@@ -365,15 +365,15 @@ function localStages(p, fab = "cotton") {
       // then backing fabric taped under the hoop and one satin edge through every layer; cut out when it's done
       stages = [
         { color: p.color, paths: [loop(run(edge, 2.5, true))], sews: `Sews the ${name} outline on the stabilizer.`, fabric: true,
-          before: `Fabric: front and back pieces, each ${cut(p.w, p.h)}, and tape.` },
+          before: `Fabric: front and back pieces, each ${cut(p.w, p.h)}${p.quilt ? `, thin batting the same size` : ""}, tear-away stabilizer and tape.` },
         { color: p.color, pause: true, paths: tack(edge),
-          you: `Lay the front fabric over the ${name} outline, right side up, covering it by ½ in. Press Start. Then take the hoop off (leave everything hooped), trim the fabric close to the stitching, and put the hoop back.`,
+          you: `Lay ${p.quilt ? "the batting, then " : ""}the front fabric over the ${name} outline, right side up, covering it by ½ in. Press Start. Then take the hoop off (leave everything hooped), trim the fabric${p.quilt ? " and batting" : ""} close to the stitching, and put the hoop back.`,
           sews: "Tacks the front fabric down.", under: true },
         { color: p.color, pause: true, last: true,
           paths: [loop(run(edge, 2.0, true)), ...satinBorder(edge)],
-          you: `Take the hoop off and turn it over. Tape the backing fabric to the back, right side out, covering the ${name} by ½ in. For a hanging loop, tape a folded ribbon at the top on the front, loop pointing in, ends ½ in past the outline. Put the hoop back and press Start.`,
+          you: `Take the hoop off and turn it over. Tape the backing fabric to the back, right side facing you (away from the stabilizer), covering the ${name} by ½ in. For a hanging loop, tape a folded ribbon at the top on the front, loop pointing in, ends ½ in past the outline. Put the hoop back and press Start.`,
           sews: "Tacks the backing on and covers the edge with satin through every layer.",
-          after: `Take it out of the hoop, tear the stabilizer away and cut round the ${name} about ⅛ in outside the satin (not through it). Flip the ribbon loop up.` },
+          after: `Take it out of the hoop, tear the stabilizer away and cut round the ${name} as close to the satin as you can without nicking it (keep the ribbon loop clear of the scissors). Flip the ribbon loop up.` },
       ];
     } else if (p.border === "patch") {
       // solid tatami fill (inset so the satin edge covers its ragged ends), then the satin edge over it
@@ -558,7 +558,7 @@ export const FABRICS = {
   knit: { name: "Knit", tip: "Knits stretch: hoop them with cut-away stabilizer (fusible no-show mesh is easiest) and use a 75/11 ballpoint needle. Don't stretch the fabric while hooping." },
   towel: { name: "Towel", tip: "Lay a water-soluble topper on the towel and hoop tear-away (or cut-away) stabilizer under it. The light base sewn under the letters flattens the loops; tear the topper off afterwards." },
   felt: { name: "Felt", tip: "Felt is firm: tear-away stabilizer is enough. Use a sharp 75/11 needle." },
-  denim: { name: "Denim", tip: "On denim and canvas use a 90/14 denim needle and cut-away or heavy tear-away stabilizer." },
+  denim: { name: "Denim", tip: "On denim use a 75/11 sharp or 80/12 needle (90/14 only for heavy denim and canvas) and cut-away or heavy tear-away stabilizer." },
 };
 
 // Quilting in a frame (`quilt`: stipple or echo) fills it around everything else on it, sewn right after the frame

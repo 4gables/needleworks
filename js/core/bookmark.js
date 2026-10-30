@@ -10,10 +10,10 @@ export const RED = "#ed171f";
 const W = 50, MAX_L = 165, LETTERS = 0.72, CHAMFER = 9, BORDER = 3.6, TEXT_SATIN = 1.8, EYE_R = 4.2, EYE_W = 2.2;
 
 export const STEPS = [
-  { title: "Placement line", machine: "Sews the bookmark outline on the bare stabilizer." },
-  { title: "Front fabric", you: "Tape the front fabric on, right side up, covering the outline by ½ in. Press Start. Then take the hoop off (leave everything hooped), trim about ⅛ in outside the line, and put it back." },
+  { title: "Placement line", you: "Hoop a piece of tear-away stabilizer on its own, tight like a drum. Put the hoop on and press Start.", machine: "Sews the bookmark outline on the bare stabilizer." },
+  { title: "Front fabric", you: "Tape the front fabric on, right side up, covering the outline by ½ in. Press Start. Then take the hoop off (leave everything hooped), trim about 1/16 in (1.5 mm) outside the line, and put it back." },
   { title: "The name", machine: "Sews the name." },
-  { title: "Back fabric", you: "Tape felt to the back of the hoop covering the outline. Press Start. Then take the hoop off, trim the felt about ⅛ in outside the line, and put it back." },
+  { title: "Back fabric", you: "Tape felt to the back of the hoop covering the outline. Press Start. Then take the hoop off, trim the felt about 1/16 in (1.5 mm) outside the line, and put it back." },
   { title: "Border and ribbon hole", machine: "Sews the ribbon ring and the satin border through every layer." },
 ];
 
@@ -103,6 +103,8 @@ export function buildBookmark({ name, family, color = RED, hoop, lead = true, ta
   d.path(edgeWalk(edge, BORDER, true));
   d.path(zigzag(edge, BORDER * 0.7, 2.0, true));
   d.path(satin(edge, BORDER, 0.4, 0.3, true));
-  d.cut = [[grow(edge, 3)]];   // the front fabric for the cut file: the outline plus the ⅛ in it's trimmed to
+  // the front fabric for the cut file: the outline plus the 1.5 mm it's trimmed to (the 3.6 mm satin reaches 1.95 mm
+  // past the line, so ⅛ in left raw fabric showing outside it)
+  d.cut = [[grow(edge, 1.5)]];
   return d.finish();
 }

@@ -50,7 +50,7 @@ export const STARTERS = [
   { id: "bib", name: "Baby bib", note: "a name over a little heart", make: () => [
     frame({ shape: "heart", w: 46, h: 42, border: "applique", y: 14, color: PINK }),
     text({ text: "Emma", size: 16, shape: "up", radius: 30, y: 14, color: NAVY })],
-    tip: "Hoop tear-away stabilizer and stick the bib on it (or float it with spray adhesive). On terry, lay a water-soluble topper over it so the stitches don't sink." },
+    tip: "Hoop sticky (self-adhesive) tear-away stabilizer, score and peel its paper, and press the bib onto it (or float it on plain tear-away with spray adhesive). On terry, lay a water-soluble topper over it so the stitches don't sink." },
   { id: "towel", name: "Towel name", note: "a big name that stands up to terry", make: () => [text({ text: "Ashley", size: 32, style: "satin" })], fabric: "towel", baste: true },
   { id: "ornament", name: "Ornament", note: "two-sided, sewn in the hoop", make: () => [
     frame({ shape: "circle", w: 80, h: 80, border: "ith", color: RED }),
@@ -69,14 +69,14 @@ export const STARTERS = [
     frame({ shape: "square", w: 112, h: 112, border: "bold", quilt: "stipple", color: BLACK }),
     frame({ shape: "heart", w: 52, h: 48, border: "satin", color: RED })],
     tip: "Hoop the quilt sandwich (top, batting, backing) or float it on tear-away stabilizer. Stitch the blocks, then sew them together." },
-  { id: "pouch", name: "Zipper pouch", note: "lined, sewn in the hoop", make: () => [
+  { id: "pouch", name: "Zipper pouch", note: "sewn in the hoop, turned through the zipper", make: () => [
     frame({ shape: "square", w: 110, h: 90, border: "zip", color: NAVY }),
     text({ text: "Makeup", size: 16, y: 14, color: RED })],
     tip: "Medium-weight cotton or canvas works best. Use a nylon coil zipper (the needle can't hit metal teeth, so keep the zipper tab past the side while it sews)." },
   { id: "keyfob", name: "Key fob", note: "two-sided, with a ribbon loop", make: () => [
     frame({ shape: "square", w: 44, h: 80, border: "ith", color: RED }),
     mono({ letters: "J", size: 30, y: 6, color: NAVY })],
-    tip: "Like the ornament: tape a 5 in piece of ribbon or webbing, folded in half, at the top before the back goes on. Felt or vinyl backing needs no turning." },
+    tip: "Like the ornament: tape a 5 in piece of ribbon or webbing, folded in half, at the top before the back goes on. Felt or vinyl doesn't fray, so it can be cut right up to the satin." },
   { id: "applique", name: "Appliqué", note: "a fabric shape with a name", make: () => [
     frame({ shape: "heart", w: 84, h: 76, border: "applique", y: -4 }), text({ size: 18, y: -6, color: NAVY })] },
   { id: "initials", name: "Appliqué letters", note: "fabric letters with satin edges", make: () => [appl({ text: "AB", size: 60 })] },
@@ -286,7 +286,7 @@ export function initStudio(api) {
     const built = parts.map((pt, i) => ({ ...compose(pt.pieces, hoop, { ...opts, marks: { pts: pt.marks, end: pt.end } }), filename: `${base}_hooping_${i + 1}_of_2.pes` }));
     // the whole design for the preview (a big pretend hoop), and every step of both hoopings in order
     const all = compose(pieces, { ...hoop, w: 2000, h: 2000 }, opts);
-    const steps = [...built[0].steps, { color: built[1].steps[0].color, sews: ["Second hooping."], you: "Take the fabric out and hoop it again for the second half. The next step says how to line it up." }, ...built[1].steps];
+    const steps = [...built[0].steps, { color: built[1].steps[0].color, sews: ["Nothing: this step is the rehooping."], you: "Take the fabric out and hoop it again for the second half. The next step says how to line it up." }, ...built[1].steps];
     stepsUI(steps, [...built[0].after, ...built[1].after], false, built[0].before);
     for (const b of $("st-steps").querySelectorAll("[data-step]")) b.disabled = true;   // (the step view follows one file)
     api.setView(all.design.pattern(), `${base}_2_hoopings.zip`, { fabric: "linen", steps: 0,
