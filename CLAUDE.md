@@ -307,8 +307,11 @@ Embroidery-file tools for home machines. Two implementations of the same engine:
   Design-tab files carry a hooping note (steps, done dialog, sew sheet). Lettering that sews as a fine line says so
   with a "Make it bold" link; names in a batch say "(smaller, thin line)". Header wraps the tabs to a second row at
   861-1240 px (the machine select covered "Open a design" at 1024). `tests/cdp.mjs start` disables background timer
-  throttling (headless pages are "hidden": a 300 ms debounce took 57 s). Known, not done: patch border sewn last,
-  picture specks/trims (etsy_2 fill 140 trims), monograms fitting their frame, placing "+ Design file" in free space.
+  throttling (headless pages are "hidden": a 300 ms debounce took 57 s). Then: a patch's satin edge (`edge` stage)
+  sews after everything on the patch (covers the lettering's pull at the border; batch: only patch/carve/blend files
+  changed); monograms inside a frame shrink to fit it both ways (`fittedSizes`, 0.92 of the frame less half the gap,
+  so the starters' monograms are unchanged; a script R on the key fob overran it); "+ Design file" goes above the
+  pieces (below if only that fits), sews first after frames, and the layout is recentred. Not done: picture specks/trims.
 - The preview is the file: `setView` decodes `v.bytes` with `readEmbroidery` and draws/counts/fit-checks that, and
   thread labels come from the file's own PEC palette.
 

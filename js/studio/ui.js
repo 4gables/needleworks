@@ -279,7 +279,7 @@ export function initStudio(api) {
     } else {
       h += `<p class="hint">${api.escapeHtml(p.name)}: its stitches are used exactly as they are, so it can be moved and turned but not resized.</p>`;
     }
-    if (p.kind === "text") h += `<p class="hint" data-fit hidden></p>`;
+    if (p.kind === "text" || p.kind === "monogram") h += `<p class="hint" data-fit hidden></p>`;
     if (p.kind !== "frame") h += `<p class="hint warn" data-warn hidden></p>`;
     h += range("rot", "Turn", -180, 180, p.rot || 0, "°", 5);
     if (p.kind !== "file") h += `<div class="field"><span>Thread</span><div class="swatches">${swatches(p)}</div><p class="hint">Brother ${nearestBrotherThread(p.color).name}${api.spool(p.color) ? ` · ${api.escapeHtml(api.spool(p.color))}` : ""}</p></div>`;
@@ -593,7 +593,24 @@ export function initStudio(api) {
       const d = readEmbroidery(new Uint8Array(await f.arrayBuffer()), f.name);
       remember();
       const p = piece({ kind: "file", name: f.name.replace(/\.[^.]+$/, ""), blocks: fileBlocks(d), color: d.threads[0]?.color || BLACK });
-      pieces.push(p); sel = p.id; save(); ui(); make();
+      // in free space, above what's there (or below, if only that fits), not on top of it: centred, a bought design
+      // landed on the lettering. It sews first, after any frames, so lettering added under it sews on top.
+      const bs = pieces.map(pieceBounds).filter(Boolean), fb = pieceBounds(p), hp = api.hoop();
+      if (bs.length && fb) {
+        const top = Math.min(...bs.map((b) => b[1])), bottom = Math.max(...bs.map((b) => b[3])), fh = fb[3] - fb[1];
+        const up = top - 4 - fb[3], down = bottom + 4 - fb[1], lim = hp.h / 2 - 5;
+        if (up + fb[1] >= -lim) p.y = up; else if (down + fb[3] <= lim) p.y = down;
+        else if (fh + bottom - top + 4 <= 2 * lim) p.y = up;   // (fits beside them once the whole design is moved: say so)
+      }
+      const at = pieces.findIndex((q) => q.kind !== "frame");
+      pieces.splice(at < 0 ? pieces.length : at, 0, p); sel = p.id;
+      // then the whole layout back to the middle of the hoop (the machine centres it anyway; the preview should too)
+      const all = pieces.map(pieceBounds).filter(Boolean);
+      if (all.length > 1) {
+        const cx = (Math.min(...all.map((b) => b[0])) + Math.max(...all.map((b) => b[2]))) / 2, cy = (Math.min(...all.map((b) => b[1])) + Math.max(...all.map((b) => b[3]))) / 2;
+        for (const q of pieces) { q.x = Math.round((q.x - cx) * 2) / 2; q.y = Math.round((q.y - cy) * 2) / 2; }
+      }
+      save(); ui(); make();
     } catch (err) { api.showError("That file couldn't be added: " + err.message); }
   };
 

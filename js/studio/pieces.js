@@ -430,7 +430,9 @@ function localStages(p, fab = "cotton") {
     } else if (p.border === "patch") {
       // solid tatami fill (inset so the satin edge covers its ragged ends), then the satin edge over it; `compose`
       // cuts the fill away under what's sewn on it (`carve`)
-      stages = [...patchFill(p, [inset(edge, 1.0)], fab), { color: p.color, paths: satinBorder(edge), sews: `Sews the patch's satin edge.` }];
+      // (the edge sews after what goes on the patch, `edge` in compose: it covers the pull of the lettering at the
+      // border and the fill's row ends, as a digitizer would order it)
+      stages = [...patchFill(p, [inset(edge, 1.0)], fab), { color: p.color, edge: true, paths: satinBorder(edge), sews: `Sews the patch's satin edge.` }];
     } else {
       const paths = p.border === "satin" ? [edgeWalk(edge, 3.0, true), zigzag(edge, 2.1, 2.0, true), satin(edge, 3.0, sd(0.4), 0.3, true)]
         : p.border === "bold" ? [run(edge, 2.0, true), run(edge.slice().reverse(), 2.0, true), run(edge, 2.0, true)]
@@ -581,21 +583,29 @@ function frameAround(p, pieces, shapes) {
     && Math.abs(p.x - f.x) < f.w / 2 && Math.abs(p.y - f.y) < frameH(f) / 2);
 }
 
-// Straight lettering whose centre sits inside an earlier frame shrinks to fit across it (a long name typed into
-// "Name in a frame" would otherwise run over the border). Returns id -> the size it's stitched at.
+// Straight lettering (and monograms) whose centre sits inside an earlier frame shrinks to fit across it (a long name
+// typed into "Name in a frame" would otherwise run over the border); monograms fit up and down as well. Returns id -> the size it's stitched at.
 export function fittedSizes(pieces) {
   const out = new Map();
   pieces.forEach((p) => {
-    if (p.kind !== "text" || (p.shape && p.shape !== "straight") || (p.rot || 0) % 180) return;
+    const mono = p.kind === "monogram";
+    if ((p.kind !== "text" && !mono) || (p.shape && p.shape !== "straight") || (p.rot || 0) % 180) return;
     const frame = frameAround(p, pieces.filter((f) => f === p || !(f.rot || 0)));
     if (!frame) return;
     const b = pieceBounds({ ...p, x: 0, y: 0 }); if (!b) return;
-    const dy = (p.y - frame.y) / (frameH(frame) / 2);
+    const dy = (p.y - frame.y) / (frameH(frame) / 2), gap = frame.border === "line" ? 4 : 8;
     // room across the frame at the lettering's height (narrower toward the top and bottom of round shapes)
     const round = ["circle", "oval", "scallop", "heart"].includes(frame.shape) ? Math.sqrt(Math.max(0.2, 1 - dy * dy)) : 1;
-    const room = frame.w * round * (frame.shape === "diamond" ? 0.55 : 0.82) - (frame.border === "line" ? 4 : 8);
+    // (a monogram only shrinks when it would reach the border: the starters' monograms fill their frames on purpose)
+    const fill = frame.shape === "diamond" ? 0.55 : mono ? 0.92 : 0.82, room = frame.w * round * fill - (mono ? gap / 2 : gap);
     const w = b[2] - b[0];
-    if (w > room && room > 5) out.set(p.id, Math.max(5, Math.floor(p.size * (room / w) * 2) / 2));
+    let k = w > room && room > 5 ? room / w : 1;
+    // a monogram is tall: it must fit up and down too (a script R overran a key fob's border)
+    if (mono) {
+      const roomH = frameH(frame) * fill - gap / 2 - 2 * Math.abs(p.y - frame.y), h = b[3] - b[1];
+      if (h > roomH && roomH > 5) k = Math.min(k, roomH / h);
+    }
+    if (k < 1) out.set(p.id, Math.max(5, Math.floor(p.size * k * 2) / 2));
   });
   return out;
 }
@@ -761,7 +771,7 @@ function build(pieces, hoop, opts) {
   pieces = pieces.map((p) => (fit.has(p.id) ? { ...p, size: fit.get(p.id) } : p));
   const box = (paths) => { const [x0, y0, x1, y1] = bounds(paths.flat()); return [x0 - 1, y0 - 1, x1 + 1, y1 + 1]; };
   const hits = (a, b) => a[0] < b[2] && b[0] < a[2] && a[1] < b[3] && b[1] < a[3];
-  const order = [], last = [], staged = pieces.map((p) => pieceStages(p, fab).map((st) => ({ ...st, label: label(p) })));
+  const order = [], last = [], edges = [], staged = pieces.map((p) => pieceStages(p, fab).map((st) => ({ ...st, label: label(p) })));
   pieces.forEach((p, i) => { if (QUILTED(p)) staged[i] = withQuilt(p, staged[i], staged.filter((_, j) => j !== i).flat().flatMap((s) => s.paths), opts.dragging); });
   // patches: no fill under what's sewn on them (fine-line lettering excepted)
   pieces.forEach((p, i) => {
@@ -773,6 +783,7 @@ function build(pieces, hoop, opts) {
     if (!st.paths.length) continue;
     const s = { ...st, box: box(st.paths) };
     if (s.last) { last.push(s); continue; }   // two-sided in-the-hoop edge: after everything that goes on the front
+    if (s.edge) { edges.push(s); continue; }   // a patch's satin edge: after what's sewn on the patch
     let at = order.length;
     if (!s.pause && !s.fabric) {
       for (let j = order.length - 1; j >= 0; j--) {
@@ -783,7 +794,7 @@ function build(pieces, hoop, opts) {
     if (at < order.length) s.early = true;
     order.splice(at, 0, s);
   }
-  order.push(...last);
+  order.push(...edges, ...last);
   if (opts.marks && order.length) {
     const color = opts.marks.end ? order[order.length - 1].color : order[0].color, paths = crosses(opts.marks.pts);
     if (opts.marks.end) order.push({ color, paths, label: "Alignment crosses", sews: "Sews two alignment crosses where the next hooping lines up." });
