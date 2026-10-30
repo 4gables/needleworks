@@ -233,6 +233,17 @@ Embroidery-file tools for home machines. Two implementations of the same engine:
   `strokeWidth` runs the distance transform on the ink's box plus a 1 px ring (same distances). The bookmark caches its
   lettering. Pan, pinch and wheel paint at most once a frame; starter thumbnails compose one per idle moment.
   `index.html` modulepreloads the module graph.
+- Usability round (2026-10-29): the site opens on Design your own (`#design`); the default name is Emma (no more
+  "like the photo"). After a download a dialog says what was checked (machine, hoop, size, pauses) and the three USB
+  steps, plus "open the .zip first" for ZIPs, until "Don't show this again" (`doneSeen`). Editor warnings with a fix:
+  arched words wrapping over 55% of their curve get "Widen the curve" (`archRoom`, to 45%), and any piece whose stitches
+  come within 1 mm of another's says so (`touching`; patches excepted). Plain words: Bold / Thin line (satin / fine
+  line), "N loose threads to snip after", the PES version only as a tooltip. Opened files: "Save a copy" / "Save fixed
+  copy" / "Save as PES" instead of "Download x.pes"; tiny stitches flagged only past max(50, 1% of stitches). One for
+  each name: long names shrink to fit (90%… 55%), a thumbnail per name, Done. Decluttered: Hoop/Thickness/On my item in
+  a View menu, Sewing on folded to one line, Fill direction and Fill under More settings, no hex codes under threads,
+  the appliqué guide only for real appliqué (not the pouch) and not on top of the 3-step guide. Phones: Download is a
+  fixed bar at the bottom; the arrow-key hint hides on touch screens.
 - The preview is the file: `setView` decodes `v.bytes` with `readEmbroidery` and draws/counts/fit-checks that, and
   thread labels come from the file's own PEC palette.
 

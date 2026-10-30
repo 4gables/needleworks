@@ -8,7 +8,7 @@ import { readEmbroidery } from "../core/formats.js";
 import { draw } from "../render.js";
 import { QUILTS } from "./quilt.js";
 import { MOTIFS } from "./motifs.js";
-import { BORDERS, FABRICS, SHAPES, TEXT_SHAPES, splitPieces, archTight, compose, fileBlocks, fittedSizes, followFrame, label, minSize, pieceBounds, previewLook, smallText } from "./pieces.js";
+import { BORDERS, FABRICS, SHAPES, TEXT_SHAPES, splitPieces, archRoom, archTight, touching, compose, fileBlocks, fittedSizes, followFrame, label, minSize, pieceBounds, previewLook, smallText } from "./pieces.js";
 
 const SCRIPT = "NW Great Vibes", PRINT = "NW Josefin Sans";
 // exact Brother PEC thread colours, so the name on screen is the one the machine shows
@@ -19,7 +19,7 @@ const COLORS = [RED, NAVY, "#00673e", "#770176", "#e8a900", "#f993bc", BLACK, "#
 
 let nextId = 1;
 const piece = (o) => ({ id: nextId++, x: 0, y: 0, color: NAVY, ...o });
-const text = (o) => piece({ kind: "text", text: "Ashley", font: SCRIPT, size: 18, shape: "straight", radius: 30, ...o });
+const text = (o) => piece({ kind: "text", text: "Emma", font: SCRIPT, size: 18, shape: "straight", radius: 30, ...o });
 const mono = (o) => piece({ kind: "monogram", letters: "aMs", font: SCRIPT, size: 30, ...o });
 const appl = (o) => piece({ kind: "letters", text: "AB", font: APPLIQUE_FONTS[0].family, size: 60, color: NAVY, ...o });
 const motif = (o) => piece({ kind: "motif", motif: "heart", size: 40, style: "fill", color: RED, ...o });
@@ -51,7 +51,7 @@ export const STARTERS = [
     frame({ shape: "heart", w: 46, h: 42, border: "applique", y: 14, color: PINK }),
     text({ text: "Emma", size: 16, shape: "up", radius: 30, y: 14, color: NAVY })],
     tip: "Hoop sticky (self-adhesive) tear-away stabilizer, score and peel its paper, and press the bib onto it (or float it on plain tear-away with spray adhesive). On terry, lay a water-soluble topper over it so the stitches don't sink." },
-  { id: "towel", name: "Towel name", note: "a big name that stands up to terry", make: () => [text({ text: "Ashley", size: 32, style: "satin" })], fabric: "towel", baste: true },
+  { id: "towel", name: "Towel name", note: "a big name that stands up to terry", make: () => [text({ text: "Emma", size: 32, style: "satin" })], fabric: "towel", baste: true },
   { id: "ornament", name: "Ornament", note: "two-sided, sewn in the hoop", make: () => [
     frame({ shape: "circle", w: 80, h: 80, border: "ith", color: RED }),
     text({ text: "Emma", size: 20, y: -4 }),
@@ -116,6 +116,7 @@ export function initStudio(api) {
   const current = () => pieces.find((p) => p.id === sel);
 
   function cards() {
+    $("st-cards-count").textContent = `· ${STARTERS.length} ideas, scroll for more →`;
     $("st-cards").innerHTML = STARTERS.map((s) => `<button type="button" data-start="${s.id}" title="${s.note}"><canvas aria-hidden="true"></canvas><b>${s.name}</b><small>${s.note}</small></button>`).join("");
   }
   // a small stitched preview of each starter (drawn once the tab is on screen and has a size), one at a time when
@@ -132,7 +133,7 @@ export function initStudio(api) {
       const c = $("st-cards").querySelector(`[data-start="${s.id}"] canvas`);
       try {
         if (s.mode === "bookmark") {   // lying down, like the bookmark tab shows it
-          const d = buildBookmark({ name: "Ashley", family: SCRIPT, hoop: getHoop() });
+          const d = buildBookmark({ name: "Emma", family: SCRIPT, hoop: getHoop() });
           draw(c, turnPattern(d.pattern(), false), { pad: 4, fabricShapeBlock: 0, fabric: "pink", hide: hiddenBlocks(false) });
           continue;
         }
@@ -143,7 +144,7 @@ export function initStudio(api) {
   }
   function list() {
     $("st-pieces").innerHTML = pieces.map((p, i) => `<li data-id="${p.id}" aria-selected="${p.id === sel}">
-      <button type="button" class="pick" data-id="${p.id}"><i style="background:${p.color}"></i>${api.escapeHtml(label(p))}</button>
+      <button type="button" class="pick" data-id="${p.id}"><i style="background:${p.color}"></i><span class="nm">${api.escapeHtml(label(p))}</span></button>
       <span class="ops">
         <button type="button" data-op="up" data-id="${p.id}" aria-label="Sew earlier" ${i ? "" : "disabled"}>↑</button>
         <button type="button" data-op="down" data-id="${p.id}" aria-label="Sew later" ${i < pieces.length - 1 ? "" : "disabled"}>↓</button>
@@ -158,6 +159,8 @@ export function initStudio(api) {
   const range = (k, lab, min, max, v, unit = "mm", step = 1) => `<label class="range"><span>${lab}</span><input type="range" data-k="${k}" data-unit="${unit}" min="${min}" max="${max}" step="${step}" value="${v}"><output>${v} ${unit}</output></label>`;
   const seg = (k, opts, v) => `<div class="seg" data-seg="${k}">${Object.entries(opts).map(([key, name]) => `<button type="button" data-v="${key}" aria-pressed="${key === v}">${name}</button>`).join("")}</div>`;
 
+  // satin and fine line, said plainly: bold columns or a thin outline of the letter
+  const STITCHES = { auto: "Stitch: automatic", satin: "Bold", line: "Thin line" };
   let moreOpen = false;
   $("st-edit").addEventListener("toggle", (e) => { if (e.target.matches("details.more")) moreOpen = e.target.open; }, true);
   function editor() {
@@ -170,7 +173,7 @@ export function initStudio(api) {
       h += `<label class="field"><span>Font</span>${fontSelect(p)}</label>`;
       h += range("size", "Height", 5, 60, p.size);
       h += seg("shape", TEXT_SHAPES, p.shape);
-      h += seg("style", { auto: "Stitch: automatic", satin: "Satin", line: "Fine line" }, p.style || "auto");
+      h += seg("style", STITCHES, p.style || "auto");
       if (arc) {
         h += range("radius", "Curve width", 15, 80, p.radius);
         h += range("ry", "Curve height", 15, 80, p.ry ?? p.radius);
@@ -190,7 +193,7 @@ export function initStudio(api) {
       h += `<p class="hint">Traditional order: first, LAST, middle. The middle letter is stitched biggest.</p>`;
       h += `<label class="field"><span>Font</span>${fontSelect(p)}</label>`;
       h += range("size", "Height", 15, 90, p.size);
-      h += seg("style", { auto: "Stitch: automatic", satin: "Satin", line: "Fine line" }, p.style || "auto");
+      h += seg("style", STITCHES, p.style || "auto");
     } else if (p.kind === "motif") {
       h += `<div class="field"><span>Motif</span><div class="motifs" role="group" aria-label="Motif">${Object.entries(MOTIFS).map(([k, m]) => `<button type="button" data-motif="${k}" aria-pressed="${k === p.motif}" title="${m.name}"><svg viewBox="0 0 256 256" aria-hidden="true"><path d="${m.d}"/></svg></button>`).join("")}</div></div>`;
       h += range("size", "Size", 10, 120, p.size);
@@ -218,7 +221,7 @@ export function initStudio(api) {
       h += `<p class="hint">${api.escapeHtml(p.name)}: its stitches are used exactly as they are, so it can be moved and turned but not resized.</p>`;
     }
     if (p.kind === "text") h += `<p class="hint" data-fit hidden></p>`;
-    if (p.kind === "text" || p.kind === "monogram") h += `<p class="hint warn" data-warn hidden></p>`;
+    if (p.kind !== "frame") h += `<p class="hint warn" data-warn hidden></p>`;
     h += range("rot", "Turn", -180, 180, p.rot || 0, "°", 5);
     if (p.kind !== "file") h += `<div class="field"><span>Thread</span><div class="swatches">${swatches(p)}</div><p class="hint">Brother ${nearestBrotherThread(p.color).name}${api.spool(p.color) ? ` · ${api.escapeHtml(api.spool(p.color))}` : ""}</p></div>`;
     $("st-edit").innerHTML = h;
@@ -227,20 +230,23 @@ export function initStudio(api) {
   function ui() { list(); editor(); sewnOn(); }
   function sewnOn() {
     $("st-fabric").innerHTML = Object.entries(FABRICS).map(([k, f]) => `<button type="button" data-fab="${k}" aria-pressed="${k === fabric}">${f.name}</button>`).join("");
-    $("st-baste").checked = baste; $("st-fabric-tip").textContent = FABRICS[fabric].tip;
+    $("st-baste").checked = baste; $("st-fabric-tip").textContent = FABRICS[fabric].tip; $("st-fabric-name").textContent = FABRICS[fabric].name + (baste ? ", basted" : "");
   }
   $("st-fabric").onclick = (e) => { const b = e.target.closest("[data-fab]"); if (!b || b.dataset.fab === fabric) return; remember(); fabric = b.dataset.fab; save(); sewnOn(); make(); };
-  $("st-baste").onchange = (e) => { remember(); baste = e.target.checked; save(); make(); };
+  $("st-baste").onchange = (e) => { remember(); baste = e.target.checked; save(); sewnOn(); make(); };
   // too-small lettering, said plainly (updated in place so typing keeps focus)
   async function warn() {
     const w = $("st-edit").querySelector("[data-warn]"), p = current(); if (!w || !p) return;
-    await document.fonts.load(`40px "${p.font}"`);
+    if (p.font) await document.fonts.load(`40px "${p.font}"`);
     const fit = $("st-edit").querySelector("[data-fit]"), fs = fittedSizes(pieces).get(p.id);
     if (fit) { fit.hidden = !fs; fit.textContent = fs ? `Shrunk to ${fs} mm so it fits inside the frame.` : ""; }
-    const m = minSize(fs ? { ...p, size: fs } : p);
-    w.hidden = !m && !archTight(p);
-    w.textContent = m ? `These letters are too small to stitch cleanly. Make the height ${m} mm or more.`
-      : archTight(p) ? "The curve is too tight for letters this tall: they'd bunch up. Make the curve bigger or the letters smaller." : "";
+    const m = minSize(fs ? { ...p, size: fs } : p), room = archRoom(p), near = touching(fs ? { ...p, size: fs } : p, pieces);
+    // (said plainly, with a one-tap fix where there is one)
+    w.innerHTML = m ? `These letters are too small to stitch cleanly. Make the height ${m} mm or more.`
+      : room ? `The words wrap most of the way round the curve. <button type="button" class="link" data-room>Widen the curve</button>`
+      : archTight(p) ? "The curve is too tight for letters this tall: they'd bunch up. Make the curve bigger or the letters smaller."
+      : near ? `This runs into ${api.escapeHtml(label(near))}. Drag it apart or make it smaller.` : "";
+    w.hidden = !w.innerHTML;
   }
 
   function change(fn, now = false) {
@@ -294,10 +300,10 @@ export function initStudio(api) {
   }
   // appliqué tips: shown the first time a design has fabric to lay on, then on request
   function applGuide(steps) {
-    const has = steps.some((st) => st.fabric);
+    const has = steps.some((st) => st.fabric && st.cut);
     $("st-appl-open").hidden = !has;
     if (!has) $("st-appl").hidden = true;
-    else if (!api.store.get("studio.applSeen", false)) $("st-appl").hidden = false;
+    else if (!api.store.get("studio.applSeen", false) && $("st-guide").hidden) $("st-appl").hidden = false;
   }
   $("st-appl-close").onclick = () => { $("st-appl").hidden = true; api.store.set("studio.applSeen", true); };
   $("st-appl-open").onclick = () => { $("st-appl").hidden = false; $("st-appl").scrollIntoView({ block: "nearest", behavior: "smooth" }); };
@@ -378,6 +384,7 @@ export function initStudio(api) {
     if (mo) { change((p) => (p.motif = mo.dataset.motif), true); editor(); list(); return; }
     const f = e.target.closest("[data-fill]");
     if (f) { change((p) => (p.fill = f.dataset.fill), true); editor(); return; }
+    if (e.target.closest("[data-room]")) { change((p) => Object.assign(p, archRoom(p) || {}), true); editor(); return; }
     if (e.target.closest("[data-follow]")) { change((p) => Object.assign(p, followFrame(p, pieces)), true); editor(); return; }
     const s = e.target.closest("[data-seg] button");
     if (s) { change((p) => (p[s.closest("[data-seg]").dataset.seg] = s.dataset.v), true); editor(); }
@@ -467,7 +474,13 @@ export function initStudio(api) {
     if (!p) return null;
     return {
       what: p.text.replace(/\s*\n\s*/g, " / "),
-      build: (name) => ({ pattern: compose(pieces.map((q) => (q.id === p.id ? { ...q, text: name } : q)), api.hoop(), { fabric, baste }).design.pattern(), name }),
+      // shrink: a name too long for the hoop is tried at 90 %, 80 %… down to half its size
+      build: (name, shrink = false) => {
+        for (let f = 1; ; f -= 0.1) {
+          try { return { pattern: compose(pieces.map((q) => (q.id === p.id ? { ...q, text: name, size: Math.round(p.size * f * 2) / 2 } : q)), api.hoop(), { fabric, baste }).design.pattern(), name, smaller: f < 1 }; }
+          catch (err) { if (!shrink || !err.overBy || f < 0.55) throw err; }
+        }
+      },
     };
   }
 

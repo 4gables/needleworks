@@ -51,7 +51,7 @@
       <div class="field">
         <label for="bm-name">Name</label>
         <input id="bm-name" type="text" value="ashley" maxlength="14" autocomplete="off" spellcheck="false">
-        <p class="hint">One word works best. Type it the way you want it stitched: all lowercase looks like the photo.</p>
+        <p class="hint">One word works best. Type it the way you want it stitched: all lowercase flows most gracefully in script.</p>
       </div>
       <label class="check"><input id="bm-blank" autocomplete="off" type="checkbox"> Blank bookmark, no name</label>
       <fieldset class="field" id="bm-lettering">
@@ -110,18 +110,21 @@
           <label for="pic-cross">Cross size <output id="pic-cross-out">2.5 mm</output></label>
           <input id="pic-cross" autocomplete="off" type="range" min="1.5" max="4" step="0.5" value="2.5">
         </div>
-        <div class="field" id="pic-angle-row">
-          <label for="pic-angle">Fill direction <output id="pic-angle-out">45°</output></label>
-          <input id="pic-angle" autocomplete="off" type="range" min="0" max="175" step="5" value="45">
-        </div>
-        <fieldset class="field" id="pic-density-row">
-          <legend>Fill</legend>
-          <div id="pic-density" class="chips">
-            <button type="button" data-d="standard" aria-pressed="true">Standard</button>
-            <button type="button" data-d="solid" aria-pressed="false">Dense (felt, patches, dark fabric)</button>
-          </div>
-        </fieldset>
         <label class="check"><input id="pic-bg" autocomplete="off" type="checkbox" checked> Leave the background unstitched</label>
+        <details class="more" id="pic-more">
+          <summary>More settings</summary>
+          <div class="field" id="pic-angle-row">
+            <label for="pic-angle">Fill direction <output id="pic-angle-out">45°</output></label>
+            <input id="pic-angle" autocomplete="off" type="range" min="0" max="175" step="5" value="45">
+          </div>
+          <fieldset class="field" id="pic-density-row">
+            <legend>Fill</legend>
+            <div id="pic-density" class="chips">
+              <button type="button" data-d="standard" aria-pressed="true">Standard</button>
+              <button type="button" data-d="solid" aria-pressed="false">Dense (felt, patches, dark fabric)</button>
+            </div>
+          </fieldset>
+        </details>
         <p class="fine-warn" id="pic-fine" role="status" hidden></p>
         <fieldset class="field">
           <legend>Threads <span class="hint inline">(tap one to leave it out)</span></legend>
@@ -142,7 +145,7 @@
         <button type="button" class="link" id="st-guide-close" aria-label="Hide these tips">Got it</button>
       </ol>
       <fieldset class="field">
-        <legend>Start from</legend>
+        <legend>Start from <span class="hint inline" id="st-cards-count"></span></legend>
         <div id="st-cards" class="cards"></div>
         <p class="hint" id="st-tip" hidden></p>
       </fieldset>
@@ -181,14 +184,14 @@
       <fieldset class="field">
         <legend>Selected piece <button type="button" id="st-center" class="link">Centre it</button></legend>
         <div id="st-edit" class="edit"></div>
-        <p class="hint">Drag on the preview to move it, or use the arrow keys (Shift for bigger steps).</p>
+        <p class="hint">Drag on the preview to move it<span class="keys">, or use the arrow keys (Shift for bigger steps)</span>.</p>
       </fieldset>
-      <fieldset class="field">
-        <legend>Sewing on</legend>
+      <details class="field sewn-on" id="st-sewn">
+        <summary>Sewing on: <b id="st-fabric-name">Cotton</b></summary>
         <div id="st-fabric" class="chips plain" role="group" aria-label="Fabric"></div>
         <label class="check small"><input type="checkbox" id="st-baste"> Baste first (holds a towel or floated fabric flat)</label>
         <p class="hint" id="st-fabric-tip"></p>
-      </fieldset>
+      </details>
       <details class="steps">
         <summary>How to stitch it <span class="hint inline" id="st-steps-count"></span></summary>
         <p class="hint">Tap a step to see the design as it is after it. <button type="button" id="st-steps-all" class="link" hidden>Show it all</button>
@@ -229,9 +232,14 @@
     <div class="sew">
       <button type="button" id="play" class="ghost" aria-label="Watch it sew">▶︎ Watch it sew</button>
       <input id="progress" autocomplete="off" type="range" min="0" max="1000" value="1000" aria-label="Sewing progress">
-      <label class="check small"><input id="show-hoop" type="checkbox" checked> Hoop</label>
-      <label class="check small" title="Shows where the needle goes in most often: yellow is busy, red is too dense (more than 24 per mm²)"><input id="show-heat" type="checkbox"> Thickness</label>
-      <button type="button" id="item-open" class="ghost" title="See the design at its real size on a photo of the bib, towel or shirt">On my item</button>
+      <details class="views">
+        <summary class="ghost">View</summary>
+        <div class="views-menu">
+          <label class="check small"><input id="show-hoop" type="checkbox" checked> Hoop</label>
+          <label class="check small" title="Shows where the needle goes in most often: yellow is busy, red is too dense (more than 24 per mm²)"><input id="show-heat" type="checkbox"> Thickness</label>
+          <button type="button" id="item-open" class="ghost" title="See the design at its real size on a photo of the bib, towel or shirt">On my item</button>
+        </div>
+      </details>
       <button type="button" id="turn" class="ghost turn" aria-pressed="false" title="Turn the hoop sideways on screen. The file still loads the right way on the machine.">⟲ Turn hoop</button>
     </div>
     <div class="bottom">
@@ -251,13 +259,29 @@
   <p>Everything runs in your browser. Your pictures and files never leave your computer.</p>
   <p>A product of <a href="https://4gables.com/">4gables.com</a></p>
 </footer>
+<dialog id="done" class="names" aria-labelledby="done-title">
+  <form method="dialog">
+    <h2 id="done-title">Saved to your downloads</h2>
+    <p class="good" id="done-checked"></p>
+    <p class="warn" id="done-zip" hidden>It's a .zip: open it first (double-click it) and copy the .pes files inside, not the .zip. The machine can't read a .zip.</p>
+    <ol class="done-steps">
+      <li>Copy the file to a USB stick.</li>
+      <li>Plug the stick into the machine's USB port and touch the USB key on its screen.</li>
+      <li>Pick the design, then follow “How to stitch it” (or Sew along) at every pause.</li>
+    </ol>
+    <label class="check small"><input type="checkbox" id="done-never"> Don't show this again</label>
+    <div class="row"><button type="button" class="primary" id="done-close">Got it</button></div>
+  </form>
+</dialog>
 <dialog id="names" class="names" aria-labelledby="names-title">
   <form method="dialog">
     <h2 id="names-title">One for each name</h2>
     <p class="hint" id="names-what"></p>
     <textarea id="names-list" rows="6" placeholder="Emma&#10;Liam&#10;Olivia" spellcheck="false"></textarea>
     <p class="hint" id="names-note">One name per line, up to 40. You get one file for each, in a single .zip.</p>
-    <div class="row"><button type="submit" class="ghost" value="cancel">Cancel</button><button type="button" class="primary" id="names-make">Make the files</button></div>
+    <label class="check small" id="names-shrink-row"><input type="checkbox" id="names-shrink" checked> Make long names smaller so they fit</label>
+    <div class="names-thumbs" id="names-thumbs"></div>
+    <div class="row"><button type="submit" class="ghost" value="cancel" id="names-cancel">Cancel</button><button type="button" class="primary" id="names-make">Make the files</button></div>
   </form>
 </dialog>
 <dialog id="spools" class="names" aria-labelledby="spools-title">

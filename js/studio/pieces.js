@@ -86,6 +86,34 @@ export function archTight(p) {
   }
   return depth > 0.8 * rho;
 }
+// Arched lettering that wraps more than ~55% of the way round its curve (a long name on the bib's small arch) reads
+// as a ring and runs into what's under it: the curve size that brings it to 45%, or null when it's fine.
+export function archRoom(p) {
+  if (p.kind !== "text" || (p.shape !== "up" && p.shape !== "down")) return null;
+  const l = letters(p.text, p.font, p.size, p.style);
+  if (!l.parts.length) return null;
+  const xs = l.parts.flatMap(([q]) => q.map((v) => v[0])), span = Math.max(...xs) - Math.min(...xs);
+  const a = Math.max(p.radius, 8), b = Math.max(p.ry ?? p.radius, 8), per = Math.PI * (3 * (a + b) - Math.sqrt((3 * a + b) * (a + 3 * b)));
+  if (span <= per * 0.55) return null;
+  const k = span / (per * 0.45);
+  return { radius: Math.round(a * k), ry: Math.round(b * k) };
+}
+// The first other piece whose stitches come within 1 mm of p's (lettering run into a heart, say), or null. Patches
+// are left out: lettering on a filled patch is meant to sit on it.
+export function touching(p, pieces) {
+  if (p.kind === "frame") return null;
+  const mine = new Set();
+  for (const q of pieceStitches(p)) for (const [x, y] of q) mine.add(Math.round(x) + "," + Math.round(y));
+  for (const o of pieces) {
+    if (o === p || o.id === p.id || (o.kind === "frame" && o.border === "patch")) continue;
+    for (const q of pieceStitches(o)) for (const [x, y] of q) {
+      const X = Math.round(x), Y = Math.round(y);
+      for (let dx = -1; dx <= 1; dx++) for (let dy = -1; dy <= 1; dy++) if (mine.has(X + dx + "," + (Y + dy))) return o;
+    }
+  }
+  return null;
+}
+
 // extra points so long straight runs follow the curve
 function densify(p, step) {
   const out = [p[0]];

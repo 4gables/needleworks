@@ -35,7 +35,7 @@ const state = {
   showHoop: store.get("showHoop", true),
   // hoop turned sideways on screen, per tab; the bookmark reads best lying down
   turn: { picture: false, bookmark: true, design: false, open: false, ...store.get("turn", {}) },
-  bm: { name: store.get("bm.name", "ashley"), font: store.get("bm.font", FONTS[0].family), color: (c => OLD_THREADS[c] || c)(store.get("bm.color", RED)), fabric: store.get("bm.fabric", "pink"), lead: store.get("bm.lead", true), tail: store.get("bm.tail", true), blank: store.get("bm.blank", false) },
+  bm: { name: store.get("bm.name", "Emma"), font: store.get("bm.font", FONTS[0].family), color: (c => OLD_THREADS[c] || c)(store.get("bm.color", RED)), fabric: store.get("bm.fabric", "pink"), lead: store.get("bm.lead", true), tail: store.get("bm.tail", true), blank: store.get("bm.blank", false) },
   brand: BRANDS[store.get("brand", "")] ? store.get("brand", "") : "",   // thread brand for spool numbers ("" = Brother only)
   spools: store.get("spools", {}),   // { brand: [spool numbers owned] }
   pic: { mine: store.get("pic.mine", false), style: "fill", cross: 2.5, file: null, bitmap: null, key: 0, skip: [], colors: 4, size: 100, angle: 45, bg: true, density: store.get("pic.density", "standard"), req: 0, colorsInfo: [] },
@@ -95,20 +95,20 @@ function setView(v) {
     st.colorChanges ? `<span>${st.colorChanges} ${st.colorChanges === 1 ? "pause" : "pauses"}</span>` : "",
     `<span>≈ ${minutes} min</span>`,
     v.split ? `<span>${v.split.length} hoopings</span>` : fits ? "" : `<span class="bad">Too big for the ${h.name}</span>`,
-    snips ? `<span title="The machine only trims jumps longer than its 'jump stitch not to trim' setting (5 mm at the lowest). The thread is locked at both ends, so these are safe to snip after stitching.">${snips} short ${snips === 1 ? "jump" : "jumps"} to snip</span>` : "",
+    snips ? `<span title="The machine only trims jumps longer than its 'jump stitch not to trim' setting (5 mm at the lowest). The thread is locked at both ends, so these are safe to snip after stitching.">${snips} loose ${snips === 1 ? "thread" : "threads"} to snip after</span>` : "",
   ].join("");
   const seen = new Set(), mt = machineThreadList(v);
   $("threads").innerHTML = v.cache.blocks.filter((b) => !(v.hide && v.hide.has(b.index)))
     .map((b) => {
       const t = mt[b.index] || nearestBrotherThread(b.color), label = v.threadLabel ? v.threadLabel(b, t) : `Brother ${t.name}`;
       const k = b.color + label; if (seen.has(k)) return ""; seen.add(k);
-      return `<li><i style="background:${b.color}"></i><span>${label}<br><small>${spool(b.color) || b.color}</small></span></li>`;
+      return `<li><i style="background:${b.color}"></i><span>${label}${spool(b.color) ? `<br><small>${spool(b.color)}</small>` : ""}</span></li>`;
     }).join("");
   v.facts = [`${st.widthMm.toFixed(0)} × ${st.heightMm.toFixed(0)} mm (${inch(st.widthMm)} × ${inch(st.heightMm)} in)`, `${st.stitches.toLocaleString()} stitches`,
     `${st.colorChanges} ${st.colorChanges === 1 ? "pause" : "pauses"}`, `≈ ${minutes} min`, `${h.machineName} ${h.name}`];
   $("download").disabled = !fits; $("share").disabled = !fits || !!v.split;
   $("sheet-print").disabled = $("along-open").disabled = !fits || !!v.split; $("cut-file").hidden = !v.sheet?.cut?.length; $("names-open").hidden = !!v.split || !namesFor();
-  $("download").textContent = v.split ? `Download ${v.split.length} files (.zip)` : fits ? `Download ${v.filename}` : "Too big for this hoop";
+  $("download").textContent = v.split ? `Download ${v.split.length} files (.zip)` : !fits ? "Too big for this hoop" : v.action || `Download ${v.filename}`;
   paint();
 }
 // moves between 1 and 5 mm: too short for the PE900 to trim (its lowest setting is 5 mm), left as loose thread
@@ -252,13 +252,24 @@ $("download").onclick = () => {
       files.push({ name: p.filename, bytes });
     }
     saveFile(new Blob([zip(files)], { type: "application/zip" }), v.filename);
+    downloaded(v, true);
     return;
   }
   // never hand out a file we haven't proven decodes to exactly this design
   const check = validatePES(v.bytes, v.verifyAgainst || null, hoop());
   if (!check.ok) { showError("Download stopped: " + check.error); return; }
   saveFile(new Blob([v.bytes], { type: "application/octet-stream" }), v.filename);
+  downloaded(v, false);
 };
+// what was checked and the next steps at the machine, until "Don't show this again"
+function downloaded(v, zipped) {
+  if (store.get("doneSeen", false)) return;
+  const h = hoop(), s = v.file && designStats(v.file);
+  $("done-checked").textContent = `Checked: it opens on a ${h.machineName} in the ${h.name}${s ? `, ${s.widthMm.toFixed(0)} × ${s.heightMm.toFixed(0)} mm, ${s.colorChanges ? `${s.colorChanges} ${s.colorChanges === 1 ? "pause" : "pauses"}` : "no pauses"}` : ""}.`;
+  $("done-zip").hidden = !zipped;
+  $("done").showModal();
+}
+$("done-close").onclick = () => { if ($("done-never").checked) store.set("doneSeen", true); $("done").close(); };
 
 // sew sheet: the design at 1:1 on the hoop field, the steps, appliqué shapes; printed from a hidden block
 $("sheet-print").onclick = () => {
@@ -373,6 +384,8 @@ $("names-open").onclick = () => {
   $("names-what").textContent = `Each name takes the place of “${n.what}”. Everything else stays the same.`;
   $("names-list").value = store.get("names", ""); $("names-note").classList.remove("warn");
   $("names-note").textContent = "One name per line, up to 40. You get one file for each, in a single .zip.";
+  $("names-shrink-row").hidden = !!n.bookmark;   // (the bookmark shrinks a long name by itself)
+  $("names-thumbs").innerHTML = ""; $("names-cancel").textContent = "Cancel";
   $("names").showModal();
 };
 $("names-make").onclick = async () => {
@@ -381,24 +394,29 @@ $("names-make").onclick = async () => {
   store.set("names", list.join("\n"));
   if (!list.length) { $("names-note").textContent = "Type at least one name."; return; }
   $("names-make").disabled = true; $("names-note").textContent = "Making the files…";
-  const files = [], bad = [], used = new Set();
+  const files = [], bad = [], used = new Set(), made = [];
   for (const name of list) {
     await new Promise((r) => setTimeout(r, 0));
     try {
-      const { pattern } = n.build(name), bytes = writePES(pattern), check = validatePES(bytes, pattern, hoop());
+      const { pattern, smaller } = n.build(name, $("names-shrink").checked), bytes = writePES(pattern), check = validatePES(bytes, pattern, hoop());
       if (!check.ok) throw new Error(check.error);
       let base = safeName(name, "name") + (n.bookmark ? "_bookmark" : ""), f = base, k = 2;
       while (used.has(f)) f = `${base}_${k++}`;
-      used.add(f); files.push({ name: f + ".pes", bytes });
+      used.add(f); files.push({ name: f + ".pes", bytes }); made.push({ name, pattern, smaller });
     } catch (err) { bad.push(`${name} (${/hoop fits|too big/i.test(err.message) ? "too long for the hoop" : err.message})`); }
   }
   $("names-make").disabled = false;
+  // every name as it'll sew, to look over (is one crowded?)
+  $("names-thumbs").innerHTML = made.map((m, i) => `<figure><canvas data-i="${i}"></canvas><figcaption>${escapeHtml(m.name)}${m.smaller ? " (smaller)" : ""}</figcaption></figure>`).join("");
+  for (const c of $("names-thumbs").querySelectorAll("canvas")) {
+    const m = made[+c.dataset.i]; draw(c, n.bookmark ? turnPattern(m.pattern, false) : m.pattern, { pad: 3, fabric: "white" });
+  }
   if (files.length) {
     saveFile(new Blob([zip(files)], { type: "application/zip" }), `${safeName(n.what, "names")}_names.zip`);
+    $("names-cancel").textContent = "Done";
   }
-  if (!bad.length) { $("names").close(); return; }
-  $("names-note").classList.add("warn");
-  $("names-note").textContent = `${files.length ? `Made ${files.length} ${files.length === 1 ? "file" : "files"}. ` : ""}Couldn't make: ${bad.join(", ")}.`;
+  $("names-note").classList.toggle("warn", bad.length > 0);
+  $("names-note").textContent = `${files.length ? `Made ${files.length} ${files.length === 1 ? "file" : "files"}, saved as one .zip (open it and copy the .pes files to the USB stick). ` : ""}${bad.length ? `Couldn't make: ${bad.join(", ")}.` : ""}`;
 };
 
 // ---------- thread brand ----------
@@ -471,7 +489,7 @@ function refresh() { if (state.mode === "bookmark") makeBookmark(); else if (sta
 // ---------- tabs ----------
 const MODES = ["picture", "bookmark", "design", "open"];
 function setMode(mode, push = true) {
-  if (!MODES.includes(mode)) mode = "picture";
+  if (!MODES.includes(mode)) mode = "design";
   state.mode = mode;
   document.body.dataset.mode = mode;
   for (const m of MODES) $("panel-" + m).hidden = m !== mode;
@@ -507,7 +525,7 @@ function bookmarkUI() {
   $("bm-lead-text").textContent = `${kind} before the name`; $("bm-tail-text").textContent = `${kind} after the name`;
   $("bm-name").disabled = state.bm.blank; $("bm-lettering").classList.toggle("off", state.bm.blank);
   $("bm-fonts").innerHTML = FONTS.map((f) => `<button type="button" data-f="${f.family}" title="${f.name}${f.note ? " · " + f.note : ""}" aria-pressed="${f.family === state.bm.font}">
-    <span class="sample" style="font-family:'${f.family}'">${escapeHtml(stitchedName() || "ashley")}</span>
+    <span class="sample" style="font-family:'${f.family}'">${escapeHtml(stitchedName() || "Emma")}</span>
     <span class="fname">${f.name}${f.note ? " · " + f.note : ""}</span></button>`).join("");
   const custom = !THREADS.includes(state.bm.color);
   $("bm-colors").innerHTML = THREADS.map((c) => `<button type="button" data-c="${c}" style="background:${c}" aria-pressed="${c === state.bm.color}" aria-label="Brother ${nearestBrotherThread(c).name}" title="Brother ${nearestBrotherThread(c).name}"></button>`).join("")
@@ -524,7 +542,7 @@ const stitchedName = () => state.bm.name.trim();
 function escapeHtml(s) { return s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]); }
 $("bm-name").addEventListener("input", (e) => {
   state.bm.name = e.target.value; store.set("bm.name", state.bm.name);
-  document.querySelectorAll("#bm-fonts .sample").forEach((s) => (s.textContent = stitchedName() || "ashley"));
+  document.querySelectorAll("#bm-fonts .sample").forEach((s) => (s.textContent = stitchedName() || "Emma"));
   clearTimeout(bmTimer); bmTimer = setTimeout(makeBookmark, 350);
 });
 $("bm-fonts").onclick = (e) => { const b = e.target.closest("button"); if (!b) return; state.bm.font = b.dataset.f; store.set("bm.font", b.dataset.f); bookmarkUI(); makeBookmark(); };
@@ -586,7 +604,7 @@ worker.onerror = (e) => { jobDone(); busy(false); if (state.mode === "picture") 
 function paletteUI() {
   const cols = state.pic.colorsInfo.filter((c) => !c.background && c.area > 0);
   $("pic-palette").innerHTML = cols.map((c) => `<button type="button" data-id="${c.id}" aria-pressed="${!state.pic.skip.includes(c.id)}">
-    <i style="background:${c.hex}"></i><span>Brother ${state.pic.machineName?.get(c.hex) || c.thread.name}<small>${spool(c.hex) || c.hex}</small></span></button>`).join("");
+    <i style="background:${c.hex}"></i><span>Brother ${state.pic.machineName?.get(c.hex) || c.thread.name}${spool(c.hex) ? `<small>${spool(c.hex)}</small>` : ""}</span></button>`).join("");
 }
 $("pic-palette").onclick = (e) => {
   const b = e.target.closest("button"); if (!b) return;
@@ -728,11 +746,11 @@ async function openDesign(file) {
     const base = safeName(file.name.replace(/\.[^.]+$/, ""), "design");
     $("open-info").hidden = false;
     $("open-info").innerHTML = `<b>${escapeHtml(file.name)}</b>
-      <span>${d.format.toUpperCase()}${pesVersion(d.version)} · ${st.stitches.toLocaleString()} stitches · ${d.threads.length || "no"} thread colours</span>
+      <span title="${d.format.toUpperCase()}${pesVersion(d.version)}">${st.stitches.toLocaleString()} stitches · ${d.threads.length || "no"} thread colours${d.threads.length ? " (named as the file names them)" : ""}</span>
       ${fits ? `<span class="good">Fits the ${h.machineName} ${h.name}.</span>` : `<span class="warn">Too big for the ${h.name}: it's ${st.widthMm.toFixed(0)} × ${st.heightMm.toFixed(0)} mm.</span>`}
       ${repair ? `<span class="warn">As it is, this file would load cut off on a Brother machine (shifted, about half shown). The download here is fixed.</span>`
         : isPes ? "" : `<span>You can download it as a PES file for your machine.</span>`}`;
-    state.opened = { d, bytes, out, isPes, base, opts: { scale: 1, tiny: false, thin: false } };
+    state.opened = { d, bytes, out, isPes, repair, base, opts: { scale: 1, tiny: false, thin: false } };
     $("doctor-fix").innerHTML = ""; setMode("open"); openView();
   } catch (err) { console.error(err); setMode("open"); showError(err.message || "This file couldn't be read."); }
 }
@@ -742,6 +760,8 @@ function openView() {
   const p = changed ? fix(o.d, o.opts) : o.d;
   const v = { pattern: p, verifyAgainst: changed || !o.isPes ? p : null, bytes: changed ? writePES(p) : o.out,
     filename: `${o.base}${scale !== 1 ? `_${Math.round(scale * 100)}pct` : ""}.pes`, fabric: "linen", source: changed || !o.isPes ? null : o.bytes,
+    // (a file she already has: say what the button gives her)
+    action: changed || o.repair ? "Save fixed copy" : o.isPes ? "Save a copy" : "Save as PES",
     threadLabel: (b, t) => (/[a-z]{2}/i.test(b.name || "") ? escapeHtml(b.name) : `Brother ${t.name}${b.name ? " · " + escapeHtml(b.name) : ""}`) };
   state.views.open = v; setView(v); doctorUI(p);
 }
@@ -751,7 +771,8 @@ function doctorUI(p) {
   const say = (ok, text) => items.push(`<li class="${ok ? "good" : "warn"}">${text}</li>`);
   say(!c.hot, c.hot ? `${c.hot} ${c.hot === 1 ? "spot is" : "spots are"} very dense (up to ${c.max} needle hits per mm²; sold designs stay under 25): thread can break or the fabric pucker there. Turn on <b>Thickness</b> under the preview to see ${c.hot === 1 ? "it" : "them"}.`
     : `Thickness is fine: the densest spot has ${c.max} needle hits per mm².`);
-  if (c.tiny) say(false, `${c.tiny} ${c.tiny === 1 ? "stitch is" : "stitches are"} shorter than 0.3 mm. They pile up thread and can break it.`);
+  // (a few are normal in sold designs; only many are worth a worry)
+  if (c.tiny > Math.max(50, c.stitches * 0.01)) say(false, `${c.tiny} stitches are shorter than 0.3 mm. They pile up thread and can break it.`);
   if (c.satinGap && c.satinGap > 0.6) say(false, `The satin stitches are far apart (${c.satinGap.toFixed(1)} mm on each edge; well-made designs 0.3–0.4 mm), so fabric may show through.${o.scale > 0.85 ? " Shrinking it a little fills it in." : ""}`);
   if (c.long) say(true, `${c.long} ${c.long === 1 ? "stitch is" : "stitches are"} longer than 10 mm. Fine on a wall hanging; on clothes they can snag.`);
   say(true, c.perSqIn > 1500 ? `Heavy stitching (about ${c.perSqIn.toLocaleString()} stitches per square inch): use cut-away stabilizer, or two layers of tear-away.`
@@ -821,7 +842,7 @@ const studio = initStudio({
   },
 });
 
-setMode((location.hash || "#picture").slice(1), false);
+setMode((location.hash || "#design").slice(1), false);
 
 // installable and offline (sw.js); a picture or design shared to the installed app opens straight away
 if ("serviceWorker" in navigator && location.protocol === "https:") navigator.serviceWorker.register("sw.js").catch(() => {});

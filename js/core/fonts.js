@@ -1,6 +1,6 @@
 // Bookmark lettering fonts: CSS @font-face families in css/app.css. Print fonts get dashes instead of swashes.
 export const FONTS = [
-  { family: "NW Sacramento", name: "Sacramento", note: "like the photo" },
+  { family: "NW Sacramento", name: "Sacramento", note: "flowing, joined" },
   { family: "NW Allura", name: "Allura" },
   { family: "NW Parisienne", name: "Parisienne" },
   { family: "NW Corinthia", name: "Corinthia" },
