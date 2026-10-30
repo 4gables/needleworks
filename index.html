@@ -82,6 +82,14 @@
       <button type="button" id="pic-rotate" class="ghost" hidden>⟳ Rotate picture</button>
       <p class="hint" id="pic-sample-note" hidden>Showing a sample flower. Choose your own picture above to stitch it instead.</p>
       <div id="pic-settings" class="settings" hidden>
+        <fieldset class="field">
+          <legend>Style</legend>
+          <div id="pic-style" class="chips plain">
+            <button type="button" data-s="fill" aria-pressed="true">Filled</button>
+            <button type="button" data-s="line" aria-pressed="false">Line drawing</button>
+            <button type="button" data-s="cross" aria-pressed="false">Cross-stitch</button>
+          </div>
+        </fieldset>
         <div class="field">
           <label for="pic-colors">Thread colours <output id="pic-colors-out">4</output></label>
           <input id="pic-colors" autocomplete="off" type="range" min="1" max="8" value="4">
@@ -90,11 +98,15 @@
           <label for="pic-size">Size <output id="pic-size-out">100 mm</output></label>
           <input id="pic-size" autocomplete="off" type="range" min="20" max="176" value="100">
         </div>
-        <div class="field">
+        <div class="field" id="pic-cross-row" hidden>
+          <label for="pic-cross">Cross size <output id="pic-cross-out">2.5 mm</output></label>
+          <input id="pic-cross" autocomplete="off" type="range" min="1.5" max="4" step="0.5" value="2.5">
+        </div>
+        <div class="field" id="pic-angle-row">
           <label for="pic-angle">Fill direction <output id="pic-angle-out">45°</output></label>
           <input id="pic-angle" autocomplete="off" type="range" min="0" max="175" step="5" value="45">
         </div>
-        <fieldset class="field">
+        <fieldset class="field" id="pic-density-row">
           <legend>Fill</legend>
           <div id="pic-density" class="chips">
             <button type="button" data-d="solid" aria-pressed="true">Solid</button>

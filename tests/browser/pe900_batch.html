@@ -45,6 +45,15 @@ for (const src of pics) {
     try { const p = digitize(img, analyze(img, opts), opts).design.pattern(); await save(tag, turn ? turnPattern(p) : p); }
     catch (e) { bad++; log(`ERROR ${tag}: ${e.message}`); }
   }
+  // the other picture styles: line drawing (redwork) and cross-stitch
+  for (const [style, colors, size, cross] of [["line", 4, 120], ["line", 8, 170], ["cross", 4, 100, 2.5], ["cross", 8, 160, 2]]) {
+    const sz = workingSize(bmp.width, bmp.height, size, hoop), c = new OffscreenCanvas(sz.w, sz.h), ctx = c.getContext("2d");
+    ctx.imageSmoothingQuality = "high"; ctx.drawImage(bmp, 0, 0, sz.w, sz.h);
+    const img = ctx.getImageData(0, 0, sz.w, sz.h), opts = { colors, removeBackground: true, skip: [], hoop, style, cross };
+    const tag = `pic_${src.split("/").pop().split(".")[0]}_${style}_c${colors}_s${size}`;
+    try { await save(tag, digitize(img, analyze(img, opts), opts).design.pattern()); }
+    catch (e) { bad++; log(`ERROR ${tag}: ${e.message}`); }
+  }
   log(`${src}: done`);
 }
 log(`DONE ${n} files, ${bad} problems`);

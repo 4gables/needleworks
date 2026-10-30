@@ -145,6 +145,12 @@ Embroidery-file tools for home machines. Two implementations of the same engine:
   sewed a stitch out from the origin. Untouched files still download as their own bytes. `tests/doctor.test.mjs`
   (CI) validates every fix on the fixtures (and tests/external when present). "Thickness" under the preview overlays
   the hits per mm² (12+ yellow, 18+ orange, 24+ red) on every tab, over the stitches faded so it shows on black.
+- Picture styles (`opts.style`, Picture tab "Style"): Filled (`build`), Line drawing (`lineArt`: outlines of shapes
+  over 1.5 mm across, drawn on one side only where two colours meet, plus thin shapes' centre lines, thickened to 2 px,
+  skeletonized and walked like lettering so each line is sewn out and back; one thread, the darkest colour) and
+  Cross-stitch (`crossStitch`: `cross` mm cells, majority colour or empty when mostly background; a row run is two
+  diagonal zigzags, out and back, with one straight stitch up its last edge; climbing every cell edge drew bowties).
+  The batch adds 4 line/cross cases per picture. Not done: "make it stitchable" (thicken/drop too-fine detail).
 - Sew sheet + cut file (`js/sheet.js`, links under Download): "Print a sew sheet" fills a hidden `#sheet` and calls
   `window.print()` (print CSS hides the app). Page 1 is the hoop field at 1:1 (SVG sized in mm) with the design centred
   as the machine centres it, a crosshair and a 5 cm check bar; page 2 the steps with the machine's thread names

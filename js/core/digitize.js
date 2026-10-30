@@ -374,8 +374,9 @@ export function toPalette(analysis, palette) {
 
 export function digitize(img, analysis, opts = {}) {
   let res = opts.res || DEFAULTS.res;
+  const make = opts.style === "line" ? lineArt : opts.style === "cross" ? crossStitch : build;
   for (let tries = 0; ; tries++) {
-    try { return build(img, analysis, { ...opts, res }); }
+    try { return make(img, analysis, { ...opts, res }); }
     catch (e) { if (!e.overBy || tries === 3) throw e; res *= e.overBy * 1.01; }
   }
 }
@@ -493,6 +494,84 @@ function build(img, analysis, opts) {
 }
 
 // fit the picture's longest side to sizeMm, capped by the hoop
+// Line drawing (redwork): every shape's outline and every thin line's centre, in the picture's darkest colour. The
+// lines are walked like lettering (each one out and back), so a connected drawing sews without a trim.
+function lineArt(img, analysis, opts) {
+  const o = { ...DEFAULTS, ...opts }, { w, h, labels, colors } = analysis, res = o.res;
+  const used = colors.filter((c) => !c.background && c.area > 0 && !(o.skip || []).includes(c.id));
+  if (!used.length) throw new Error("Nothing to stitch. Try more colours or turn off background removal.");
+  const ink = used.reduce((a, c) => (c.lightness < a.lightness ? c : a)), mine = new Set(used.map((c) => c.id));
+  const cx = w / 2, cy = h / 2, toMm = (p) => p.map(([x, y]) => [(x - cx) / res, (y - cy) / res]);
+  const lines = { w, h, data: new Uint8Array(w * h) };
+  for (const col of used) {
+    const mask = { w, h, data: new Uint8Array(w * h) };
+    for (let i = 0; i < w * h; i++) mask.data[i] = labels[i] === col.id ? 1 : 0;
+    const dt = distanceTransform(mask), { labels: cl, count } = label(mask), wide = new Uint8Array(count + 1);
+    for (let i = 0; i < w * h; i++) if (cl[i] && dt[i] > 0.75 * res) wide[cl[i]] = 1;   // over 1.5 mm across somewhere
+    for (let i = 0; i < w * h; i++) {
+      if (!cl[i]) continue;
+      if (!wide[cl[i]]) { lines.data[i] = 1; continue; }   // a thin line: its centre comes from the skeleton
+      // an outline, drawn on one side only where two colours meet (the lower id), so it isn't doubled
+      const x = i % w, nb = [x > 0 ? i - 1 : -1, x < w - 1 ? i + 1 : -1, i - w, i + w];
+      if (nb.some((j) => j < 0 || j >= w * h || (labels[j] !== col.id && (!mine.has(labels[j]) || labels[j] > col.id)))) lines.data[i] = 1;
+    }
+  }
+  // thicken the 1 px outlines so the skeleton follows them smoothly
+  const thick = { w, h, data: lines.data.slice() };
+  for (let i = 0; i < w * h; i++) if (lines.data[i]) { const x = i % w; if (x < w - 1) thick.data[i + 1] = 1; if (i + w < w * h) thick.data[i + w] = 1; }
+  const comps = order(skeletonEdges(thick, 3, { spur: 1 }));
+  const d = new Design(o.hoop);
+  d.color(ink.hex, ink.thread.name);
+  let shapes = 0;
+  for (const comp of comps) {
+    const walk = comp.flatMap(([p], k) => run(toMm(p), 2.0).slice(k ? 1 : 0));
+    if (walk.length > 1) { d.path(walk); shapes++; }
+  }
+  if (!d.stitches.length) throw new Error("No lines found to stitch. Try more colours.");
+  d.finish();
+  return { design: d, summary: [{ ...ink, shapes, kinds: ["run"] }], fine: { narrowMm2: 0, hairlines: 0 } };
+}
+
+// Cross-stitch: the picture on a grid of `cross` mm cells, each the colour most of its pixels have (or left empty when
+// most are background). A run of cells in a row is two zigzags of diagonals (bottom-top-bottom… out, top-bottom-top…
+// back), so the only straight stitch is one up the run's last edge; climbing every cell edge made lone cells bowties.
+function crossStitch(img, analysis, opts) {
+  const o = { ...DEFAULTS, ...opts }, { w, h, labels, colors } = analysis, res = o.res;
+  const c = (o.cross || 2.5) * res, gw = Math.floor(w / c), gh = Math.floor(h / c), grid = new Int32Array(gw * gh).fill(-1);
+  const bg = new Set(colors.filter((k) => k.background || (o.skip || []).includes(k.id)).map((k) => k.id));
+  for (let gy = 0; gy < gh; gy++) for (let gx = 0; gx < gw; gx++) {
+    const n = new Map();
+    for (let y = Math.floor(gy * c); y < Math.floor((gy + 1) * c); y++) for (let x = Math.floor(gx * c); x < Math.floor((gx + 1) * c); x++) {
+      const l = labels[y * w + x]; n.set(l, (n.get(l) || 0) + 1);
+    }
+    let best = -1, bn = 0, fg = 0, all = 0;
+    for (const [l, k] of n) { all += k; if (bg.has(l)) continue; fg += k; if (k > bn) { bn = k; best = l; } }
+    if (fg * 2 > all) grid[gy * gw + gx] = best;
+  }
+  const used = colors.filter((k) => grid.includes(k.id)).sort((a, b) => b.lightness - a.lightness);
+  if (!used.length) throw new Error("Nothing to stitch. Try more colours or bigger crosses.");
+  const ox = (gw * c) / 2, oy = (gh * c) / 2, mm = (gx, gy) => [(gx * c - ox) / res, (gy * c - oy) / res];
+  const d = new Design(o.hoop), summary = [];
+  for (const col of used) {
+    d.color(col.hex, col.thread.name);
+    let crosses = 0;
+    for (let gy = 0; gy < gh; gy++) {
+      const runs = [];
+      for (let gx = 0; gx < gw; gx++) if (grid[gy * gw + gx] === col.id) { if (runs.length && runs[runs.length - 1][1] === gx - 1) runs[runs.length - 1][1] = gx; else runs.push([gx, gx]); }
+      if (gy % 2) runs.reverse();   // serpentine: odd rows from the right
+      for (const [a, b] of runs) {
+        const n = b - a + 1, pts = [];
+        for (let k = 0; k <= n; k++) pts.push(mm(a + k, gy + (k % 2 ? 0 : 1)));
+        for (let k = n; k >= 0; k--) pts.push(mm(a + k, gy + (k % 2 ? 1 : 0)));
+        d.path(pts); crosses += n;
+      }
+    }
+    summary.push({ ...col, shapes: crosses, kinds: ["cross"] });
+  }
+  d.finish();
+  return { design: d, summary, fine: { narrowMm2: 0, hairlines: 0 } };
+}
+
 export function workingSize(imgW, imgH, sizeMm, hoop, res = DEFAULTS.res) {
   const maxW = hoop.w - 2 * MARGIN - 2, maxH = hoop.h - 2 * MARGIN - 2;
   let s = sizeMm / Math.max(imgW, imgH);
