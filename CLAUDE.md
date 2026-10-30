@@ -156,7 +156,8 @@ Embroidery-file tools for home machines. Two implementations of the same engine:
   Cross-stitch (`crossStitch`: `cross` mm cells, majority colour or empty when mostly background; a row run is two
   diagonal zigzags, out and back, with one straight stitch up its last edge; climbing every cell edge drew bowties).
   The batch adds 4 line/cross cases per picture. Not done: "make it stitchable" (thicken/drop too-fine detail).
-- Quilting (`js/studio/quilt.js`, frame `quilt`: stipple | echo): the free space is the frame inset 3-4.5 mm minus a
+- Quilting (`js/studio/quilt.js`, frame `quilt`: stipple | echo): (stipple and echo rewritten 2026-10-30: see "Before round 4"; the
+  description that follows is the first version) the free space is the frame inset 3-4.5 mm minus a
   2.5 mm disc round every other piece's stitches, on a 4 px/mm mask. Stipple: 7 mm cells wholly free, a random (fixed
   seed) spanning tree, the closed walk round it through the 2 x 2 sub-cells (each once, never crossing), points nudged
   (0.35 of a sub-cell) and averaged over ~9 mm. The tree is depth-first but turns rather than goes straight on (odds
@@ -325,6 +326,74 @@ Embroidery-file tools for home machines. Two implementations of the same engine:
   2 mm straight (trims -5%, loose threads -12% on the batch). Quilt label starter uses Quicksand 9 mm (Josefin's
   single-storey a merges its stem into the bowl and reads as o; still true for Josefin and small Quicksand: open).
   Tried and reverted: split satin 7-14 mm in the doctor's re-stitch (tapered ends piled 39-49 hits/mm²).
+  Before round 4 (2026-10-30; four parallel worktree agents, merged, then UI: Picture tab "How to stitch it", a
+  "runs into" warning beside Download, new pieces placed beside the others (`freeSpot`/`recentre`), roving tabindex on
+  the starter row, piece buttons named with their piece, field edges at 3:1 (`--field-line`), oversized designs
+  fitted whole (`v.whole`); the checkup's thickness at every grid offset (`peak` in doctor.js)):
+  Batch after merging: 396/396 ok, 153 files changed, stitches -1.5%, same-hole 0, script bookmarks byte-identical.
+  VM: FITS 18/18; PE-DESIGN opened peace at 150 %, appliqué AB, mug rug, cross-stitch.
+  - Picture travel (2026-10-30): `makeRouter` (digitize.js) is the shared 0.5 mm-cell A* (`routeFill` refactored onto
+    it, byte-identical). In `build`, a move between a colour's sections or shapes (up to 10 mm, `TRAVEL`) travels, with
+    stitches up to 2.5 mm, through cells this colour's unsewn fills (0.25 mm inside) or a later colour's solid fill
+    (over 0.6 mm inside a non-speck shape) will cover; at most 2 mm on finished own-colour stitches, route at most 1.5 x
+    the gap + 3 mm. Moves under 2 mm are always sewn (a jump that short is never trimmed: a loose thread plus two locks).
+    Shapes go nearest-first, preferring a hidden route, then a jump over 5 mm (trimmed) over a 2-5 mm one (loose).
+    Batch pictures: trims -9%, loose threads -59%, stitches +0.4%. Remaining jumps cross background or earlier colours.
+  - Tatami (pictures and patches): the step to the next row is split into pieces <= 3 mm (it reached 7.6 mm along
+    shallow edges) and a row-end stitch over 4 mm is halved: stitches over 4 mm 1492 -> 60, +1.4% stitches.
+  - Cross-stitch: runs chained by Dijkstra over cell corners (edge step costs 1 beside this colour, 2 beside another,
+    4 over open fabric, back over a sewn diagonal 1; limit 6), else a jump preferring over 5 mm. A cell with no
+    same-colour cell within 2 and no other colour touching it is dropped (dropping every lone cell erased sprigs).
+    Trims -78%, no loose threads, stitches -41% (locks).
+  - Line drawing: whole pieces under 2 mm dropped (pruning 2 mm dead ends cut small lettering apart; `spur: 1` kept);
+    a line end within 2 mm of another drawing is joined (out-and-back tour, back over the same stitch; 3 mm drew bars
+    between letters); each drawing entered nearest the needle, preferring over 5 mm to 2-5 mm. Trims -78%, no loose.
+  - Doctor re-stitch (`restitch`, 2026-10-30): wide satin columns stay satin (filled only past 30 mm median width);
+    stitches over 6.8 mm are split (`split`: pieces <= 5.5 mm, cuts staggered by a quarter piece in golden-ratio steps)
+    because the writer halves anything over 7 mm out of sight of `relieve`; crowded edge hits become short stitches
+    (`room`, 16 per 1 mm window on a 0.5 mm grid); cuts slide along their own stitch out of crowded spots (`spread`,
+    then `slide`). Filling each wide column on its own (everything over 8 mm until then) criss-crossed peace's ring:
+    trims 49 -> 103 at 150 %, now 48. A rebuilt column ends on the edge its run ended on (ursula 150 %: trims 24 -> 3,
+    loose 20 -> 1). Dropped: fixed-place split cuts (33-40 hits/mm²), filling columns over 25 mm (peace 250 % trims 54->82).
+  - `slide()` (end of every `fix`): where a 1 mm window at any 0.1 mm offset has over 24 hits in one block, a point in
+    the middle of a straight line (>= 5 stitches from any command) slides along it, both stitches kept 1-6.8 mm.
+  - `landJumps` (on open and in every `fix`): a jump lands on its first stitch. The writer puts the needle down where a
+    jump ends; all 49 of peace.pes's jumps stop 0.5-12 mm short, so re-saving gave 31 loose threads instead of 3.
+    `fileBlocks` starts runs at the first stitch for the same reason (a Design-tab file piece: 31 -> 3). `fix` keeps the
+    stitch a jump lands on and splits stitches over 6.8 mm itself.
+  - Shrinking turns on Remove tiny stitches and Thin; the checkup says how many jumps shrinking brought under 5 mm, flags
+    stitches over 12.1 mm with a "Split long stitches" fix, and shows the 10 mm note only when none are over 12.
+    Open: the checkup's "Thickness" still counts at grid offset 0 only (peace 17 vs 25 at another offset).
+  - Print-font stroke ends reach the ink's edge (`reachEnds` in raster.js, `skeletonEdges(..., { reach: true })`, print
+    only): thinning stops ~half a stroke short, so a single-storey a (Josefin, small Quicksand) lost its stem's ends
+    inside the bowl's satin and sewed as o. Lettering is sized from the strokes before that (`info.sized`, also the
+    bookmark's band), so sizes are unchanged. Loops count twice for the loose-end test; dots aren't extended.
+  - Print letters always jump between separate pieces (`gap` on the first stroke of each piece after the first, through
+    `letters` -> shapes -> `stitchLetters` -> placement -> `d.path(q, true, q.gap)`; towel moves it to the lattice;
+    bookmark: `print && k > 0 && j === 0`): the reached i stem came within 2 mm of its dot and Design.path sewed it as a
+    stitch. Script unchanged.
+  - Appliqué letters: each ink piece is closed (grow then shrink 1.4 mm, `closeMask` in outline.js) before tracing, so
+    slivers inside a letter (M's notches) go and the satin no longer spikes; closing the whole word merged near letters
+    and i dots. `chained()` (pieces.js) sews the placement line letter by letter, left to right, reaching each hole by a
+    straight run across the letter (under the fabric): AB 14 -> 12 trims. Tack-down and satin still trim between loops.
+  - Heart frames: the bottom cusp is an arc of the 1.8 mm circle that fits it, then refitted to h (placement/tack
+    showed ~1 mm past the flat-ended satin, the edge walk 2 mm).
+  - Print trims (S10): every walk ends where it began, so each move between letters is a trim or a visible connector
+    whatever the order; left as is.
+  - Quilting (rewritten 2026-10-30 after a quilter called stipple a maze with V points and echo's steps/corner
+    triangles ugly): `freeMask` also returns distance to the frame (`dtA`) and to the pieces (`dtB`). Stipple: the
+    spanning-tree walk (cells 1.2 x `space`, 5 mm) is only a seed; `relax` (up to 600 rounds on 1.2 mm points):
+    repulsion from other parts of the line closer than `space` (arc neighbours within 1.7 x space skipped), a push
+    `space`/2 off the free space's edge, bending (-1 4 -6 4 -1, 0.6) and growth where there's room (0.3), max 0.25 mm a
+    round; stops when under 0.2% longer per 25 rounds, then 15 rounds to round off kinks. Loops under 40 mm dropped.
+    Sewn with `followRun(2.5, 0.15)`. Dropped: Laplacian pull (halved the line), growth at the curve's scale (wiggles),
+    long-range repulsion (6.7 mm spacing), smaller seed cells (a maze).
+    Echo: rings are levels of f = a/(a+b) (a = mm out from the pieces' clearance, b = mm in from the frame), n = round(
+    30th-percentile width / gap), so they turn gradually from the lettering's shape into the frame's; where width/n <
+    0.5 gap rings are cut into arcs. Empty frame: rings every `gap` in from it. `chain` sews innermost first as a
+    spiral (each ring glides over its last 3 gaps onto the next; a ring reached by glide stops halfway round);
+    straight steps only under 2.5 gaps crossing nothing. Batch quilting: trims 105 -> 84, stitches -0.3%, density
+    unchanged. Open: narrow heart/diamond tips stay empty; quilt label with stipple sews as 3 lines.
 - The preview is the file: `setView` decodes `v.bytes` with `readEmbroidery` and draws/counts/fit-checks that, and
   thread labels come from the file's own PEC palette.
 
