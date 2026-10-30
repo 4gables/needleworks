@@ -3,7 +3,7 @@ import { APPLIQUE_FONTS, FONTS } from "../core/fonts.js";
 import { nearestBrotherThread } from "../core/threads.js";
 import { readEmbroidery } from "../core/formats.js";
 import { draw } from "../render.js";
-import { BORDERS, SHAPES, compose, fileBlocks, fittedSizes, label, minSize, pieceBounds } from "./pieces.js";
+import { BORDERS, SHAPES, archTight, compose, fileBlocks, fittedSizes, followFrame, label, minSize, pieceBounds } from "./pieces.js";
 
 const SCRIPT = "NW Great Vibes", PRINT = "NW Josefin Sans";
 // exact Brother PEC thread colours, so the name on screen is the one the machine shows
@@ -24,6 +24,12 @@ export const STARTERS = [
     text({ text: "HANDMADE", font: PRINT, size: 9, shape: "up", radius: 33, color: RED }),
     text({ text: "WITH LOVE", font: PRINT, size: 7, shape: "down", radius: 36, color: RED }),
     mono({ letters: "A", size: 30, y: 2 })] },
+  { id: "oval", name: "Oval badge", note: "words arched round an oval", make: () => [
+    frame({ shape: "oval", w: 120, h: 84, border: "satin" }),
+    // curves just inside the border (what "Follow the frame" gives with the fonts loaded)
+    text({ text: "HANDMADE", font: PRINT, size: 9, shape: "up", radius: 45, ry: 27, color: RED }),
+    text({ text: "WITH LOVE", font: PRINT, size: 7, shape: "down", radius: 54, ry: 36, color: RED }),
+    text({ size: 18 })] },
   { id: "framed", name: "Name in a frame", note: "a name inside a border", make: () => [frame({ shape: "oval", w: 110, h: 64, border: "satin" }), text({ size: 22 })] },
   { id: "label", name: "Label", note: "two lines for a quilt or gift", make: () => [
     frame({ shape: "square", w: 100, h: 56, border: "line", color: BLACK }),
@@ -109,7 +115,11 @@ export function initStudio(api) {
       h += range("size", "Height", 5, 60, p.size);
       h += seg("shape", { straight: "Straight", up: "Arch up", down: "Arch down" }, p.shape);
       h += seg("style", { auto: "Stitch: automatic", satin: "Satin", line: "Fine line" }, p.style || "auto");
-      if (p.shape !== "straight") h += range("radius", "Curve size", 15, 80, p.radius);
+      if (p.shape !== "straight") {
+        h += range("radius", "Curve width", 15, 80, p.radius);
+        h += range("ry", "Curve height", 15, 80, p.ry ?? p.radius);
+        if (followFrame(p, pieces)) h += `<button type="button" class="link" data-follow>Follow the frame</button>`;
+      }
     } else if (p.kind === "monogram") {
       h += `<label class="field"><span>Initials</span><input type="text" data-k="letters" value="${api.escapeHtml(p.letters)}" maxlength="3" autocomplete="off" spellcheck="false"></label>`;
       h += `<p class="hint">Traditional order: first, LAST, middle. The middle letter is stitched biggest.</p>`;
@@ -146,7 +156,9 @@ export function initStudio(api) {
     const fit = $("st-edit").querySelector("[data-fit]"), fs = fittedSizes(pieces).get(p.id);
     if (fit) { fit.hidden = !fs; fit.textContent = fs ? `Shrunk to ${fs} mm so it fits inside the frame.` : ""; }
     const m = minSize(fs ? { ...p, size: fs } : p);
-    w.hidden = !m; w.textContent = m ? `These letters are too small to stitch cleanly. Make the height ${m} mm or more.` : "";
+    w.hidden = !m && !archTight(p);
+    w.textContent = m ? `These letters are too small to stitch cleanly. Make the height ${m} mm or more.`
+      : archTight(p) ? "The curve is too tight for letters this tall: they'd bunch up. Make the curve bigger or the letters smaller." : "";
   }
 
   function change(fn, now = false) {
@@ -218,7 +230,7 @@ export function initStudio(api) {
     if (!k) return;
     if (t.type === "range") t.nextElementSibling.textContent = `${t.value} ${t.dataset.unit}`;
     change((p) => (p[k] = t.type === "range" ? +t.value : t.value));
-    if (["size", "text", "letters", "font"].includes(k)) { clearTimeout(warnTimer); warnTimer = setTimeout(warn, 300); }
+    if (["size", "text", "letters", "font", "radius", "ry"].includes(k)) { clearTimeout(warnTimer); warnTimer = setTimeout(warn, 300); }
   });
   let warnTimer = 0;
   edit.addEventListener("change", (e) => { if (e.target.dataset.k === "font" || e.target.matches("[data-color-any], [data-fill-any]")) editor(); });
@@ -227,6 +239,7 @@ export function initStudio(api) {
     if (c) { change((p) => (p.color = c.dataset.color), true); editor(); return; }
     const f = e.target.closest("[data-fill]");
     if (f) { change((p) => (p.fill = f.dataset.fill), true); editor(); return; }
+    if (e.target.closest("[data-follow]")) { change((p) => Object.assign(p, followFrame(p, pieces)), true); editor(); return; }
     const s = e.target.closest("[data-seg] button");
     if (s) { change((p) => (p[s.closest("[data-seg]").dataset.seg] = s.dataset.v), true); editor(); }
   });
@@ -264,7 +277,7 @@ export function initStudio(api) {
     remember();
     for (const p of pieces) {
       p.x *= f; p.y *= f;
-      if (p.kind !== "file") for (const k of ["size", "radius", "w", "h"]) if (p[k] != null) p[k] = Math.round(p[k] * f * 2) / 2;
+      if (p.kind !== "file") for (const k of ["size", "radius", "ry", "w", "h"]) if (p[k] != null) p[k] = Math.round(p[k] * f * 2) / 2;
     }
     save(); ui(); make();
   };

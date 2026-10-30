@@ -50,12 +50,18 @@ Embroidery-file tools for home machines. Two implementations of the same engine:
   row ends. `compose` moves a stage up to join an earlier block in the same thread (one pause fewer) only if it
   overlaps nothing it would jump ahead of (bbox + 1 mm) and isn't an appliqué stage. Save design / Open saved write
   and read `{ needleworks: 1, pieces }` JSON (editable pieces, not stitches). Straight lettering centred inside an
-  earlier frame shrinks to fit across it (`fittedSizes`), and the editor says so. Starter cards are one scrolling
+  earlier frame shrinks to fit across it (`fittedSizes`), and the editor says so. Arched lettering bends onto an ellipse (`radius` = half-width,
+  optional `ry` = half-height, missing = circle), letters spaced by arc length; "Follow the frame" (`followFrame`) puts
+  the curve just inside an earlier circle/oval/scallop frame, and the editor warns when letters reach further inside the
+  curve than 0.8 x its tightest radius of curvature under the word (`archTight`). Lettering drawn before its font has
+  loaded is never cached (it's the fallback font; `warn()` measuring other pieces early had cached it). Starter cards are one scrolling
   row so the pieces and editor stay in view at desktop height (checked at 1413 x 717 and 390 x 844). `tests/browser/studio_batch.html` builds ~70 Design-tab files
   (starters x hoops, shapes x borders, every font as monogram and arcs, turns, a file combo) for `pe900_check.py`;
   look at a rendered contact sheet too, the checker can't see mush. Running the browser batches: Chrome caches the
   ES modules, so load with a fresh `?v=N` and hard-reload (Cmd+Shift+R) after code changes; if a batch page stops
-  writing files (it happened once), navigate to it again. Its title reads `DONE <files> <problems>`.
+  writing files (it happened once), navigate to it again. Its title reads `DONE <files> <problems>`. Without the
+  Chrome extension: headless Chrome with `--remote-debugging-port`, then over CDP import the page's module script as a
+  blob with absolute URLs (the inline module doesn't start on its own in headless).
 - Lessons from other open-source projects (researched 2026-10-29), now handled:
   - PEC palette 62-64 are applique codes on Brother machines ("Applique Material/Position"), not Orange/Cream Yellow
     as pyembroidery named them: `PEC_MATCH` excludes them (inkstitch/pyembroidery#140, SE700-verified).

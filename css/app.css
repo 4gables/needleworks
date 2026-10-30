@@ -281,6 +281,9 @@ canvas#view:active { cursor: grabbing; }
 .edit .field > span, .edit .range > span { font-weight: 700; }
 .edit select { width: 100%; }
 .range { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 10px; }
+/* one label column in the editor, so the sliders line up */
+.edit .range { display: grid; grid-template-columns: 6.6em 1fr auto; }
+.edit .range > span { white-space: nowrap; }
 .range output { font-size: 14px; color: var(--muted); min-width: 52px; text-align: right; }
 .seg { display: flex; flex-wrap: wrap; gap: 6px; }
 .seg button { border: 1.5px solid var(--line); background: var(--panel); color: var(--ink); border-radius: 999px; padding: 6px 12px; cursor: pointer; font: inherit; font-size: 14px; }

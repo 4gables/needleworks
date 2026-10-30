@@ -11,15 +11,19 @@ import { letterOutlines } from "./outline.js";
 
 // ---------- lettering ----------
 const lettering = new Map();   // font + text -> centre-line strokes (rendering is the slow part)
+// Nothing drawn before its font has loaded is cached: it was drawn in the browser's fallback font, and caching it
+// kept that lettering after the font arrived.
+const fontReady = (family) => !family || typeof document === "undefined" || document.fonts.check(`40px "${family}"`);
 function letterStrokes(text, family) {
   const key = family + "\n" + text;
-  if (!lettering.has(key)) {
-    const print = !!fontOf(family).print;
-    const { edges, info } = strokes(text, family, print ? { deco: "dash", join: false } : {});
-    lettering.set(key, { comps: order(edges), info });
+  if (lettering.has(key)) return lettering.get(key);
+  const print = !!fontOf(family).print;
+  const { edges, info } = strokes(text, family, print ? { deco: "dash", join: false } : {}), out = { comps: order(edges), info };
+  if (fontReady(family)) {
+    lettering.set(key, out);
     if (lettering.size > 60) lettering.delete(lettering.keys().next().value);
   }
-  return lettering.get(key);
+  return out;
 }
 
 // Letters as [pts, "run"|"satin"] in mm: `size` is the height of the lettering, baseline at y = 0, centred across.
@@ -44,13 +48,43 @@ function letters(text, family, size, style = "auto") {
   return { parts, satinW, xh, top: (y0 - info.baseline) * s, bottom: (y1 - info.baseline) * s };
 }
 
-// Bend straight lettering onto a circle of radius R around (0, 0): "up" reads over the top, letters pointing out;
-// "down" reads along the bottom, letters pointing in. Both keep the baseline on the circle.
-function bend(parts, shape, R) {
+// Bend straight lettering onto an ellipse (half-width a, half-height b; a circle when a = b) around (0, 0): "up"
+// reads over the top, letters pointing out; "down" reads along the bottom, letters pointing in. Both keep the
+// baseline on the curve, and letters are spaced by arc length so they keep their width on an oval.
+function bend(parts, shape, a, b = a) {
+  const n = 720, pts = [], len = [0];
+  for (let i = 0; i <= n; i++) { const t = (i / n) * Math.PI * 2; pts.push([a * Math.sin(t), -b * Math.cos(t), t]); }
+  for (let i = 1; i <= n; i++) len.push(len[i - 1] + Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]));
+  const L = len[n], half = len[n / 2];
+  // point and outward normal at arc length s from the top
+  const at = (s) => {
+    s = ((s % L) + L) % L;
+    let lo = 0, hi = n;
+    while (hi - lo > 1) { const m = (lo + hi) >> 1; if (len[m] <= s) lo = m; else hi = m; }
+    const f = (s - len[lo]) / (len[hi] - len[lo] || 1), t = pts[lo][2] + (pts[hi][2] - pts[lo][2]) * f;
+    const nx = b * Math.sin(t), ny = -a * Math.cos(t), k = Math.hypot(nx, ny);
+    return [a * Math.sin(t), -b * Math.cos(t), nx / k, ny / k];
+  };
   const f = shape === "up"
-    ? ([x, y]) => { const a = x / R, r = R - y; return [r * Math.sin(a), -r * Math.cos(a)]; }
-    : ([x, y]) => { const a = -x / R, r = R + y; return [-r * Math.sin(a), r * Math.cos(a)]; };
+    ? ([x, y]) => { const [px, py, nx, ny] = at(x); return [px - y * nx, py - y * ny]; }
+    : ([x, y]) => { const [px, py, nx, ny] = at(half - x); return [px + y * nx, py + y * ny]; };
   return parts.map(([p, mode]) => [densify(p, 1).map(f), mode]);
+}
+// Arched lettering whose letters reach further inside the curve than ~0.8 x its radius of curvature (somewhere
+// under the word) crowd into a knot there: "down" letters point inward, "up" ones only dip in with descenders.
+export function archTight(p) {
+  if (p.kind !== "text" || (p.shape !== "up" && p.shape !== "down")) return false;
+  const l = letters(p.text, p.font, p.size, p.style);
+  if (!l.parts.length) return false;
+  const a = Math.max(p.radius, 8), b = Math.max(p.ry ?? p.radius, 8), xs = l.parts.flatMap(([q]) => q.map((v) => v[0]));
+  const depth = p.shape === "up" ? l.bottom : -l.top, span = Math.max(...xs.map(Math.abs));
+  // radius of curvature at t (0 = top) is (a^2 cos^2 t + b^2 sin^2 t)^1.5 / ab; walk the word's half span from the middle
+  let s = 0, t = p.shape === "up" ? 0 : Math.PI, rho = Infinity;
+  while (s <= span && Math.abs(t) < Math.PI * 2) {
+    const v = Math.hypot(a * Math.cos(t), b * Math.sin(t));
+    rho = Math.min(rho, v ** 3 / (a * b)); s += v * 0.01; t += 0.01;
+  }
+  return depth > 0.8 * rho;
 }
 // extra points so long straight runs follow the curve
 function densify(p, step) {
@@ -127,7 +161,7 @@ function fitBox(pts, w, h) {
 export const BORDERS = { line: "Thin line", bold: "Bold line", satin: "Satin border", patch: "Filled patch", applique: "Appliqué" };
 
 // ---------- pieces ----------
-// text:     { kind: "text", text, font, size, shape: "straight"|"up"|"down", radius, x, y, rot, color }
+// text:     { kind: "text", text, font, size, shape: "straight"|"up"|"down", radius, ry, x, y, rot, color }
 // monogram: { kind: "monogram", letters, font, size, x, y, rot, color }  (3 letters: small, BIG, small)
 // frame:    { kind: "frame", shape, w, h, border: "line"|"bold"|"satin"|"applique", x, y, rot, color }
 // file:     { kind: "file", name, blocks: [{ color, name, paths }], x, y, rot }  (an opened PES/DST, stitches as is)
@@ -139,12 +173,17 @@ const built = new Map();
 export function pieceStages(p) {
   const { x, y, rot, id, ...shape } = p, key = JSON.stringify(shape);
   if (!built.has(key)) {
-    built.set(key, localStages(p));
+    const st = localStages(p);
+    if (!fontReady(p.font)) return st.map((s) => ({ ...s, paths: s.paths.map((q) => q.map(placer(p))) }));
+    built.set(key, st);
     if (built.size > 80) built.delete(built.keys().next().value);
   }
-  const a = ((rot || 0) * Math.PI) / 180, c = Math.cos(a), sn = Math.sin(a);
-  const place = ([u, v]) => [u * c - v * sn + x, u * sn + v * c + y];
+  const place = placer(p);
   return built.get(key).map((st) => ({ ...st, paths: st.paths.map((q) => q.map(place)) }));
+}
+function placer({ x, y, rot }) {
+  const a = ((rot || 0) * Math.PI) / 180, c = Math.cos(a), sn = Math.sin(a);
+  return ([u, v]) => [u * c - v * sn + x, u * sn + v * c + y];
 }
 
 function localStages(p) {
@@ -152,7 +191,7 @@ function localStages(p) {
   if (p.kind === "text") {
     const { parts, satinW, top, bottom } = letters(p.text, p.font, p.size, p.style);
     if (parts.length) {
-      const paths = p.shape === "up" || p.shape === "down" ? stitchLetters(bend(parts, p.shape, Math.max(p.radius, 8)), satinW)
+      const paths = p.shape === "up" || p.shape === "down" ? stitchLetters(bend(parts, p.shape, Math.max(p.radius, 8), Math.max(p.ry ?? p.radius, 8)), satinW)
         : stitchLetters(parts.map(([q, m]) => [q.map(([x, y]) => [x, y - (top + bottom) / 2]), m]), satinW);
       stages = [{ color: p.color, paths, sews: `Sews “${p.text.trim()}”.` }];
     }
@@ -274,10 +313,6 @@ export function fileBlocks(design) {
   return kept;
 }
 
-// Sew the pieces in list order. Neighbouring stages in the same thread share one colour block unless a stage
-// needs a pause. A stage in a thread used earlier moves up to join it (one pause fewer) when it overlaps nothing
-// it would jump ahead of, so what lies on top of what never changes; appliqué stages never move.
-// Returns the design and the steps to show (what the machine sews, what the person does at pauses).
 // Straight lettering whose centre sits inside an earlier frame shrinks to fit across it (a long name typed into
 // "Name in a frame" would otherwise run over the border). Returns id -> the size it's stitched at.
 export function fittedSizes(pieces) {
@@ -298,6 +333,24 @@ export function fittedSizes(pieces) {
   return out;
 }
 
+// The earlier round frame arched lettering sits in, and the curve that runs it just inside that frame's border
+// ("up" letters stand inside the edge, "down" letters hang from it). Null when there's no such frame.
+export function followFrame(p, pieces) {
+  if (p.kind !== "text" || (p.shape !== "up" && p.shape !== "down")) return null;
+  const i = pieces.indexOf(p), before = i < 0 ? pieces : pieces.slice(0, i);
+  const f = before.slice().reverse().find((q) => q.kind === "frame" && ["circle", "oval", "scallop"].includes(q.shape)
+    && Math.abs(p.x - q.x) < q.w / 2 && Math.abs(p.y - q.y) < (q.shape === "circle" ? q.w : q.h) / 2);
+  if (!f) return null;
+  const gap = f.border === "line" ? 4 : 6, rx = f.w / 2, ry = (f.shape === "circle" ? f.w : f.h) / 2;
+  const l = letters(p.text, p.font, p.size, p.style), up = p.shape === "up";
+  const d = up ? gap - (l.parts.length ? l.top : -p.size) : gap + (l.parts.length ? Math.max(0, l.bottom) : 0);
+  return { x: f.x, y: f.y, radius: Math.round(Math.max(8, rx - d) * 2) / 2, ry: Math.round(Math.max(8, ry - d) * 2) / 2 };
+}
+
+// Sew the pieces in list order. Neighbouring stages in the same thread share one colour block unless a stage
+// needs a pause. A stage in a thread used earlier moves up to join it (one pause fewer) when it overlaps nothing
+// it would jump ahead of, so what lies on top of what never changes; appliqué stages never move.
+// Returns the design and the steps to show (what the machine sews, what the person does at pauses).
 export function compose(pieces, hoop) {
   const fit = fittedSizes(pieces);
   pieces = pieces.map((p) => (fit.has(p.id) ? { ...p, size: fit.get(p.id) } : p));

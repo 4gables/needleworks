@@ -10,7 +10,7 @@ lettering. Each is checked with <code>validatePES</code> and POSTed to <code>/sa
 import { hoop as getHoop } from "../../js/core/machines.js";
 import { readEmbroidery, writePES, validatePES } from "../../js/core/formats.js";
 import { APPLIQUE_FONTS, FONTS } from "../../js/core/fonts.js";
-import { BORDERS, SHAPES, compose, fileBlocks } from "../../js/studio/pieces.js";
+import { BORDERS, SHAPES, compose, fileBlocks, followFrame } from "../../js/studio/pieces.js";
 import { STARTERS } from "../../js/studio/ui.js";
 
 const log = (s) => (document.getElementById("log").textContent += s + "\n");
@@ -38,9 +38,17 @@ for (const f of FONTS) {
   await save(`st_mono_${tag}`, [P({ kind: "monogram", letters: "eLb", font: f.family, size: 26 })]);
   await save(`st_arc_${tag}`, [P({ kind: "text", text: "Sunday Best", font: f.family, size: 10, shape: "up", radius: 34 }),
     P({ kind: "text", text: "since 2026", font: f.family, size: 8, shape: "down", radius: 36, color: "#ed171f" })]);
+  // ovals both ways round: wide (gentle top, tight ends) and tall (tight top)
+  for (const [w, h] of [[110, 70], [70, 110]]) {
+    const fr = P({ kind: "frame", shape: "oval", border: "satin", w, h, color: "#ed171f" });
+    const up = P({ kind: "text", text: "Sunday Best", font: f.family, size: 9, shape: "up" }), dn = P({ kind: "text", text: "since 2026", font: f.family, size: 7, shape: "down" });
+    const ps = [fr, up, dn];
+    for (const t of [up, dn]) Object.assign(t, followFrame(t, ps));
+    await save(`st_oval_${w}x${h}_${tag}`, ps);
+  }
 }
 log("fonts: done");
-for (const f of APPLIQUE_FONTS) for (const [text, size] of [["AB", 60], ["Mia", 35], ["Q&8", 50]]) {
+for (const f of APPLIQUE_FONTS) for (const [text, size] of [["AB", 60], ["Mia", 35], ["Q&8", 44]]) {
   const tag = f.family.slice(3).replace(/ /g, "");
   await save(`st_appl_${tag}_${text.replace(/[^A-Za-z0-9]/g, "")}_${size}`, [P({ kind: "letters", text, font: f.family, size })]);
 }

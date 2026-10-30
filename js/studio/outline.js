@@ -52,8 +52,10 @@ export function letterOutlines(text, family, size) {
   text = (text || "").trim();
   if (!text) return [];
   const k = family + "\n" + text;
-  if (!traced.has(k)) { traced.set(k, trace(text, family)); if (traced.size > 30) traced.delete(traced.keys().next().value); }
-  const { loops, inkH, w, h } = traced.get(k), s = size / Math.max(inkH, 1);
+  // not cached until the font has loaded (before that it's the browser's fallback font)
+  const t = traced.get(k) || trace(text, family);
+  if (!traced.has(k) && document.fonts.check(`40px "${family}"`)) { traced.set(k, t); if (traced.size > 30) traced.delete(traced.keys().next().value); }
+  const { loops, inkH, w, h } = t, s = size / Math.max(inkH, 1);
   return loops
     // corners rounded ~1 mm: a 2.8 mm satin around a square inside corner folds on itself and piles up needle hits
     .map((l) => smooth(resample(l.map(([x, y]) => [(x - w / 2) * s, (y - h / 2) * s]), 0.3, true), 7, true))
