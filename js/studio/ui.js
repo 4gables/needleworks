@@ -8,7 +8,7 @@ import { readEmbroidery } from "../core/formats.js";
 import { draw } from "../render.js";
 import { QUILTS } from "./quilt.js";
 import { MOTIFS } from "./motifs.js";
-import { BORDERS, FABRICS, SHAPES, TEXT_SHAPES, splitPieces, archTight, compose, fileBlocks, fittedSizes, followFrame, label, minSize, pieceBounds, smallText } from "./pieces.js";
+import { BORDERS, FABRICS, SHAPES, TEXT_SHAPES, splitPieces, archTight, compose, fileBlocks, fittedSizes, followFrame, label, minSize, pieceBounds, previewLook, smallText } from "./pieces.js";
 
 const SCRIPT = "NW Great Vibes", PRINT = "NW Josefin Sans";
 // exact Brother PEC thread colours, so the name on screen is the one the machine shows
@@ -87,7 +87,8 @@ export const STARTERS = [
   { id: "words", name: "Just lettering", note: "a word or name on its own", make: () => [text({ size: 24 })] },
 ];
 
-// api: { hoop(), setView(v), showError(msg), busy(on, text), safeName(s, fb), escapeHtml(s), store }
+// api: { hoop(), setView(pattern, filename, look) (null pattern: nothing to show), showError(msg), busy(on, text),
+//        safeName(s, fb), escapeHtml(s), saveFile(blob, name), store, showStep(i), step(), setMode(mode), spool(hex) }
 export function initStudio(api) {
   const $ = (id) => document.getElementById(id);
   const saved = api.store.get("studio", null);
@@ -133,8 +134,7 @@ export function initStudio(api) {
           continue;
         }
         const { design, steps } = compose(s.make(), { w: 1000, h: 1000, name: "" });
-        const fab = steps.findIndex((st) => st.fabric);
-        draw(c, design.pattern(), { pad: 4, fabricShapeBlock: fab >= 0 ? fab : undefined, fabric: "pink", hide: new Set(steps.flatMap((st, i) => (st.under ? [i] : []))) });
+        draw(c, design.pattern(), { pad: 4, ...previewLook(steps) });
       } catch { c.remove(); }
       await new Promise((r) => setTimeout(r, 0));
     }
@@ -263,11 +263,9 @@ export function initStudio(api) {
       if (s !== seq) return;
       const fit = fittedSizes(pieces), small = pieces.some((p) => smallText(fit.has(p.id) ? { ...p, size: fit.get(p.id) } : p));
       stepsUI(steps, after, small, before);
-      // preview: appliqué fabric under its satin, placement and tack-down lines hidden beneath it
-      const fabricBlock = steps.findIndex((st) => st.fabric);
+      const look = previewLook(steps);
       api.setView(design.pattern(), `${api.safeName(firstWords(), "design")}.pes`, {
-        fabricShapeBlock: fabricBlock >= 0 ? fabricBlock : undefined,
-        hide: new Set(steps.flatMap((st, i) => (st.under ? [i] : []))), fabric: fabricBlock >= 0 ? "pink" : "linen", steps: steps.length,
+        ...look, fabric: look.fabricShapeBlock != null ? "pink" : "linen", steps: steps.length,
         sheet: { steps: steps.map((st) => ({ you: st.you, sews: st.sews.join(" ") })), after, cut: steps.filter((st) => st.cut).map((st) => st.cut),
           notes: [...before.map((b) => "Have ready: " + b), $("st-tip").hidden ? "" : $("st-tip").textContent, tip, small ? SMALL_TIP : ""] } });
     } catch (err) { if (s === seq) { console.error(err); api.setView(null); api.showError(err.message); } }
@@ -425,10 +423,8 @@ export function initStudio(api) {
   $("st-undo").onclick = undo;
   // a design file to keep and change later (the pieces, not the stitches)
   $("st-save").onclick = () => {
-    const blob = new Blob([JSON.stringify({ needleworks: 1, pieces, fabric, baste }, null, 1)], { type: "application/json" });
-    const a = document.createElement("a"); a.href = URL.createObjectURL(blob);
-    a.download = `${api.safeName(firstWords(), "design")}.needleworks.json`; document.body.append(a); a.click(); a.remove();
-    setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+    api.saveFile(new Blob([JSON.stringify({ needleworks: 1, pieces, fabric, baste }, null, 1)], { type: "application/json" }),
+      `${api.safeName(firstWords(), "design")}.needleworks.json`);
   };
   $("st-load").onchange = async (e) => {
     const f = e.target.files[0]; e.target.value = ""; if (!f) return;

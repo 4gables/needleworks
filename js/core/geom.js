@@ -65,6 +65,13 @@ export function normals(p, closed = false) {
 
 export const run = (p, length = 2.0, closed = false) => resample(p, length, closed);
 
+// [x0, y0, x1, y1] of points (a loop: Math.min(...pts) overflows the stack on big designs)
+export function bounds(pts) {
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+  for (const [x, y] of pts) { if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
+  return [x0, y0, x1, y1];
+}
+
 // A run that keeps to the line (Ink/Stitch's running-stitch tolerance): stitches up to `length`, shortened so no
 // point of the line between two needle holes strays more than `tol` from the stitch, never shorter than `min`, and a
 // hole on every turn sharper than 30°. Uniform stitches cut tight curves: 1.6 mm round a 1 mm loop is 0.32 mm off.

@@ -1,5 +1,6 @@
 // Picture -> embroidery. Reduce to a few thread colours, then stitch each shape by its width:
 // hairlines get a double running stitch along their centre; every shape with width gets a solid tatami fill.
+// Other styles: line drawing (`lineArt`) and cross-stitch (`crossStitch`).
 import { Design } from "./design.js";
 import { run } from "./geom.js";
 import { MARGIN } from "./machines.js";
@@ -374,8 +375,6 @@ function routeFill(groups, comp, mask, res) {
 }
 
 // ---------- build ----------
-// Fill edges and satin outlines reach a little past the picture, so a picture sized to the hoop's edge can land
-// just over it; shrink to fit (more pixels per mm) rather than refuse.
 // "Use only my threads": every colour becomes the nearest of `palette` (hex, by Lab), and colours that land on the
 // same thread merge into one (fewer thread changes). The background stays as it is.
 export function toPalette(analysis, palette) {
@@ -394,6 +393,8 @@ export function toPalette(analysis, palette) {
   return { ...analysis, labels, colors };
 }
 
+// Fill edges and satin outlines reach a little past the picture, so a picture sized to the hoop's edge can land
+// just over it; shrink to fit (more pixels per mm) rather than refuse.
 export function digitize(img, analysis, opts = {}) {
   let res = opts.res || DEFAULTS.res;
   const make = opts.style === "line" ? lineArt : opts.style === "cross" ? crossStitch : build;
@@ -515,7 +516,6 @@ function build(img, analysis, opts) {
   return { design: d, summary, fine };
 }
 
-// fit the picture's longest side to sizeMm, capped by the hoop
 // Line drawing (redwork): every shape's outline and every thin line's centre, in the picture's darkest colour. The
 // lines are walked like lettering (each one out and back), so a connected drawing sews without a trim.
 function lineArt(img, analysis, opts) {
@@ -594,6 +594,7 @@ function crossStitch(img, analysis, opts) {
   return { design: d, summary, fine: { narrowMm2: 0, hairlines: 0 } };
 }
 
+// fit the picture's longest side to sizeMm, capped by the hoop
 export function workingSize(imgW, imgH, sizeMm, hoop, res = DEFAULTS.res) {
   const maxW = hoop.w - 2 * MARGIN - 2, maxH = hoop.h - 2 * MARGIN - 2;
   let s = sizeMm / Math.max(imgW, imgH);

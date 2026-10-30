@@ -1,4 +1,4 @@
-// Script text -> centerline strokes.
+// Lettering (script and print fonts) -> centerline strokes.
 // The word is drawn on a canvas, swashes and bridges between unjoined letters are added tangent to
 // real stroke ends, then the ink is thinned to a graph of strokes.
 import { cubic, resample } from "./geom.js";
@@ -148,6 +148,7 @@ export function renderWord(text, family, { leadIn = 0, tail = 0, join = true, de
 
 export function strokes(text, family, opts) {
   const r = renderWord(text, family, opts);
-  // print letters have real short strokes (t's crossbar, a's stem) that script-sized pruning would cut
+  // print letters have real short strokes (t's crossbar, a's stem) that script-sized pruning would cut (print fonts are
+  // the ones drawn with dash decorations: both callers pass deco "dash" for them)
   return { edges: skeletonEdges(r.mask, r.stroke, { spur: opts?.deco === "dash" ? 0.45 : 1.3, dots: true }), info: { ...r, firstX: r.span[0], lastX: r.span[1] } };
 }

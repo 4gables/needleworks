@@ -1,11 +1,12 @@
-// Design tab: pieces (text, monogram, frame) -> stitches, laid out around the hoop centre (mm, y down).
+// Design tab: pieces (lettering, monogram, frame, appliqué letters, motif, opened file) -> stitches, laid out around
+// the hoop centre (mm, y down).
 // Uses the shared lettering and stitch engines and returns a Design; the PES file is written by the locked
 // writer in js/core/formats.js, which nothing here touches.
 import { Design } from "../core/design.js";
 import { DENSITY, fillPolygon } from "../core/digitize.js";
 import { fontOf } from "../core/fonts.js";
 import { MARGIN } from "../core/machines.js";
-import { edgeWalk, filletPolygon, followRun, run, satin, zigzag } from "../core/geom.js";
+import { bounds, edgeWalk, filletPolygon, followRun, run, satin, zigzag } from "../core/geom.js";
 import { order } from "../core/raster.js";
 import { strokes } from "../core/text.js";
 import { MOTIFS } from "./motifs.js";
@@ -36,12 +37,8 @@ function letters(text, family, size, style = "auto", spacing = 0) {
   const { comps, info } = letterStrokes(text, family, spacing);
   const all = comps.flatMap((c) => c.flatMap(([p]) => p));
   if (!all.length) return { parts: [], satinW: 0 };
-  let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
-  for (const [x, y] of all) { x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y); }
-  const s = size / Math.max(y1 - y0, 1e-9), cx = (x0 + x1) / 2;
+  const [x0, y0, x1, y1] = bounds(all), s = size / Math.max(y1 - y0, 1e-9), cx = (x0 + x1) / 2;
   const parts = comps.flatMap((c) => c.map(([p, mode]) => [p.map(([x, y]) => [(x - cx) * s, (y - info.baseline) * s]), mode]));
-  // satin as wide as the font's own stroke, within what sews well; a stroke thinner than ~1 mm can't take a satin
-  // (it fills the counters and small script turns to mush), so it's a bean stitch: three runs along the line
   // A satin column no wider than the font's own stroke, and never more than a fifth of the x-height (a sixth for
   // thin monoline fonts, which get a satin sized to the letters like the bookmark). Under 1 mm a satin can't be sewn
   // cleanly and fills small loops, so those letters get a fine line instead.
@@ -128,22 +125,26 @@ function spaced(p, min = 0.4) {
   return out;
 }
 
+// the lettering whose size matters: the words, or a monogram's middle letter (its sides are 0.68 of a 3-letter one,
+// so with 3 letters that smaller size is what blurs first); null for other pieces
+function bulk(p) {
+  if (p.kind !== "text" && p.kind !== "monogram") return null;
+  const chars = [...(p.letters || "")];
+  return p.kind === "text" ? letters(p.text, p.font, p.size, p.style) : letters(chars[1] || p.letters, p.font, chars.length === 3 ? p.size * 0.68 : p.size, p.style);
+}
+
 // Lettering smaller than this blurs: the bulk of the letters (x-height, or caps) under ~4 mm.
 export function minSize(p) {
-  if (p.kind !== "text" && p.kind !== "monogram") return 0;
-  const t = p.kind === "text" ? p.text : [...(p.letters || "")][1] || p.letters, size = p.kind === "monogram" && [...(p.letters || "")].length === 3 ? p.size * 0.68 : p.size;
-  const l = letters(t, p.font, size, p.style);
-  if (!l.parts.length || l.xh >= 4) return 0;
+  const l = bulk(p);
+  if (!l || !l.parts.length || l.xh >= 4) return 0;
   return Math.ceil((p.size * 4) / l.xh);
 }
 
 // Lettering under ~6 mm (x-height, or caps) stitches cleanest with thinner thread and needle (Ink/Stitch's small
 // fonts: "thin thread (60) and thin needle (60) is mandatory").
 export function smallText(p) {
-  if (p.kind !== "text" && p.kind !== "monogram") return false;
-  const t = p.kind === "text" ? p.text : [...(p.letters || "")][1] || p.letters, size = p.kind === "monogram" && [...(p.letters || "")].length === 3 ? p.size * 0.68 : p.size;
-  const l = letters(t, p.font, size, p.style);
-  return l.parts.length > 0 && l.xh < 6;
+  const l = bulk(p);
+  return !!l && l.parts.length > 0 && l.xh < 6;
 }
 
 // ---------- frames ----------
@@ -174,20 +175,25 @@ function scallop(rx, ry, n = 360) {
   });
 }
 function fitBox(pts, w, h) {
-  let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
-  for (const [x, y] of pts) { x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y); }
-  const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2;
+  const [x0, y0, x1, y1] = bounds(pts), cx = (x0 + x1) / 2, cy = (y0 + y1) / 2;
   return pts.map(([x, y]) => [((x - cx) / (x1 - x0)) * w, ((y - cy) / (y1 - y0)) * h]);
 }
+const shapeOf = (p) => SHAPES[p.shape] || SHAPES.circle;
+// a circle frame is w across both ways
+const frameH = (f) => (f.shape === "circle" ? f.w : f.h);
 export const BORDERS = { line: "Thin line", bold: "Bold line", satin: "Satin border", patch: "Filled patch", applique: "Appliqué", ith: "In the hoop (two-sided)", zip: "Zipper pouch (in the hoop)" };
 // fabric to cut for a w x h mm in-the-hoop piece, with 2.5 cm (1 in) spare all round to trim off
 const cut = (w, h, extra = 25) => `${Math.ceil((w + extra) / 10)} × ${Math.ceil((h + extra) / 10)} cm (${((w + extra) / 25.4).toFixed(1)} × ${((h + extra) / 25.4).toFixed(1)} in)`;
 
 // ---------- pieces ----------
-// text:     { kind: "text", text, font, size, shape: "straight"|"up"|"down", radius, ry, x, y, rot, color }
-// monogram: { kind: "monogram", letters, font, size, x, y, rot, color }  (3 letters: small, BIG, small)
-// frame:    { kind: "frame", shape, w, h, border: "line"|"bold"|"satin"|"applique", x, y, rot, color }
-// file:     { kind: "file", name, blocks: [{ color, name, paths }], x, y, rot }  (an opened PES/DST, stitches as is)
+// every piece: x, y (mm from the hoop centre), rot (degrees), flip (mirrored), color, id
+// text:     { kind: "text", text (up to 3 lines), font, size, style: "auto"|"satin"|"line", shape: TEXT_SHAPES key,
+//             radius, ry (arches), amp, waves (wave), bulge (bridge), align, leading, spacing, deco (a MOTIFS key) }
+// monogram: { kind: "monogram", letters, font, size, style }  (3 letters: small, BIG, small)
+// frame:    { kind: "frame", shape: SHAPES key, w, h, border: BORDERS key, fill (patch thread), quilt: "stipple"|"echo" }
+// letters:  { kind: "letters", text, font (APPLIQUE_FONTS), size }  (appliqué letters)
+// motif:    { kind: "motif", motif: MOTIFS key, size, style: "fill"|"outline"|"applique" }
+// file:     { kind: "file", name, blocks: [{ color, name, paths }] }  (an opened PES/DST, stitches as is)
 //
 // A piece sews in stages; each stage is one colour block. `pause` forces a machine stop even in the same thread,
 // with `you` telling the person what to do at it.
@@ -290,6 +296,12 @@ function lettersOn(laid, satinW, fab) {
   return out;
 }
 
+const loop = (q) => [...q, q[0]];
+// a tack-down: round the outline and back again
+const tack = (e) => [loop(run(e, 2.0, true)), loop(run(e.slice().reverse(), 2.0, true))];
+// the 3.6 mm satin border of appliqué, patch and in-the-hoop edges: edge walk, zigzag, satin
+const satinBorder = (e) => [edgeWalk(e, 3.6, true), loop(zigzag(e, 2.6, 2.0, true)), loop(satin(e, 3.6, 0.4, 0.3, true))];
+
 function localStages(p, fab = "cotton") {
   let stages = [];
   if (p.kind === "text") {
@@ -297,8 +309,7 @@ function localStages(p, fab = "cotton") {
     let paths = rows.flatMap(({ parts, satinW }) => lettersOn(parts, satinW, fab));
     // a small filled motif either side (`deco`), sized to the letters and centred on them
     if (paths.length && MOTIFS[p.deco]) {
-      const all = paths.flat(), x0 = Math.min(...all.map((q) => q[0])), x1 = Math.max(...all.map((q) => q[0]));
-      const y0 = Math.min(...all.map((q) => q[1])), y1 = Math.max(...all.map((q) => q[1])), s = Math.max(6, Math.min(p.size * 0.75, 30)), gap = s * 0.35;
+      const [x0, y0, x1, y1] = bounds(paths.flat()), s = Math.max(6, Math.min(p.size * 0.75, 30)), gap = s * 0.35;
       const side = (dx) => motifStitches(motifOutlines(MOTIFS[p.deco].d, s), "fill").map((q) => q.map(([x, y]) => [x + dx, y + (y0 + y1) / 2]));
       paths = [...side(x0 - gap - s / 2), ...paths, ...side(x1 + gap + s / 2)];
     }
@@ -308,22 +319,20 @@ function localStages(p, fab = "cotton") {
     const paths = monogram(p, fab);
     if (paths.length) stages = [{ color: p.color, paths, sews: fab === "towel" ? `Sews a light base to flatten the towel loops, then the monogram ${p.letters}.` : `Sews the monogram ${p.letters}.` }];
   } else if (p.kind === "frame") {
-    const edge = (SHAPES[p.shape] || SHAPES.circle).path(p.w, p.h), name = (SHAPES[p.shape] || SHAPES.circle).name.toLowerCase();
-    const loop = (q) => [...q, q[0]];
+    const edge = shapeOf(p).path(p.w, p.h), name = shapeOf(p).name.toLowerCase();
     if (p.border === "applique") {
       stages = [
         { color: p.color, paths: [loop(run(edge, 2.5, true))], sews: `Sews the ${name} outline on the base fabric.`, fabric: true },
-        { color: p.color, pause: true, paths: [loop(run(edge, 2.0, true)), loop(run(edge.slice().reverse(), 2.0, true))],
+        { color: p.color, pause: true, paths: tack(edge),
           you: `Lay the appliqué fabric over the ${name} outline, right side up, covering it by ½ in. Press Start. Then take the hoop off (leave everything hooped), trim the appliqué fabric close to the stitching, and put the hoop back.`,
           sews: "Tacks the appliqué fabric down.", under: true },
-        { color: p.color, pause: true, paths: [edgeWalk(edge, 3.6, true), loop(zigzag(edge, 2.6, 2.0, true)), loop(satin(edge, 3.6, 0.4, 0.3, true))],
-          you: "Press Start.", sews: "Covers the raw edge with a satin border." },
+        { color: p.color, pause: true, paths: satinBorder(edge), you: "Press Start.", sews: "Covers the raw edge with a satin border." },
       ];
     } else if (p.border === "zip") {
       // in-the-hoop zipper pouch: zipper across the top, the front in two folded pieces either side of it, whatever
       // goes on the front (the pieces after it), then the back face down and one seam through everything; turned
       // right side out through the zipper
-      const top = Math.min(...edge.map((q) => q[1])), bot = Math.max(...edge.map((q) => q[1])), x = p.w / 2 + 5;
+      const [, top, , bot] = bounds(edge), x = p.w / 2 + 5;
       const yz = top + Math.max(14, p.h * 0.2), line = (y) => run([[-x, y], [x, y]], 2.5), a = yz - top, b = bot - yz;
       stages = [
         { color: p.color, paths: [line(yz)], sews: "Sews the zipper line on the stabilizer.", under: true,
@@ -336,7 +345,7 @@ function localStages(p, fab = "cotton") {
           you: "Lay the top front piece above the zipper, folded edge along the teeth, and the bottom piece below it the same way, both right side up and past the outline. Tape them. Press Start.",
           sews: `Tacks the front pieces down round the ${name}.` },
         { color: p.color, paths: [line(yz - 7), line(yz + 7).reverse()], sews: "Topstitches beside the zipper." },
-        { color: p.color, pause: true, last: true, paths: [loop(run(edge, 2.0, true)), loop(run(edge.slice().reverse(), 2.0, true)), loop(run(edge, 2.0, true))],
+        { color: p.color, pause: true, last: true, paths: [...tack(edge), loop(run(edge, 2.0, true))],
           you: `Open the zipper halfway (you'll turn the pouch through it). Lay the back piece right side down over everything, covering the outline by ½ in, and tape it. Press Start.`,
           sews: `Sews round the ${name} through every layer, three times.`,
           after: "Take it out of the hoop and tear the stabilizer away. Trim ¼ in outside the seam (pinking shears stop fraying), trim the zipper ends, clip the corners, then turn it right side out through the zipper and press." },
@@ -347,11 +356,11 @@ function localStages(p, fab = "cotton") {
       stages = [
         { color: p.color, paths: [loop(run(edge, 2.5, true))], sews: `Sews the ${name} outline on the stabilizer.`, fabric: true,
           before: `Fabric: front and back pieces, each ${cut(p.w, p.h)}, and tape.` },
-        { color: p.color, pause: true, paths: [loop(run(edge, 2.0, true)), loop(run(edge.slice().reverse(), 2.0, true))],
+        { color: p.color, pause: true, paths: tack(edge),
           you: `Lay the front fabric over the ${name} outline, right side up, covering it by ½ in. Press Start. Then take the hoop off (leave everything hooped), trim the fabric close to the stitching, and put the hoop back.`,
           sews: "Tacks the front fabric down.", under: true },
         { color: p.color, pause: true, last: true,
-          paths: [loop(run(edge, 2.0, true)), edgeWalk(edge, 3.6, true), loop(zigzag(edge, 2.6, 2.0, true)), loop(satin(edge, 3.6, 0.4, 0.3, true))],
+          paths: [loop(run(edge, 2.0, true)), ...satinBorder(edge)],
           you: `Take the hoop off and turn it over. Tape the backing fabric to the back, right side out, covering the ${name} by ½ in. For a hanging loop, tape a folded ribbon at the top on the front, loop pointing in, ends ½ in past the outline. Put the hoop back and press Start.`,
           sews: "Tacks the backing on and covers the edge with satin through every layer.",
           after: `Take it out of the hoop, tear the stabilizer away and cut round the ${name} about ⅛ in outside the satin (not through it). Flip the ribbon loop up.` },
@@ -360,7 +369,7 @@ function localStages(p, fab = "cotton") {
       // solid tatami fill (inset so the satin edge covers its ragged ends), then the satin edge over it
       stages = [
         { color: p.fill || p.color, paths: fillPolygon(inset(edge, 1.0), fab === "knit" ? { density: DENSITY.standard } : {}), sews: `Fills the ${name} patch.` },
-        { color: p.color, paths: [edgeWalk(edge, 3.6, true), loop(zigzag(edge, 2.6, 2.0, true)), loop(satin(edge, 3.6, 0.4, 0.3, true))], sews: `Sews the patch's satin edge.` },
+        { color: p.color, paths: satinBorder(edge), sews: `Sews the patch's satin edge.` },
       ];
     } else {
       const paths = p.border === "satin" ? [edgeWalk(edge, 3.0, true), zigzag(edge, 2.1, 2.0, true), satin(edge, 3.0, 0.4, 0.3, true)]
@@ -383,7 +392,6 @@ function localStages(p, fab = "cotton") {
 
 // a motif filled (tatami inside, then a narrow satin edge over the row ends) or as a satin outline
 function motifStitches(loops, style) {
-  const loop = (q) => [...q, q[0]];
   if (style === "outline") return loops.flatMap((l) => edgeSatin(l, 2.2));
   return [...fillPolygon(loops, { inset: 0.6 }), ...loops.flatMap((l) => [loop(run(l, 2.0, true)), loop(satin(l, 1.4, 0.4, 0.2, true))])];
 }
@@ -391,8 +399,7 @@ function motifStitches(loops, style) {
 // a satin edge round a closed outline: as wide as `max`, narrower round a small hole (a 2.8 mm satin in the top of an
 // A overlaps itself), over an edge walk and a zigzag
 function edgeSatin(l, max) {
-  const xs = l.map((q) => q[0]), ys = l.map((q) => q[1]), loop = (q) => [...q, q[0]];
-  const w = Math.max(1.2, Math.min(max, Math.min(Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys)) / 3.5));
+  const [x0, y0, x1, y1] = bounds(l), w = Math.max(1.2, Math.min(max, Math.min(x1 - x0, y1 - y0) / 3.5));
   return [edgeWalk(l, w, true, Math.min(0.4, w / 4)), loop(zigzag(l, w * 0.7, 2.0, true)), loop(satin(l, w, 0.4, w > 2 ? 0.3 : 0.2, true))];
 }
 
@@ -400,10 +407,10 @@ function edgeSatin(l, max) {
 // starting a third further round so the three seams (and their locks) don't stack in one spot
 function appliqued(loops, color, what, cover, trim, them = "it") {
   if (!loops.length) return [];
-  const loop = (q) => [...q, q[0]], turn = (l, f) => { const k = Math.floor(l.length * f); return [...l.slice(k), ...l.slice(0, k)]; };
+  const turn = (l, f) => { const k = Math.floor(l.length * f); return [...l.slice(k), ...l.slice(0, k)]; };
   return [
     { color, paths: loops.map((l) => loop(run(l, 2.5, true))), sews: `Sews the outline of ${what} on the base fabric.`, fabric: true },
-    { color, pause: true, paths: loops.map((l) => turn(l, 1 / 3)).flatMap((l) => [loop(run(l, 2.0, true)), loop(run(l.slice().reverse(), 2.0, true))]),
+    { color, pause: true, paths: loops.map((l) => turn(l, 1 / 3)).flatMap(tack),
       you: `Lay the appliqué fabric over ${cover}, right side up, covering ${them} by ½ in. Press Start. Then take the hoop off (leave everything hooped), trim the fabric close to the stitching ${trim}, and put the hoop back.`,
       sews: "Tacks the appliqué fabric down.", under: true },
     { color, pause: true, paths: loops.map((l) => turn(l, 2 / 3)).flatMap((l) => edgeSatin(l, 2.8)), you: "Press Start.", sews: "Covers the raw edges with satin." },
@@ -421,6 +428,12 @@ function inset(pts, d) {
     out.push([pts[i][0] - (sgn * ty * d) / L, pts[i][1] + (sgn * tx * d) / L]);
   }
   return out;
+}
+
+// preview options for composed steps: appliqué fabric under its satin, placement and tack-down lines hidden beneath it
+export function previewLook(steps) {
+  const fab = steps.findIndex((st) => st.fabric);
+  return { fabricShapeBlock: fab >= 0 ? fab : undefined, fabric: "pink", hide: new Set(steps.flatMap((st, i) => (st.under ? [i] : []))) };
 }
 
 export const pieceStitches = (p) => pieceStages(p).flatMap((st) => st.paths);
@@ -445,14 +458,11 @@ function monogram(p, fab = "cotton") {
 
 export function pieceBounds(p) {
   const pts = pieceStitches(p).flat();
-  if (!pts.length) return null;
-  let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
-  for (const [x, y] of pts) { x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y); }
-  return [x0, y0, x1, y1];
+  return pts.length ? bounds(pts) : null;
 }
 
 export const label = (p) => p.kind === "motif" ? `${(MOTIFS[p.motif] || MOTIFS.heart).name}` : p.kind === "text" ? `“${p.text.replace(/\s*\n\s*/g, " / ")}”` : p.kind === "letters" ? `Appliqué ${p.text}` : p.kind === "monogram" ? `Monogram ${p.letters}`
-  : p.kind === "file" ? p.name : `${(SHAPES[p.shape] || SHAPES.circle).name}${p.border === "applique" ? " appliqué" : ""}`;
+  : p.kind === "file" ? p.name : `${shapeOf(p).name}${p.border === "applique" ? " appliqué" : ""}`;
 
 // An opened design as a piece: its stitches split into runs at jumps/trims, per colour block, centred.
 export function fileBlocks(design) {
@@ -472,25 +482,28 @@ export function fileBlocks(design) {
   flush();
   const kept = blocks.filter((b) => b.paths.length), pts = kept.flatMap((b) => b.paths.flat());
   if (!pts.length) throw new Error("That file has no stitches.");
-  // (a loop, not Math.min(...pts): spreading 110k+ points overflows the stack)
-  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
-  for (const [x, y] of pts) { if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
-  const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2;
+  const [x0, y0, x1, y1] = bounds(pts), cx = (x0 + x1) / 2, cy = (y0 + y1) / 2;
   for (const b of kept) b.paths = b.paths.map((q) => q.map(([x, y]) => [Math.round((x - cx) * 10) / 10, Math.round((y - cy) * 10) / 10]));
   return kept;
+}
+
+// the nearest frame before p in the list whose box holds p's centre, among `shapes` (any shape when omitted)
+function frameAround(p, pieces, shapes) {
+  const i = pieces.indexOf(p);
+  return (i < 0 ? pieces : pieces.slice(0, i)).slice().reverse().find((f) => f.kind === "frame" && (!shapes || shapes.includes(f.shape))
+    && Math.abs(p.x - f.x) < f.w / 2 && Math.abs(p.y - f.y) < frameH(f) / 2);
 }
 
 // Straight lettering whose centre sits inside an earlier frame shrinks to fit across it (a long name typed into
 // "Name in a frame" would otherwise run over the border). Returns id -> the size it's stitched at.
 export function fittedSizes(pieces) {
   const out = new Map();
-  pieces.forEach((p, i) => {
+  pieces.forEach((p) => {
     if (p.kind !== "text" || (p.shape && p.shape !== "straight") || (p.rot || 0) % 180) return;
-    const frame = pieces.slice(0, i).reverse().find((f) => f.kind === "frame" && !(f.rot || 0)
-      && Math.abs(p.x - f.x) < f.w / 2 && Math.abs(p.y - f.y) < (f.shape === "circle" ? f.w : f.h) / 2);
+    const frame = frameAround(p, pieces.filter((f) => f === p || !(f.rot || 0)));
     if (!frame) return;
     const b = pieceBounds({ ...p, x: 0, y: 0 }); if (!b) return;
-    const fh = frame.shape === "circle" ? frame.w : frame.h, dy = (p.y - frame.y) / (fh / 2);
+    const dy = (p.y - frame.y) / (frameH(frame) / 2);
     // room across the frame at the lettering's height (narrower toward the top and bottom of round shapes)
     const round = ["circle", "oval", "scallop", "heart"].includes(frame.shape) ? Math.sqrt(Math.max(0.2, 1 - dy * dy)) : 1;
     const room = frame.w * round * (frame.shape === "diamond" ? 0.55 : 0.82) - (frame.border === "line" ? 4 : 8);
@@ -504,20 +517,14 @@ export function fittedSizes(pieces) {
 // ("up" letters stand inside the edge, "down" letters hang from it). Null when there's no such frame.
 export function followFrame(p, pieces) {
   if (p.kind !== "text" || (p.shape !== "up" && p.shape !== "down")) return null;
-  const i = pieces.indexOf(p), before = i < 0 ? pieces : pieces.slice(0, i);
-  const f = before.slice().reverse().find((q) => q.kind === "frame" && ["circle", "oval", "scallop"].includes(q.shape)
-    && Math.abs(p.x - q.x) < q.w / 2 && Math.abs(p.y - q.y) < (q.shape === "circle" ? q.w : q.h) / 2);
+  const f = frameAround(p, pieces, ["circle", "oval", "scallop"]);
   if (!f) return null;
-  const gap = f.border === "line" ? 4 : 6, rx = f.w / 2, ry = (f.shape === "circle" ? f.w : f.h) / 2;
+  const gap = f.border === "line" ? 4 : 6, rx = f.w / 2, ry = frameH(f) / 2;
   const l = letters(p.text, p.font, p.size, p.style), up = p.shape === "up";
   const d = up ? gap - (l.parts.length ? l.top : -p.size) : gap + (l.parts.length ? Math.max(0, l.bottom) : 0);
   return { x: f.x, y: f.y, radius: Math.round(Math.max(8, rx - d) * 2) / 2, ry: Math.round(Math.max(8, ry - d) * 2) / 2 };
 }
 
-// Sew the pieces in list order. Neighbouring stages in the same thread share one colour block unless a stage
-// needs a pause. A stage in a thread used earlier moves up to join it (one pause fewer) when it overlaps nothing
-// it would jump ahead of, so what lies on top of what never changes; appliqué stages never move.
-// Returns the design and the steps to show (what the machine sews, what the person does at pauses).
 // what the design is sewn on: changes the stitches (knit, towel) and the stabilizer advice
 export const FABRICS = {
   cotton: { name: "Cotton", tip: "On woven cotton, hoop it with tear-away stabilizer underneath." },
@@ -536,13 +543,13 @@ function withQuilt(p, stages, obstacles) {
   // keyed on every obstacle point: moving a middle piece reused the old quilting, sewn through it
   let h = obstacles.length;
   for (const o of obstacles) for (const [x, y] of o) h = (Math.imul(h ^ Math.round(x * 10), 16777619) ^ Math.round(y * 10)) | 0;
-  const edge = (SHAPES[p.shape] || SHAPES.circle).path(p.w, p.h).map(placer(p)), key = JSON.stringify([p, h]);
+  const edge = shapeOf(p).path(p.w, p.h).map(placer(p)), key = JSON.stringify([p, h]);
   if (!quilted.has(key)) {
     quilted.set(key, (p.quilt === "echo" ? echo : stipple)(edge, obstacles, { inset: p.border === "line" || p.border === "bold" ? 3 : 4.5 }));
     if (quilted.size > 12) quilted.delete(quilted.keys().next().value);
   }
   const paths = quilted.get(key); if (!paths.length) return stages;
-  const q = { color: p.color, paths, sews: `Quilts the ${(SHAPES[p.shape] || SHAPES.circle).name.toLowerCase()} (${p.quilt}).`, label: label(p) };
+  const q = { color: p.color, paths, sews: `Quilts the ${shapeOf(p).name.toLowerCase()} (${p.quilt}).`, label: label(p) };
   const at = stages.findIndex((s) => s.last);
   return at < 0 ? [...stages, q] : [...stages.slice(0, at), q, ...stages.slice(at)];
 }
@@ -581,17 +588,17 @@ export function splitPieces(pieces, hoop) {
 // basting crosses (long stitches, easy to pull out), each starting and ending at its centre
 const crosses = (marks) => marks.map(([x, y]) => [[x, y], [x + 5, y], [x - 5, y], [x, y], [x, y + 5], [x, y - 5], [x, y]]);
 
+// Sew the pieces in list order. Neighbouring stages in the same thread share one colour block unless a stage
+// needs a pause. A stage in a thread used earlier moves up to join it (one pause fewer) when it overlaps nothing
+// it would jump ahead of, so what lies on top of what never changes; appliqué stages never move.
+// Returns the design and the steps to show (what the machine sews, what the person does at pauses).
 // opts: { fabric: key of FABRICS, baste: a basting box round everything first (floating, towels),
 //         marks: { pts, end } alignment crosses for a split design (end: after everything, else first) }
 export function compose(pieces, hoop, opts = {}) {
   const fab = FABRICS[opts.fabric] ? opts.fabric : "cotton";
   const fit = fittedSizes(pieces);
   pieces = pieces.map((p) => (fit.has(p.id) ? { ...p, size: fit.get(p.id) } : p));
-  const box = (paths) => {
-    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
-    for (const q of paths) for (const [x, y] of q) { x0 = Math.min(x0, x); y0 = Math.min(y0, y); x1 = Math.max(x1, x); y1 = Math.max(y1, y); }
-    return [x0 - 1, y0 - 1, x1 + 1, y1 + 1];
-  };
+  const box = (paths) => { const [x0, y0, x1, y1] = bounds(paths.flat()); return [x0 - 1, y0 - 1, x1 + 1, y1 + 1]; };
   const hits = (a, b) => a[0] < b[2] && b[0] < a[2] && a[1] < b[3] && b[1] < a[3];
   const order = [], last = [], staged = pieces.map((p) => pieceStages(p, fab).map((st) => ({ ...st, label: label(p) })));
   pieces.forEach((p, i) => { if (QUILTED(p)) staged[i] = withQuilt(p, staged[i], staged.filter((_, j) => j !== i).flat().flatMap((s) => s.paths)); });
@@ -618,7 +625,7 @@ export function compose(pieces, hoop, opts = {}) {
       sews: "Sews the alignment crosses again, on top of the first ones.", after: "Pull out the alignment crosses (they're long stitches; snip and pull)." });
   }
   if (opts.baste && order.length) {
-    // long stitches 10 mm round everything (as far as the hoop allows), centred on the design so it stays centred;
+    // long stitches 9 mm round everything (as far as the hoop allows), centred on the design so it stays centred;
     // part of the first block, so it needs no stop of its own
     const b = box(order.flatMap((s) => s.paths)), cx = (b[0] + b[2]) / 2, cy = (b[1] + b[3]) / 2;
     const hw = Math.min((b[2] - b[0]) / 2 + 9, hoop.w / 2 - MARGIN - 1), hh = Math.min((b[3] - b[1]) / 2 + 9, hoop.h / 2 - MARGIN - 1);

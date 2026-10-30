@@ -5,7 +5,7 @@ import { COLOR_CHANGE, JUMP, STITCH, designStats, machineThreads, readEmbroidery
 import { DEFAULT_MACHINE, MACHINES, MARGIN, hoop as getHoop } from "./core/machines.js";
 import { DENSITY, workingSize } from "./core/digitize.js";
 import { nearestBrotherThread, pecThread } from "./core/threads.js";
-import { FABRICS, colorBlocks, draw } from "./render.js";
+import { CLOTHS, colorBlocks, draw } from "./render.js";
 import { cutSVG, sewSheet } from "./sheet.js";
 import { zip } from "./zip.js";
 import { checkup, fix, heat } from "./doctor.js";
@@ -27,7 +27,8 @@ const state = {
   mode: "picture",
   machine: store.get("machine", DEFAULT_MACHINE),
   hoopId: store.get("hoop", null),
-  view: null,          // { pattern, bytes, filename, fabricShapeBlock, hide, cache }
+  view: null,          // { pattern, bytes, filename, file (the bytes read back), shown, cache, fabric, fabricShapeBlock, hide,
+                       //   steps, sheet, split, verifyAgainst, threadLabel }
   views: {},           // last view per mode
   zoom: 1, pan: [0, 0], upto: null,
   step: null,   // Design tab: show the design as it is after that colour block
@@ -47,21 +48,22 @@ const shownHoop = () => { const h = hoop(); return turned() ? { ...h, w: h.h, h:
 
 // ---------- preview ----------
 const canvas = $("view");
+// the design as it is after colour block i (step view, sew along): sewn so far, the rest faint; placement lines show
+// until the fabric goes over them
+function stepLook(v, i, block) {
+  const fab = v.fabricShapeBlock;
+  return { upto: block ? block.segs.reduce((m, sg) => Math.max(m, sg[sg.length - 1][2]), 0) + 1 : undefined,
+    hide: new Set([...(v.hide || [])].filter((k) => k < i)), fabricShapeBlock: fab != null && i <= fab ? undefined : fab };
+}
 function paint() {
   const v = state.view;
   $("empty").hidden = !!v;
   if (!v) { draw(canvas, null); return; }
-  let upto = state.upto ?? undefined, hide = v.hide, fabricShapeBlock = v.fabricShapeBlock;
   const block = state.step != null && state.mode === "design" && v.cache.blocks.find((b) => b.index === state.step);
-  if (block) {
-    // sewn so far, the rest faint; placement lines show until the fabric goes over them
-    upto = Math.max(...block.segs.map((sg) => sg[sg.length - 1][2])) + 1;
-    hide = new Set([...(v.hide || [])].filter((i) => i < state.step));
-    if (fabricShapeBlock != null && state.step <= fabricShapeBlock) fabricShapeBlock = undefined;
-  }
+  const look = block ? stepLook(v, state.step, block) : { upto: state.upto ?? undefined, hide: v.hide, fabricShapeBlock: v.fabricShapeBlock };
   state.tf = draw(canvas, v.shown, {
     center: state.mode === "design" ? [0, 0] : undefined, ghost: !!block,
-    cache: v.cache, fabric: v.fabric, fabricShapeBlock, hide, upto,
+    cache: v.cache, fabric: v.fabric, ...look,
     heat: state.heat ? (v.heat ||= heat(v.shown)) : null, backdrop: state.backdrop,
     hoop: shownHoop(), showHoop: state.showHoop && !state.backdrop, zoom: state.zoom, pan: state.pan, showNeedle: state.upto != null,
     padTop: $("facts").offsetHeight + 16,
@@ -69,13 +71,12 @@ function paint() {
 }
 new ResizeObserver(() => paint()).observe(canvas);
 
-function fmtMm(mm) { return `${mm.toFixed(0)} × `; }
 function setView(v) {
   stopPlay();
   state.view = v; state.views[state.mode] = v; state.upto = null; $("progress").value = 1000;
   if (state.step != null && !(v?.steps > state.step)) showStep(null);   // the design changed under a step view
   $("turn").setAttribute("aria-pressed", turned());
-  if (!v) { $("facts").innerHTML = ""; $("threads").innerHTML = ""; $("download").disabled = true; $("share").disabled = true; $("sheet-print").disabled = $("along-open").disabled = true; $("cut-file").hidden = true; paint(); return; }
+  if (!v) { $("facts").innerHTML = ""; $("threads").innerHTML = ""; $("download").disabled = true; $("download").textContent = "Download PES"; $("share").disabled = true; $("sheet-print").disabled = $("along-open").disabled = true; $("cut-file").hidden = true; paint(); return; }
   // the preview is the file: decode the PES bytes and draw those, not the design they were made from
   if (!v.file) {
     try { v.file = v.source ? v.pattern : readEmbroidery(v.bytes, v.filename); }
@@ -87,14 +88,14 @@ function setView(v) {
   // (a split design is checked part by part when it's downloaded)
   const fits = !!v.split || (st.widthMm <= h.w - 2 * MARGIN && st.heightMm <= h.h - 2 * MARGIN);
   const inch = (mm) => (mm / 25.4).toFixed(1);
-  const minutes = Math.max(1, Math.round(st.stitches / 550 + st.colorChanges * 0.5));
+  const minutes = Math.max(1, Math.round(st.stitches / 550 + st.colorChanges * 0.5)), snips = shortJumps(v.file);
   $("facts").innerHTML = [
     `<span>${shown.widthMm.toFixed(0)} × ${shown.heightMm.toFixed(0)} mm · ${inch(shown.widthMm)} × ${inch(shown.heightMm)} in</span>`,
     `<span>${st.stitches.toLocaleString()} stitches</span>`,
     st.colorChanges ? `<span>${st.colorChanges} ${st.colorChanges === 1 ? "pause" : "pauses"}</span>` : "",
     `<span>≈ ${minutes} min</span>`,
     v.split ? `<span>${v.split.length} hoopings</span>` : fits ? "" : `<span class="bad">Too big for the ${h.name}</span>`,
-    shortJumps(v.file) ? `<span title="The machine only trims jumps longer than its 'jump stitch not to trim' setting (5 mm at the lowest). The thread is locked at both ends, so these are safe to snip after stitching.">${shortJumps(v.file)} short ${shortJumps(v.file) === 1 ? "jump" : "jumps"} to snip</span>` : "",
+    snips ? `<span title="The machine only trims jumps longer than its 'jump stitch not to trim' setting (5 mm at the lowest). The thread is locked at both ends, so these are safe to snip after stitching.">${snips} short ${snips === 1 ? "jump" : "jumps"} to snip</span>` : "",
   ].join("");
   const seen = new Set(), mt = machineThreadList(v);
   $("threads").innerHTML = v.cache.blocks.filter((b) => !(v.hide && v.hide.has(b.index)))
@@ -208,12 +209,18 @@ $("turn").onclick = () => {
   if (state.mode === "picture") makePicture(); else setView(state.view);
 };
 
-// iPhone/iPad/Android share sheet: Messages, Mail, AirDrop, Save to Files
 // USB file names the machine can show: plain ASCII (José -> Jose), nothing else, never empty
 function safeName(s, fallback) {
   const t = s.normalize("NFKD").replace(/[\u0300-\u036f]/g, "").replace(/[^A-Za-z0-9_-]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 40);
   return t || fallback;
 }
+// a file handed to the browser's downloads
+function saveFile(blob, name) {
+  const url = URL.createObjectURL(blob), a = document.createElement("a");
+  a.href = url; a.download = name; document.body.append(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 2000);
+}
+// iPhone/iPad/Android share sheet: Messages, Mail, AirDrop, Save to Files
 function pesFile(v) { return new File([v.bytes], v.filename, { type: "application/octet-stream" }); }
 function canShareFile() {
   try { return !!(navigator.canShare && navigator.canShare({ files: [new File([new Uint8Array(1)], "x.pes", { type: "application/octet-stream" })] })); }
@@ -241,17 +248,13 @@ $("download").onclick = () => {
       if (!check.ok) { showError(`Download stopped (${p.filename}): ${check.error}`); return; }
       files.push({ name: p.filename, bytes });
     }
-    const url = URL.createObjectURL(new Blob([zip(files)], { type: "application/zip" }));
-    const a = document.createElement("a"); a.href = url; a.download = v.filename; document.body.append(a); a.click(); a.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 2000);
+    saveFile(new Blob([zip(files)], { type: "application/zip" }), v.filename);
     return;
   }
   // never hand out a file we haven't proven decodes to exactly this design
   const check = validatePES(v.bytes, v.verifyAgainst || null, hoop());
   if (!check.ok) { showError("Download stopped: " + check.error); return; }
-  const url = URL.createObjectURL(new Blob([v.bytes], { type: "application/octet-stream" }));
-  const a = document.createElement("a"); a.href = url; a.download = v.filename; document.body.append(a); a.click(); a.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 2000);
+  saveFile(new Blob([v.bytes], { type: "application/octet-stream" }), v.filename);
 };
 
 // sew sheet: the design at 1:1 on the hoop field, the steps, appliqué shapes; printed from a hidden block
@@ -263,9 +266,8 @@ $("sheet-print").onclick = () => {
 addEventListener("afterprint", () => { $("sheet").innerHTML = ""; });
 $("cut-file").onclick = () => {
   const v = state.view; if (!v?.sheet?.cut?.length) return;
-  const name = v.filename.replace(/\.pes$/i, ""), url = URL.createObjectURL(new Blob([cutSVG(v.sheet.cut, name)], { type: "image/svg+xml" }));
-  const a = document.createElement("a"); a.href = url; a.download = `${name}_cut.svg`; document.body.append(a); a.click(); a.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 2000);
+  const name = v.filename.replace(/\.pes$/i, "");
+  saveFile(new Blob([cutSVG(v.sheet.cut, name)], { type: "image/svg+xml" }), `${name}_cut.svg`);
 };
 
 // ---------- on my item ----------
@@ -326,7 +328,7 @@ function alongShow() {
   $("along-count").textContent = done ? "All done" : `Step ${i + 1} of ${steps.length}`;
   $("along-back").disabled = i === 0;
   $("along-next").textContent = done ? "Close" : i === steps.length - 1 ? "Finish" : "Next step";
-  let upto, hide = v.hide, fab = v.fabricShapeBlock;
+  let look = { hide: v.hide, fabricShapeBlock: v.fabricShapeBlock };
   if (done) {
     $("along-title").textContent = "Finished";
     $("along-you").textContent = (v.sheet?.after || []).join(" ") || "Take the hoop off, cut the jump threads, and tear or cut away the stabilizer.";
@@ -337,11 +339,9 @@ function alongShow() {
     $("along-you").textContent = s.you || (i ? "" : "Thread the machine, put the hoop on, and press Start.");
     $("along-sews").textContent = s.sews || "";
     $("along-time").textContent = `About ${s.minutes} min of sewing.`;
-    if (s.block) upto = Math.max(...s.block.segs.map((sg) => sg[sg.length - 1][2])) + 1;
-    hide = new Set([...(v.hide || [])].filter((k) => k < i));
-    if (fab != null && i <= fab) fab = undefined;
+    look = stepLook(v, i, s.block);
   }
-  draw($("along-view"), v.shown, { cache: v.cache, fabric: v.fabric, fabricShapeBlock: fab, hide, upto, ghost: upto != null, hoop: shownHoop(), showHoop: false, pad: 12 });
+  draw($("along-view"), v.shown, { cache: v.cache, fabric: v.fabric, ...look, ghost: look.upto != null, hoop: shownHoop(), showHoop: false, pad: 12 });
 }
 $("along-open").onclick = async () => {
   if (!state.view?.cache) return;
@@ -391,9 +391,7 @@ $("names-make").onclick = async () => {
   }
   $("names-make").disabled = false;
   if (files.length) {
-    const url = URL.createObjectURL(new Blob([zip(files)], { type: "application/zip" }));
-    const a = document.createElement("a"); a.href = url; a.download = `${safeName(n.what, "names")}_names.zip`; document.body.append(a); a.click(); a.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 2000);
+    saveFile(new Blob([zip(files)], { type: "application/zip" }), `${safeName(n.what, "names")}_names.zip`);
   }
   if (!bad.length) { $("names").close(); return; }
   $("names-note").classList.add("warn");
@@ -512,7 +510,7 @@ function bookmarkUI() {
   $("bm-colors").innerHTML = THREADS.map((c) => `<button type="button" data-c="${c}" style="background:${c}" aria-pressed="${c === state.bm.color}" aria-label="Brother ${nearestBrotherThread(c).name}" title="Brother ${nearestBrotherThread(c).name}"></button>`).join("")
     + `<span class="custom" style="box-shadow:0 0 0 ${custom ? "2.5px var(--ink)" : "1.5px var(--line)"}" title="Any colour"><input type="color" id="bm-custom" value="${state.bm.color}" aria-label="Any colour"></span>`
     + `<span class="swatch-name">Closest Brother thread: <b>${nearestBrotherThread(state.bm.color).name}</b></span>`;
-  $("bm-fabrics").innerHTML = Object.entries(FABRICS).map(([k, f]) => `<button type="button" data-fab="${k}" aria-pressed="${k === state.bm.fabric}"><i style="background:${f.solid || `repeating-conic-gradient(${f.cross} 0 25%, ${f.base} 0 50%) 0 0/8px 8px`}"></i>${f.label}</button>`).join("");
+  $("bm-fabrics").innerHTML = Object.entries(CLOTHS).map(([k, f]) => `<button type="button" data-fab="${k}" aria-pressed="${k === state.bm.fabric}"><i style="background:${f.solid || `repeating-conic-gradient(${f.cross} 0 25%, ${f.base} 0 50%) 0 0/8px 8px`}"></i>${f.label}</button>`).join("");
   const steps = stepsFor(state.bm.blank), pauses = steps.length - 1;
   $("bm-steps-count").textContent = `· ${steps.length} steps, ${pauses} pauses`;
   $("bm-steps-lede").textContent = `Keep the same thread in the whole time. The machine pauses ${pauses} times. Each pause is a fabric step.`;
@@ -811,7 +809,7 @@ function showStep(i) {
   state.step = i; document.dispatchEvent(new CustomEvent("nw:step", { detail: i })); paint();
 }
 const studio = initStudio({
-  hoop, store, showError, busy, safeName, escapeHtml, showStep, step: () => state.step, setMode, spool,
+  hoop, store, showError, busy, safeName, escapeHtml, saveFile, showStep, step: () => state.step, setMode, spool,
   setView(pattern, filename, look = {}) {
     if (!pattern) { state.views.design = null; if (state.mode === "design") setView(null); return; }
     const v = { pattern, verifyAgainst: pattern, bytes: writePES(pattern), filename, fabric: "linen", ...look };
