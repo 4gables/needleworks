@@ -53,7 +53,7 @@ export const FABRICS = {
   black: { label: "Black", solid: "#232022" },
 };
 
-// opts: { fabric, fabricShapeBlock, hide: Set, upto, ghost (stitches after upto drawn faint), hoop: {w,h} (mm), showHoop, zoom, pan: [x,y], center: [x,y] (0.1 mm) }
+// opts: { fabric, fabricShapeBlock, hide: Set, upto, ghost (stitches after upto drawn faint), heat (Map "cx,cy" -> hits per mm²), hoop: {w,h} (mm), showHoop, zoom, pan: [x,y], center: [x,y] (0.1 mm) }
 export function draw(canvas, design, opts = {}) {
   const dpr = window.devicePixelRatio || 1;
   const W = canvas.clientWidth, H = canvas.clientHeight;
@@ -139,6 +139,15 @@ export function draw(canvas, design, opts = {}) {
           ctx.lineTo(bx * 0.8 + mx * 0.2 + o, by * 0.8 + my * 0.2 + o); ctx.stroke();
         }
       }
+    }
+  }
+  if (opts.heat) {   // thickness: needle hits per 1 mm cell (the most in one colour block), over the stitches faded
+    ctx.fillStyle = "rgba(255,255,255,.7)"; ctx.fillRect(0, 0, W, H);
+    for (const [k, n] of opts.heat) {
+      if (n < 12) continue;
+      const [cx, cy] = k.split(",").map(Number);
+      ctx.fillStyle = n > 24 ? "rgba(214,25,25,.9)" : n > 18 ? "rgba(240,120,20,.75)" : "rgba(235,190,20,.55)";
+      ctx.fillRect(X(cx * 10), Y(cy * 10), 10 * s + 0.5, 10 * s + 0.5);
     }
   }
   if (opts.showNeedle && upto < total) {

@@ -184,6 +184,11 @@
         <span class="drop-text"><b>Choose a design file</b> or drop it here.</span>
       </label>
       <div id="open-info" class="info" hidden></div>
+      <fieldset class="field" id="doctor" hidden>
+        <legend>Checkup</legend>
+        <ul id="doctor-list" class="doctor"></ul>
+        <div id="doctor-fix" class="edit"></div>
+      </fieldset>
     </div>
   </section>
 
@@ -204,6 +209,7 @@
       <button type="button" id="play" class="ghost" aria-label="Watch it sew">▶︎ Watch it sew</button>
       <input id="progress" autocomplete="off" type="range" min="0" max="1000" value="1000" aria-label="Sewing progress">
       <label class="check small"><input id="show-hoop" type="checkbox" checked> Hoop</label>
+      <label class="check small" title="Shows where the needle goes in most often: yellow is busy, red is too dense (more than 24 per mm²)"><input id="show-heat" type="checkbox"> Thickness</label>
       <button type="button" id="turn" class="ghost turn" aria-pressed="false" title="Turn the hoop sideways on screen. The file still loads the right way on the machine.">⟲ Turn hoop</button>
     </div>
     <div class="bottom">

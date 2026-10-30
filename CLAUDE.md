@@ -136,6 +136,15 @@ Embroidery-file tools for home machines. Two implementations of the same engine:
   only: files always carry Brother PEC colours. Picture tab "Use only threads I own" sends `palette` to the worker;
   `toPalette()` maps each colour cluster to the nearest owned spool and merges clusters that land on the same one
   (the sample flower: 3 thread changes -> 2).
+- Design doctor (`js/doctor.js`, Open tab "Checkup"): needle hits per mm² per block (> 24 flagged), stitches under
+  0.3 mm, satin same-edge gap (median, as pe900_check.py; > 0.6 flagged), stitches over 10 mm, a stabilizer hint from
+  stitches per square inch. Fixes: Size 80-120 % about the centre (coordinates rounded to whole 0.1 mm and zero-length
+  stitches dropped first, or the writer's rounding broke `validatePES`), remove tiny stitches (on by itself when
+  shrinking: 80 % made 55 on a file with none), thin to 24 with `relieve()`, split stitches over 12 mm. A file that
+  starts with a stitch at the origin (gnome.pes) gets a jump to its first point when it changes, or the scaled file
+  sewed a stitch out from the origin. Untouched files still download as their own bytes. `tests/doctor.test.mjs`
+  (CI) validates every fix on the fixtures (and tests/external when present). "Thickness" under the preview overlays
+  the hits per mm² (12+ yellow, 18+ orange, 24+ red) on every tab, over the stitches faded so it shows on black.
 - Sew sheet + cut file (`js/sheet.js`, links under Download): "Print a sew sheet" fills a hidden `#sheet` and calls
   `window.print()` (print CSS hides the app). Page 1 is the hoop field at 1:1 (SVG sized in mm) with the design centred
   as the machine centres it, a crosshair and a 5 cm check bar; page 2 the steps with the machine's thread names

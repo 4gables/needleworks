@@ -361,3 +361,9 @@ body[data-mode="design"] #view { cursor: grab; }
 .st-steps b small { font-weight: 400; color: var(--muted); }
 @media (max-width: 600px) { #brand { max-width: 9.5em; } }
 #brand { max-width: 12em; }
+.doctor { list-style: none; padding: 0; margin: 0; display: grid; gap: 8px; font-size: 15px; }
+.doctor li { padding-left: 24px; position: relative; line-height: 1.4; }
+.doctor li::before { position: absolute; left: 0; top: 0; font-weight: 700; }
+.doctor li.good::before { content: "✓"; color: #2f7d4a; }
+.doctor li.warn::before { content: "!"; color: #a5521a; left: 5px; }
+#doctor .edit { margin-top: 10px; }

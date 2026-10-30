@@ -8,6 +8,7 @@ import { nearestBrotherThread, pecThread } from "./core/threads.js";
 import { FABRICS, colorBlocks, draw } from "./render.js";
 import { cutSVG, sewSheet } from "./sheet.js";
 import { zip } from "./zip.js";
+import { checkup, fix, heat } from "./doctor.js";
 import { BRANDS, nearestSpool, spools } from "./core/brands.js";
 import { initStudio } from "./studio/ui.js";
 
@@ -59,6 +60,7 @@ function paint() {
   state.tf = draw(canvas, v.shown, {
     center: state.mode === "design" ? [0, 0] : undefined, ghost: !!block,
     cache: v.cache, fabric: v.fabric, fabricShapeBlock, hide, upto,
+    heat: state.heat ? (v.heat ||= heat(v.shown)) : null,
     hoop: shownHoop(), showHoop: state.showHoop, zoom: state.zoom, pan: state.pan, showNeedle: state.upto != null,
     padTop: $("facts").offsetHeight + 16,
   });
@@ -77,7 +79,7 @@ function setView(v) {
     try { v.file = v.source ? v.pattern : readEmbroidery(v.bytes, v.filename); }
     catch (err) { v.file = null; showError("This file didn't read back: " + err.message); $("download").disabled = true; $("share").disabled = true; return; }
   }
-  v.shown = turned() ? turnPattern(v.file, false) : v.file;
+  v.shown = turned() ? turnPattern(v.file, false) : v.file; v.heat = null;
   v.cache = colorBlocks(v.shown);
   const st = designStats(v.file), h = hoop(), shown = designStats(v.shown);
   const fits = st.widthMm <= h.w - 2 * MARGIN && st.heightMm <= h.h - 2 * MARGIN;
@@ -191,6 +193,7 @@ $("progress").oninput = (e) => {
   if (!state.view) return; stopPlay(); showStep(null);
   const v = +e.target.value; state.upto = v >= 1000 ? null : Math.round((v / 1000) * state.view.cache.total); paint();
 };
+$("show-heat").onchange = (e) => { state.heat = e.target.checked; paint(); };
 $("show-hoop").checked = state.showHoop;
 $("show-hoop").onchange = (e) => { state.showHoop = e.target.checked; store.set("showHoop", state.showHoop); paint(); };
 $("turn").onclick = () => {
@@ -603,12 +606,51 @@ async function openDesign(file) {
       ${fits ? `<span class="good">Fits the ${h.machineName} ${h.name}.</span>` : `<span class="warn">Too big for the ${h.name}: it's ${st.widthMm.toFixed(0)} × ${st.heightMm.toFixed(0)} mm.</span>`}
       ${repair ? `<span class="warn">As it is, this file would load cut off on a Brother machine (shifted, about half shown). The download here is fixed.</span>`
         : isPes ? "" : `<span>You can download it as a PES file for your machine.</span>`}`;
-    const v = { pattern: d, verifyAgainst: isPes ? null : d, bytes: out, filename: `${base}.pes`, fabric: "linen",
-      source: isPes ? bytes : null,
-      threadLabel: (b, t) => (/[a-z]{2}/i.test(b.name || "") ? escapeHtml(b.name) : `Brother ${t.name}${b.name ? " · " + escapeHtml(b.name) : ""}`) };
-    state.views.open = v; setMode("open"); setView(v);
+    state.opened = { d, bytes, out, isPes, base, opts: { scale: 1, tiny: false, thin: false } };
+    $("doctor-fix").innerHTML = ""; setMode("open"); openView();
   } catch (err) { console.error(err); setMode("open"); showError(err.message || "This file couldn't be read."); }
 }
+// the opened file as it stands after the checkup's fixes (none: its own bytes, as they came)
+function openView() {
+  const o = state.opened, { scale, tiny, thin } = o.opts, changed = scale !== 1 || tiny || thin;
+  const p = changed ? fix(o.d, o.opts) : o.d;
+  const v = { pattern: p, verifyAgainst: changed || !o.isPes ? p : null, bytes: changed ? writePES(p) : o.out,
+    filename: `${o.base}${scale !== 1 ? `_${Math.round(scale * 100)}pct` : ""}.pes`, fabric: "linen", source: changed || !o.isPes ? null : o.bytes,
+    threadLabel: (b, t) => (/[a-z]{2}/i.test(b.name || "") ? escapeHtml(b.name) : `Brother ${t.name}${b.name ? " · " + escapeHtml(b.name) : ""}`) };
+  state.views.open = v; setView(v); doctorUI(p);
+}
+// what might go wrong at the machine, in plain words, with the fixes that are safe on a finished design
+function doctorUI(p) {
+  const c = checkup(p), o = state.opened.opts, items = [];
+  const say = (ok, text) => items.push(`<li class="${ok ? "good" : "warn"}">${text}</li>`);
+  say(!c.hot, c.hot ? `${c.hot} ${c.hot === 1 ? "spot is" : "spots are"} very dense (up to ${c.max} needle hits per mm²; sold designs stay under 25): thread can break or the fabric pucker there. Turn on <b>Thickness</b> under the preview to see ${c.hot === 1 ? "it" : "them"}.`
+    : `Thickness is fine: the densest spot has ${c.max} needle hits per mm².`);
+  if (c.tiny) say(false, `${c.tiny} ${c.tiny === 1 ? "stitch is" : "stitches are"} shorter than 0.3 mm. They pile up thread and can break it.`);
+  if (c.satinGap && c.satinGap > 0.6) say(false, `The satin stitches are far apart (${c.satinGap.toFixed(1)} mm on each edge; well-made designs 0.3–0.4 mm), so fabric may show through.${o.scale > 0.85 ? " Shrinking it a little fills it in." : ""}`);
+  if (c.long) say(true, `${c.long} ${c.long === 1 ? "stitch is" : "stitches are"} longer than 10 mm. Fine on a wall hanging; on clothes they can snag.`);
+  say(true, c.perSqIn > 1500 ? `Heavy stitching (about ${c.perSqIn.toLocaleString()} stitches per square inch): use cut-away stabilizer, or two layers of tear-away.`
+    : c.perSqIn > 600 ? `Medium stitching: tear-away stabilizer on woven fabric, cut-away on knits.` : `Light stitching: tear-away stabilizer is enough.`);
+  $("doctor").hidden = false; $("doctor-list").innerHTML = items.join("");
+  // the fixes are drawn once per file (redrawing the slider mid-drag would drop it); only their state follows
+  if (!$("doc-scale")) $("doctor-fix").innerHTML = `<label class="range"><span>Size</span><input type="range" id="doc-scale" min="80" max="120" step="5" value="100"><output>100 %</output></label>
+    <p class="hint">Bought designs only resize well a little: past 10–20 % the stitches need redoing. Shrinking makes it denser; growing opens it up.</p>
+    <label class="check small"><input type="checkbox" id="doc-tiny"> Remove tiny stitches</label>
+    <label class="check small"><input type="checkbox" id="doc-thin"> Thin the densest spots to 24 hits per mm²</label>`;
+  $("doc-scale").value = Math.round(o.scale * 100); $("doc-scale").nextElementSibling.textContent = `${Math.round(o.scale * 100)} %`;
+  $("doc-tiny").checked = o.tiny; $("doc-thin").checked = o.thin;
+}
+$("doctor-fix").addEventListener("input", (e) => {
+  const o = state.opened.opts;
+  if (e.target.id === "doc-scale") {
+    const was = o.scale; o.scale = +e.target.value / 100; e.target.nextElementSibling.textContent = `${e.target.value} %`;
+    if (o.scale < 1 && was >= 1) o.tiny = true;   // shrinking turns short stitches into tiny ones
+    clearTimeout(docTimer); docTimer = setTimeout(openView, 200); return;
+  }
+  if (e.target.id === "doc-tiny") o.tiny = e.target.checked;
+  if (e.target.id === "doc-thin") o.thin = e.target.checked;
+  openView();
+});
+let docTimer = 0;
 $("open-file").onchange = (e) => e.target.files[0] && openDesign(e.target.files[0]);
 
 // drag & drop / paste anywhere
