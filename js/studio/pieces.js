@@ -542,7 +542,42 @@ function withQuilt(p, stages, obstacles) {
   return at < 0 ? [...stages, q] : [...stages.slice(0, at), q, ...stages.slice(at)];
 }
 
-// opts: { fabric: key of FABRICS, baste: a basting box round everything first (floating, towels) }
+// Bigger than the hoop: split into two hoopings by whole pieces (never through a stitch), along the design's long
+// side, at the most even cut where both halves fit. Two basting crosses on the cut line line the second hooping up
+// with the first: sewn at the end of the first and again at the start of the second. null when it can't be done
+// (one piece is bigger than the hoop by itself, or no cut leaves both halves small enough).
+export function splitPieces(pieces, hoop) {
+  const lw = hoop.w - 2 * MARGIN - 2, lh = hoop.h - 2 * MARGIN - 2;
+  const items = pieces.map((p) => ({ p, b: pieceBounds(p) })).filter((it) => it.b);
+  if (items.length < 2) return null;
+  const all = [Math.min(...items.map((i) => i.b[0])), Math.min(...items.map((i) => i.b[1])), Math.max(...items.map((i) => i.b[2])), Math.max(...items.map((i) => i.b[3]))];
+  for (const ax of all[2] - all[0] - lw > all[3] - all[1] - lh ? [0, 1] : [1, 0]) {
+    const L = ax ? lh : lw, C = ax ? lw : lh, lo = ax ? 1 : 0, hi = ax ? 3 : 2, c0 = all[ax ? 0 : 1], c1 = all[ax ? 2 : 3];
+    if (c1 - c0 > C) continue;
+    const sorted = items.slice().sort((a, b) => a.b[lo] + a.b[hi] - b.b[lo] - b.b[hi]);
+    let best = null;
+    for (let k = 1; k < sorted.length; k++) {
+      const A = sorted.slice(0, k), B = sorted.slice(k);
+      const aLo = Math.min(...A.map((i) => i.b[lo])), aHi = Math.max(...A.map((i) => i.b[hi])), bLo = Math.min(...B.map((i) => i.b[lo])), bHi = Math.max(...B.map((i) => i.b[hi]));
+      // the crosses sit between the halves, as near the middle of the gap as both hoopings allow (each must hold them)
+      const uLo = bHi - L + 5, uHi = aLo + L - 5;
+      if (uLo > uHi || aHi - aLo > L || bHi - bLo > L) continue;
+      const m = Math.min(uHi, Math.max(uLo, (aHi + bLo) / 2));
+      const spanA = Math.max(aHi, m + 5) - Math.min(aLo, m - 5), spanB = Math.max(bHi, m + 5) - Math.min(bLo, m - 5);
+      if (spanA > L || spanB > L) continue;
+      if (!best || Math.max(spanA, spanB) < best.worst) best = { worst: Math.max(spanA, spanB), A, B, m };
+    }
+    if (!best) continue;
+    const at = (u, v) => (ax ? [v, u] : [u, v]), marks = [at(best.m, c0 + (c1 - c0) * 0.25), at(best.m, c0 + (c1 - c0) * 0.75)];
+    return [{ pieces: best.A.map((i) => i.p), marks, end: true }, { pieces: best.B.map((i) => i.p), marks, end: false }];
+  }
+  return null;
+}
+// basting crosses (long stitches, easy to pull out), each starting and ending at its centre
+const crosses = (marks) => marks.map(([x, y]) => [[x, y], [x + 5, y], [x - 5, y], [x, y], [x, y + 5], [x, y - 5], [x, y]]);
+
+// opts: { fabric: key of FABRICS, baste: a basting box round everything first (floating, towels),
+//         marks: { pts, end } alignment crosses for a split design (end: after everything, else first) }
 export function compose(pieces, hoop, opts = {}) {
   const fab = FABRICS[opts.fabric] ? opts.fabric : "cotton";
   const fit = fittedSizes(pieces);
@@ -570,6 +605,13 @@ export function compose(pieces, hoop, opts = {}) {
     order.splice(at, 0, s);
   }
   order.push(...last);
+  if (opts.marks && order.length) {
+    const color = opts.marks.end ? order[order.length - 1].color : order[0].color, paths = crosses(opts.marks.pts);
+    if (opts.marks.end) order.push({ color, paths, label: "Alignment crosses", sews: "Sews two alignment crosses where the next hooping lines up." });
+    else order.unshift({ color, paths, label: "Alignment crosses", pause: true,
+      you: "Hoop the fabric again, as straight as you can, with both crosses from the first hooping inside the hoop. Before you press Start, use the machine's layout arrows to move the design until the needle comes down on the centre of the left cross (turn the handwheel to check). Press Start: the crosses should sew right on top of the old ones. If they don't, stop, move the design and try again.",
+      sews: "Sews the alignment crosses again, on top of the first ones.", after: "Pull out the alignment crosses (they're long stitches; snip and pull)." });
+  }
   if (opts.baste && order.length) {
     // long stitches 10 mm round everything (as far as the hoop allows), centred on the design so it stays centred;
     // part of the first block, so it needs no stop of its own

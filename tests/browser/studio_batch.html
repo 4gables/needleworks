@@ -10,7 +10,7 @@ lettering. Each is checked with <code>validatePES</code> and POSTed to <code>/sa
 import { hoop as getHoop } from "../../js/core/machines.js";
 import { readEmbroidery, writePES, validatePES } from "../../js/core/formats.js";
 import { APPLIQUE_FONTS, FONTS } from "../../js/core/fonts.js";
-import { BORDERS, SHAPES, compose, fileBlocks, followFrame } from "../../js/studio/pieces.js";
+import { BORDERS, SHAPES, compose, fileBlocks, followFrame, splitPieces } from "../../js/studio/pieces.js";
 import { STARTERS } from "../../js/studio/ui.js";
 
 const log = (s) => (document.getElementById("log").textContent += s + "\n");
@@ -82,6 +82,20 @@ for (const [k, i] of Object.keys(MOTIFS).map((k, i) => [k, i]))
 await save("st_motif_small_fill", [P({ kind: "motif", motif: "cat", size: 12, style: "fill" }), P({ kind: "motif", motif: "paw", size: 10, style: "fill", x: 20 })]);
 for (const f of [FONTS[0], FONTS.find((x) => x.print)]) await save(`st_deco_${f.family.slice(3).replace(/ /g, "")}`, [P({ kind: "text", text: "Emma", font: f.family, size: 14, deco: "heart" })]);
 log("motifs: done");
+// bigger than the hoop: two hoopings, each with the alignment crosses
+for (const [tag, ps] of [
+  ["long_name", [P({ kind: "text", text: "Grandma's", font: FONTS[0].family, size: 26, x: -64 }), P({ kind: "text", text: "Kitchen", font: FONTS[0].family, size: 26, x: 64 })]],
+  ["tall", [P({ kind: "motif", motif: "flower", size: 90, y: -60, style: "outline" }), P({ kind: "motif", motif: "heart", size: 80, y: 60, style: "fill", color: "#ed171f" })]],
+]) {
+  const hoop = getHoop("brother-pe900", "5x7"), parts = splitPieces(ps, hoop);
+  if (!parts) { bad++; log(`ERROR split_${tag}: no split`); continue; }
+  for (const [i, pt] of parts.entries()) {
+    const pattern = compose(pt.pieces, hoop, { marks: { pts: pt.marks, end: pt.end } }).design.pattern(), bytes = writePES(pattern), v = validatePES(bytes, pattern, hoop);
+    if (!v.ok) { bad++; log(`INVALID split_${tag}_${i + 1}: ${v.error}`); }
+    await fetch(`/save/st_split_${tag}_${i + 1}.pes`, { method: "POST", body: bytes }); n++;
+  }
+}
+log("split: done");
 for (const f of APPLIQUE_FONTS) for (const [text, size] of [["AB", 60], ["Mia", 35], ["Q&8", 44]]) {
   const tag = f.family.slice(3).replace(/ /g, "");
   await save(`st_appl_${tag}_${text.replace(/[^A-Za-z0-9]/g, "")}_${size}`, [P({ kind: "letters", text, font: f.family, size })]);

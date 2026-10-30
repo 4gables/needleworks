@@ -8,7 +8,7 @@ import { readEmbroidery } from "../core/formats.js";
 import { draw } from "../render.js";
 import { QUILTS } from "./quilt.js";
 import { MOTIFS } from "./motifs.js";
-import { BORDERS, FABRICS, SHAPES, TEXT_SHAPES, archTight, compose, fileBlocks, fittedSizes, followFrame, label, minSize, pieceBounds, smallText } from "./pieces.js";
+import { BORDERS, FABRICS, SHAPES, TEXT_SHAPES, splitPieces, archTight, compose, fileBlocks, fittedSizes, followFrame, label, minSize, pieceBounds, smallText } from "./pieces.js";
 
 const SCRIPT = "NW Great Vibes", PRINT = "NW Josefin Sans";
 // exact Brother PEC thread colours, so the name on screen is the one the machine shows
@@ -256,7 +256,10 @@ export function initStudio(api) {
       const fonts = [...new Set(pieces.filter((p) => p.font).map((p) => p.font))];
       await Promise.all(fonts.map((f) => document.fonts.load(`40px "${f}"`)));
       if (s !== seq) return;
-      const { design, steps, after, before, tip } = compose(pieces, api.hoop(), { fabric, baste });
+      let composed;
+      try { composed = compose(pieces, api.hoop(), { fabric, baste }); }
+      catch (err) { if (!err.overBy) throw err; if (s === seq) split(err); return; }
+      const { design, steps, after, before, tip } = composed;
       if (s !== seq) return;
       const fit = fittedSizes(pieces), small = pieces.some((p) => smallText(fit.has(p.id) ? { ...p, size: fit.get(p.id) } : p));
       stepsUI(steps, after, small, before);
@@ -268,6 +271,20 @@ export function initStudio(api) {
         sheet: { steps: steps.map((st) => ({ you: st.you, sews: st.sews.join(" ") })), after, cut: steps.filter((st) => st.cut).map((st) => st.cut),
           notes: [...before.map((b) => "Have ready: " + b), $("st-tip").hidden ? "" : $("st-tip").textContent, tip, small ? SMALL_TIP : ""] } });
     } catch (err) { if (s === seq) { console.error(err); api.showError(err.message); } }
+  }
+  // too big for the hoop: two hoopings if whole pieces can be shared out, else say how much to shrink
+  function split(err) {
+    const hoop = api.hoop(), parts = splitPieces(pieces, hoop);
+    if (!parts) { api.showError(err.message + " Use Fit to hoop, or make the biggest piece smaller."); return; }
+    const opts = { fabric, baste }, base = api.safeName(firstWords(), "design");
+    const built = parts.map((pt, i) => ({ ...compose(pt.pieces, hoop, { ...opts, marks: { pts: pt.marks, end: pt.end } }), filename: `${base}_hooping_${i + 1}_of_2.pes` }));
+    // the whole design for the preview (a big pretend hoop), and every step of both hoopings in order
+    const all = compose(pieces, { ...hoop, w: 2000, h: 2000 }, opts);
+    const steps = [...built[0].steps, { color: built[1].steps[0].color, sews: ["Second hooping."], you: "Take the fabric out and hoop it again for the second half. The next step says how to line it up." }, ...built[1].steps];
+    stepsUI(steps, [...built[0].after, ...built[1].after], false, built[0].before);
+    for (const b of $("st-steps").querySelectorAll("[data-step]")) b.disabled = true;   // (the step view follows one file)
+    api.setView(all.design.pattern(), `${base}_2_hoopings.zip`, { fabric: "linen", steps: 0,
+      split: built.map((b) => ({ pattern: b.design.pattern(), filename: b.filename })) });
   }
   // appliqué tips: shown the first time a design has fabric to lay on, then on request
   function applGuide(steps) {

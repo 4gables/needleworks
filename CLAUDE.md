@@ -190,6 +190,14 @@ Embroidery-file tools for home machines. Two implementations of the same engine:
   true size (the hoop is hidden), and a drag that isn't on a piece slides the photo. Nothing leaves the device and
   nothing is saved. (Found doing this: since round 2 a trailing comment in app.js's state had swallowed `showHoop`, so
   the Hoop box showed unticked while the hoop was drawn and the saved choice was ignored.)
+- Bigger than the hoop (`splitPieces` in pieces.js): when `compose` throws `overBy`, the Design tab shares whole pieces
+  (never a cut stitch) between two hoopings along the long side, at the most even cut where both fit (field - 2 mm).
+  Two basting crosses on the cut line, placed as near the middle of the gap as both hoopings allow, are sewn at the end
+  of the first and first in the second (`compose` opts `marks`), with plain-words lining-up steps; the download is a
+  ZIP of both files, each through `validatePES`. The preview shows the whole design (composed in a 2 m pretend hoop);
+  step view, sew sheet, sew along, share and one-per-name are off for a split design. Embrilliance patents its
+  seam-hiding auto-split; this is the manual method (whole pieces + alignment marks). One piece bigger than the hoop
+  by itself can't be split: the error says to use Fit to hoop.
 - Sew sheet + cut file (`js/sheet.js`, links under Download): "Print a sew sheet" fills a hidden `#sheet` and calls
   `window.print()` (print CSS hides the app). Page 1 is the hoop field at 1:1 (SVG sized in mm) with the design centred
   as the machine centres it, a crosshair and a 5 cm check bar; page 2 the steps with the machine's thread names

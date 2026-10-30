@@ -84,7 +84,8 @@ function setView(v) {
   v.shown = turned() ? turnPattern(v.file, false) : v.file; v.heat = null;
   v.cache = colorBlocks(v.shown);
   const st = designStats(v.file), h = hoop(), shown = designStats(v.shown);
-  const fits = st.widthMm <= h.w - 2 * MARGIN && st.heightMm <= h.h - 2 * MARGIN;
+  // (a split design is checked part by part when it's downloaded)
+  const fits = !!v.split || (st.widthMm <= h.w - 2 * MARGIN && st.heightMm <= h.h - 2 * MARGIN);
   const inch = (mm) => (mm / 25.4).toFixed(1);
   const minutes = Math.max(1, Math.round(st.stitches / 550 + st.colorChanges * 0.5));
   $("facts").innerHTML = [
@@ -92,7 +93,7 @@ function setView(v) {
     `<span>${st.stitches.toLocaleString()} stitches</span>`,
     st.colorChanges ? `<span>${st.colorChanges} ${st.colorChanges === 1 ? "pause" : "pauses"}</span>` : "",
     `<span>≈ ${minutes} min</span>`,
-    fits ? "" : `<span class="bad">Too big for the ${h.name}</span>`,
+    v.split ? `<span>${v.split.length} hoopings</span>` : fits ? "" : `<span class="bad">Too big for the ${h.name}</span>`,
     shortJumps(v.file) ? `<span title="The machine only trims jumps longer than its 'jump stitch not to trim' setting (5 mm at the lowest). The thread is locked at both ends, so these are safe to snip after stitching.">${shortJumps(v.file)} short ${shortJumps(v.file) === 1 ? "jump" : "jumps"} to snip</span>` : "",
   ].join("");
   const seen = new Set(), mt = machineThreadList(v);
@@ -104,9 +105,9 @@ function setView(v) {
     }).join("");
   v.facts = [`${st.widthMm.toFixed(0)} × ${st.heightMm.toFixed(0)} mm (${inch(st.widthMm)} × ${inch(st.heightMm)} in)`, `${st.stitches.toLocaleString()} stitches`,
     `${st.colorChanges} ${st.colorChanges === 1 ? "pause" : "pauses"}`, `≈ ${minutes} min`, `${h.machineName} ${h.name}`];
-  $("download").disabled = !fits; $("share").disabled = !fits;
-  $("sheet-print").disabled = $("along-open").disabled = !fits; $("cut-file").hidden = !v.sheet?.cut?.length; $("names-open").hidden = !namesFor();
-  $("download").textContent = fits ? `Download ${v.filename}` : "Too big for this hoop";
+  $("download").disabled = !fits; $("share").disabled = !fits || !!v.split;
+  $("sheet-print").disabled = $("along-open").disabled = !fits || !!v.split; $("cut-file").hidden = !v.sheet?.cut?.length; $("names-open").hidden = !!v.split || !namesFor();
+  $("download").textContent = v.split ? `Download ${v.split.length} files (.zip)` : fits ? `Download ${v.filename}` : "Too big for this hoop";
   paint();
 }
 // moves between 1 and 5 mm: too short for the PE900 to trim (its lowest setting is 5 mm), left as loose thread
@@ -233,6 +234,18 @@ $("share").onclick = async () => {
 
 $("download").onclick = () => {
   const v = state.view; if (!v) return;
+  if (v.split) {   // one file per hooping, each proven like any other download
+    const files = [];
+    for (const p of v.split) {
+      const bytes = writePES(p.pattern), check = validatePES(bytes, p.pattern, hoop());
+      if (!check.ok) { showError(`Download stopped (${p.filename}): ${check.error}`); return; }
+      files.push({ name: p.filename, bytes });
+    }
+    const url = URL.createObjectURL(new Blob([zip(files)], { type: "application/zip" }));
+    const a = document.createElement("a"); a.href = url; a.download = v.filename; document.body.append(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 2000);
+    return;
+  }
   // never hand out a file we haven't proven decodes to exactly this design
   const check = validatePES(v.bytes, v.verifyAgainst || null, hoop());
   if (!check.ok) { showError("Download stopped: " + check.error); return; }
