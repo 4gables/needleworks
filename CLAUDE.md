@@ -290,7 +290,8 @@ Embroidery-file tools for home machines. Two implementations of the same engine:
   alternate fill angle (base, base + 90°). `routeFill` charges +2 per earlier travel through a cell, or travel funnels
   through one spot (50 hits/mm²). Net on the batch pictures: trims down, stitches +1-18%, max density unchanged.
   Ashley's School of Medicine file has no touching colours, so it gains nothing; it wasn't resent.
-- Fill density (`DENSITY` in digitize.js): Solid 0.35 mm rows (default) or Lighter 0.4. 0.3 fails the PE900 check
+- Fill density (`DENSITY` in digitize.js): Standard 0.4 mm rows (the 40 wt norm; the default since 2026-10-29) or
+  Dense 0.35 (felt, patches, dark fabric; Design-tab patches always use it). 0.3 fails the PE900 check
   (row links become < 0.3 mm stitches). `digitize()` also returns `fine`: area of gaps < 0.5 mm that stay narrow over a
   length (clusters >= 0.3 mm²; corner tips don't count) and the count of hairline (< 1 mm) shapes. The site warns at
   >= 0.8 mm² or >= 5 hairlines.

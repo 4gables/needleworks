@@ -38,7 +38,7 @@ const state = {
   bm: { name: store.get("bm.name", "ashley"), font: store.get("bm.font", FONTS[0].family), color: (c => OLD_THREADS[c] || c)(store.get("bm.color", RED)), fabric: store.get("bm.fabric", "pink"), lead: store.get("bm.lead", true), tail: store.get("bm.tail", true), blank: store.get("bm.blank", false) },
   brand: BRANDS[store.get("brand", "")] ? store.get("brand", "") : "",   // thread brand for spool numbers ("" = Brother only)
   spools: store.get("spools", {}),   // { brand: [spool numbers owned] }
-  pic: { mine: store.get("pic.mine", false), style: "fill", cross: 2.5, file: null, bitmap: null, key: 0, skip: [], colors: 4, size: 100, angle: 45, bg: true, density: store.get("pic.density", "solid"), req: 0, colorsInfo: [] },
+  pic: { mine: store.get("pic.mine", false), style: "fill", cross: 2.5, file: null, bitmap: null, key: 0, skip: [], colors: 4, size: 100, angle: 45, bg: true, density: store.get("pic.density", "standard"), req: 0, colorsInfo: [] },
 };
 if (!MACHINES[state.machine]) state.machine = DEFAULT_MACHINE;
 const hoop = () => getHoop(state.machine, state.hoopId);
@@ -691,7 +691,7 @@ function makePicture() {
   ctx.drawImage(p.bitmap, box.sx, box.sy, box.sw, box.sh, 0, 0, sz.w, sz.h);
   const img = ctx.getImageData(0, 0, sz.w, sz.h);
   p.req++; busy(true, "Stitching your picture…");
-  digitizeJob({ id: p.req, img, opts: { colors: p.colors, removeBackground: p.bg, fillAngle: p.angle, density: DENSITY[p.density] || DENSITY.solid, skip: p.skip, hoop: h, turn: turned(), imageKey: p.key, palette: ownedPalette(), style: p.style, cross: p.cross } });
+  digitizeJob({ id: p.req, img, opts: { colors: p.colors, removeBackground: p.bg, fillAngle: p.angle, density: DENSITY[p.density] || DENSITY.standard, skip: p.skip, hoop: h, turn: turned(), imageKey: p.key, palette: ownedPalette(), style: p.style, cross: p.cross } });
 }
 $("pic-file").onchange = (e) => loadPicture(e.target.files[0]);
 
