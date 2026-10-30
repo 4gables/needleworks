@@ -94,11 +94,12 @@ export function draw(canvas, design, opts = {}) {
   }
 
   const fab = FABRICS[opts.fabric || "linen"];
-  if (opts.fabricShapeBlock != null && blocks[opts.fabricShapeBlock]) {
+  const fabBlock = opts.fabricShapeBlock != null && blocks.find((b) => b.index === opts.fabricShapeBlock);   // (block index, as hide)
+  if (fabBlock) {
     // every outline in the placement block (appliqué letters have several, and holes): fabric between them
     // (closed ones only, ends within 5 mm: a zipper pouch's topstitch lines share the block; the bookmark's outline
     // stops a 2.5 mm stitch short of where it began)
-    const outlines = blocks[opts.fabricShapeBlock].segs.filter((sg) => sg.length > 8 && Math.hypot(sg[0][0] - sg[sg.length - 1][0], sg[0][1] - sg[sg.length - 1][1]) <= 50);
+    const outlines = fabBlock.segs.filter((sg) => sg.length > 8 && Math.hypot(sg[0][0] - sg[sg.length - 1][0], sg[0][1] - sg[sg.length - 1][1]) <= 50);
     ctx.save();
     ctx.beginPath();
     for (const outline of outlines) { outline.forEach(([x, y], i) => (i ? ctx.lineTo(X(x), Y(y)) : ctx.moveTo(X(x), Y(y)))); ctx.closePath(); }

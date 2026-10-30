@@ -256,9 +256,11 @@ function routeFill(groups, comp, mask, res) {
   }
   const cellOf = ([x, y]) => Math.min(gh - 1, Math.max(0, Math.floor(y / C))) * gw + Math.min(gw - 1, Math.max(0, Math.floor(x / C)));
   const centre = (c) => [(c % gw) * C + C / 2, Math.floor(c / gw) * C + C / 2];
+  // f returning false stops the walk (and along returns false)
   const along = (a, b, f) => {
     const steps = Math.max(1, Math.ceil(Math.hypot(b[0] - a[0], b[1] - a[1]) / (C / 2)));
-    for (let k = 0; k <= steps; k++) f(cellOf([a[0] + ((b[0] - a[0]) * k) / steps, a[1] + ((b[1] - a[1]) * k) / steps]));
+    for (let k = 0; k <= steps; k++) if (f(cellOf([a[0] + ((b[0] - a[0]) * k) / steps, a[1] + ((b[1] - a[1]) * k) / steps])) === false) return false;
+    return true;
   };
   const markSewn = (p) => { for (let i = 1; i < p.length; i++) along(p[i - 1], p[i], (c) => (sewn[c] = 1)); };
   // A* over 8-neighbour cells; finished rows cost 6x so travel hides under rows still to come
@@ -273,15 +275,35 @@ function routeFill(groups, comp, mask, res) {
     }
     return best;
   };
+  // 8-connected regions of inside cells: no way between two of them, so route() says so without flooding one
+  // (half of all calls on a busy picture, and most of the time)
+  const region = new Int32Array(n);
+  for (let c0 = 0, r = 0; c0 < n; c0++) {
+    if (!inside[c0] || region[c0]) continue;
+    const st = [c0]; region[c0] = ++r;
+    while (st.length) {
+      const c = st.pop(), cx = c % gw, cy = (c - cx) / gw;
+      for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+        const x = cx + dx, y = cy + dy, m = y * gw + x;
+        if (x >= 0 && y >= 0 && x < gw && y < gh && inside[m] && !region[m]) { region[m] = r; st.push(m); }
+      }
+    }
+  }
+  // A* state reused between calls (a cell's g/from count only if stamped this call); the open list is the same
+  // linear scan and swap-remove as before, in typed arrays, so ties break the same way and the stitches don't change
+  const G = new Float64Array(n), FROM = new Int32Array(n), STAMP = new Uint32Array(n), HK = new Float64Array(20010), HC = new Int32Array(20010);
+  let gen = 0;
   function route(a, b) {
     const s = snap(cellOf(a)), t = snap(cellOf(b));
-    if (s < 0 || t < 0) return null;
-    const g = new Float64Array(n).fill(Infinity), from = new Int32Array(n).fill(-1), heap = [[0, s]];
+    if (s < 0 || t < 0 || region[s] !== region[t]) return null;
+    gen++;
+    const g = (c) => (STAMP[c] === gen ? G[c] : Infinity), from = (c) => (STAMP[c] === gen ? FROM[c] : -1);
     const hx = (c) => Math.hypot((c % gw) - (t % gw), Math.floor(c / gw) - Math.floor(t / gw));
-    g[s] = 0;
-    while (heap.length) {
-      let bi = 0; for (let i = 1; i < heap.length; i++) if (heap[i][0] < heap[bi][0]) bi = i;
-      const [, c] = heap[bi]; heap[bi] = heap[heap.length - 1]; heap.pop();
+    STAMP[s] = gen; G[s] = 0; FROM[s] = -1; HK[0] = 0; HC[0] = s;
+    let hn = 1;
+    while (hn) {
+      let bi = 0; for (let i = 1; i < hn; i++) if (HK[i] < HK[bi]) bi = i;
+      const c = HC[bi]; hn--; HK[bi] = HK[hn]; HC[bi] = HC[hn];
       if (c === t) break;
       const cx = c % gw, cy = (c - cx) / gw;
       for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
@@ -289,18 +311,18 @@ function routeFill(groups, comp, mask, res) {
         const x = cx + dx, y = cy + dy; if (x < 0 || y < 0 || x >= gw || y >= gh) continue;
         const m = y * gw + x; if (!inside[m]) continue;
         // each earlier travel through a cell costs more, so ways don't all funnel through one spot (needle hits pile up)
-        const v = g[c] + Math.hypot(dx, dy) * ((sewn[m] ? 6 : 1) + 2 * trod[m]);
-        if (v < g[m]) { g[m] = v; from[m] = c; heap.push([v + hx(m), m]); }
+        const v = g(c) + Math.hypot(dx, dy) * ((sewn[m] ? 6 : 1) + 2 * trod[m]);
+        if (v < g(m)) { STAMP[m] = gen; G[m] = v; FROM[m] = c; HK[hn] = v + hx(m); HC[hn++] = m; }
       }
-      if (heap.length > 20000) return null;
+      if (hn > 20000) return null;
     }
-    if (from[t] < 0 && s !== t) return null;
-    const cells = [t]; while (cells[cells.length - 1] !== s) cells.push(from[cells[cells.length - 1]]);
+    if (from(t) < 0 && s !== t) return null;
+    const cells = [t]; while (cells[cells.length - 1] !== s) cells.push(from(cells[cells.length - 1]));
     cells.reverse();
     let sewnMm = 0;
     for (let i = 1; i < cells.length; i++) if (sewn[cells[i]]) sewnMm += Math.hypot((cells[i] % gw) - (cells[i - 1] % gw), Math.floor(cells[i] / gw) - Math.floor(cells[i - 1] / gw)) * C / res;
     // pull the staircase straight where a straight line stays inside (and off finished rows if the route was)
-    const ok = (p, q) => { let good = true; along(p, q, (c) => { if (!inside[c] || (sewn[c] && !sewnMm)) good = false; }); return good; };
+    const ok = (p, q) => along(p, q, (c) => !!inside[c] && !(sewn[c] && !sewnMm));
     const pts = [a], cs = cells.map(centre); let i = 0;
     while (i < cs.length - 1) { let j = cs.length - 1; while (j > i + 1 && !ok(pts[pts.length - 1], cs[j])) j--; pts.push(cs[j]); i = j; }
     pts.push(b);

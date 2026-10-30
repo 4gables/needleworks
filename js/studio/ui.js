@@ -270,12 +270,18 @@ export function initStudio(api) {
         hide: new Set(steps.flatMap((st, i) => (st.under ? [i] : []))), fabric: fabricBlock >= 0 ? "pink" : "linen", steps: steps.length,
         sheet: { steps: steps.map((st) => ({ you: st.you, sews: st.sews.join(" ") })), after, cut: steps.filter((st) => st.cut).map((st) => st.cut),
           notes: [...before.map((b) => "Have ready: " + b), $("st-tip").hidden ? "" : $("st-tip").textContent, tip, small ? SMALL_TIP : ""] } });
-    } catch (err) { if (s === seq) { console.error(err); api.showError(err.message); } }
+    } catch (err) { if (s === seq) { console.error(err); api.setView(null); api.showError(err.message); } }
   }
   // too big for the hoop: two hoopings if whole pieces can be shared out, else say how much to shrink
   function split(err) {
     const hoop = api.hoop(), parts = splitPieces(pieces, hoop);
-    if (!parts) { api.showError(err.message + " Use Fit to hoop, or make the biggest piece smaller."); return; }
+    // can't be shared out: show it whole (a big pretend hoop) so it can be seen and dragged back; setView turns
+    // Download into "Too big for this hoop"
+    if (!parts) {
+      try { api.setView(compose(pieces, { ...hoop, w: 2000, h: 2000 }, { fabric, baste }).design.pattern(), `${api.safeName(firstWords(), "design")}.pes`, { fabric: "linen", steps: 0 }); }
+      catch { api.setView(null); }
+      api.showError(err.message + " Use Fit to hoop, or make the biggest piece smaller."); return;
+    }
     const opts = { fabric, baste }, base = api.safeName(firstWords(), "design");
     const built = parts.map((pt, i) => ({ ...compose(pt.pieces, hoop, { ...opts, marks: { pts: pt.marks, end: pt.end } }), filename: `${base}_hooping_${i + 1}_of_2.pes` }));
     // the whole design for the preview (a big pretend hoop), and every step of both hoopings in order
@@ -389,11 +395,12 @@ export function initStudio(api) {
   function start(mm) {
     const p = hit(mm); if (!p) return false;
     if (sel !== p.id) { sel = p.id; ui(); }
-    remember(); drag = { p, from: mm, x: p.x, y: p.y };
+    drag = { p, from: mm, x: p.x, y: p.y, moved: false };
     return true;
   }
   function move(mm) {
     if (!drag) return;
+    if (!drag.moved) { remember(); drag.moved = true; }
     drag.p.x = Math.round((drag.x + mm[0] - drag.from[0]) * 2) / 2; drag.p.y = Math.round((drag.y + mm[1] - drag.from[1]) * 2) / 2;
     clearTimeout(timer); timer = setTimeout(make, 40);
   }
@@ -437,7 +444,7 @@ export function initStudio(api) {
     } catch (err) { api.showError("That design couldn't be opened: " + err.message); }
   };
   document.addEventListener("keydown", (e) => {
-    if (document.body.dataset.mode !== "design" || e.target.matches("input[type=text], textarea")) return;
+    if (document.body.dataset.mode !== "design" || e.defaultPrevented || e.target.matches("input[type=text], textarea, [role=tab]")) return;
     if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "z") { e.preventDefault(); undo(); }
     const arrows = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] }[e.key];
     if (arrows && !e.target.matches("input, select")) { e.preventDefault(); nudge(arrows[0] * (e.shiftKey ? 5 : 1), arrows[1] * (e.shiftKey ? 5 : 1)); }

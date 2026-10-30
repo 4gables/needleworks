@@ -56,9 +56,10 @@ function satinGap(st) {
 export function fix(pattern, { scale = 1, tiny = false, thin = false } = {}) {
   let st = pattern.stitches;
   if (scale !== 1) {
-    const pts = st.filter((s) => s[2] === STITCH || s[2] === JUMP);
-    const cx = (Math.min(...pts.map((s) => s[0])) + Math.max(...pts.map((s) => s[0]))) / 2;
-    const cy = (Math.min(...pts.map((s) => s[1])) + Math.max(...pts.map((s) => s[1]))) / 2;
+    // (a loop, not Math.min(...pts): spreading 110k+ stitches overflows the stack)
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    for (const [x, y, c] of st) if (c === STITCH || c === JUMP) { if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
+    const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2;
     // whole 0.1 mm units here, so the writer's rounding can't collapse a stitch the check then misses
     st = st.map(([x, y, c]) => [Math.round(cx + (x - cx) * scale), Math.round(cy + (y - cy) * scale), c]);
   }

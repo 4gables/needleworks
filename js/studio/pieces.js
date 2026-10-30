@@ -472,8 +472,10 @@ export function fileBlocks(design) {
   flush();
   const kept = blocks.filter((b) => b.paths.length), pts = kept.flatMap((b) => b.paths.flat());
   if (!pts.length) throw new Error("That file has no stitches.");
-  const cx = (Math.min(...pts.map((q) => q[0])) + Math.max(...pts.map((q) => q[0]))) / 2;
-  const cy = (Math.min(...pts.map((q) => q[1])) + Math.max(...pts.map((q) => q[1]))) / 2;
+  // (a loop, not Math.min(...pts): spreading 110k+ points overflows the stack)
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+  for (const [x, y] of pts) { if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
+  const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2;
   for (const b of kept) b.paths = b.paths.map((q) => q.map(([x, y]) => [Math.round((x - cx) * 10) / 10, Math.round((y - cy) * 10) / 10]));
   return kept;
 }
@@ -531,7 +533,10 @@ export const FABRICS = {
 const QUILTED = (p) => p.kind === "frame" && (p.quilt === "stipple" || p.quilt === "echo") && p.border !== "patch";
 const quilted = new Map();
 function withQuilt(p, stages, obstacles) {
-  const edge = (SHAPES[p.shape] || SHAPES.circle).path(p.w, p.h).map(placer(p)), key = JSON.stringify([p, obstacles.length, obstacles[0]?.[0], obstacles.at(-1)?.at(-1)]);
+  // keyed on every obstacle point: moving a middle piece reused the old quilting, sewn through it
+  let h = obstacles.length;
+  for (const o of obstacles) for (const [x, y] of o) h = (Math.imul(h ^ Math.round(x * 10), 16777619) ^ Math.round(y * 10)) | 0;
+  const edge = (SHAPES[p.shape] || SHAPES.circle).path(p.w, p.h).map(placer(p)), key = JSON.stringify([p, h]);
   if (!quilted.has(key)) {
     quilted.set(key, (p.quilt === "echo" ? echo : stipple)(edge, obstacles, { inset: p.border === "line" || p.border === "bold" ? 3 : 4.5 }));
     if (quilted.size > 12) quilted.delete(quilted.keys().next().value);

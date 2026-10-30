@@ -459,10 +459,12 @@ function fillMachines() {
   const h = hoop();
   const max = Math.floor(Math.max(h.w, h.h) - 2 * MARGIN - 2);
   $("pic-size").max = max;
-  if (state.pic.size > max) { state.pic.size = max; $("pic-size").value = max; $("pic-size").dispatchEvent(new Event("input")); }
+  if (state.pic.size > max) { state.pic.size = max; $("pic-size").value = max; $("pic-size-out").textContent = sizeLabel(max); }
 }
-$("machine").onchange = (e) => { state.machine = e.target.value; state.hoopId = null; store.set("machine", state.machine); fillMachines(); refresh(); };
-$("hoop").onchange = (e) => { state.hoopId = e.target.value; store.set("hoop", state.hoopId); fillMachines(); refresh(); };
+const sizeLabel = (v) => `${v} mm · ${(v / 25.4).toFixed(1)} in`;
+function hoopChanged() { if (state.mode !== "picture") state.pic.req++; for (const m of ["picture", "bookmark", "design"]) if (m !== state.mode) state.views[m] = null; fillMachines(); refresh(); }
+$("machine").onchange = (e) => { state.machine = e.target.value; state.hoopId = null; store.set("machine", state.machine); hoopChanged(); };
+$("hoop").onchange = (e) => { state.hoopId = e.target.value; store.set("hoop", state.hoopId); hoopChanged(); };
 function refresh() { if (state.mode === "bookmark") makeBookmark(); else if (state.mode === "picture") makePicture(); else if (state.mode === "design") studio.make(); else if (state.view) setView(state.view); }
 
 // ---------- tabs ----------
@@ -475,10 +477,11 @@ function setMode(mode, push = true) {
   // the bookmark is a starting idea inside Design your own, not a tab of its own
   for (const m of TABS) $("tab-" + m).setAttribute("aria-selected", m === mode || (m === "design" && mode === "bookmark"));
   if (push) history.replaceState(null, "", "#" + mode);
-  showError("");
+  showError(""); busy(false);   // (a picture still stitching from the last tab)
   $("empty").textContent = mode === "picture" ? "Choose a picture to see it as stitches." : mode === "open" ? "Open a PES, PEC or DST file to see it here." : "";
   state.zoom = 1; state.pan = [0, 0];
   if (mode === "picture" && !state.pic.bitmap) loadSample();
+  else if (mode === "picture" && !state.views.picture) makePicture();
   else if (mode === "bookmark" && !state.views.bookmark) makeBookmark();
   else if (mode === "design" && !state.views.design) studio.make();
   else setView(state.views[mode] || null);
@@ -490,7 +493,7 @@ document.querySelector(".tabs").addEventListener("keydown", (e) => {
   const i = TABS.indexOf(state.mode === "bookmark" ? "design" : state.mode);
   if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
     const n = TABS[(i + (e.key === "ArrowRight" ? 1 : TABS.length - 1)) % TABS.length];
-    setMode(n); $("tab-" + n).focus();
+    e.preventDefault(); setMode(n); $("tab-" + n).focus();
   }
 });
 
@@ -554,11 +557,16 @@ async function makeBookmark() {
 
 // ---------- picture ----------
 const worker = new Worker(new URL("./worker.js", import.meta.url), { type: "module" });
+// one job at a time, and only the newest waiting: three quick slider moves on a slow picture computed all three
+let picRunning = false, picNext = null;
+function digitizeJob(msg) { if (picRunning) picNext = msg; else { picRunning = true; worker.postMessage(msg); } }
+function jobDone() { picRunning = false; if (picNext) { const m = picNext; picNext = null; digitizeJob(m); } }
 worker.onmessage = (e) => {
   const r = e.data;
+  jobDone();
   if (r.id !== state.pic.req) return;
   busy(false);
-  if (!r.ok) { showError(r.error); return; }
+  if (!r.ok) { state.views.picture = null; if (state.mode === "picture") { setView(null); showError(r.error); } return; }
   showError("");
   const stitched = new Set(r.summary.map((c) => c.id));
   state.pic.colorsInfo = r.colors.filter((c) => stitched.has(c.id) || state.pic.skip.includes(c.id));
@@ -572,7 +580,7 @@ worker.onmessage = (e) => {
   state.views.picture = v;
   if (state.mode === "picture") setView(v);
 };
-worker.onerror = (e) => { busy(false); showError("Something went wrong while stitching this picture. " + (e.message || "")); };
+worker.onerror = (e) => { jobDone(); busy(false); if (state.mode === "picture") showError("Something went wrong while stitching this picture. " + (e.message || "")); };
 
 function paletteUI() {
   const cols = state.pic.colorsInfo.filter((c) => !c.background && c.area > 0);
@@ -595,7 +603,7 @@ const bindRange = (id, key, fmt) => {
   });
 };
 bindRange("pic-colors", "colors", (v) => String(v));
-bindRange("pic-size", "size", (v) => `${v} mm · ${(v / 25.4).toFixed(1)} in`);
+bindRange("pic-size", "size", sizeLabel);
 bindRange("pic-angle", "angle", (v) => `${v}°`);
 bindRange("pic-cross", "cross", (v) => `${v} mm`);
 // warn when parts of the picture are finer than thread can show (they'd close up or turn into a single line)
@@ -682,7 +690,7 @@ function makePicture() {
   ctx.drawImage(p.bitmap, box.sx, box.sy, box.sw, box.sh, 0, 0, sz.w, sz.h);
   const img = ctx.getImageData(0, 0, sz.w, sz.h);
   p.req++; busy(true, "Stitching your picture…");
-  worker.postMessage({ id: p.req, img, opts: { colors: p.colors, removeBackground: p.bg, fillAngle: p.angle, density: DENSITY[p.density] || DENSITY.solid, skip: p.skip, hoop: h, turn: turned(), imageKey: p.key, palette: ownedPalette(), style: p.style, cross: p.cross } });
+  digitizeJob({ id: p.req, img, opts: { colors: p.colors, removeBackground: p.bg, fillAngle: p.angle, density: DENSITY[p.density] || DENSITY.solid, skip: p.skip, hoop: h, turn: turned(), imageKey: p.key, palette: ownedPalette(), style: p.style, cross: p.cross } });
 }
 $("pic-file").onchange = (e) => loadPicture(e.target.files[0]);
 
@@ -805,6 +813,7 @@ function showStep(i) {
 const studio = initStudio({
   hoop, store, showError, busy, safeName, escapeHtml, showStep, step: () => state.step, setMode, spool,
   setView(pattern, filename, look = {}) {
+    if (!pattern) { state.views.design = null; if (state.mode === "design") setView(null); return; }
     const v = { pattern, verifyAgainst: pattern, bytes: writePES(pattern), filename, fabric: "linen", ...look };
     state.views.design = v;
     if (state.mode === "design") { const keep = [state.zoom, state.pan]; setView(v); [state.zoom, state.pan] = keep; paint(); }

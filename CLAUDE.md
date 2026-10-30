@@ -206,6 +206,16 @@ Embroidery-file tools for home machines. Two implementations of the same engine:
   grown 3 mm, the ⅛ in it's trimmed to), never stitches (tie-ins would show as spikes in a cutter). "Cut file" downloads
   them as one SVG at actual size, one group per fabric. Verified with headless Chrome `Page.printToPDF`: field 130 x 180
   mm, bar 50 mm. Never test with the real print dialog through the Chrome extension (it blocks the page).
+- Zero-based review fixes (2026-10-29, no stitch changed: both batches byte-identical to the commit before):
+  a design that won't build or is too big to split clears the old preview and Download (it handed out the previous
+  file); too big is drawn whole in a pretend 2 m hoop with Download reading "Too big for this hoop". A hoop change
+  drops the other tabs' designs so they rebuild when shown (a stale 5x7 split on 4x4), and no longer stitches the
+  picture from another tab. Arrow keys on the tab bar no longer nudge the selected piece; a click without a drag adds
+  no undo step. The quilting cache is keyed on a hash of every obstacle point (moving a middle piece reused quilting
+  sewn through it). Min/max over every stitch uses loops (`Math.min(...pts)` overflows the stack past ~110k).
+  `routeFill`'s A* gives up at once between 8-connected regions it can't cross, and reuses typed arrays with the same
+  linear-scan open list (a binary heap breaks ties differently and changes stitches): etsy_3 6.2 s -> 2.7 s. The
+  picture worker runs one job at a time and keeps only the newest waiting.
 - The preview is the file: `setView` decodes `v.bytes` with `readEmbroidery` and draws/counts/fit-checks that, and
   thread labels come from the file's own PEC palette.
 
