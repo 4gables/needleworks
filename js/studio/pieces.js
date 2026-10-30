@@ -437,7 +437,7 @@ function localStages(p, fab = "cotton") {
           sews: "Tacks the front fabric down.", under: true },
         { color: p.color, pause: true, last: true,
           paths: [loop(run(edge, 2.0, true)), ...satinBorder(edge)],
-          you: `Take the hoop off and turn it over. Tape the backing fabric to the back, right side facing you (away from the stabilizer), covering the ${name} by ½ in. For a hanging loop, tape a folded ribbon at the top on the front, loop pointing in, ends ½ in past the outline. Put the hoop back and press Start.`,
+          you: `Take the hoop off and turn it over. Tape the backing fabric to the back, right side facing you (away from the stabilizer), covering the ${name} by ½ in. For a hanging loop (an ornament or key fob), tape a folded ribbon at the top on the front, loop pointing in, ends ½ in past the outline. Put the hoop back and press Start.`,
           sews: "Tacks the backing on and covers the edge with satin through every layer.",
           after: `Take it out of the hoop, tear the stabilizer away and cut round the ${name} as close to the satin as you can without nicking it (keep the ribbon loop clear of the scissors). Flip the ribbon loop up.` },
       ];

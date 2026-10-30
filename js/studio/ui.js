@@ -47,9 +47,9 @@ export const STARTERS = [
     frame({ shape: "square", w: 110, h: 70, border: "line", color: BLACK }),
     // (Quicksand at 9 mm: Josefin's single-storey a sewed as an o at label sizes, its stem merged with the bowl, and
     // 8 mm warned "too small" out of the box)
-    text({ text: "Made for", font: ROUND, size: 9, y: -20, color: BLACK }),
+    text({ text: "Made for", font: ROUND, size: 9, y: -23, color: BLACK }),
     text({ text: "Emma", size: 20, y: -3, color: RED }),
-    text({ text: "by Ashley in 2026", font: ROUND, size: 9, y: 17, color: BLACK })],
+    text({ text: "by Ashley in 2026", font: ROUND, size: 9, y: 19, color: BLACK })],
     tip: "Stitch it on cotton backed with tear-away stabilizer, then turn the edges under and hand-sew it to the back of the quilt." },
   { id: "bib", name: "Baby bib", note: "a name over a little heart", make: () => [
     frame({ shape: "heart", w: 46, h: 42, border: "applique", y: 14, color: PINK }),
@@ -82,7 +82,7 @@ export const STARTERS = [
     mono({ letters: "J", size: 30, y: 6, color: NAVY })],
     tip: "Like the ornament: tape a 5 in piece of ribbon or webbing, folded in half, at the top before the back goes on. Felt or vinyl doesn't fray, so it can be cut right up to the satin." },
   { id: "applique", name: "Appliqué", note: "a fabric shape with a name", make: () => [
-    frame({ shape: "heart", w: 84, h: 76, border: "applique", y: -4 }), text({ size: 18, y: -6, color: NAVY })] },
+    frame({ shape: "heart", w: 84, h: 76, border: "applique", y: -4 }), text({ size: 16, y: -4, color: NAVY })] },   // (18 at -6 ran into the lobes)
   { id: "initials", name: "Appliqué letters", note: "fabric letters with satin edges", make: () => [appl({ text: "AB", size: 60 })] },
   { id: "patch", name: "Patch", note: "a filled badge with an edge", make: () => [
     frame({ shape: "circle", w: 76, h: 76, border: "patch", fill: NAVY, color: RED }),
@@ -134,8 +134,17 @@ export function initStudio(api) {
 
   function cards() {
     $("st-cards-count").textContent = `· ${STARTERS.length} ideas, scroll for more →`;
-    $("st-cards").innerHTML = STARTERS.map((s) => `<button type="button" data-start="${s.id}" title="${s.note}"><canvas aria-hidden="true"></canvas><b>${s.name}</b><small>${s.note}</small></button>`).join("");
+    // (one tab stop for the row, arrow keys between cards: 19 cards were 19 Tab presses before the pieces)
+    $("st-cards").innerHTML = STARTERS.map((s, i) => `<button type="button" data-start="${s.id}" title="${s.note}" tabindex="${i ? -1 : 0}"><canvas aria-hidden="true"></canvas><b>${s.name}</b><small>${s.note}</small></button>`).join("");
   }
+  $("st-cards").addEventListener("keydown", (e) => {
+    const all = [...$("st-cards").querySelectorAll("[data-start]")], i = all.indexOf(e.target);
+    const k = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1, Home: -i, End: all.length - 1 - i }[e.key];
+    if (i < 0 || k == null) return;
+    e.preventDefault(); const n = all[Math.max(0, Math.min(all.length - 1, i + k))];
+    for (const b of all) b.tabIndex = b === n ? 0 : -1;
+    n.focus(); n.scrollIntoView({ block: "nearest", inline: "nearest" });
+  });
   // a small stitched preview of each starter (drawn once the tab is on screen and has a size), one at a time when
   // the page is idle: composing all of them at once held the first visit to the tab up for 1.6 s
   let thumbed = false;
@@ -163,11 +172,11 @@ export function initStudio(api) {
     $("st-pieces").innerHTML = pieces.map((p, i) => `<li data-id="${p.id}" aria-selected="${p.id === sel}">
       <button type="button" class="pick" data-id="${p.id}" ${p.id === sel ? `aria-current="true"` : ""}><i style="background:${p.color}"></i><span class="nm">${api.escapeHtml(label(p))}</span></button>
       <span class="ops">
-        <button type="button" data-op="up" data-id="${p.id}" aria-label="Sew earlier" ${i ? "" : "disabled"}>↑</button>
-        <button type="button" data-op="down" data-id="${p.id}" aria-label="Sew later" ${i < pieces.length - 1 ? "" : "disabled"}>↓</button>
-        <button type="button" data-op="dup" data-id="${p.id}" aria-label="Duplicate" title="Duplicate">⧉</button>
-        <button type="button" data-op="flip" data-id="${p.id}" aria-label="Mirror" title="Mirror (flip left to right)" aria-pressed="${!!p.flip}">⇋</button>
-        <button type="button" data-op="del" data-id="${p.id}" aria-label="Remove">✕</button>
+        <button type="button" data-op="up" data-id="${p.id}" aria-label="Sew earlier: ${api.escapeHtml(label(p))}" ${i ? "" : "disabled"}>↑</button>
+        <button type="button" data-op="down" data-id="${p.id}" aria-label="Sew later: ${api.escapeHtml(label(p))}" ${i < pieces.length - 1 ? "" : "disabled"}>↓</button>
+        <button type="button" data-op="dup" data-id="${p.id}" aria-label="Duplicate: ${api.escapeHtml(label(p))}" title="Duplicate">⧉</button>
+        <button type="button" data-op="flip" data-id="${p.id}" aria-label="Mirror: ${api.escapeHtml(label(p))}" title="Mirror (flip left to right)" aria-pressed="${!!p.flip}">⇋</button>
+        <button type="button" data-op="del" data-id="${p.id}" aria-label="Remove: ${api.escapeHtml(label(p))}">✕</button>
       </span></li>`).join("");
   }
   const swatches = (p, k = "color") => COLORS.map((c) => `<button type="button" data-${k}="${c}" style="background:${c}" aria-pressed="${c === p[k]}" title="Brother ${nearestBrotherThread(c).name}"></button>`).join("")
@@ -349,8 +358,10 @@ export function initStudio(api) {
       const ready = [FABRICS[fabric].ready, ...before].filter(Boolean), done = [...after, FABRICS[fabric].after].filter(Boolean);
       stepsUI(steps, done, small, ready);
       const look = previewLook(steps);
+      // pieces sewn into each other (checked when the design settles, not on every drag frame)
+      const hit = dragging ? null : pieces.map((p) => [p, touching(p, pieces)]).find(([, q]) => q);
       api.setView(design.pattern(), `${api.safeName(firstWords(), "design")}.pes`, {
-        ...look, fabric: look.fabricShapeBlock != null ? "pink" : "linen", steps: steps.length,
+        ...look, warn: hit ? `${label(hit[0])} runs into ${label(hit[1])}: drag them apart before you stitch.` : "", fabric: look.fabricShapeBlock != null ? "pink" : "linen", steps: steps.length,
         sheet: { steps: steps.map((st) => ({ you: st.you, sews: st.sews.join(" ") })), after: done, ready, cut: steps.filter((st) => st.cut).map((st) => st.cut),
           notes: [api.turned() ? TURNED : "", ...ready.map((b) => "Have ready: " + b), $("st-tip").hidden ? "" : $("st-tip").textContent, tip, thread === "auto" ? "" : THREADS[thread].tip, small ? SMALL_TIP : ""] } });
     } catch (err) {
@@ -442,7 +453,12 @@ export function initStudio(api) {
     if (b.dataset.add === "file") { $("st-file").click(); return; }
     remember();
     const p = b.dataset.add === "text" ? text({ y: 20 }) : b.dataset.add === "monogram" ? mono() : b.dataset.add === "letters" ? appl() : b.dataset.add === "motif" ? motif() : frame({ border: "line" });
-    pieces.push(p); sel = p.id; save(); ui(); make();
+    // a new piece that would land on another goes below what's there (it landed on top: + Lettering over a design)
+    const moved = p.kind !== "frame" && !!touching(p, pieces);
+    if (moved) freeSpot(p, "down");
+    pieces.push(p); sel = p.id;
+    if (moved) recentre();
+    save(); ui(); make();
   };
   $("st-pieces").onclick = (e) => {
     const b = e.target.closest("button"); if (!b) return;
@@ -595,6 +611,21 @@ export function initStudio(api) {
     const arrows = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] }[e.key];
     if (arrows && (e.target === document.body || e.target.id === "view")) { e.preventDefault(); nudge(arrows[0] * (e.shiftKey ? 5 : 1), arrows[1] * (e.shiftKey ? 5 : 1)); }
   });
+  // a new piece in free space beside what's there: above or below (the other way if that doesn't fit the hoop)
+  function freeSpot(p, prefer) {
+    const bs = pieces.map(pieceBounds).filter(Boolean), fb = pieceBounds({ ...p, x: 0, y: 0 }), hp = api.hoop();
+    if (!bs.length || !fb) return;
+    const top = Math.min(...bs.map((b) => b[1])), bottom = Math.max(...bs.map((b) => b[3])), lim = hp.h / 2 - 5;
+    const up = top - 4 - fb[3], down = bottom + 4 - fb[1], fitsUp = up + fb[1] >= -lim, fitsDown = down + fb[3] <= lim;
+    p.x = 0; p.y = prefer === "down" ? (fitsDown || !fitsUp ? down : up) : (fitsUp || !fitsDown ? up : down);
+  }
+  // the whole layout back to the middle of the hoop (the machine centres it anyway; the preview should too)
+  function recentre() {
+    const all = pieces.map(pieceBounds).filter(Boolean);
+    if (all.length < 2) return;
+    const cx = (Math.min(...all.map((b) => b[0])) + Math.max(...all.map((b) => b[2]))) / 2, cy = (Math.min(...all.map((b) => b[1])) + Math.max(...all.map((b) => b[3]))) / 2;
+    for (const q of pieces) { q.x = Math.round((q.x - cx) * 2) / 2; q.y = Math.round((q.y - cy) * 2) / 2; }
+  }
   // add an opened design (PES/PEC/DST) as a piece, to combine a motif with lettering
   $("st-file").onchange = async (e) => {
     const f = e.target.files[0]; e.target.value = ""; if (!f) return;
@@ -604,22 +635,10 @@ export function initStudio(api) {
       const p = piece({ kind: "file", name: f.name.replace(/\.[^.]+$/, ""), blocks: fileBlocks(d), color: d.threads[0]?.color || BLACK });
       // in free space, above what's there (or below, if only that fits), not on top of it: centred, a bought design
       // landed on the lettering. It sews first, after any frames, so lettering added under it sews on top.
-      const bs = pieces.map(pieceBounds).filter(Boolean), fb = pieceBounds(p), hp = api.hoop();
-      if (bs.length && fb) {
-        const top = Math.min(...bs.map((b) => b[1])), bottom = Math.max(...bs.map((b) => b[3])), fh = fb[3] - fb[1];
-        const up = top - 4 - fb[3], down = bottom + 4 - fb[1], lim = hp.h / 2 - 5;
-        if (up + fb[1] >= -lim) p.y = up; else if (down + fb[3] <= lim) p.y = down;
-        else if (fh + bottom - top + 4 <= 2 * lim) p.y = up;   // (fits beside them once the whole design is moved: say so)
-      }
+      freeSpot(p, "up");
       const at = pieces.findIndex((q) => q.kind !== "frame");
       pieces.splice(at < 0 ? pieces.length : at, 0, p); sel = p.id;
-      // then the whole layout back to the middle of the hoop (the machine centres it anyway; the preview should too)
-      const all = pieces.map(pieceBounds).filter(Boolean);
-      if (all.length > 1) {
-        const cx = (Math.min(...all.map((b) => b[0])) + Math.max(...all.map((b) => b[2]))) / 2, cy = (Math.min(...all.map((b) => b[1])) + Math.max(...all.map((b) => b[3]))) / 2;
-        for (const q of pieces) { q.x = Math.round((q.x - cx) * 2) / 2; q.y = Math.round((q.y - cy) * 2) / 2; }
-      }
-      save(); ui(); make();
+      recentre(); save(); ui(); make();
     } catch (err) { api.showError("That file couldn't be added: " + err.message); }
   };
 

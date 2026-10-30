@@ -70,7 +70,8 @@ function paint() {
   const block = state.step != null && state.mode === "design" && v.cache.blocks.find((b) => b.index === state.step);
   const look = block ? stepLook(v, state.step, block) : { upto: state.upto ?? undefined, hide: v.hide, fabricShapeBlock: v.fabricShapeBlock };
   state.tf = draw(canvas, v.shown, {
-    center: state.mode === "design" ? [0, 0] : undefined, ghost: !!block,
+    // (a design too big for the hoop, or split in two, is fitted whole: centred on the hoop it was cut off)
+    center: state.mode === "design" && !v.whole ? [0, 0] : undefined, ghost: !!block,
     cache: v.cache, fabric: v.fabric, ...look,
     heat: state.heat ? (v.heat ||= heat(v.shown)) : null, backdrop: state.backdrop,
     hoop: shownHoop(), showHoop: state.showHoop && !state.backdrop, zoom: state.zoom, pan: state.pan, showNeedle: state.upto != null,
@@ -88,7 +89,7 @@ function setView(v) {
   state.view = v; state.views[state.mode] = v; state.upto = null; $("progress").value = 1000;
   if (state.step != null && !(v?.steps > state.step)) showStep(null);   // the design changed under a step view
   $("turn").setAttribute("aria-pressed", turned());
-  if (!v) { $("facts").innerHTML = ""; $("threads").innerHTML = ""; $("download").disabled = true; $("download").textContent = "Download PES"; $("share").disabled = true; $("sheet-print").disabled = $("along-open").disabled = true; $("cut-file").hidden = true; $("names-open").hidden = true; paint(); return; }
+  if (!v) { $("dl-warn").hidden = true; $("facts").innerHTML = ""; $("threads").innerHTML = ""; $("download").disabled = true; $("download").textContent = "Download PES"; $("share").disabled = true; $("sheet-print").disabled = $("along-open").disabled = true; $("cut-file").hidden = true; $("names-open").hidden = true; paint(); return; }
   // the preview is the file: decode the PES bytes and draw those, not the design they were made from
   if (!v.file) {
     try { v.file = v.source ? v.pattern : readEmbroidery(v.bytes, v.filename); }
@@ -99,6 +100,7 @@ function setView(v) {
   const st = designStats(v.file), h = hoop(), shown = designStats(v.shown);
   // (a split design is checked part by part when it's downloaded)
   const fits = !!v.split || (st.widthMm <= h.w - 2 * MARGIN && st.heightMm <= h.h - 2 * MARGIN);
+  v.whole = !!v.split || !fits;
   const inch = (mm) => (mm / 25.4).toFixed(1);
   const minutes = Math.max(1, Math.round(st.stitches / 550 + st.colorChanges * 0.5)), snips = shortJumps(v.file);
   $("facts").innerHTML = [
@@ -121,8 +123,20 @@ function setView(v) {
     `${st.colorChanges} ${st.colorChanges === 1 ? "pause" : "pauses"}`, `≈ ${minutes} min`, `${h.machineName} ${h.name}`];
   $("download").disabled = !fits; $("share").disabled = !fits || !!v.split;
   $("sheet-print").disabled = $("along-open").disabled = !fits || !!v.split; $("cut-file").hidden = !v.sheet?.cut?.length; $("names-open").hidden = !!v.split || !namesFor();
+  if (state.mode === "picture") picSteps(v, st);
+  // (pieces running into each other said beside Download, before the file is saved, not only in the editor)
+  $("dl-warn").textContent = v.warn || ""; $("dl-warn").hidden = !v.warn;
   $("download").textContent = v.split ? `Download ${v.split.length} files (.zip)` : !fits ? "Too big for this hoop" : v.action || `Download ${v.filename}`;
   paint();
+}
+// the Picture tab's steps: what to have ready, then one thread per pause (it had none: "3 pauses" went unexplained)
+function picSteps(v, st) {
+  const mt = machineThreadList(v), blocks = v.cache.blocks;
+  $("pic-steps-count").textContent = `· ${blocks.length} ${blocks.length === 1 ? "thread" : "threads"}`;
+  $("pic-steps").innerHTML = `<li class="after"><b>Have ready</b><span>${st.stitches > 8000 ? "Cut-away stabilizer (or two layers of tear-away): this is a lot of stitching." : "Tear-away stabilizer under woven fabric, cut-away under knits."} The threads below, in this order.</span></li>`
+    + blocks.map((b, i) => { const t = mt[b.index] || nearestBrotherThread(b.color);
+      return `<li><b><span class="n">${i + 1}</span><i style="background:${b.color}"></i>Brother ${escapeHtml(t.name)}${spool(b.color) ? ` <small>${escapeHtml(spool(b.color))}</small>` : ""}</b><span class="you">${i ? "The machine stops: thread this colour and press Start." : "Hoop the fabric with the stabilizer, thread this colour and press Start."}</span></li>`; }).join("")
+    + `<li class="after"><b>When it's done</b><span>Take the hoop off, snip any loose threads between parts, and tear or cut away the stabilizer.</span></li>`;
 }
 // moves between 1 and 5 mm: too short for the PE900 to trim (its lowest setting is 5 mm), left as loose thread
 function shortJumps(p) {
@@ -206,6 +220,8 @@ $("play").onclick = () => {
   if (!state.view) return;
   showStep(null);
   if (playing) { stopPlay(); return; }
+  // (phones: the hoop was mostly scrolled off while it played)
+  const r = canvas.getBoundingClientRect(); if (r.top < 0 || r.bottom > innerHeight) canvas.scrollIntoView({ block: "center", behavior: "smooth" });
   const total = state.view.cache.total, dur = Math.min(14000, 3000 + total * 1.2);
   const from = state.upto == null || state.upto >= total ? 0 : state.upto, t0 = performance.now() - (from / total) * dur;
   $("play").textContent = "❚❚ Pause";

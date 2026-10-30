@@ -132,6 +132,10 @@
           <div id="pic-palette" class="palette"></div>
           <label class="check small" id="pic-mine-row" hidden><input type="checkbox" id="pic-mine"> Use only threads I own</label>
         </fieldset>
+        <details class="steps" id="pic-steps-box">
+          <summary>How to stitch it <span class="hint inline" id="pic-steps-count"></span></summary>
+          <ol class="st-steps" id="pic-steps"></ol>
+        </details>
       </div>
     </div>
 
@@ -176,8 +180,8 @@
         </div>
         <div class="add">
           <button type="button" class="ghost" id="st-fit" title="Make the whole design as big as the hoop allows">Fit to hoop</button>
-          <button type="button" class="ghost" id="st-undo" disabled title="Undo (⌘Z)">↶ Undo</button>
-          <button type="button" class="ghost" id="st-redo" disabled title="Redo (⇧⌘Z)">↷ Redo</button>
+          <button type="button" class="ghost" id="st-undo" disabled title="Undo (⌘Z)"><span aria-hidden="true">↶</span> Undo</button>
+          <button type="button" class="ghost" id="st-redo" disabled title="Redo (⇧⌘Z)"><span aria-hidden="true">↷</span> Redo</button>
           <button type="button" class="ghost" id="st-save" title="Keep this design to change it later (not for the machine: use Download PES for that)">Save design</button>
           <label class="ghost st-load" for="st-load" title="Open a design saved from here">Open saved</label>
           <input type="file" id="st-load" accept=".json,application/json" class="sr-file">
@@ -245,7 +249,7 @@
           <button type="button" id="item-open" class="ghost" title="See the design at its real size on a photo of the bib, towel or shirt">On my item</button>
         </div>
       </details>
-      <button type="button" id="turn" class="ghost turn" aria-pressed="false" title="Turn the hoop sideways, so a long design can use the hoop's long side.">⟲ Turn hoop</button>
+      <button type="button" id="turn" class="ghost turn" aria-pressed="false" title="Turn the hoop sideways, so a long design can use the hoop's long side."><span aria-hidden="true">⟲</span> Turn hoop</button>
     </div>
     <div class="bottom">
       <ul class="threads" id="threads" aria-label="Threads"></ul>
@@ -254,6 +258,7 @@
         <label class="ghost pick" id="pick-design" for="open-file">Open a design file</label>
         <button type="button" id="share" class="ghost share" hidden>Send by text or email</button>
         <button type="button" id="download" class="primary" disabled>Download PES</button>
+        <p class="hint warn dl-warn" id="dl-warn" role="status" hidden></p>
         <p class="extras"><button type="button" id="along-open" class="link" disabled>Sew along</button><button type="button" id="sheet-print" class="link" disabled>Print a sew sheet</button><button type="button" id="names-open" class="link" hidden>One for each name</button><button type="button" id="cut-file" class="link" hidden title="The appliqué fabric shapes at actual size, for a Cricut or ScanNCut">Cut file for the fabric (SVG)</button></p>
       </div>
     </div>

@@ -26,12 +26,13 @@
   --ink: #241a1d;
   --muted: #6d5f63;
   --line: #ece4e2;
+  --field-line: #9b8c90;   /* (input, select and card edges: --line is 1.25:1, under the 3:1 non-text minimum) */
   --accent: #b3133a;
   --accent-ink: #ffffff;
   --accent-soft: #fbe7ec;
   --stage: #f3eeec;
   --focus: #1d5fd1;
-  --danger: #9a1b1b; --warn: #a5521a; --good: #2f7d4a; --danger-line: #f3c2c2;
+  --danger: #9a1b1b; --warn: #a5521a; --good: #2a7043; --danger-line: #f3c2c2;
   --display: "Bricolage Grotesque", "Avenir Next", system-ui, sans-serif;
   --body: "Atkinson Hyperlegible", "Helvetica Neue", Arial, sans-serif;
   --mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
@@ -41,13 +42,13 @@
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --bg: #161214; --panel: #1f191b; --ink: #f3ebec; --muted: #b8a8ac; --line: #342a2d;
+    --bg: #161214; --panel: #1f191b; --ink: #f3ebec; --muted: #b8a8ac; --line: #342a2d; --field-line: #7d6c71;
     --accent: #ff4f73; --accent-ink: #1a0b10; --accent-soft: #3b1a23; --stage: #120f10; --focus: #7fb0ff; color-scheme: dark;
     --danger: #ff8a8a; --warn: #f0a868; --good: #6fcf8f; --danger-line: #6b2b2b;
   }
 }
 :root[data-theme="dark"] {
-  --bg: #161214; --panel: #1f191b; --ink: #f3ebec; --muted: #b8a8ac; --line: #342a2d;
+  --bg: #161214; --panel: #1f191b; --ink: #f3ebec; --muted: #b8a8ac; --line: #342a2d; --field-line: #7d6c71;
   --accent: #ff4f73; --accent-ink: #1a0b10; --accent-soft: #3b1a23; --stage: #120f10; --focus: #7fb0ff; color-scheme: dark;
   --danger: #ff8a8a; --warn: #f0a868; --good: #6fcf8f; --danger-line: #6b2b2b;
 }
@@ -474,3 +475,7 @@ label:has(> .sr-file:focus-visible), label:has(+ .sr-file:focus-visible) { outli
   .facts { max-width: calc(100% - 175px); }   /* (44 px zoom buttons on touch) */
 }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .fine-warn, :root:not([data-theme="light"]) .facts .bad { background: #3a2a1a; color: #f3c79a; } }
+/* input, select and card edges at 3:1 or more */
+select, input[type="text"], .edit textarea, .cards button, .names textarea { border-color: var(--field-line); }
+.dl-warn { margin: 6px 0 0; text-align: right; }
+@media (max-width: 600px) { .dl-warn { text-align: left; } }
