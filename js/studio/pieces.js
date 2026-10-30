@@ -7,6 +7,7 @@ import { fontOf } from "../core/fonts.js";
 import { edgeWalk, filletPolygon, run, satin, zigzag } from "../core/geom.js";
 import { order } from "../core/raster.js";
 import { strokes } from "../core/text.js";
+import { letterOutlines } from "./outline.js";
 
 // ---------- lettering ----------
 const lettering = new Map();   // font + text -> centre-line strokes (rendering is the slow part)
@@ -182,6 +183,23 @@ function localStages(p) {
         : [run(edge, 2.2, true)];
       stages = [{ color: p.color, paths: paths.map(loop), sews: `Sews the ${name} frame.` }];
     }
+  } else if (p.kind === "letters") {
+    // appliqué letters: one piece of fabric for the whole word, outlined letter by letter (holes too)
+    const loops = letterOutlines(p.text, p.font, p.size), loop = (q) => [...q, q[0]];
+    // each stage starts a third further round, so the three seams (and their locks) don't stack in one spot
+    const turn = (l, f) => { const k = Math.floor(l.length * f); return [...l.slice(k), ...l.slice(0, k)]; };
+    if (loops.length) stages = [
+      { color: p.color, paths: loops.map((l) => loop(run(l, 2.5, true))), sews: `Sews the outline of ${p.text.trim()} on the base fabric.`, fabric: true },
+      { color: p.color, pause: true, paths: loops.map((l) => turn(l, 1 / 3)).flatMap((l) => [loop(run(l, 2.0, true)), loop(run(l.slice().reverse(), 2.0, true))]),
+        you: "Lay the appliqué fabric over the letters, right side up, covering them by ½ in. Press Start. Then take the hoop off (leave everything hooped), trim the fabric close to the stitching around each letter (and inside the holes), and put the hoop back.",
+        sews: "Tacks the appliqué fabric down.", under: true },
+      // a small hole (the top of an A) can't take a 2.8 mm satin around it: it would overlap itself; narrow it to fit
+      { color: p.color, pause: true, paths: loops.map((l) => turn(l, 2 / 3)).flatMap((l) => {
+        const xs = l.map((q) => q[0]), ys = l.map((q) => q[1]);
+        const w = Math.max(1.2, Math.min(2.8, Math.min(Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys)) / 3.5));
+        return [edgeWalk(l, w, true, Math.min(0.4, w / 4)), loop(zigzag(l, w * 0.7, 2.0, true)), loop(satin(l, w, 0.4, w > 2 ? 0.3 : 0.2, true))];
+      }), you: "Press Start.", sews: "Covers the raw edges with satin." },
+    ];
   } else if (p.kind === "file") {
     stages = p.blocks.map((b) => ({ color: b.color, paths: b.paths, sews: `Sews ${p.name}${p.blocks.length > 1 ? ` (${b.name || "colour " + (p.blocks.indexOf(b) + 1)})` : ""}.` }));
   }
@@ -229,7 +247,7 @@ export function pieceBounds(p) {
   return [x0, y0, x1, y1];
 }
 
-export const label = (p) => p.kind === "text" ? `“${p.text}”` : p.kind === "monogram" ? `Monogram ${p.letters}`
+export const label = (p) => p.kind === "text" ? `“${p.text}”` : p.kind === "letters" ? `Appliqué ${p.text}` : p.kind === "monogram" ? `Monogram ${p.letters}`
   : p.kind === "file" ? p.name : `${(SHAPES[p.shape] || SHAPES.circle).name}${p.border === "applique" ? " appliqué" : ""}`;
 
 // An opened design as a piece: its stitches split into runs at jumps/trims, per colour block, centred.

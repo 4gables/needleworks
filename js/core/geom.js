@@ -109,7 +109,9 @@ export function edgeWalk(p, width, closed = false, inset = 0.4) {
   if (closed) { c = [...c, c[0]]; n = [...n, n[0]]; }
   const d = width / 2 - inset;
   const side = (s) => c.map((q, i) => [q[0] + n[i][0] * d * s, q[1] + n[i][1] * d * s]);
-  return [...run(side(1), 2.5), ...run(side(-1).reverse(), 2.5)];
+  // out along the far side, back along the near one: it ends on the side where the zigzag and satin start, so they
+  // sew straight on (ending on the other side left a 2 mm gap: a jump, trim and two locks on the seam)
+  return [...run(side(-1), 2.5), ...run(side(1).reverse(), 2.5)];
 }
 
 // open zigzag (underlay): `spacing` between hits on the same edge

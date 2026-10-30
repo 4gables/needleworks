@@ -91,11 +91,13 @@ export function draw(canvas, design, opts = {}) {
 
   const fab = FABRICS[opts.fabric || "linen"];
   if (opts.fabricShapeBlock != null && blocks[opts.fabricShapeBlock]) {
-    const outline = blocks[opts.fabricShapeBlock].segs.reduce((a, b) => (b.length > a.length ? b : a));
+    // every outline in the placement block (appliqué letters have several, and holes): fabric between them
+    const outlines = blocks[opts.fabricShapeBlock].segs.filter((sg) => sg.length > 8);
     ctx.save();
-    ctx.beginPath(); outline.forEach(([x, y], i) => (i ? ctx.lineTo(X(x), Y(y)) : ctx.moveTo(X(x), Y(y)))); ctx.closePath();
+    ctx.beginPath();
+    for (const outline of outlines) { outline.forEach(([x, y], i) => (i ? ctx.lineTo(X(x), Y(y)) : ctx.moveTo(X(x), Y(y)))); ctx.closePath(); }
     ctx.shadowColor = "rgba(60,30,30,0.22)"; ctx.shadowBlur = 18; ctx.shadowOffsetY = 6;
-    ctx.fillStyle = fab.solid || gingham(ctx, fab, Math.max(3, 26 * s)); ctx.fill();
+    ctx.fillStyle = fab.solid || gingham(ctx, fab, Math.max(3, 26 * s)); ctx.fill("evenodd");
     ctx.restore();
   }
 

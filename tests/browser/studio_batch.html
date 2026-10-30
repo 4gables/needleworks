@@ -9,13 +9,13 @@ lettering. Each is checked with <code>validatePES</code> and POSTed to <code>/sa
 <script type="module">
 import { hoop as getHoop } from "../../js/core/machines.js";
 import { readEmbroidery, writePES, validatePES } from "../../js/core/formats.js";
-import { FONTS } from "../../js/core/fonts.js";
+import { APPLIQUE_FONTS, FONTS } from "../../js/core/fonts.js";
 import { BORDERS, SHAPES, compose, fileBlocks } from "../../js/studio/pieces.js";
 import { STARTERS } from "../../js/studio/ui.js";
 
 const log = (s) => (document.getElementById("log").textContent += s + "\n");
 let n = 0, bad = 0, id = 1;
-for (const f of FONTS) await document.fonts.load(`40px "${f.family}"`);
+for (const f of [...FONTS, ...APPLIQUE_FONTS]) await document.fonts.load(`40px "${f.family}"`);
 async function save(name, pieces, hoopId = "5x7", expectTooBig = false) {
   const hoop = getHoop("brother-pe900", hoopId);
   let pattern;
@@ -40,6 +40,11 @@ for (const f of FONTS) {
     P({ kind: "text", text: "since 2026", font: f.family, size: 8, shape: "down", radius: 36, color: "#ed171f" })]);
 }
 log("fonts: done");
+for (const f of APPLIQUE_FONTS) for (const [text, size] of [["AB", 60], ["Mia", 35], ["Q&8", 90]]) {
+  const tag = f.family.slice(3).replace(/ /g, "");
+  await save(`st_appl_${tag}_${text.replace(/[^A-Za-z0-9]/g, "")}_${size}`, [P({ kind: "letters", text, font: f.family, size })]);
+}
+log("appliqué letters: done");
 for (const rot of [15, 90, -45, 180])
   await save(`st_rot_${rot}`, [P({ kind: "frame", shape: "diamond", border: "satin", w: 70, h: 90, rot }), P({ kind: "text", text: "Hello", font: FONTS[6].family, size: 16, rot })]);
 try {

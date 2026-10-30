@@ -41,7 +41,11 @@ Embroidery-file tools for home machines. Two implementations of the same engine:
   (1/6 for thin monoline fonts, which get a satin sized to the letters); under 1 mm it's a fine line instead
   (bean stitch: three runs, strokes under 0.6 mm skipped, points 0.4 mm apart), because satin on small script fills
   the loops. Each text/monogram has Stitch: automatic / Satin / Fine line; the editor warns under a 4 mm x-height.
-  Starter cards draw their own stitched thumbnails (`draw(..., { pad })`). Patches: `fillPolygon()` (digitize.js)
+  Starter cards draw their own stitched thumbnails (`draw(..., { pad })`). Appliqué letters (`kind: "letters"`,
+  `js/studio/outline.js`): the word is rendered in a bold OFL display font (Graduate, Lilita One, Alfa Slab One in
+  `APPLIQUE_FONTS`), every edge traced with marching squares (holes too), corners rounded ~1 mm; placement, tack-down,
+  satin per outline, each stage starting a third further round so seams don't stack; a hole too small for a 2.8 mm
+  satin gets a narrower one (min dimension / 3.5). The preview fills every placement outline with fabric (even-odd). Patches: `fillPolygon()` (digitize.js)
   rasterises a frame (inset 1 mm) and returns the picture tool's underlay + tatami, then a satin edge covers the
   row ends. `compose` moves a stage up to join an earlier block in the same thread (one pause fewer) only if it
   overlaps nothing it would jump ahead of (bbox + 1 mm) and isn't an appliqué stage. Save design / Open saved write
@@ -67,6 +71,10 @@ Embroidery-file tools for home machines. Two implementations of the same engine:
   >= 1.5 mm. Measure with the same-edge statistic, not by eye on a PNG. Satin borders 2.5-4 mm (frames, patch and
   appliqué edges, the bookmark border) sew `edgeWalk` first: a run 0.4 mm inside each edge, then the zigzag, then
   the satin (Ink/Stitch contour underlay), for a firm edge on felt.
+- `edgeWalk` ends on the side where zigzag/satin start (ending on the other side left a 2 mm gap: a jump, trim and
+  two locks on the seam), and `Design.path` adds no stitch when a run starts within 0.3 mm of the needle.
+- The checker counts a STOP as a new block: pyembroidery reads a pause between two blocks of the same thread (the
+  bookmark's and appliqué's fabric steps) as a STOP, which had lumped separate fabric steps into one density count.
 - Tie-ins point at the first point more than 0.3 mm from the start: strokes often begin with repeated points, which
   made 143 zero-length tie-ins (5 hits in one hole) across the 109-file batch before 2026-10-29.
 - Machines/hoops: `js/core/machines.js`. Designs are checked to fit

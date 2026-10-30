@@ -31,7 +31,7 @@ export class Design {
         const p = pts[0], q = [p[0] + d[0], p[1] + d[1]];
         for (const r of [p, q, p, q, p]) this.st(STITCH, r);
       }
-    } else this.st(STITCH, pts[0]);
+    } else if (Math.hypot(pts[0][0] - this.cur[0], pts[0][1] - this.cur[1]) >= 0.3) this.st(STITCH, pts[0]);   // (a run that starts where the needle is needs no extra stitch)
     for (let i = 1; i < pts.length; i++) this.st(STITCH, pts[i]);
     this.cur = pts[pts.length - 1]; this.started = true;
     // where a tie-off can step back to: along the line just sewn, so it hides in those stitches

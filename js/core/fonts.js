@@ -18,3 +18,9 @@ export const FONTS = [
   { family: "NW Josefin Sans", name: "Josefin Sans", note: "print", print: true },
 ];
 export const fontOf = (family) => FONTS.find((f) => f.family === family) || FONTS[0];
+// Bold display fonts for appliqué letters (cut from fabric, outlined in satin), not centre-line lettering.
+export const APPLIQUE_FONTS = [
+  { family: "NW Graduate", name: "Graduate", note: "varsity block" },
+  { family: "NW Lilita One", name: "Lilita One", note: "rounded" },
+  { family: "NW Alfa Slab One", name: "Alfa Slab One", note: "slab" },
+];

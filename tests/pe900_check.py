@@ -226,7 +226,8 @@ def check(path):
     # 5. needle pile-up: penetrations per 1 mm cell, per colour block
     blk, cells = 0, Counter()
     for x, y, c in sts:
-        if c == pe.COLOR_CHANGE:
+        # (pyembroidery reads a pause between two blocks of the same thread as a STOP: still a new fabric step)
+        if c in (pe.COLOR_CHANGE, pe.STOP):
             blk += 1
         elif c == pe.STITCH:
             cells[(blk, math.floor(x), math.floor(y))] += 1

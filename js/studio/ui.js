@@ -1,5 +1,5 @@
 // Design tab UI: start from a card, edit pieces in a short list, drag them on the preview.
-import { FONTS } from "../core/fonts.js";
+import { APPLIQUE_FONTS, FONTS } from "../core/fonts.js";
 import { nearestBrotherThread } from "../core/threads.js";
 import { readEmbroidery } from "../core/formats.js";
 import { draw } from "../render.js";
@@ -14,6 +14,7 @@ let nextId = 1;
 const piece = (o) => ({ id: nextId++, x: 0, y: 0, color: NAVY, ...o });
 const text = (o) => piece({ kind: "text", text: "Ashley", font: SCRIPT, size: 18, shape: "straight", radius: 30, ...o });
 const mono = (o) => piece({ kind: "monogram", letters: "aMs", font: SCRIPT, size: 30, ...o });
+const appl = (o) => piece({ kind: "letters", text: "AB", font: APPLIQUE_FONTS[0].family, size: 60, color: NAVY, ...o });
 const frame = (o) => piece({ kind: "frame", shape: "circle", w: 80, h: 80, border: "satin", color: RED, ...o });
 
 export const STARTERS = [
@@ -30,6 +31,7 @@ export const STARTERS = [
     text({ text: "Ashley", size: 20, y: 6, color: RED })] },
   { id: "applique", name: "Appliqué", note: "a fabric shape with a name", make: () => [
     frame({ shape: "heart", w: 84, h: 76, border: "applique", y: -4 }), text({ size: 18, y: -6, color: NAVY })] },
+  { id: "initials", name: "Appliqué letters", note: "fabric letters with satin edges", make: () => [appl({ text: "AB", size: 60 })] },
   { id: "patch", name: "Patch", note: "a filled badge with an edge", make: () => [
     frame({ shape: "circle", w: 76, h: 76, border: "patch", fill: NAVY, color: RED }),
     mono({ letters: "JD", size: 26, font: PRINT, color: "#f0f0f0" })] },
@@ -114,6 +116,11 @@ export function initStudio(api) {
       h += `<label class="field"><span>Font</span>${fontSelect(p)}</label>`;
       h += range("size", "Height", 15, 90, p.size);
       h += seg("style", { auto: "Stitch: automatic", satin: "Satin", line: "Fine line" }, p.style || "auto");
+    } else if (p.kind === "letters") {
+      h += `<label class="field"><span>Letters</span><input type="text" data-k="text" value="${api.escapeHtml(p.text)}" maxlength="12" autocomplete="off" spellcheck="false"></label>`;
+      h += `<label class="field"><span>Font</span><select data-k="font">${APPLIQUE_FONTS.map((f) => `<option value="${f.family}" ${f.family === p.font ? "selected" : ""}>${f.name} (${f.note})</option>`).join("")}</select></label>`;
+      h += range("size", "Height", 20, 120, p.size);
+      h += `<p class="hint">Cut from fabric: the machine sews an outline, pauses for you to lay fabric on and trim it, then satins the edges. Letters 30 mm or taller cut and sew most easily.</p>`;
     } else if (p.kind === "frame") {
       h += seg("shape", Object.fromEntries(Object.entries(SHAPES).map(([k, s]) => [k, s.name])), p.shape);
       h += range("w", p.shape === "circle" ? "Size" : "Width", 20, 170, p.w);
@@ -173,7 +180,7 @@ export function initStudio(api) {
     $("st-steps").innerHTML = steps.map((st) => `<li><b><i style="background:${st.color}"></i>Brother ${nearestBrotherThread(st.color).name}</b>
       ${st.you ? `<span class="you">${api.escapeHtml(st.you)}</span>` : ""}<span>${api.escapeHtml(st.sews.join(" "))}</span></li>`).join("");
   }
-  const firstWords = () => (pieces.find((p) => p.kind === "text")?.text || pieces.find((p) => p.kind === "monogram")?.letters || "design");
+  const firstWords = () => (pieces.find((p) => p.kind === "text" || p.kind === "letters")?.text || pieces.find((p) => p.kind === "monogram")?.letters || "design");
 
   // ---------- events ----------
   $("st-cards").onclick = (e) => {
@@ -185,7 +192,7 @@ export function initStudio(api) {
     const b = e.target.closest("[data-add]"); if (!b) return;
     if (b.dataset.add === "file") { $("st-file").click(); return; }
     remember();
-    const p = b.dataset.add === "text" ? text({ y: 20 }) : b.dataset.add === "monogram" ? mono() : frame({ border: "line" });
+    const p = b.dataset.add === "text" ? text({ y: 20 }) : b.dataset.add === "monogram" ? mono() : b.dataset.add === "letters" ? appl() : frame({ border: "line" });
     pieces.push(p); sel = p.id; save(); ui(); make();
   };
   $("st-pieces").onclick = (e) => {
@@ -275,7 +282,7 @@ export function initStudio(api) {
     try {
       const data = JSON.parse(await f.text());
       if (!data || data.needleworks !== 1 || !Array.isArray(data.pieces)) throw new Error("it isn't a design saved from this page");
-      const kinds = new Set(["text", "monogram", "frame", "file"]);
+      const kinds = new Set(["text", "monogram", "frame", "file", "letters"]);
       const loaded = data.pieces.filter((p) => p && kinds.has(p.kind) && Number.isFinite(p.x) && Number.isFinite(p.y));
       if (!loaded.length) throw new Error("it has no pieces");
       remember(); nextId = 1; pieces = loaded.map((p) => ({ ...p, id: nextId++ })); sel = pieces[pieces.length - 1].id;
