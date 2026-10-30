@@ -213,8 +213,9 @@ Embroidery-file tools for home machines. Two implementations of the same engine:
   picture from another tab. Arrow keys on the tab bar no longer nudge the selected piece; a click without a drag adds
   no undo step. The quilting cache is keyed on a hash of every obstacle point (moving a middle piece reused quilting
   sewn through it). Min/max over every stitch uses loops (`Math.min(...pts)` overflows the stack past ~110k).
-  `routeFill`'s A* gives up at once between 8-connected regions it can't cross, and reuses typed arrays with the same
-  linear-scan open list (a binary heap breaks ties differently and changes stitches): etsy_3 6.2 s -> 2.7 s. The
+  `routeFill`'s A* gives up at once between 8-connected regions it can't cross and reuses typed arrays (etsy_3 6.2 s
+  -> 2.7 s, byte-identical); then a binary-heap open list (ties break differently: 12 of 377 batch files changed,
+  stitches +0.09%, trims 2149 -> 2152, peak density unchanged). The
   picture worker runs one job at a time and keeps only the newest waiting.
 - Speed (2026-10-29, byte-identical): `renderWord` thins the word once (stroke width, stroke ends and, when no join or
   swash was drawn, the final skeleton) and finds stroke ends/letter pieces only when joins or swashes need them;

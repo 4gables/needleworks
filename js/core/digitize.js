@@ -290,9 +290,27 @@ function routeFill(groups, comp, mask, res) {
       }
     }
   }
-  // A* state reused between calls (a cell's g/from count only if stamped this call); the open list is the same
-  // linear scan and swap-remove as before, in typed arrays, so ties break the same way and the stitches don't change
+  // A* state reused between calls (a cell's g/from count only if stamped this call); the open list is a binary heap
+  // in typed arrays (a linear scan was most of a busy picture's time)
   const G = new Float64Array(n), FROM = new Int32Array(n), STAMP = new Uint32Array(n), HK = new Float64Array(20010), HC = new Int32Array(20010);
+  let hn = 0;
+  const push = (k, c) => {
+    let i = hn++;
+    while (i) { const up = (i - 1) >> 1; if (HK[up] <= k) break; HK[i] = HK[up]; HC[i] = HC[up]; i = up; }
+    HK[i] = k; HC[i] = c;
+  };
+  const pop = () => {
+    const top = HC[0], k = HK[--hn], c = HC[hn];
+    let i = 0;
+    for (;;) {
+      let m = 2 * i + 1; if (m >= hn) break;
+      if (m + 1 < hn && HK[m + 1] < HK[m]) m++;
+      if (HK[m] >= k) break;
+      HK[i] = HK[m]; HC[i] = HC[m]; i = m;
+    }
+    HK[i] = k; HC[i] = c;
+    return top;
+  };
   let gen = 0;
   function route(a, b) {
     const s = snap(cellOf(a)), t = snap(cellOf(b));
@@ -300,11 +318,9 @@ function routeFill(groups, comp, mask, res) {
     gen++;
     const g = (c) => (STAMP[c] === gen ? G[c] : Infinity), from = (c) => (STAMP[c] === gen ? FROM[c] : -1);
     const hx = (c) => Math.hypot((c % gw) - (t % gw), Math.floor(c / gw) - Math.floor(t / gw));
-    STAMP[s] = gen; G[s] = 0; FROM[s] = -1; HK[0] = 0; HC[0] = s;
-    let hn = 1;
+    STAMP[s] = gen; G[s] = 0; FROM[s] = -1; hn = 0; push(0, s);
     while (hn) {
-      let bi = 0; for (let i = 1; i < hn; i++) if (HK[i] < HK[bi]) bi = i;
-      const c = HC[bi]; hn--; HK[bi] = HK[hn]; HC[bi] = HC[hn];
+      const c = pop();
       if (c === t) break;
       const cx = c % gw, cy = (c - cx) / gw;
       for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
@@ -313,7 +329,7 @@ function routeFill(groups, comp, mask, res) {
         const m = y * gw + x; if (!inside[m]) continue;
         // each earlier travel through a cell costs more, so ways don't all funnel through one spot (needle hits pile up)
         const v = g(c) + Math.hypot(dx, dy) * ((sewn[m] ? 6 : 1) + 2 * trod[m]);
-        if (v < g(m)) { STAMP[m] = gen; G[m] = v; FROM[m] = c; HK[hn] = v + hx(m); HC[hn++] = m; }
+        if (v < g(m)) { STAMP[m] = gen; G[m] = v; FROM[m] = c; push(v + hx(m), m); }
       }
       if (hn > 20000) return null;
     }
