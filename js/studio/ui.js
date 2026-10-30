@@ -183,15 +183,26 @@ export function initStudio(api) {
       const fabricBlock = steps.findIndex((st) => st.fabric);
       api.setView(design.pattern(), `${api.safeName(firstWords(), "design")}.pes`, {
         fabricShapeBlock: fabricBlock >= 0 ? fabricBlock : undefined,
-        hide: new Set(steps.flatMap((st, i) => (st.under ? [i] : []))), fabric: fabricBlock >= 0 ? "pink" : "linen" });
+        hide: new Set(steps.flatMap((st, i) => (st.under ? [i] : []))), fabric: fabricBlock >= 0 ? "pink" : "linen", steps: steps.length });
     } catch (err) { if (s === seq) { console.error(err); api.showError(err.message); } }
   }
   function stepsUI(steps) {
     const pauses = steps.length - 1;
     $("st-steps-count").textContent = `· ${steps.length} ${steps.length === 1 ? "step" : "steps"}, ${pauses} ${pauses === 1 ? "pause" : "pauses"}`;
-    $("st-steps").innerHTML = steps.map((st) => `<li><b><i style="background:${st.color}"></i>Brother ${nearestBrotherThread(st.color).name}</b>
-      ${st.you ? `<span class="you">${api.escapeHtml(st.you)}</span>` : ""}<span>${api.escapeHtml(st.sews.join(" "))}</span></li>`).join("");
+    // each step is a button: the preview shows the design as it is after that step, what's still to come faint
+    $("st-steps").innerHTML = steps.map((st, i) => `<li><button type="button" data-step="${i}" aria-pressed="${api.step() === i}">
+      <b><span class="n">${i + 1}</span><i style="background:${st.color}"></i>Brother ${nearestBrotherThread(st.color).name}</b>
+      ${st.you ? `<span class="you">${api.escapeHtml(st.you)}</span>` : ""}<span>${api.escapeHtml(st.sews.join(" "))}</span>
+      ${st.early ? `<small>Sewn early, with the other ${api.escapeHtml(nearestBrotherThread(st.color).name)} parts, to save a thread change.</small>` : ""}</button></li>`).join("");
   }
+  $("st-steps").onclick = (e) => { const b = e.target.closest("[data-step]"); if (b) api.showStep(api.step() === +b.dataset.step ? null : +b.dataset.step); };
+  document.addEventListener("nw:step", (e) => {
+    for (const b of $("st-steps").querySelectorAll("[data-step]")) b.setAttribute("aria-pressed", +b.dataset.step === e.detail);
+    $("st-steps-all").hidden = e.detail == null;
+  });
+  $("st-steps-all").onclick = () => api.showStep(null);
+  // closing the steps shows the whole design again
+  $("st-steps").closest("details").addEventListener("toggle", (e) => { if (!e.target.open) api.showStep(null); });
   const firstWords = () => (pieces.find((p) => p.kind === "text" || p.kind === "letters")?.text || pieces.find((p) => p.kind === "monogram")?.letters || "design");
 
   // ---------- events ----------

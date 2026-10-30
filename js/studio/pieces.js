@@ -371,6 +371,7 @@ export function compose(pieces, hoop) {
         if (hits(order[j].box, s.box) || order[j].pause) break;
       }
     }
+    if (at < order.length) s.early = true;
     order.splice(at, 0, s);
   }
   const d = new Design(hoop), steps = [];
@@ -379,9 +380,10 @@ export function compose(pieces, hoop) {
     if (st.color !== last || st.pause || st.fabric) {
       d.color(st.color, st.label); last = st.color;
       steps.push({ color: st.color, sews: [], you: st.you || (steps.length ? "Change to the next thread and press Start." : null),
-        fabric: !!st.fabric, under: !!st.under || !!st.fabric });
+        fabric: !!st.fabric, under: !!st.under || !!st.fabric, early: false });
     }
     steps[steps.length - 1].sews.push(st.sews);
+    if (st.early) steps[steps.length - 1].early = true;
     for (const q of st.paths) d.path(q);
   }
   if (!steps.length) throw new Error("Add some lettering or a frame to start.");

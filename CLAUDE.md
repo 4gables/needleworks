@@ -36,7 +36,9 @@ Embroidery-file tools for home machines. Two implementations of the same engine:
   so dragged pieces stay put; the machine centres the whole design anyway. Swatches are exact Brother PEC colours
   so on-screen names match the machine (a near-black hex showed as "Olive Green").
   Pieces sew in stages (`pieceStages`): an appliqué frame is placement line, pause (lay fabric, trim), tack-down,
-  pause, satin; `compose` returns the steps shown under "How to stitch it". Opened PES/DST files become pieces
+  pause, satin; `compose` returns the steps shown under "How to stitch it". Each step is a button: the preview then shows the design
+  as it is after that colour block (`state.step` in app.js: `upto` = the block's last stitch, later stitches faint via
+  `draw(..., { ghost })`, placement lines shown until the fabric step covers them); steps a stage joined early say so. Opened PES/DST files become pieces
   (stitches as is: move/turn, no resize). Lettering satin width = the font's stroke, capped at 1/5 of the x-height
   (1/6 for thin monoline fonts, which get a satin sized to the letters); under 1 mm it's a fine line instead
   (bean stitch: three runs, strokes under 0.6 mm skipped, points 0.4 mm apart), because satin on small script fills

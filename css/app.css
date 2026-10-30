@@ -290,7 +290,14 @@ canvas#view:active { cursor: grabbing; }
 .seg button[aria-pressed="true"] { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
 .link { background: none; border: 0; color: var(--accent); font: inherit; font-size: 14px; font-weight: 400; cursor: pointer; padding: 0; }
 body[data-mode="design"] #view { cursor: grab; }
-.st-steps li { display: grid; gap: 2px; margin-bottom: 8px; }
+.steps ol.st-steps { list-style: none; padding: 0; gap: 2px; }
+.steps .st-steps li b { display: flex; }
+.st-steps i { flex: none; }
+.st-steps button { display: grid; gap: 2px; width: 100%; text-align: left; font: inherit; color: inherit; background: none; border: 1.5px solid transparent; border-radius: 10px; padding: 6px 8px; cursor: pointer; }
+.st-steps button:hover { background: var(--panel); }
+.st-steps button[aria-pressed="true"] { border-color: var(--accent); background: var(--panel); }
+.st-steps .n { min-width: 1.4em; color: var(--muted); }
+.st-steps small { color: var(--muted); }
 .st-steps b { display: flex; align-items: center; gap: 6px; }
 .st-steps b i { width: 12px; height: 12px; border-radius: 50%; border: 1px solid rgba(0,0,0,.15); }
 .st-steps .you { color: var(--accent); }

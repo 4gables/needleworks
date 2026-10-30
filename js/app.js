@@ -22,7 +22,7 @@ const state = {
   hoopId: store.get("hoop", null),
   view: null,          // { pattern, bytes, filename, fabricShapeBlock, hide, cache }
   views: {},           // last view per mode
-  zoom: 1, pan: [0, 0], upto: null, showHoop: store.get("showHoop", true),
+  zoom: 1, pan: [0, 0], upto: null, step: null,   // step: Design tab, show the design as it is after that colour block showHoop: store.get("showHoop", true),
   // hoop turned sideways on screen, per tab; the bookmark reads best lying down
   turn: { picture: false, bookmark: true, design: false, open: false, ...store.get("turn", {}) },
   bm: { name: store.get("bm.name", "ashley"), font: store.get("bm.font", FONTS[0].family), color: store.get("bm.color", RED), fabric: store.get("bm.fabric", "pink"), lead: store.get("bm.lead", true), tail: store.get("bm.tail", true), blank: store.get("bm.blank", false) },
@@ -40,9 +40,17 @@ function paint() {
   const v = state.view;
   $("empty").hidden = !!v;
   if (!v) { draw(canvas, null); return; }
+  let upto = state.upto ?? undefined, hide = v.hide, fabricShapeBlock = v.fabricShapeBlock;
+  const block = state.step != null && state.mode === "design" && v.cache.blocks.find((b) => b.index === state.step);
+  if (block) {
+    // sewn so far, the rest faint; placement lines show until the fabric goes over them
+    upto = Math.max(...block.segs.map((sg) => sg[sg.length - 1][2])) + 1;
+    hide = new Set([...(v.hide || [])].filter((i) => i < state.step));
+    if (fabricShapeBlock != null && state.step <= fabricShapeBlock) fabricShapeBlock = undefined;
+  }
   state.tf = draw(canvas, v.shown, {
-    center: state.mode === "design" ? [0, 0] : undefined,
-    cache: v.cache, fabric: v.fabric, fabricShapeBlock: v.fabricShapeBlock, hide: v.hide, upto: state.upto ?? undefined,
+    center: state.mode === "design" ? [0, 0] : undefined, ghost: !!block,
+    cache: v.cache, fabric: v.fabric, fabricShapeBlock, hide, upto,
     hoop: shownHoop(), showHoop: state.showHoop, zoom: state.zoom, pan: state.pan, showNeedle: state.upto != null,
     padTop: $("facts").offsetHeight + 16,
   });
@@ -53,6 +61,7 @@ function fmtMm(mm) { return `${mm.toFixed(0)} × `; }
 function setView(v) {
   stopPlay();
   state.view = v; state.views[state.mode] = v; state.upto = null; $("progress").value = 1000;
+  if (state.step != null && !(v?.steps > state.step)) showStep(null);   // the design changed under a step view
   $("turn").setAttribute("aria-pressed", turned());
   if (!v) { $("facts").innerHTML = ""; $("threads").innerHTML = ""; $("download").disabled = true; $("share").disabled = true; paint(); return; }
   // the preview is the file: decode the PES bytes and draw those, not the design they were made from
@@ -155,6 +164,7 @@ let playing = 0;
 function stopPlay() { if (playing) cancelAnimationFrame(playing); playing = 0; $("play").textContent = "▶︎ Watch it sew"; }
 $("play").onclick = () => {
   if (!state.view) return;
+  showStep(null);
   if (playing) { stopPlay(); return; }
   const total = state.view.cache.total, dur = Math.min(14000, 3000 + total * 1.2);
   const from = state.upto == null || state.upto >= total ? 0 : state.upto, t0 = performance.now() - (from / total) * dur;
@@ -167,7 +177,7 @@ $("play").onclick = () => {
   playing = requestAnimationFrame(step);
 };
 $("progress").oninput = (e) => {
-  if (!state.view) return; stopPlay();
+  if (!state.view) return; stopPlay(); showStep(null);
   const v = +e.target.value; state.upto = v >= 1000 ? null : Math.round((v / 1000) * state.view.cache.total); paint();
 };
 $("show-hoop").checked = state.showHoop;
@@ -507,8 +517,13 @@ document.addEventListener("paste", (e) => {
 fillMachines();
 bookmarkUI();
 // ---------- design your own ----------
+// Design tab: show the design as it stands after one step (null = all of it)
+function showStep(i) {
+  if (state.step === i) return;
+  state.step = i; document.dispatchEvent(new CustomEvent("nw:step", { detail: i })); paint();
+}
 const studio = initStudio({
-  hoop, store, showError, busy, safeName, escapeHtml,
+  hoop, store, showError, busy, safeName, escapeHtml, showStep, step: () => state.step,
   setView(pattern, filename, look = {}) {
     const v = { pattern, verifyAgainst: pattern, bytes: writePES(pattern), filename, fabric: "linen", ...look };
     state.views.design = v;

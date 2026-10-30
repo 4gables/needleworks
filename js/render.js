@@ -53,7 +53,7 @@ export const FABRICS = {
   black: { label: "Black", solid: "#232022" },
 };
 
-// opts: { fabric, fabricShapeBlock, hide: Set, upto, hoop: {w,h} (mm), showHoop, zoom, pan: [x,y], center: [x,y] (0.1 mm) }
+// opts: { fabric, fabricShapeBlock, hide: Set, upto, ghost (stitches after upto drawn faint), hoop: {w,h} (mm), showHoop, zoom, pan: [x,y], center: [x,y] (0.1 mm) }
 export function draw(canvas, design, opts = {}) {
   const dpr = window.devicePixelRatio || 1;
   const W = canvas.clientWidth, H = canvas.clientHeight;
@@ -104,6 +104,19 @@ export function draw(canvas, design, opts = {}) {
   const upto = opts.upto ?? total;
   const tw = Math.max(0.6, 5.6 * s);       // a stitched thread lies ~0.55 mm wide (it spreads)
   ctx.lineCap = "round"; ctx.lineJoin = "round";
+  if (opts.ghost && upto < total) {   // what's still to sew, faint, under what's sewn
+    ctx.globalAlpha = 0.16; ctx.lineWidth = Math.max(0.6, tw * 0.5);
+    for (const b of blocks) {
+      if (opts.hide && opts.hide.has(b.index)) continue;
+      ctx.strokeStyle = b.color; ctx.beginPath();
+      for (const seg of b.segs) {
+        let on = false;
+        for (const [x, y, n] of seg) { if (n + 1 < upto) continue; if (on) ctx.lineTo(X(x), Y(y)); else { ctx.moveTo(X(x), Y(y)); on = true; } }
+      }
+      ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+  }
   for (const b of blocks) {
     if (opts.hide && opts.hide.has(b.index)) continue;
     const base = b.color, dark = shade(base, -0.42), light = shade(base, 0.38);
