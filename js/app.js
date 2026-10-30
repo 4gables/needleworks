@@ -14,7 +14,10 @@ const store = {
   set(k, v) { try { localStorage.setItem("nw:" + k, JSON.stringify(v)); } catch {} },
 };
 
-const THREADS = ["#c8102e", "#e1252f", "#f06292", "#7b2d8e", "#1f3a68", "#2e6b3a", "#c99a2e", "#1a1a1a"];
+// exact Brother PEC colours, so the name on the machine's screen is the swatch's (#1a1a1a showed as "Olive Green")
+const THREADS = ["#ed171f", "#c70156", "#f64a8a", "#770176", "#0e1f7c", "#00673e", "#e8a900", "#000000"];
+const OLD_THREADS = { "#c8102e": "#ed171f", "#e1252f": "#ed171f", "#f06292": "#f64a8a", "#7b2d8e": "#770176",
+  "#1f3a68": "#0e1f7c", "#2e6b3a": "#00673e", "#c99a2e": "#e8a900", "#1a1a1a": "#000000" };
 
 const state = {
   mode: "picture",
@@ -25,7 +28,7 @@ const state = {
   zoom: 1, pan: [0, 0], upto: null, step: null,   // step: Design tab, show the design as it is after that colour block showHoop: store.get("showHoop", true),
   // hoop turned sideways on screen, per tab; the bookmark reads best lying down
   turn: { picture: false, bookmark: true, design: false, open: false, ...store.get("turn", {}) },
-  bm: { name: store.get("bm.name", "ashley"), font: store.get("bm.font", FONTS[0].family), color: store.get("bm.color", RED), fabric: store.get("bm.fabric", "pink"), lead: store.get("bm.lead", true), tail: store.get("bm.tail", true), blank: store.get("bm.blank", false) },
+  bm: { name: store.get("bm.name", "ashley"), font: store.get("bm.font", FONTS[0].family), color: (c => OLD_THREADS[c] || c)(store.get("bm.color", RED)), fabric: store.get("bm.fabric", "pink"), lead: store.get("bm.lead", true), tail: store.get("bm.tail", true), blank: store.get("bm.blank", false) },
   pic: { file: null, bitmap: null, key: 0, skip: [], colors: 4, size: 100, angle: 45, bg: true, density: store.get("pic.density", "solid"), req: 0, colorsInfo: [] },
 };
 if (!MACHINES[state.machine]) state.machine = DEFAULT_MACHINE;

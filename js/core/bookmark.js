@@ -6,7 +6,7 @@ import { MARGIN } from "./machines.js";
 import { order } from "./raster.js";
 import { strokes } from "./text.js";
 
-export const RED = "#c8102e";
+export const RED = "#ed171f";
 const W = 50, MAX_L = 165, LETTERS = 0.72, CHAMFER = 9, BORDER = 3.6, TEXT_SATIN = 1.8, EYE_R = 4.2, EYE_W = 2.2;
 
 export const STEPS = [

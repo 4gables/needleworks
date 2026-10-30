@@ -27,6 +27,8 @@ Embroidery-file tools for home machines. Two implementations of the same engine:
   centred and loops may reach further one way; lengthwise it's centred with equal room below
   the eyelet and above the border. Letters are sized so their band fills `LETTERS` (72%) of the inner width, the same with
   or without decorations; only a word too long for the bookmark shrinks. Needs the 5x7 hoop.
+  Its swatches are exact Brother PEC colours like the Design tab's (until 2026-10-29 crimson read "Dark Fuchsia", navy
+  "Peacock Blue", black "Olive Green" on the machine); a colour saved from the old swatches maps to the new one.
 - Print fonts (`print: true` in `js/core/fonts.js`): letters aren't bridged (each is its own piece, the machine trims
   between them), decorations are straight dashes on the middle of the x-height (cap height for all-caps), and spur
   pruning is gentler (0.45 vs 1.3 stroke widths) so t crossbars and a's stems survive. Dots (i, j) that thin to a lone
