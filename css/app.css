@@ -371,3 +371,9 @@ body[data-mode="design"] #view { cursor: grab; }
 .motifs button { aspect-ratio: 1; border: 1.5px solid var(--line); background: var(--panel); border-radius: 10px; padding: 6px; cursor: pointer; color: var(--ink); }
 .motifs button[aria-pressed="true"] { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); color: var(--accent); }
 .motifs svg { width: 100%; height: 100%; fill: currentColor; display: block; }
+/* phones: the sewing controls and the extra download links wrap instead of widening the page */
+.extras { flex-wrap: wrap; row-gap: 4px; }
+@media (max-width: 600px) {
+  .sew { flex-wrap: wrap; gap: 8px 12px; }
+  .sew input[type="range"] { order: -1; flex-basis: 100%; }
+}

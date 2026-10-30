@@ -165,6 +165,16 @@ Embroidery-file tools for home machines. Two implementations of the same engine:
   several loops, even-odd) plus a 1.4 mm satin edge; outline = `edgeSatin` (narrower round small holes); appliqué =
   `appliqued()`, shared with appliqué letters. Filled under 25 mm the detail closes up (the editor says so). Lettering
   `deco` puts a small filled motif either side (More > Motif either side; the "Name with motifs" starter).
+- In-the-hoop projects: frame `border: "zip"` (Zipper pouch, square/oval/circle only in the editor): zipper line
+  (under), pause: tape the zipper, tack both sides of the teeth (under), pause: two folded front pieces, tack round the
+  outline (`fabric`, `nocut`: the cut file would be the wrong shape), topstitch beside the zipper, the pieces after it,
+  then a `last` stage: open the zipper halfway, back face down, three times round. The zipper line overhangs 5 mm a
+  side (6 took the 120 mm starter past 126 mm). Stages may carry `before` ("Have ready": fabric sizes from the frame's
+  size, +2.5 cm; folded front pieces twice what they cover); `compose` returns it, the steps list it first and the sew
+  sheet prints it. ITH frames list their front/back pieces too. Starters: Zipper pouch, Key fob. The preview's fabric
+  shape uses only the block's closed outlines (the pouch's topstitch lines share it), and a visible stage joining any
+  hidden block (fabric too) shows it.
+- Phones (<= 600 px): the sewing controls and the links under Download wrap (Thickness made the row overflow to 481 px).
 - Sew sheet + cut file (`js/sheet.js`, links under Download): "Print a sew sheet" fills a hidden `#sheet` and calls
   `window.print()` (print CSS hides the app). Page 1 is the hoop field at 1:1 (SVG sized in mm) with the design centred
   as the machine centres it, a crosshair and a 5 cm check bar; page 2 the steps with the machine's thread names

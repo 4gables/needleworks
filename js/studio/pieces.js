@@ -179,7 +179,9 @@ function fitBox(pts, w, h) {
   const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2;
   return pts.map(([x, y]) => [((x - cx) / (x1 - x0)) * w, ((y - cy) / (y1 - y0)) * h]);
 }
-export const BORDERS = { line: "Thin line", bold: "Bold line", satin: "Satin border", patch: "Filled patch", applique: "Appliqué", ith: "In the hoop (two-sided)" };
+export const BORDERS = { line: "Thin line", bold: "Bold line", satin: "Satin border", patch: "Filled patch", applique: "Appliqué", ith: "In the hoop (two-sided)", zip: "Zipper pouch (in the hoop)" };
+// fabric to cut for a w x h mm in-the-hoop piece, with 2.5 cm (1 in) spare all round to trim off
+const cut = (w, h, extra = 25) => `${Math.ceil((w + extra) / 10)} × ${Math.ceil((h + extra) / 10)} cm (${((w + extra) / 25.4).toFixed(1)} × ${((h + extra) / 25.4).toFixed(1)} in)`;
 
 // ---------- pieces ----------
 // text:     { kind: "text", text, font, size, shape: "straight"|"up"|"down", radius, ry, x, y, rot, color }
@@ -317,11 +319,34 @@ function localStages(p, fab = "cotton") {
         { color: p.color, pause: true, paths: [edgeWalk(edge, 3.6, true), loop(zigzag(edge, 2.6, 2.0, true)), loop(satin(edge, 3.6, 0.4, 0.3, true))],
           you: "Press Start.", sews: "Covers the raw edge with a satin border." },
       ];
+    } else if (p.border === "zip") {
+      // in-the-hoop zipper pouch: zipper across the top, the front in two folded pieces either side of it, whatever
+      // goes on the front (the pieces after it), then the back face down and one seam through everything; turned
+      // right side out through the zipper
+      const top = Math.min(...edge.map((q) => q[1])), bot = Math.max(...edge.map((q) => q[1])), x = p.w / 2 + 5;
+      const yz = top + Math.max(14, p.h * 0.2), line = (y) => run([[-x, y], [x, y]], 2.5), a = yz - top, b = bot - yz;
+      stages = [
+        { color: p.color, paths: [line(yz)], sews: "Sews the zipper line on the stabilizer.", under: true,
+          // (folded in half, each front piece has to reach from the zipper past the outline: twice that, plus spare)
+          before: `Fabric: two front pieces, ${cut(p.w, 2 * (a + 15), 25)} for the top and ${cut(p.w, 2 * (b + 15), 25)} for the bottom (each folded in half along its length, wrong sides together), and the back, ${cut(p.w, p.h)}. A zipper at least ${Math.ceil((p.w + 50) / 10)} cm (${((p.w + 50) / 25.4).toFixed(0)} in) long, and tape.` },
+        { color: p.color, pause: true, paths: [line(yz - 3.5), line(yz + 3.5).reverse()], under: true,
+          you: "Lay the zipper face up with its teeth on the line and the ends past both sides (pull the zipper tab past the side too). Tape the ends down. Press Start.",
+          sews: "Tacks the zipper down along both sides of the teeth." },
+        { color: p.color, pause: true, fabric: true, nocut: true, paths: [loop(run(edge, 2.5, true))],
+          you: "Lay the top front piece above the zipper, folded edge along the teeth, and the bottom piece below it the same way, both right side up and past the outline. Tape them. Press Start.",
+          sews: `Tacks the front pieces down round the ${name}.` },
+        { color: p.color, paths: [line(yz - 7), line(yz + 7).reverse()], sews: "Topstitches beside the zipper." },
+        { color: p.color, pause: true, last: true, paths: [loop(run(edge, 2.0, true)), loop(run(edge.slice().reverse(), 2.0, true)), loop(run(edge, 2.0, true))],
+          you: `Open the zipper halfway (you'll turn the pouch through it). Lay the back piece right side down over everything, covering the outline by ½ in, and tape it. Press Start.`,
+          sews: `Sews round the ${name} through every layer, three times.`,
+          after: "Take it out of the hoop and tear the stabilizer away. Trim ¼ in outside the seam (pinking shears stop fraying), trim the zipper ends, clip the corners, then turn it right side out through the zipper and press." },
+      ];
     } else if (p.border === "ith") {
       // in-the-hoop ornament or keychain: an appliqué front, then whatever goes on it (the pieces after it in the list),
       // then backing fabric taped under the hoop and one satin edge through every layer; cut out when it's done
       stages = [
-        { color: p.color, paths: [loop(run(edge, 2.5, true))], sews: `Sews the ${name} outline on the stabilizer.`, fabric: true },
+        { color: p.color, paths: [loop(run(edge, 2.5, true))], sews: `Sews the ${name} outline on the stabilizer.`, fabric: true,
+          before: `Fabric: front and back pieces, each ${cut(p.w, p.h)}, and tape.` },
         { color: p.color, pause: true, paths: [loop(run(edge, 2.0, true)), loop(run(edge.slice().reverse(), 2.0, true))],
           you: `Lay the front fabric over the ${name} outline, right side up, covering it by ½ in. Press Start. Then take the hoop off (leave everything hooped), trim the fabric close to the stitching, and put the hoop back.`,
           sews: "Tacks the front fabric down.", under: true },
@@ -555,25 +580,26 @@ export function compose(pieces, hoop, opts = {}) {
     const sides = rect.slice(1).flatMap((q, i) => run([rect[i], q], 4).slice(i ? 1 : 0));
     order[0] = { ...order[0], paths: [sides, ...order[0].paths], sews: "Sews a basting box to hold everything flat. " + order[0].sews };
   }
-  const d = new Design(hoop), steps = [], after = [];
+  const d = new Design(hoop), steps = [], after = [], before = [];
   let thread = null;
   for (const st of order) {
     if (st.after && !after.includes(st.after)) after.push(st.after);
+    if (st.before && !before.includes(st.before)) before.push(st.before);
     if (st.color !== thread || st.pause || st.fabric) {
       d.color(st.color, st.label); thread = st.color;
       steps.push({ color: st.color, sews: [], you: st.you || (steps.length ? "Change to the next thread and press Start." : null),
-        fabric: !!st.fabric, under: !!st.under || !!st.fabric, early: false, cut: st.fabric ? st.paths : null });
+        fabric: !!st.fabric, under: !!st.under || !!st.fabric, early: false, cut: st.fabric && !st.nocut ? st.paths : null });
     }
     steps[steps.length - 1].sews.push(st.sews);
     if (st.early) steps[steps.length - 1].early = true;
     // something you'd see joining a tack-down (quilting, lettering in the same thread) shows the block in the preview;
     // the tack line sits at the edge, under the satin that comes later
     const cur = steps[steps.length - 1];
-    if (cur.under && !cur.fabric && !st.under) cur.under = false;
+    if (cur.under && !st.under && !st.fabric) cur.under = false;
     for (const q of st.paths) d.path(q);
   }
   if (!steps.length) throw new Error("Add some lettering or a frame to start.");
   if (opts.baste) after.push("Unpick the basting box (snip every few stitches on the back, then pull it out from the front).");
   d.finish();
-  return { design: d, steps, after, tip: FABRICS[fab].tip };
+  return { design: d, steps, after, before, tip: FABRICS[fab].tip };
 }
