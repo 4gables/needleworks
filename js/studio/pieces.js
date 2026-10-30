@@ -446,7 +446,7 @@ function motifStitches(loops, style) {
 // A overlaps itself), over an edge walk and a zigzag
 function edgeSatin(l, max, min = 1.2) {
   const [x0, y0, x1, y1] = bounds(l), w = Math.max(min, Math.min(max, Math.min(x1 - x0, y1 - y0) / 3.5));
-  return [edgeWalk(l, w, true, Math.min(0.4, w / 4)), loop(zigzag(l, w * 0.7, 2.0, true)), loop(satin(l, w, 0.4, w > 2 ? 0.3 : 0.2, true))];
+  return [edgeWalk(l, w, true, Math.min(0.4, w / 4), true), loop(zigzag(l, w * 0.7, 2.0, true, true)), loop(satin(l, w, 0.4, w > 2 ? 0.3 : 0.2, true, true))];
 }
 
 // every loop moved d mm away from the inside of the shape (even-odd over all the loops, so holes move into the hole)

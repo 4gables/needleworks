@@ -54,7 +54,7 @@ Embroidery-file tools for home machines. Two implementations of the same engine:
   Starter cards draw their own stitched thumbnails (`draw(..., { pad })`). Appliqué letters (`kind: "letters"`,
   `js/studio/outline.js`): the word is rendered in a bold OFL display font (Graduate, Lilita One, Alfa Slab One in
   `APPLIQUE_FONTS`), every edge traced with marching squares (holes too), corners filleted 1.6 mm (Douglas-Peucker 0.1 mm, then
-  `filletPolygon`; ~1 mm smoothing left satin fans 1.5 mm past an M's notches; very acute V's still star a little);
+  `filletPolygon`; ~1 mm smoothing left satin fans 1.5 mm past an M's notches); round inside corners tighter than the satin's half-width the edge offset folds back on itself (a star), so appliqué/outline edges (`edgeSatin`) cut each fold where the edge crosses itself (`fold` in `satin`/`zigzag`/`edgeWalk`, `unfold` in geom.js) and the stitches meet there; only those files change, density same or lower, corner stitches up to 4.6 mm;
   placement, tack-down, satin per outline, each stage starting a third further round so seams don't stack; the satin
   sits 0.4 mm outside the placement line (`outward`, holes included) so it covers a ~1 mm trim; a hole too small for a
   2.8 mm satin gets a narrower one (min dimension / 3.5, at least 2 mm). The preview fills every placement outline with fabric (even-odd). Patches: `fillPolygon()` (digitize.js)

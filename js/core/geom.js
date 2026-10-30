@@ -107,14 +107,15 @@ export function followRun(p, length = 1.6, tol = 0.1, min = 0.8) {
 // default and what Brother-made files measure, 0.30-0.42). Stitches alternate edges, so stations are density / 2
 // apart, spaced by the outer edge so curves don't gap; where the inner edge crowds, every other stitch is shortened.
 // (Until 2026-10-29 stations were `density` apart: 0.8 mm per edge, half the coverage of sold designs.)
-export function satin(p, width, density = 0.4, pullComp = 0.2, closed = false) {
+export function satin(p, width, density = 0.4, pullComp = 0.2, closed = false, fold = false) {
   const station = density / 2;
   let c = resample(p, 0.02, closed);
   let n = normals(c, closed);
   if (closed) { c = [...c, c[0]]; n = [...n, n[0]]; }
   const half = (width + pullComp) / 2;
-  const A = c.map((q, i) => [q[0] + n[i][0] * half, q[1] + n[i][1] * half]);
-  const B = c.map((q, i) => [q[0] - n[i][0] * half, q[1] - n[i][1] * half]);
+  let A = c.map((q, i) => [q[0] + n[i][0] * half, q[1] + n[i][1] * half]);
+  let B = c.map((q, i) => [q[0] - n[i][0] * half, q[1] - n[i][1] * half]);
+  if (fold) { A = unfold(A, c); B = unfold(B, c); }
   const lens = [arclen(A), arclen(B), arclen(c)];
   const idx = [0];
   let last = 0;
@@ -135,26 +136,56 @@ export function satin(p, width, density = 0.4, pullComp = 0.2, closed = false) {
       // (inner edge hit at under half the outer's rate: a 1.5 mm satin round a 3 mm radius hit it every 0.21 mm)
       if (gThis < gOther * 0.5 && (j % 4 === 2 || j % 4 === 3)) r = half * 0.6;
     }
-    out.push([c[i][0] + n[i][0] * r * sgn, c[i][1] + n[i][1] * r * sgn]);
+    if (!fold) out.push([c[i][0] + n[i][0] * r * sgn, c[i][1] + n[i][1] * r * sgn]);
+    else { const e = sgn > 0 ? A[i] : B[i]; out.push([c[i][0] + (e[0] - c[i][0]) * (r / half), c[i][1] + (e[1] - c[i][1]) * (r / half)]); }
   });
   return out;
 }
 
+// An edge offset from a line folds back on itself round an inside corner tighter than the offset (a swallowtail):
+// a satin's stitches there fan out past the edge in a star. Each fold is cut at the point where the edge crosses
+// itself, so the stitches meet there instead. `c` is the line, point for point with `e`.
+function unfold(e, c) {
+  e = e.slice();
+  const back = (i) => (e[i + 1][0] - e[i][0]) * (c[i + 1][0] - c[i][0]) + (e[i + 1][1] - e[i][1]) * (c[i + 1][1] - c[i][1]) < 0;
+  const cross = (p, q, r, s) => {
+    const d = (q[0] - p[0]) * (s[1] - r[1]) - (q[1] - p[1]) * (s[0] - r[0]);
+    if (Math.abs(d) < 1e-12) return null;
+    const t = ((r[0] - p[0]) * (s[1] - r[1]) - (r[1] - p[1]) * (s[0] - r[0])) / d, u = ((r[0] - p[0]) * (q[1] - p[1]) - (r[1] - p[1]) * (q[0] - p[0])) / d;
+    return t >= 0 && t <= 1 && u >= 0 && u <= 1 ? [p[0] + (q[0] - p[0]) * t, p[1] + (q[1] - p[1]) * t] : null;
+  };
+  const K = 400;   // how far either side of a fold to look for the crossing (8 mm of a 0.02 mm line)
+  for (let a = 0; a < e.length - 1; a++) {
+    if (!back(a)) continue;
+    let b = a; while (b + 1 < e.length - 1 && back(b + 1)) b++;
+    let hit = null;
+    for (let s = 0; s <= K && !hit; s++)   // nearest crossing first: segment i before the fold, j after it
+      for (let di = 0; di <= s && !hit; di++) {
+        const i = a - di, j = b + s - di;
+        if (i < 0 || j > e.length - 2 || j < i + 2) continue;
+        const x = cross(e[i], e[i + 1], e[j], e[j + 1]);
+        if (x) hit = [i, j, x];
+      }
+    if (hit) { const [i, j, x] = hit; for (let k = i + 1; k <= j; k++) e[k] = x; a = j; } else a = b;
+  }
+  return e;
+}
+
 // Edge-walk underlay for a satin 2.5-4 mm wide: a run just inside each edge (0.4 mm in), out along one side and back
 // along the other, so the satin's edges sit on a firm line (Ink/Stitch "contour underlay", Lilo's 2.5-4 mm band).
-export function edgeWalk(p, width, closed = false, inset = 0.4) {
+export function edgeWalk(p, width, closed = false, inset = 0.4, fold = false) {
   let c = resample(p, 0.5, closed);
   let n = normals(c, closed);
   if (closed) { c = [...c, c[0]]; n = [...n, n[0]]; }
   const d = width / 2 - inset;
-  const side = (s) => c.map((q, i) => [q[0] + n[i][0] * d * s, q[1] + n[i][1] * d * s]);
+  const side = (s) => { const e = c.map((q, i) => [q[0] + n[i][0] * d * s, q[1] + n[i][1] * d * s]); return fold ? unfold(e, c) : e; };
   // out along the far side, back along the near one: it ends on the side where the zigzag and satin start, so they
   // sew straight on (ending on the other side left a 2 mm gap: a jump, trim and two locks on the seam)
   return [...run(side(-1), 2.5), ...run(side(1).reverse(), 2.5)];
 }
 
 // open zigzag (underlay): `spacing` between hits on the same edge
-export const zigzag = (p, width, spacing = 2.0, closed = false) => satin(p, width, spacing, 0, closed);
+export const zigzag = (p, width, spacing = 2.0, closed = false, fold = false) => satin(p, width, spacing, 0, closed, fold);
 
 export function filletPolygon(verts, radius, seg = 8) {
   const out = [], n = verts.length;
