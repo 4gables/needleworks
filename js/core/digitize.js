@@ -512,3 +512,4 @@ export function fillPolygon(poly, { angle = DEFAULTS.fillAngle, density = DENSIT
   }
   return paths;
 }
+

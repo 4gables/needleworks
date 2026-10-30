@@ -6,7 +6,7 @@ import { hoop as getHoop } from "../core/machines.js";
 import { nearestBrotherThread } from "../core/threads.js";
 import { readEmbroidery } from "../core/formats.js";
 import { draw } from "../render.js";
-import { BORDERS, SHAPES, archTight, compose, fileBlocks, fittedSizes, followFrame, label, minSize, pieceBounds, smallText } from "./pieces.js";
+import { BORDERS, FABRICS, SHAPES, archTight, compose, fileBlocks, fittedSizes, followFrame, label, minSize, pieceBounds, smallText } from "./pieces.js";
 
 const SCRIPT = "NW Great Vibes", PRINT = "NW Josefin Sans";
 // exact Brother PEC thread colours, so the name on screen is the one the machine shows
@@ -48,8 +48,7 @@ export const STARTERS = [
     frame({ shape: "heart", w: 46, h: 42, border: "applique", y: 14, color: PINK }),
     text({ text: "Emma", size: 16, shape: "up", radius: 30, y: 14, color: NAVY })],
     tip: "Hoop tear-away stabilizer and stick the bib on it (or float it with spray adhesive). On terry, lay a water-soluble topper over it so the stitches don't sink." },
-  { id: "towel", name: "Towel name", note: "a big name that stands up to terry", make: () => [text({ text: "Ashley", size: 32, style: "satin" })],
-    tip: "Lay a water-soluble topper over the towel so the loops don't swallow the stitches, with tear-away stabilizer underneath. Tear the topper off afterwards; a damp cloth melts the rest." },
+  { id: "towel", name: "Towel name", note: "a big name that stands up to terry", make: () => [text({ text: "Ashley", size: 32, style: "satin" })], fabric: "towel", baste: true },
   { id: "ornament", name: "Ornament", note: "two-sided, sewn in the hoop", make: () => [
     frame({ shape: "circle", w: 80, h: 80, border: "ith", color: RED }),
     text({ text: "Emma", size: 20, y: -4 }),
@@ -71,20 +70,22 @@ export function initStudio(api) {
   let pieces = saved?.pieces?.length ? saved.pieces : STARTERS.find((s) => s.make).make();
   nextId = Math.max(0, ...pieces.map((p) => p.id)) + 1;
   let sel = saved?.sel ?? pieces[pieces.length - 1]?.id, seq = 0, timer = 0;
+  // what it's sewn on (changes the stitches for knit and towel) and the basting box
+  let fabric = FABRICS[saved?.fabric] ? saved.fabric : "cotton", baste = !!saved?.baste;
 
-  const save = () => api.store.set("studio", { pieces, sel });
+  const save = () => api.store.set("studio", { pieces, sel, fabric, baste });
   // undo: a snapshot before each change (a burst of slider moves counts as one)
   const history = [];
   let quiet = 0;
   function remember(burst = false) {
     if (burst && Date.now() - quiet < 800) { quiet = Date.now(); return; }
     quiet = burst ? Date.now() : 0;
-    history.push(JSON.stringify({ pieces, sel })); if (history.length > 60) history.shift();
+    history.push(JSON.stringify({ pieces, sel, fabric, baste })); if (history.length > 60) history.shift();
     $("st-undo").disabled = false;
   }
   function undo() {
     const h = history.pop(); if (!h) return;
-    ({ pieces, sel } = JSON.parse(h)); quiet = 0;
+    ({ pieces, sel, fabric, baste } = JSON.parse(h)); quiet = 0;
     $("st-undo").disabled = !history.length; save(); ui(); make();
   }
   const current = () => pieces.find((p) => p.id === sel);
@@ -174,7 +175,13 @@ export function initStudio(api) {
     $("st-edit").innerHTML = h;
     warn();
   }
-  function ui() { list(); editor(); }
+  function ui() { list(); editor(); sewnOn(); }
+  function sewnOn() {
+    $("st-fabric").innerHTML = Object.entries(FABRICS).map(([k, f]) => `<button type="button" data-fab="${k}" aria-pressed="${k === fabric}">${f.name}</button>`).join("");
+    $("st-baste").checked = baste; $("st-fabric-tip").textContent = FABRICS[fabric].tip;
+  }
+  $("st-fabric").onclick = (e) => { const b = e.target.closest("[data-fab]"); if (!b || b.dataset.fab === fabric) return; remember(); fabric = b.dataset.fab; save(); sewnOn(); make(); };
+  $("st-baste").onchange = (e) => { remember(); baste = e.target.checked; save(); make(); };
   // too-small lettering, said plainly (updated in place so typing keeps focus)
   async function warn() {
     const w = $("st-edit").querySelector("[data-warn]"), p = current(); if (!w || !p) return;
@@ -202,7 +209,7 @@ export function initStudio(api) {
       const fonts = [...new Set(pieces.filter((p) => p.font).map((p) => p.font))];
       await Promise.all(fonts.map((f) => document.fonts.load(`40px "${f}"`)));
       if (s !== seq) return;
-      const { design, steps, after } = compose(pieces, api.hoop());
+      const { design, steps, after, tip } = compose(pieces, api.hoop(), { fabric, baste });
       if (s !== seq) return;
       const fit = fittedSizes(pieces), small = pieces.some((p) => smallText(fit.has(p.id) ? { ...p, size: fit.get(p.id) } : p));
       stepsUI(steps, after, small);
@@ -212,7 +219,7 @@ export function initStudio(api) {
         fabricShapeBlock: fabricBlock >= 0 ? fabricBlock : undefined,
         hide: new Set(steps.flatMap((st, i) => (st.under ? [i] : []))), fabric: fabricBlock >= 0 ? "pink" : "linen", steps: steps.length,
         sheet: { steps: steps.map((st) => ({ you: st.you, sews: st.sews.join(" ") })), after, cut: steps.filter((st) => st.cut).map((st) => st.cut),
-          notes: [$("st-tip").hidden ? "" : $("st-tip").textContent, small ? SMALL_TIP : ""] } });
+          notes: [$("st-tip").hidden ? "" : $("st-tip").textContent, tip, small ? SMALL_TIP : ""] } });
     } catch (err) { if (s === seq) { console.error(err); api.showError(err.message); } }
   }
   // appliqué tips: shown the first time a design has fabric to lay on, then on request
@@ -252,6 +259,8 @@ export function initStudio(api) {
     const s = STARTERS.find((x) => x.id === b.dataset.start);
     if (s.mode) { api.setMode(s.mode); return; }
     remember(); pieces = s.make(); sel = pieces[pieces.length - 1].id;
+    if (s.fabric) fabric = s.fabric;
+    baste = !!s.baste;
     $("st-tip").hidden = !s.tip; $("st-tip").textContent = s.tip || "";
     save(); ui(); make();
   };
@@ -340,7 +349,7 @@ export function initStudio(api) {
   $("st-undo").onclick = undo;
   // a design file to keep and change later (the pieces, not the stitches)
   $("st-save").onclick = () => {
-    const blob = new Blob([JSON.stringify({ needleworks: 1, pieces }, null, 1)], { type: "application/json" });
+    const blob = new Blob([JSON.stringify({ needleworks: 1, pieces, fabric, baste }, null, 1)], { type: "application/json" });
     const a = document.createElement("a"); a.href = URL.createObjectURL(blob);
     a.download = `${api.safeName(firstWords(), "design")}.needleworks.json`; document.body.append(a); a.click(); a.remove();
     setTimeout(() => URL.revokeObjectURL(a.href), 2000);
@@ -354,6 +363,7 @@ export function initStudio(api) {
       const loaded = data.pieces.filter((p) => p && kinds.has(p.kind) && Number.isFinite(p.x) && Number.isFinite(p.y));
       if (!loaded.length) throw new Error("it has no pieces");
       remember(); nextId = 1; pieces = loaded.map((p) => ({ ...p, id: nextId++ })); sel = pieces[pieces.length - 1].id;
+      fabric = FABRICS[data.fabric] ? data.fabric : "cotton"; baste = !!data.baste;
       save(); ui(); make();
     } catch (err) { api.showError("That design couldn't be opened: " + err.message); }
   };

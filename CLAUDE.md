@@ -108,6 +108,18 @@ Embroidery-file tools for home machines. Two implementations of the same engine:
 - "Turn hoop" (per tab, bookmark defaults on) only turns the preview; the PES is always written in machine orientation
   (the hoop clips on one way). A turned picture is digitized in the sideways field and `turnPattern()`ed clockwise
   before `writePES`; the preview turns the file back.
+- "Sewing on" (`FABRICS` in pieces.js, Design tab; `compose(pieces, hoop, { fabric, baste })`, saved in the JSON):
+  cotton/felt/denim sew as before (tips only); knit gets the zigzag underlay from 1.5 mm satins, +0.05 mm pull comp a
+  side and the Lighter fill on patches; towel makes lettering satin (a fine line sinks) on a knockdown: a lattice 0.3
+  mm wider than the satin (zigzag out and back along each stroke, ≥ 3 mm apart, `spaced`), sewn per connected word
+  just before its letters, so it adds no jumps (the walk ends where it began). Tried and dropped: a tatami fill of the
+  grown word (+17 trims on a name), one 1.5 mm zigzag (the checker's median read it as a sparse satin), 1 mm wider
+  (a fringe), zigzag underlay as well (24 hits/mm²). "Baste first": a 4 mm run box 9 mm round everything (clamped to
+  the hoop, centred on the design) at the start of the first block, unpicked at the end. The towel starter sets both.
+- Lettering satins start from the stroke's centre point and the zigzag underlay ends on it: back-to-back satins at a
+  junction began on the opposite edge, a column apart (2.4 mm > the 2 mm jump rule), so each was a jump + trim (11
+  on "Ashley" in Yellowtail). Across the studio batch trims -14%, none worse; the bookmark has its own engine and
+  is unchanged.
 - Sew sheet + cut file (`js/sheet.js`, links under Download): "Print a sew sheet" fills a hidden `#sheet` and calls
   `window.print()` (print CSS hides the app). Page 1 is the hoop field at 1:1 (SVG sized in mm) with the design centred
   as the machine centres it, a crosshair and a 5 cm check bar; page 2 the steps with the machine's thread names

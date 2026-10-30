@@ -2,8 +2,9 @@
 // Uses the shared lettering and stitch engines and returns a Design; the PES file is written by the locked
 // writer in js/core/formats.js, which nothing here touches.
 import { Design } from "../core/design.js";
-import { fillPolygon } from "../core/digitize.js";
+import { DENSITY, fillPolygon } from "../core/digitize.js";
 import { fontOf } from "../core/fonts.js";
+import { MARGIN } from "../core/machines.js";
 import { edgeWalk, filletPolygon, followRun, run, satin, zigzag } from "../core/geom.js";
 import { order } from "../core/raster.js";
 import { strokes } from "../core/text.js";
@@ -96,14 +97,21 @@ function densify(p, step) {
   return out;
 }
 
-function stitchLetters(parts, satinW) {
+// fabric (`FABRICS`): knit gets a zigzag underlay under thinner columns too (the fabric moves under a centre run)
+// and a little more pull comp; towel lettering has its knockdown underneath instead (a zigzag on top of it took the
+// towel name to 24 hits/mm²); cotton, felt and denim sew as they always have
+function stitchLetters(parts, satinW, fab = "cotton") {
+  const zz = fab === "knit" ? 1.5 : 2.5, pull = fab === "knit" ? 0.1 : 0;
   return parts.map(([p, mode]) => {
     // thin lettering: a stroke under ~0.6 mm is a speck of the skeleton; skip it (the next stroke picks up there)
     if (!satinW && length(p) < 0.6) return [];
     // the way out under a satin: a centre run, or a zigzag under wide columns (Ink/Stitch fonts' usual underlay)
-    if (mode === "run") return satinW >= 2.5 ? zigzag(p, satinW - 0.4, 2.5) : satinW ? run(p, 1.2) : spaced(followRun(p, 1.6, 0.1, 0.8));
-    // pull comp 0.15 mm a side; 0.05 on thin columns (more widens them enough to close small counters)
-    if (satinW) return satin(p, satinW, 0.38, satinW >= 1.5 ? 0.3 : 0.1);
+    // (the zigzag ends back on the centre line: ending on an edge left the satin's start 2.4 mm away, a jump and trim)
+    if (mode === "run") return satinW >= zz ? [p[0], ...zigzag(p, satinW - 0.4, 2.5), p[p.length - 1]] : satinW ? run(p, 1.2) : spaced(followRun(p, 1.6, 0.1, 0.8));
+    // pull comp 0.15 mm a side; 0.05 on thin columns (more widens them enough to close small counters). It starts
+    // from the centre: two satins back to back at a junction ended and began on opposite edges, a column's width
+    // apart (2.4 mm on a 24 mm name), which was a jump and a trim: 11 needless trims on "Ashley" in Yellowtail.
+    if (satinW) return [p[0], ...satin(p, satinW, 0.38, (satinW >= 1.5 ? 0.3 : 0.1) + pull)];
     const r = spaced(followRun(p, 1.6, 0.1, 0.8)), back = r.slice().reverse();   // the walk's way back: back, forth and back again
     return r.length > 1 ? [...r, ...back.slice(1), ...r.slice(1)] : r;
   });
@@ -181,10 +189,10 @@ export const BORDERS = { line: "Thin line", bold: "Bold line", satin: "Satin bor
 // with `you` telling the person what to do at it.
 // Stitches don't change when a piece only moves or turns, so they're built once per shape and placed after.
 const built = new Map();
-export function pieceStages(p) {
-  const { x, y, rot, id, ...shape } = p, key = JSON.stringify(shape);
+export function pieceStages(p, fab = "cotton") {
+  const { x, y, rot, id, ...shape } = p, key = JSON.stringify(shape) + fab;
   if (!built.has(key)) {
-    const st = localStages(p);
+    const st = localStages(p, fab);
     if (!fontReady(p.font)) return st.map((s) => ({ ...s, paths: s.paths.map((q) => q.map(placer(p))) }));
     built.set(key, st);
     if (built.size > 80) built.delete(built.keys().next().value);
@@ -197,18 +205,39 @@ function placer({ x, y, rot }) {
   return ([u, v]) => [u * c - v * sn + x, u * sn + v * c + y];
 }
 
-function localStages(p) {
+// a towel's loops swallow a fine line, so lettering there is always satin
+const styleOn = (p, fab) => (fab === "towel" && (p.style || "auto") === "auto" ? "satin" : p.style);
+// Towel lettering sits on a knockdown in its own thread: a lattice 0.3 mm wider than the satin each side (a zigzag
+// out along each stroke and one back, ≥ 3 mm apart), walked like the letters. Each connected word sews its lattice and
+// then its letters; the walk ends where it began, so it adds no jumps. (A tatami fill of the grown word, Ink/Stitch's
+// knockdown, broke into sections on thin script: +17 trims on a name; one dense zigzag read as a sparse satin;
+// 1 mm wider stuck out of the satin like a fringe.)
+function lettersOn(laid, satinW, fab) {
+  const sewn = stitchLetters(laid, satinW, fab);
+  if (fab !== "towel") return sewn;
+  const w = satinW + 0.6, out = [];
+  let from = 0;
+  for (let i = 1; i <= laid.length; i++) {
+    const a = laid[i - 1][0], b = laid[i]?.[0];
+    if (b && Math.hypot(b[0][0] - a[a.length - 1][0], b[0][1] - a[a.length - 1][1]) < 0.5) continue;
+    for (const [p] of laid.slice(from, i)) out.push(spaced([p[0], ...zigzag(p, w, Math.max(3, w * 0.6)), p[p.length - 1]]));
+    out.push(...sewn.slice(from, i)); from = i;
+  }
+  return out;
+}
+
+function localStages(p, fab = "cotton") {
   let stages = [];
   if (p.kind === "text") {
-    const { parts, satinW, top, bottom } = letters(p.text, p.font, p.size, p.style);
+    const { parts, satinW, top, bottom } = letters(p.text, p.font, p.size, styleOn(p, fab));
     if (parts.length) {
-      const paths = p.shape === "up" || p.shape === "down" ? stitchLetters(bend(parts, p.shape, Math.max(p.radius, 8), Math.max(p.ry ?? p.radius, 8)), satinW)
-        : stitchLetters(parts.map(([q, m]) => [q.map(([x, y]) => [x, y - (top + bottom) / 2]), m]), satinW);
-      stages = [{ color: p.color, paths, sews: `Sews “${p.text.trim()}”.` }];
+      const laid = p.shape === "up" || p.shape === "down" ? bend(parts, p.shape, Math.max(p.radius, 8), Math.max(p.ry ?? p.radius, 8))
+        : parts.map(([q, m]) => [q.map(([x, y]) => [x, y - (top + bottom) / 2]), m]);
+      stages = [{ color: p.color, paths: lettersOn(laid, satinW, fab), sews: fab === "towel" ? `Sews a light base to flatten the towel loops, then “${p.text.trim()}” on it.` : `Sews “${p.text.trim()}”.` }];
     }
   } else if (p.kind === "monogram") {
-    const paths = monogram(p);
-    if (paths.length) stages = [{ color: p.color, paths, sews: `Sews the monogram ${p.letters}.` }];
+    const paths = monogram(p, fab);
+    if (paths.length) stages = [{ color: p.color, paths, sews: fab === "towel" ? `Sews a light base to flatten the towel loops, then the monogram ${p.letters}.` : `Sews the monogram ${p.letters}.` }];
   } else if (p.kind === "frame") {
     const edge = (SHAPES[p.shape] || SHAPES.circle).path(p.w, p.h), name = (SHAPES[p.shape] || SHAPES.circle).name.toLowerCase();
     const loop = (q) => [...q, q[0]];
@@ -238,7 +267,7 @@ function localStages(p) {
     } else if (p.border === "patch") {
       // solid tatami fill (inset so the satin edge covers its ragged ends), then the satin edge over it
       stages = [
-        { color: p.fill || p.color, paths: fillPolygon(inset(edge, 1.0)), sews: `Fills the ${name} patch.` },
+        { color: p.fill || p.color, paths: fillPolygon(inset(edge, 1.0), fab === "knit" ? { density: DENSITY.standard } : {}), sews: `Fills the ${name} patch.` },
         { color: p.color, paths: [edgeWalk(edge, 3.6, true), loop(zigzag(edge, 2.6, 2.0, true)), loop(satin(edge, 3.6, 0.4, 0.3, true))], sews: `Sews the patch's satin edge.` },
       ];
     } else {
@@ -285,19 +314,19 @@ function inset(pts, d) {
 
 export const pieceStitches = (p) => pieceStages(p).flatMap((st) => st.paths);
 
-function monogram(p) {
+function monogram(p, fab = "cotton") {
   const chars = [...(p.letters || "").replace(/\s+/g, "")].slice(0, 3);
   if (!chars.length) return [];
   // three letters sit close (the big middle one carries the shape); one or two need air between them
   const big = p.size, small = p.size * 0.68, gap = p.size * (chars.length === 3 ? 0.04 : 0.14);
   const sizes = chars.length === 3 ? [small, big, small] : chars.map(() => big);
-  const ls = chars.map((c, i) => letters(c, p.font, sizes[i], p.style));
+  const ls = chars.map((c, i) => letters(c, p.font, sizes[i], styleOn(p, fab)));
   const widths = ls.map((l) => { const xs = l.parts.flatMap(([q]) => q.map((v) => v[0])); return xs.length ? Math.max(...xs) - Math.min(...xs) : 0; });
   let x = -(widths.reduce((a, b) => a + b, 0) + gap * (chars.length - 1)) / 2;
   const out = [];
   ls.forEach((l, i) => {
     const mid = (l.top + l.bottom) / 2, cx = x + widths[i] / 2;
-    out.push(...stitchLetters(l.parts.map(([q, m]) => [q.map(([a, b]) => [a + cx, b - mid]), m]), l.satinW));
+    out.push(...lettersOn(l.parts.map(([q, m]) => [q.map(([a, b]) => [a + cx, b - mid]), m]), l.satinW, fab));
     x += widths[i] + gap;
   });
   return out;
@@ -376,7 +405,18 @@ export function followFrame(p, pieces) {
 // needs a pause. A stage in a thread used earlier moves up to join it (one pause fewer) when it overlaps nothing
 // it would jump ahead of, so what lies on top of what never changes; appliqué stages never move.
 // Returns the design and the steps to show (what the machine sews, what the person does at pauses).
-export function compose(pieces, hoop) {
+// what the design is sewn on: changes the stitches (knit, towel) and the stabilizer advice
+export const FABRICS = {
+  cotton: { name: "Cotton", tip: "On woven cotton, hoop it with tear-away stabilizer underneath." },
+  knit: { name: "Knit", tip: "Knits stretch: hoop them with cut-away stabilizer (fusible no-show mesh is easiest) and use a 75/11 ballpoint needle. Don't stretch the fabric while hooping." },
+  towel: { name: "Towel", tip: "Lay a water-soluble topper on the towel and hoop tear-away (or cut-away) stabilizer under it. The light base sewn under the letters flattens the loops; tear the topper off afterwards." },
+  felt: { name: "Felt", tip: "Felt is firm: tear-away stabilizer is enough. Use a sharp 75/11 needle." },
+  denim: { name: "Denim", tip: "On denim and canvas use a 90/14 denim needle and cut-away or heavy tear-away stabilizer." },
+};
+
+// opts: { fabric: key of FABRICS, baste: a basting box round everything first (floating, towels) }
+export function compose(pieces, hoop, opts = {}) {
+  const fab = FABRICS[opts.fabric] ? opts.fabric : "cotton";
   const fit = fittedSizes(pieces);
   pieces = pieces.map((p) => (fit.has(p.id) ? { ...p, size: fit.get(p.id) } : p));
   const box = (paths) => {
@@ -386,7 +426,7 @@ export function compose(pieces, hoop) {
   };
   const hits = (a, b) => a[0] < b[2] && b[0] < a[2] && a[1] < b[3] && b[1] < a[3];
   const order = [], last = [];
-  for (const p of pieces) for (const st of pieceStages(p)) {
+  for (const p of pieces) for (const st of pieceStages(p, fab)) {
     if (!st.paths.length) continue;
     const s = { ...st, label: label(p), box: box(st.paths) };
     if (s.last) { last.push(s); continue; }   // two-sided in-the-hoop edge: after everything that goes on the front
@@ -401,6 +441,16 @@ export function compose(pieces, hoop) {
     order.splice(at, 0, s);
   }
   order.push(...last);
+  if (opts.baste && order.length) {
+    // long stitches 10 mm round everything (as far as the hoop allows), centred on the design so it stays centred;
+    // part of the first block, so it needs no stop of its own
+    const b = box(order.flatMap((s) => s.paths)), cx = (b[0] + b[2]) / 2, cy = (b[1] + b[3]) / 2;
+    const hw = Math.min((b[2] - b[0]) / 2 + 9, hoop.w / 2 - MARGIN - 1), hh = Math.min((b[3] - b[1]) / 2 + 9, hoop.h / 2 - MARGIN - 1);
+    const rect = [[cx - hw, cy - hh], [cx + hw, cy - hh], [cx + hw, cy + hh], [cx - hw, cy + hh], [cx - hw, cy - hh]];
+    // side by side, so the corners stay square
+    const sides = rect.slice(1).flatMap((q, i) => run([rect[i], q], 4).slice(i ? 1 : 0));
+    order[0] = { ...order[0], paths: [sides, ...order[0].paths], sews: "Sews a basting box to hold everything flat. " + order[0].sews };
+  }
   const d = new Design(hoop), steps = [], after = [];
   let thread = null;
   for (const st of order) {
@@ -415,6 +465,7 @@ export function compose(pieces, hoop) {
     for (const q of st.paths) d.path(q);
   }
   if (!steps.length) throw new Error("Add some lettering or a frame to start.");
+  if (opts.baste) after.push("Unpick the basting box (snip every few stitches on the back, then pull it out from the front).");
   d.finish();
-  return { design: d, steps, after };
+  return { design: d, steps, after, tip: FABRICS[fab].tip };
 }

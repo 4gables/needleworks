@@ -342,3 +342,5 @@ body[data-mode="design"] #view { cursor: grab; }
   .actions > * { grid-row: 1; }
   .actions > .extras { grid-row: 2; grid-column: 1 / span 2; margin: 0; }
 }
+.chips.plain button { padding: 6px 14px; }
+.field label.check { justify-content: flex-start; align-items: center; font-weight: 400; gap: 10px; }
