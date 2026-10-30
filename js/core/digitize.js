@@ -177,7 +177,18 @@ export function analyze(img, opts = {}) {
 }
 
 // ---------- fills ----------
-function tatami(mask, comp, res, { angle, spacing, stitch, inset = 0, pull = 0.15 }) {
+// Fill patterns: where each row's needle points fall, as a fraction of the stitch length by row number. Tatami's
+// quarter steps hide the points; the others line them up into a texture you can see (programmable fills).
+export const FILL_PATTERNS = {
+  tatami: { name: "Plain", off: (r) => (r % 4) / 4 },
+  brick: { name: "Brick", off: (r) => (r % 2) / 2 },
+  chevron: { name: "Chevron", off: (r) => [0, 1, 2, 3, 2, 1][r % 6] / 4 },
+  wave: { name: "Wave", off: (r) => 0.5 + 0.5 * Math.sin((r * Math.PI) / 6) },
+};
+// share(f): this layer's part of the full density at f, how far across the shape (0-1) the row lies: rows are
+// spaced spacing / share, none where the share is under 0.15 (a colour blend: two layers whose spacings change
+// gradually, so neither skips rows and leaves long links)
+function tatami(mask, comp, res, { angle, spacing, stitch, inset = 0, pull = 0.15, pattern = "tatami", share = null }) {
   const { w, h } = mask, th = (angle * Math.PI) / 180;
   const U = [Math.cos(th), Math.sin(th)], V = [-Math.sin(th), Math.cos(th)];
   const inside = (x, y) => {
@@ -190,7 +201,9 @@ function tatami(mask, comp, res, { angle, spacing, stitch, inset = 0, pull = 0.1
     if (u < u0) u0 = u; if (u > u1) u1 = u; if (v < v0) v0 = v; if (v > v1) v1 = v;
   }
   const sp = spacing * res, step = 0.5, L = stitch * res, rows = [];
-  for (let v = v0 + sp / 2, r = 0; v <= v1; v += sp, r++) {
+  for (let v = v0 + sp / 2, r = 0; v <= v1; r++) {
+    const k = share ? share((v - v0) / Math.max(v1 - v0, 1e-9)) : 1;
+    if (k < 0.15) { v += sp; continue; }
     const ivs = [];
     let start = null;
     for (let u = u0 - 1; u <= u1 + 1; u += step) {
@@ -200,6 +213,7 @@ function tatami(mask, comp, res, { angle, spacing, stitch, inset = 0, pull = 0.1
     }
     if (start !== null) ivs.push([start, u1]);
     rows.push({ v, r, ivs: ivs.filter(([a, b]) => b - a >= 0.6 * res) });
+    v += sp / k;
   }
   // group intervals into regions that can be sewn back-and-forth without leaving the shape
   const regions = [];
@@ -233,7 +247,7 @@ function tatami(mask, comp, res, { angle, spacing, stitch, inset = 0, pull = 0.1
     const paths = [[]];
     reg.rows.forEach((row, k) => {
       let [a, b] = row.iv;
-      const fwd = k % 2 === 0, off = ((row.r % 4) * L) / 4, line = [a];
+      const fwd = k % 2 === 0, off = (FILL_PATTERNS[pattern] || FILL_PATTERNS.tatami).off(row.r) * L, line = [a];
       for (let u = Math.ceil((a - off) / L) * L + off; u < b; u += L) if (u - a > L * 0.3 && b - u > L * 0.3) line.push(u);
       line.push(b);
       const pts = (fwd ? line : line.reverse()).map((u) => toXY(u, row.v)), cur = paths[paths.length - 1];
@@ -621,7 +635,9 @@ export function workingSize(imgW, imgH, sizeMm, hoop, res = DEFAULTS.res) {
 // A filled shape (mm polygon, y down) as tatami stitches: underlay across, then the fill, like a picture's colour.
 // Used by the Design tab's patches.
 // poly: one closed outline, or several (holes too, even-odd); `inset` mm keeps the rows off the edge (a satin covers it)
-export function fillPolygon(poly, { angle = DEFAULTS.fillAngle, density = DENSITY.solid, res = DEFAULTS.res, inset = 0 } = {}) {
+// opts.pattern: a FILL_PATTERNS key; opts.share: this layer's part of the density across the shape (see tatami);
+// opts.underlay: false for a second layer
+export function fillPolygon(poly, { angle = DEFAULTS.fillAngle, density = DENSITY.solid, res = DEFAULTS.res, inset = 0, pattern = "tatami", share = null, underlay = true } = {}) {
   const loops = Array.isArray(poly[0][0]) ? poly : [poly], pts = loops.flat();
   const xs = pts.map((p) => p[0]), ys = pts.map((p) => p[1]);
   const x0 = Math.min(...xs) - 1, y0 = Math.min(...ys) - 1;
@@ -645,8 +661,8 @@ export function fillPolygon(poly, { angle = DEFAULTS.fillAngle, density = DENSIT
     const comp = { id, labels, dt, pixels: [] };
     for (let i = 0; i < w * h; i++) if (labels[i] === id) comp.pixels.push(i);
     if (comp.pixels.length < 1.5 * res * res) continue;
-    const under = tatami(mask, comp, res, { angle: angle + 90, spacing: 2.5, stitch: 3, inset: 0.4, pull: 0 });
-    const fill = tatami(mask, comp, res, { angle, spacing: density, stitch: 3.5, pull: 0.15 });
+    const under = underlay ? tatami(mask, comp, res, { angle: angle + 90, spacing: 2.5, stitch: 3, inset: 0.4, pull: 0 }) : [];
+    const fill = tatami(mask, comp, res, { angle, spacing: density, stitch: 3.5, pull: 0.15, pattern, share });
     paths.push(...routeFill([under, fill], comp, mask, res).map(toMm));
   }
   return paths;

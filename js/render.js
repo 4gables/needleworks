@@ -55,7 +55,7 @@ export const CLOTHS = {
 };
 
 // opts: { fabric (CLOTHS key), fabricShapeBlock, hide: Set, upto, ghost (stitches after upto drawn faint), heat (Map "cx,cy" -> hits per mm²), backdrop ({ bmp, unit, center }: a photo under it), hoop: {w,h} (mm), showHoop, zoom, pan: [x,y], center: [x,y] (0.1 mm),
-//         pad, padTop (px kept clear), cache (colorBlocks result), showNeedle (a needle at upto), fieldColor (fill inside the hoop) }
+//         pad, padTop (px kept clear), cache (colorBlocks result), showNeedle (a needle at upto), fieldColor (fill inside the hoop), real (thread twist when zoomed in) }
 export function draw(canvas, design, opts = {}) {
   const dpr = window.devicePixelRatio || 1;
   const W = canvas.clientWidth, H = canvas.clientHeight;
@@ -142,6 +142,16 @@ export function draw(canvas, design, opts = {}) {
         ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(bx, by); ctx.stroke();
         ctx.globalAlpha = 1; ctx.strokeStyle = base; ctx.lineWidth = tw * 0.86;
         ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(bx, by); ctx.stroke();
+        // realistic: the thread's twist, fine ridges across it (zoomed in enough to see, and on screen)
+        if (opts.real && tw > 3 && Math.max(ax, bx) > 0 && Math.min(ax, bx) < W && Math.max(ay, by) > 0 && Math.min(ay, by) < H) {
+          const L = Math.hypot(bx - ax, by - ay), ux = (bx - ax) / (L || 1), uy = (by - ay) / (L || 1), k = tw * 0.32;
+          ctx.strokeStyle = dark; ctx.globalAlpha = 0.28; ctx.lineWidth = Math.max(0.6, tw * 0.08); ctx.beginPath();
+          for (let t = tw * 0.5; t < L - tw * 0.3; t += tw * 0.55) {
+            const px = ax + ux * t, py = ay + uy * t;
+            ctx.moveTo(px - uy * k - ux * k * 0.6, py + ux * k - uy * k * 0.6); ctx.lineTo(px + uy * k + ux * k * 0.6, py - ux * k + uy * k * 0.6);
+          }
+          ctx.stroke(); ctx.globalAlpha = 1;
+        }
         if (tw > 2.2) {
           const mx = (ax + bx) / 2, my = (ay + by) / 2, o = -tw * 0.12;
           ctx.strokeStyle = light; ctx.lineWidth = tw * 0.2;

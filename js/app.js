@@ -8,7 +8,7 @@ import { nearestBrotherThread, pecThread } from "./core/threads.js";
 import { CLOTHS, colorBlocks, draw } from "./render.js";
 import { cutSVG, sewSheet } from "./sheet.js";
 import { zip } from "./zip.js";
-import { checkup, fix, heat } from "./doctor.js";
+import { checkup, fix, heat, sortedChanges } from "./doctor.js";
 import { BRANDS, nearestSpool, spools } from "./core/brands.js";
 import { initStudio } from "./studio/ui.js";
 
@@ -69,6 +69,7 @@ function paint() {
     cache: v.cache, fabric: v.fabric, ...look,
     heat: state.heat ? (v.heat ||= heat(v.shown)) : null, backdrop: state.backdrop,
     hoop: shownHoop(), showHoop: state.showHoop && !state.backdrop, zoom: state.zoom, pan: state.pan, showNeedle: state.upto != null,
+    real: state.real,
     fieldColor: dark.matches && state.showHoop && !state.backdrop ? "#ece5da" : undefined,
     padTop: $("facts").offsetHeight + 16,
   });
@@ -210,6 +211,8 @@ $("progress").oninput = (e) => {
   const v = +e.target.value; state.upto = v >= 1000 ? null : Math.round((v / 1000) * state.view.cache.total); paint();
 };
 $("show-heat").onchange = (e) => { state.heat = e.target.checked; paint(); };
+$("show-real").checked = state.real = store.get("real", false);
+$("show-real").onchange = (e) => { state.real = e.target.checked; store.set("real", state.real); if (state.real && state.zoom < 3) { state.zoom = 3; } paint(); };
 $("show-hoop").checked = state.showHoop;
 $("show-hoop").onchange = (e) => { state.showHoop = e.target.checked; store.set("showHoop", state.showHoop); paint(); };
 $("turn").onclick = () => {
@@ -783,13 +786,13 @@ async function openDesign(file) {
       ${fits ? `<span class="good">Fits the ${h.machineName} ${h.name}.</span>` : `<span class="warn">Too big for the ${h.name}: it's ${st.widthMm.toFixed(0)} × ${st.heightMm.toFixed(0)} mm.</span>`}
       ${repair ? `<span class="warn">As it is, this file would load cut off on a Brother machine (shifted, about half shown). The download here is fixed.</span>`
         : isPes ? "" : `<span>You can download it as a PES file for your machine.</span>`}`;
-    state.opened = { d, bytes, out, isPes, repair, base, opts: { scale: 1, tiny: false, thin: false } };
+    state.opened = { d, bytes, out, isPes, repair, base, opts: { scale: 1, tiny: false, thin: false, sort: false }, sorted: sortedChanges(d) };
     $("doctor-fix").innerHTML = ""; setMode("open"); openView();
   } catch (err) { console.error(err); setMode("open"); showError(err.message || "This file couldn't be read."); }
 }
 // the opened file as it stands after the checkup's fixes (none: its own bytes, as they came)
 function openView() {
-  const o = state.opened, { scale, tiny, thin } = o.opts, changed = scale !== 1 || tiny || thin;
+  const o = state.opened, { scale, tiny, thin, sort } = o.opts, changed = scale !== 1 || tiny || thin || sort;
   const p = changed ? fix(o.d, o.opts) : o.d;
   const v = { pattern: p, verifyAgainst: changed || !o.isPes ? p : null, bytes: changed ? writePES(p) : o.out,
     filename: `${o.base}${scale !== 1 ? `_${Math.round(scale * 100)}pct` : ""}.pes`, fabric: "linen", source: changed || !o.isPes ? null : o.bytes,
@@ -812,21 +815,28 @@ function doctorUI(p) {
     : c.perSqIn > 600 ? `Medium stitching: tear-away stabilizer on woven fabric, cut-away on knits.` : `Light stitching: tear-away stabilizer is enough.`);
   $("doctor").hidden = false; $("doctor-list").innerHTML = items.join("");
   // the fixes are drawn once per file (redrawing the slider mid-drag would drop it); only their state follows
-  if (!$("doc-scale")) $("doctor-fix").innerHTML = `<label class="range"><span>Size</span><input type="range" id="doc-scale" min="80" max="120" step="5" value="100"><output>100 %</output></label>
-    <p class="hint">Bought designs only resize well a little: past 10–20 % the stitches need redoing. Shrinking makes it denser; growing opens it up.</p>
+  const changes = Math.max(0, state.opened.d.threads.length - 1), sorted = state.opened.sorted;
+  if (!$("doc-scale")) $("doctor-fix").innerHTML = `<label class="range"><span>Size</span><input type="range" id="doc-scale" min="50" max="250" step="5" value="100"><output>100 %</output></label>
+    <p class="hint" id="doc-scale-hint"></p>
+    ${sorted != null ? `<label class="check small"><input type="checkbox" id="doc-sort"> Fewer thread changes (${changes} → ${sorted}): sews each thread's parts together where nothing in between is in the way</label>` : ""}
     <label class="check small"><input type="checkbox" id="doc-tiny"> Remove tiny stitches</label>
     <label class="check small"><input type="checkbox" id="doc-thin"> Thin the densest spots to 24 hits per mm²</label>`;
   $("doc-scale").value = Math.round(o.scale * 100); $("doc-scale").nextElementSibling.textContent = `${Math.round(o.scale * 100)} %`;
-  $("doc-tiny").checked = o.tiny; $("doc-thin").checked = o.thin;
+  // within 80-120 % the stitches are scaled as they are; past that they're re-stitched at the new size
+  $("doc-scale-hint").textContent = o.scale >= 0.8 && o.scale <= 1.2 ? "Up to 20 % either way the stitches are scaled as they are (denser smaller, more open bigger)."
+    : "Re-stitched at the new size: satins and fills get the right density again. Check it in the preview: lettering and fine detail can change.";
+  $("doc-tiny").checked = o.tiny; $("doc-thin").checked = o.thin; if ($("doc-sort")) $("doc-sort").checked = o.sort;
 }
 $("doctor-fix").addEventListener("input", (e) => {
   const o = state.opened.opts;
   if (e.target.id === "doc-scale") {
     const was = o.scale; o.scale = +e.target.value / 100; e.target.nextElementSibling.textContent = `${e.target.value} %`;
     if (o.scale < 1 && was >= 1) o.tiny = true;   // shrinking turns short stitches into tiny ones
-    clearTimeout(docTimer); docTimer = setTimeout(openView, 200); return;
+    // (re-stitching a big design takes a moment: say so, and let the screen draw first)
+    clearTimeout(docTimer); docTimer = setTimeout(() => { if (o.scale < 0.8 || o.scale > 1.2) { busy(true, "Re-stitching…"); setTimeout(() => { try { openView(); } finally { busy(false); } }, 30); } else openView(); }, 250); return;
   }
   if (e.target.id === "doc-tiny") o.tiny = e.target.checked;
+  if (e.target.id === "doc-sort") o.sort = e.target.checked;
   if (e.target.id === "doc-thin") o.thin = e.target.checked;
   openView();
 });

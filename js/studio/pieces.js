@@ -7,11 +7,11 @@ import { DENSITY, fillPolygon } from "../core/digitize.js";
 import { fontOf } from "../core/fonts.js";
 import { MARGIN } from "../core/machines.js";
 import { bounds, edgeWalk, filletPolygon, followRun, normals, run, satin, zigzag } from "../core/geom.js";
-import { order } from "../core/raster.js";
+import { distanceTransform, label as labelMask, order } from "../core/raster.js";
 import { strokes } from "../core/text.js";
 import { MOTIFS } from "./motifs.js";
 import { letterOutlines, motifOutlines } from "./outline.js";
-import { echo, stipple } from "./quilt.js";
+import { contours, echo, stipple } from "./quilt.js";
 
 // ---------- lettering ----------
 const lettering = new Map();   // font + text -> centre-line strokes (rendering is the slow part)
@@ -404,11 +404,9 @@ function localStages(p, fab = "cotton") {
           after: `Take it out of the hoop, tear the stabilizer away and cut round the ${name} as close to the satin as you can without nicking it (keep the ribbon loop clear of the scissors). Flip the ribbon loop up.` },
       ];
     } else if (p.border === "patch") {
-      // solid tatami fill (inset so the satin edge covers its ragged ends), then the satin edge over it
-      stages = [
-        { color: p.fill || p.color, paths: fillPolygon(inset(edge, 1.0), fab === "knit" ? { density: DENSITY.standard } : {}), sews: `Fills the ${name} patch.` },
-        { color: p.color, paths: satinBorder(edge), sews: `Sews the patch's satin edge.` },
-      ];
+      // solid tatami fill (inset so the satin edge covers its ragged ends), then the satin edge over it; `compose`
+      // cuts the fill away under what's sewn on it (`carve`)
+      stages = [...patchFill(p, [inset(edge, 1.0)], fab), { color: p.color, paths: satinBorder(edge), sews: `Sews the patch's satin edge.` }];
     } else {
       const paths = p.border === "satin" ? [edgeWalk(edge, 3.0, true), zigzag(edge, 2.1, 2.0, true), satin(edge, 3.0, 0.4, 0.3, true)]
         : p.border === "bold" ? [run(edge, 2.0, true), run(edge.slice().reverse(), 2.0, true), run(edge, 2.0, true)]
@@ -426,6 +424,16 @@ function localStages(p, fab = "cotton") {
     stages = p.blocks.map((b) => ({ color: b.color, paths: b.paths, sews: `Sews ${p.name}${p.blocks.length > 1 ? ` (${b.name || "colour " + (p.blocks.indexOf(b) + 1)})` : ""}.` }));
   }
   return stages.map((st) => ({ ...st, paths: st.paths.filter((q) => q.length) }));
+}
+
+// A patch's fill in its thread, in a FILL_PATTERNS `pattern`; with `blend`, two layers across the patch, the first
+// thinning out as the second fills in (row spacing changes gradually in each), the second with no underlay of its
+// own (Hatch's colour blend, on one needle)
+function patchFill(p, loops, fab, name = shapeOf(p).name.toLowerCase()) {
+  const base = { ...(fab === "knit" ? { density: DENSITY.standard } : {}), pattern: p.pattern || "tatami" }, color = p.fill || p.color;
+  if (!p.blend || p.blend === color) return [{ color, paths: fillPolygon(loops, base), sews: `Fills the ${name} patch.`, patchFill: true }];
+  return [{ color, paths: fillPolygon(loops, { ...base, share: (f) => 1 - f }), sews: `Fills the ${name} patch, fading out.`, patchFill: true },
+    { color: p.blend, paths: fillPolygon(loops, { ...base, underlay: false, share: (f) => f }), sews: `Blends the second colour in across the patch.`, patchFill: true }];
 }
 
 // a motif filled (tatami inside, then a narrow satin edge over the row ends) or as a satin outline
@@ -611,6 +619,55 @@ function withQuilt(p, stages, obstacles, dragging = false) {
   return at < 0 ? [...stages, q] : [...stages.slice(0, at), q, ...stages.slice(at)];
 }
 
+// A patch's fill cut away under what's sewn on top of it (lettering, a motif, a file): a name in satin on a full
+// tatami stacked two layers of thread (stiff, and over 24 hits/mm²). The hole is what the later stitches cover,
+// closed over 0.4 mm and then 0.8 mm smaller, so the fill still runs 0.4 mm under their edges. Only under something
+// wide (somewhere 4 mm across) and 20 mm² or more: thin satin lettering on a fill is normal (the fill is its base),
+// and cutting round every stroke broke the fill into sections (trims 3 -> 9 on a name); fine lines are never carved. Worked in the patch's own (unturned) frame.
+const carved = new Map();
+function carve(p, stages, above, fab) {
+  const ink = above.flatMap((s) => s.paths);
+  if (!ink.length) return stages;
+  const a = ((p.rot || 0) * Math.PI) / 180, c = Math.cos(a), sn = Math.sin(a), f = p.flip ? -1 : 1;
+  const local = ink.map((q) => q.map(([x, y]) => [((x - p.x) * c + (y - p.y) * sn) * f, -(x - p.x) * sn + (y - p.y) * c]));
+  let h = local.length;
+  for (const q of local) for (const [x, y] of q) h = (Math.imul(h ^ Math.round(x * 10), 16777619) ^ Math.round(y * 10)) | 0;
+  const key = JSON.stringify([{ ...p, x: 0, y: 0, rot: 0 }, h, fab]);
+  if (!carved.has(key)) {
+    const R = 4, edge = inset(shapeOf(p).path(p.w, p.h), 1.0), [x0, y0, x1, y1] = bounds(edge);
+    const w = Math.ceil((x1 - x0) * R) + 2, hh = Math.ceil((y1 - y0) * R) + 2, m = { w, h: hh, data: new Uint8Array(w * hh) };
+    const dot = (x, y) => { const X = Math.round((x - x0) * R), Y = Math.round((y - y0) * R); if (X >= 0 && Y >= 0 && X < w && Y < hh) m.data[Y * w + X] = 1; };
+    for (const q of local) for (let i = 1; i < q.length; i++) {
+      const [ax, ay] = q[i - 1], [bx, by] = q[i], n = Math.ceil(Math.hypot(bx - ax, by - ay) * R * 2);
+      for (let k = 0; k <= n; k++) dot(ax + ((bx - ax) * k) / n, ay + ((by - ay) * k) / n);
+    }
+    // close over 0.4 mm (satin's needle points are 0.4 apart), then keep only what's 0.8 mm inside that
+    const out = { w, h: hh, data: m.data.map((v) => 1 - v) }, near = distanceTransform(out);
+    const grown = { w, h: hh, data: near.map((d) => (d <= 0.4 * R ? 1 : 0)) }, deep = distanceTransform(grown);
+    // only well inside the patch's outline (a hole crossing it would add fill outside it, even-odd)
+    const inside = { w, h: hh, data: new Uint8Array(w * hh) };
+    for (let y = 0; y < hh; y++) {
+      const Y = y0 + y / R, cut = [];
+      for (let i = 0; i < edge.length; i++) { const [ax, ay] = edge[i], [bx, by] = edge[(i + 1) % edge.length]; if ((ay <= Y) !== (by <= Y)) cut.push(ax + ((Y - ay) * (bx - ax)) / (by - ay)); }
+      cut.sort((u, v) => u - v);
+      for (let k = 0; k + 1 < cut.length; k += 2) for (let x = Math.max(0, Math.ceil((cut[k] - x0) * R)); x <= Math.min(w - 1, Math.floor((cut[k + 1] - x0) * R)); x++) inside.data[y * w + x] = 1;
+    }
+    const room = distanceTransform(inside);
+    const hole = { w, h: hh, data: deep.map((d, i) => (d > 0.8 * R && room[i] > 1.5 * R ? 1 : 0)) };
+    // only under something wide: a piece of hole that's somewhere 4 mm across (a filled motif, a bold monogram)
+    const { labels, count } = labelMask(hole), wide = new Uint8Array(count + 1);
+    for (let i = 0; i < labels.length; i++) if (labels[i] && deep[i] > 2.4 * R) wide[labels[i]] = 1;   // (4 mm, grown 0.4 a side: 2.4 from the middle to the edge)
+    for (let i = 0; i < labels.length; i++) if (labels[i] && !wide[labels[i]]) hole.data[i] = 0;
+    const holes = contours(hole).map((l) => l.map(([x, y]) => [x0 + x / R, y0 + y / R]))
+      .filter((l) => l.length > 8 && Math.abs(l.reduce((s, q, i) => s + q[0] * l[(i + 1) % l.length][1] - l[(i + 1) % l.length][0] * q[1], 0)) / 2 >= 20);
+    carved.set(key, holes.length ? patchFill(p, [edge, ...holes], fab) : null);
+    if (carved.size > 12) carved.delete(carved.keys().next().value);
+  }
+  const fill = carved.get(key); if (!fill) return stages;
+  const place = placer(p), placed = fill.map((st) => ({ ...st, label: label(p), paths: st.paths.map((q) => q.map(place)) }));
+  return [...placed, ...stages.filter((s) => !s.patchFill)];
+}
+
 // Bigger than the hoop: split into two hoopings by whole pieces (never through a stitch), along the design's long
 // side, at the most even cut where both halves fit. Two basting crosses on the cut line line the second hooping up
 // with the first: sewn at the end of the first and again at the start of the second. null when it can't be done
@@ -660,6 +717,12 @@ export function compose(pieces, hoop, opts = {}) {
   const hits = (a, b) => a[0] < b[2] && b[0] < a[2] && a[1] < b[3] && b[1] < a[3];
   const order = [], last = [], staged = pieces.map((p) => pieceStages(p, fab).map((st) => ({ ...st, label: label(p) })));
   pieces.forEach((p, i) => { if (QUILTED(p)) staged[i] = withQuilt(p, staged[i], staged.filter((_, j) => j !== i).flat().flatMap((s) => s.paths), opts.dragging); });
+  // patches: no fill under what's sewn on them (fine-line lettering excepted)
+  pieces.forEach((p, i) => {
+    if (p.kind !== "frame" || p.border !== "patch" || opts.dragging) return;
+    const above = pieces.slice(i + 1).flatMap((q, k) => (q.kind === "frame" || q.style === "line" ? [] : staged[i + 1 + k].filter((s) => !s.under && !s.fabric)));
+    staged[i] = carve(p, staged[i], above, fab);
+  });
   for (const st of staged.flat()) {
     if (!st.paths.length) continue;
     const s = { ...st, box: box(st.paths) };

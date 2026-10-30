@@ -117,7 +117,7 @@ export function echo(edge, obstacles, { gap = 4, inset = 4, clear = 2.5 } = {}) 
 }
 
 // outlines of a 0/1 mask (pixel corners), linked into closed loops
-function contours(mask) {
+export function contours(mask) {
   const { w, h, data } = mask, at = (x, y) => x >= 0 && y >= 0 && x < w && y < h && data[y * w + x];
   // (numeric keys: a Map keeps insertion order either way, and strings were a quarter of the time)
   const next = new Map(), H = 2 * h + 8, key = (x, y) => (x * 2 + 4) * H + y * 2 + 4, add = (p, q) => next.set(key(...p), [q, key(...q)]);

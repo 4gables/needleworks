@@ -254,6 +254,26 @@ Embroidery-file tools for home machines. Two implementations of the same engine:
   `forced-colors` keeps thread colours and outlines what's selected; coarse pointers get 44 px targets. Cmd+P fills
   the sew sheet on `beforeprint` (it printed a blank page). `sw.js` (cache v2) serves the cached copy when the network
   takes over 3 s and refreshes in the background. A studio save too big for localStorage says so once.
+- Expert features (2026-10-29):
+  - Patches: `pattern` (FILL_PATTERNS in digitize.js: Plain tatami, Brick, Chevron, Wave; the row stagger lines the
+    needle points into a visible texture) and `blend` (a second colour: two layers whose row spacing changes
+    gradually, `share` in `tatami`, each colour's spacing density/share, none under 0.15; the second has no underlay).
+    Random row-by-row assignment was tried first: long links and jumps everywhere. Editor: patch > More.
+  - Carving (`carve` in pieces.js): a patch's fill is cut away under what's sewn on it, only where that's wide
+    (somewhere 4 mm across) and 20 mm² or more; thin satin lettering keeps the fill as its base (carving round every
+    stroke took trims 3 -> 9). Holes stay 1.5 mm inside the patch outline (even-odd would add fill outside it).
+  - Colour sort (`sortColors` in doctor.js, Open tab checkup): a block joins the last earlier block of the same
+    thread if it touches nothing sewn in between (1 mm cells grown by one); files with machine stops or without
+    thread colours (DST) are left alone.
+  - Resize 50-250 %: within 80-120 % stitches are scaled as before; past that `restitch` rebuilds each block: zigzag
+    runs keep their edges with a station every 0.2 mm (satins over 8 mm wide become fills), fill runs (over 3 mm
+    both ways, 70% of length one way, or 45% plus 80% with the 90° underlay) are traced and refilled at 0.4 mm,
+    together per block and direction and minus what an earlier direction already filled (the peace sign piled 37
+    hits/mm² otherwise), the rest are running lines (0.5-3.5 mm). gnome/ufront/peace at 0.6x and 1.6x: satin gap
+    0.40-0.41, peak density <= 24. `tests/doctor.test.mjs` covers 0.5-2.5x with and without sort (slow: ~3 min).
+  - Realistic thread (View menu): the twist drawn across each stitch when zoomed in (`real` in `draw`).
+  - Not done from the gap review: photo stitch, free-standing lace, per-pair kerning, a thread-weight setting,
+    3D puff.
 - The preview is the file: `setView` decodes `v.bytes` with `readEmbroidery` and draws/counts/fit-checks that, and
   thread labels come from the file's own PEC palette.
 

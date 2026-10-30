@@ -5,6 +5,7 @@ import { APPLIQUE_FONTS, FONTS } from "../core/fonts.js";
 import { hoop as getHoop } from "../core/machines.js";
 import { nearestBrotherThread } from "../core/threads.js";
 import { readEmbroidery } from "../core/formats.js";
+import { FILL_PATTERNS } from "../core/digitize.js";
 import { draw } from "../render.js";
 import { QUILTS } from "./quilt.js";
 import { MOTIFS } from "./motifs.js";
@@ -213,7 +214,14 @@ export function initStudio(api) {
       // (a zipper across a heart's lobes or a diamond's point makes no pouch)
       h += seg("border", Object.fromEntries(Object.entries(BORDERS).filter(([k]) => k !== "zip" || ["square", "oval", "circle"].includes(p.shape) || p.border === "zip")), p.border);
       if (p.border === "zip") h += `<p class="hint">A lined zipper pouch made in the hoop: the zipper, the front in two folded pieces, what goes on the front (the pieces below it in the list), then the back and one seam through everything. Fabric sizes are under “How to stitch it”.</p>`;
-      if (p.border === "patch") { p.fill ||= NAVY; h += `<div class="field"><span>Fill thread</span><div class="swatches">${swatches(p, "fill")}</div><p class="hint">Brother ${nearestBrotherThread(p.fill).name}. The edge uses the thread below.</p></div>`; }
+      if (p.border === "patch") {
+        p.fill ||= NAVY;
+        h += `<div class="field"><span>Fill thread</span><div class="swatches">${swatches(p, "fill")}</div><p class="hint">Brother ${nearestBrotherThread(p.fill).name}. The edge uses the thread below.</p></div>`;
+        // the expert fills, folded away: a stitch texture, and a second colour fading in across the patch
+        h += `<details class="more" ${moreOpen ? "open" : ""}><summary>More</summary>${seg("pattern", Object.fromEntries(Object.entries(FILL_PATTERNS).map(([k, f]) => [k, f.name])), p.pattern || "tatami")}
+          <label class="check small"><input type="checkbox" data-blend ${p.blend ? "checked" : ""}> Blend into a second colour</label>
+          ${p.blend ? `<div class="swatches">${swatches(p, "blend")}</div><p class="hint">Fades from Brother ${nearestBrotherThread(p.fill).name} to ${nearestBrotherThread(p.blend).name} across the patch: one more thread change.</p>` : ""}</details>`;
+      }
       if (p.border !== "patch") h += `<div class="field"><span>Quilting</span>${seg("quilt", QUILTS, p.quilt || "none")}</div>`
         + (p.quilt && p.quilt !== "none" ? `<p class="hint">Fills the frame around everything on it, in the frame's thread.</p>` : "");
       if (p.border === "ith") h += `<p class="hint">Two-sided, made in the hoop: an appliqué front, then the pieces below it in the list, then backing fabric under the hoop and a satin edge through everything. The steps are under “How to stitch it”.</p>`;
@@ -369,6 +377,8 @@ export function initStudio(api) {
     const t = e.target, k = t.dataset.k;
     if (t.matches("[data-color-any]")) { change((p) => (p.color = t.value)); return; }
     if (t.matches("[data-fill-any]")) { change((p) => (p.fill = t.value)); return; }
+    if (t.matches("[data-blend-any]")) { change((p) => (p.blend = t.value)); return; }
+    if (t.matches("[data-blend]")) { change((p) => (t.checked ? (p.blend = p.fill === RED ? NAVY : RED) : delete p.blend), true); editor(); return; }
     if (!k) return;
     if (t.type === "range") t.nextElementSibling.textContent = `${t.value} ${t.dataset.unit}`;
     change((p) => (p[k] = t.type === "range" ? +t.value : t.value));
@@ -377,7 +387,7 @@ export function initStudio(api) {
     if (k === "text" && (t.value.split("\n").length > 1) !== !!edit.querySelector('[data-seg="align"]') && current().shape === "straight") editor();
   });
   let warnTimer = 0;
-  edit.addEventListener("change", (e) => { if (e.target.dataset.k === "font" || e.target.dataset.k === "deco" || e.target.matches("[data-color-any], [data-fill-any]")) editor(); });
+  edit.addEventListener("change", (e) => { if (e.target.dataset.k === "font" || e.target.dataset.k === "deco" || e.target.matches("[data-color-any], [data-fill-any], [data-blend-any]")) editor(); });
   edit.addEventListener("click", (e) => {
     const c = e.target.closest("[data-color]");
     if (c) { change((p) => (p.color = c.dataset.color), true); editor(); return; }
@@ -385,6 +395,8 @@ export function initStudio(api) {
     if (mo) { change((p) => (p.motif = mo.dataset.motif), true); editor(); list(); return; }
     const f = e.target.closest("[data-fill]");
     if (f) { change((p) => (p.fill = f.dataset.fill), true); editor(); return; }
+    const bl = e.target.closest("button[data-blend]");
+    if (bl) { change((p) => (p.blend = bl.dataset.blend), true); editor(); return; }
     if (e.target.closest("[data-room]")) { change((p) => Object.assign(p, archRoom(p) || {}), true); editor(); return; }
     if (e.target.closest("[data-follow]")) { change((p) => Object.assign(p, followFrame(p, pieces)), true); editor(); return; }
     const s = e.target.closest("[data-seg] button");
