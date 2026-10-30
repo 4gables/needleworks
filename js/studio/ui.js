@@ -8,6 +8,7 @@ import { BORDERS, SHAPES, archTight, compose, fileBlocks, fittedSizes, followFra
 const SCRIPT = "NW Great Vibes", PRINT = "NW Josefin Sans";
 // exact Brother PEC thread colours, so the name on screen is the one the machine shows
 const RED = "#ed171f", NAVY = "#0e1f7c", BLACK = "#000000";
+const PINK = "#f993bc";
 const COLORS = [RED, NAVY, "#00673e", "#770176", "#e8a900", "#f993bc", BLACK, "#f0f0f0"];
 
 let nextId = 1;
@@ -31,10 +32,23 @@ export const STARTERS = [
     text({ text: "WITH LOVE", font: PRINT, size: 7, shape: "down", radius: 54, ry: 36, color: RED }),
     text({ size: 18 })] },
   { id: "framed", name: "Name in a frame", note: "a name inside a border", make: () => [frame({ shape: "oval", w: 110, h: 64, border: "satin" }), text({ size: 22 })] },
-  { id: "label", name: "Label", note: "two lines for a quilt or gift", make: () => [
-    frame({ shape: "square", w: 100, h: 56, border: "line", color: BLACK }),
-    text({ text: "Made by", font: PRINT, size: 7, y: -13, color: BLACK }),
-    text({ text: "Ashley", size: 20, y: 6, color: RED })] },
+  { id: "quilt", name: "Quilt label", note: "who it's for, who made it", make: () => [
+    frame({ shape: "square", w: 110, h: 70, border: "line", color: BLACK }),
+    text({ text: "Made for", font: PRINT, size: 8, y: -20, color: BLACK }),
+    text({ text: "Emma", size: 20, y: -3, color: RED }),
+    text({ text: "by Ashley in 2026", font: PRINT, size: 8, y: 17, color: BLACK })],
+    tip: "Stitch it on cotton backed with tear-away stabilizer, then turn the edges under and hand-sew it to the back of the quilt." },
+  { id: "bib", name: "Baby bib", note: "a name over a little heart", make: () => [
+    frame({ shape: "heart", w: 46, h: 42, border: "applique", y: 14, color: PINK }),
+    text({ text: "Emma", size: 16, shape: "up", radius: 30, y: 14, color: NAVY })],
+    tip: "Hoop tear-away stabilizer and stick the bib on it (or float it with spray adhesive). On terry, lay a water-soluble topper over it so the stitches don't sink." },
+  { id: "towel", name: "Towel name", note: "a big name that stands up to terry", make: () => [text({ text: "Ashley", size: 32, style: "satin" })],
+    tip: "Lay a water-soluble topper over the towel so the loops don't swallow the stitches, with tear-away stabilizer underneath. Tear the topper off afterwards; a damp cloth melts the rest." },
+  { id: "ornament", name: "Ornament", note: "two-sided, sewn in the hoop", make: () => [
+    frame({ shape: "circle", w: 80, h: 80, border: "ith", color: RED }),
+    text({ text: "Emma", size: 20, y: -4 }),
+    text({ text: "2026", font: PRINT, size: 8, y: 14 })],
+    tip: "Made in the hoop, front and back. Have ready: tear-away stabilizer, front and back fabric cut 1 in bigger than the circle, tape, and a 6 in ribbon for hanging. Smaller (Fit to hoop or the size slider) makes a keychain." },
   { id: "applique", name: "Appliqué", note: "a fabric shape with a name", make: () => [
     frame({ shape: "heart", w: 84, h: 76, border: "applique", y: -4 }), text({ size: 18, y: -6, color: NAVY })] },
   { id: "initials", name: "Appliqué letters", note: "fabric letters with satin edges", make: () => [appl({ text: "AB", size: 60 })] },
@@ -137,6 +151,7 @@ export function initStudio(api) {
       if (p.shape !== "circle") h += range("h", "Height", 20, 170, p.h);
       h += seg("border", BORDERS, p.border);
       if (p.border === "patch") { p.fill ||= NAVY; h += `<div class="field"><span>Fill thread</span><div class="swatches">${swatches(p, "fill")}</div><p class="hint">Brother ${nearestBrotherThread(p.fill).name}. The edge uses the thread below.</p></div>`; }
+      if (p.border === "ith") h += `<p class="hint">Two-sided, made in the hoop: an appliqué front, then the pieces below it in the list, then backing fabric under the hoop and a satin edge through everything. The steps are under “How to stitch it”.</p>`;
       if (p.border === "applique") h += `<p class="hint">Sews an outline, pauses for you to lay fabric on and trim it, then covers the edge in satin. The steps are under “How to stitch it”.</p>`;
     } else {
       h += `<p class="hint">${api.escapeHtml(p.name)}: its stitches are used exactly as they are, so it can be moved and turned but not resized.</p>`;
@@ -176,9 +191,9 @@ export function initStudio(api) {
       const fonts = [...new Set(pieces.filter((p) => p.font).map((p) => p.font))];
       await Promise.all(fonts.map((f) => document.fonts.load(`40px "${f}"`)));
       if (s !== seq) return;
-      const { design, steps } = compose(pieces, api.hoop());
+      const { design, steps, after } = compose(pieces, api.hoop());
       if (s !== seq) return;
-      stepsUI(steps);
+      stepsUI(steps, after);
       // preview: appliqué fabric under its satin, placement and tack-down lines hidden beneath it
       const fabricBlock = steps.findIndex((st) => st.fabric);
       api.setView(design.pattern(), `${api.safeName(firstWords(), "design")}.pes`, {
@@ -186,14 +201,15 @@ export function initStudio(api) {
         hide: new Set(steps.flatMap((st, i) => (st.under ? [i] : []))), fabric: fabricBlock >= 0 ? "pink" : "linen", steps: steps.length });
     } catch (err) { if (s === seq) { console.error(err); api.showError(err.message); } }
   }
-  function stepsUI(steps) {
+  function stepsUI(steps, after = []) {
     const pauses = steps.length - 1;
     $("st-steps-count").textContent = `· ${steps.length} ${steps.length === 1 ? "step" : "steps"}, ${pauses} ${pauses === 1 ? "pause" : "pauses"}`;
     // each step is a button: the preview shows the design as it is after that step, what's still to come faint
     $("st-steps").innerHTML = steps.map((st, i) => `<li><button type="button" data-step="${i}" aria-pressed="${api.step() === i}">
       <b><span class="n">${i + 1}</span><i style="background:${st.color}"></i>Brother ${nearestBrotherThread(st.color).name}</b>
       ${st.you ? `<span class="you">${api.escapeHtml(st.you)}</span>` : ""}<span>${api.escapeHtml(st.sews.join(" "))}</span>
-      ${st.early ? `<small>Sewn early, with the other ${api.escapeHtml(nearestBrotherThread(st.color).name)} parts, to save a thread change.</small>` : ""}</button></li>`).join("");
+      ${st.early ? `<small>Sewn early, with the other ${api.escapeHtml(nearestBrotherThread(st.color).name)} parts, to save a thread change.</small>` : ""}</button></li>`).join("")
+      + (after.length ? `<li class="after"><b>When it's done</b><span>${api.escapeHtml(after.join(" "))}</span></li>` : "");
   }
   $("st-steps").onclick = (e) => { const b = e.target.closest("[data-step]"); if (b) api.showStep(api.step() === +b.dataset.step ? null : +b.dataset.step); };
   document.addEventListener("nw:step", (e) => {
@@ -208,7 +224,9 @@ export function initStudio(api) {
   // ---------- events ----------
   $("st-cards").onclick = (e) => {
     const b = e.target.closest("[data-start]"); if (!b) return;
-    remember(); pieces = STARTERS.find((s) => s.id === b.dataset.start).make(); sel = pieces[pieces.length - 1].id;
+    const s = STARTERS.find((x) => x.id === b.dataset.start);
+    remember(); pieces = s.make(); sel = pieces[pieces.length - 1].id;
+    $("st-tip").hidden = !s.tip; $("st-tip").textContent = s.tip || "";
     save(); ui(); make();
   };
   $("st-add").onclick = (e) => {

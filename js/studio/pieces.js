@@ -158,7 +158,7 @@ function fitBox(pts, w, h) {
   const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2;
   return pts.map(([x, y]) => [((x - cx) / (x1 - x0)) * w, ((y - cy) / (y1 - y0)) * h]);
 }
-export const BORDERS = { line: "Thin line", bold: "Bold line", satin: "Satin border", patch: "Filled patch", applique: "Appliqué" };
+export const BORDERS = { line: "Thin line", bold: "Bold line", satin: "Satin border", patch: "Filled patch", applique: "Appliqué", ith: "In the hoop (two-sided)" };
 
 // ---------- pieces ----------
 // text:     { kind: "text", text, font, size, shape: "straight"|"up"|"down", radius, ry, x, y, rot, color }
@@ -209,6 +209,20 @@ function localStages(p) {
           sews: "Tacks the appliqué fabric down.", under: true },
         { color: p.color, pause: true, paths: [edgeWalk(edge, 3.6, true), loop(zigzag(edge, 2.6, 2.0, true)), loop(satin(edge, 3.6, 0.4, 0.3, true))],
           you: "Press Start.", sews: "Covers the raw edge with a satin border." },
+      ];
+    } else if (p.border === "ith") {
+      // in-the-hoop ornament or keychain: an appliqué front, then whatever goes on it (the pieces after it in the list),
+      // then backing fabric taped under the hoop and one satin edge through every layer; cut out when it's done
+      stages = [
+        { color: p.color, paths: [loop(run(edge, 2.5, true))], sews: `Sews the ${name} outline on the stabilizer.`, fabric: true },
+        { color: p.color, pause: true, paths: [loop(run(edge, 2.0, true)), loop(run(edge.slice().reverse(), 2.0, true))],
+          you: `Lay the front fabric over the ${name} outline, right side up, covering it by ½ in. Press Start. Then take the hoop off (leave everything hooped), trim the fabric close to the stitching, and put the hoop back.`,
+          sews: "Tacks the front fabric down.", under: true },
+        { color: p.color, pause: true, last: true,
+          paths: [loop(run(edge, 2.0, true)), edgeWalk(edge, 3.6, true), loop(zigzag(edge, 2.6, 2.0, true)), loop(satin(edge, 3.6, 0.4, 0.3, true))],
+          you: `Take the hoop off and turn it over. Tape the backing fabric to the back, right side out, covering the ${name} by ½ in. For a hanging loop, tape a folded ribbon at the top on the front, loop pointing in, ends ½ in past the outline. Put the hoop back and press Start.`,
+          sews: "Tacks the backing on and covers the edge with satin through every layer.",
+          after: `Take it out of the hoop, tear the stabilizer away and cut round the ${name} about ⅛ in outside the satin (not through it). Flip the ribbon loop up.` },
       ];
     } else if (p.border === "patch") {
       // solid tatami fill (inset so the satin edge covers its ragged ends), then the satin edge over it
@@ -360,25 +374,28 @@ export function compose(pieces, hoop) {
     return [x0 - 1, y0 - 1, x1 + 1, y1 + 1];
   };
   const hits = (a, b) => a[0] < b[2] && b[0] < a[2] && a[1] < b[3] && b[1] < a[3];
-  const order = [];
+  const order = [], last = [];
   for (const p of pieces) for (const st of pieceStages(p)) {
     if (!st.paths.length) continue;
     const s = { ...st, label: label(p), box: box(st.paths) };
+    if (s.last) { last.push(s); continue; }   // two-sided in-the-hoop edge: after everything that goes on the front
     let at = order.length;
     if (!s.pause && !s.fabric) {
       for (let j = order.length - 1; j >= 0; j--) {
-        if (order[j].color === s.color && !order[j].fabric) { at = j + 1; break; }
+        if (order[j].color === s.color && !order[j].fabric && !order[j].under) { at = j + 1; break; }
         if (hits(order[j].box, s.box) || order[j].pause) break;
       }
     }
     if (at < order.length) s.early = true;
     order.splice(at, 0, s);
   }
-  const d = new Design(hoop), steps = [];
-  let last = null;
+  order.push(...last);
+  const d = new Design(hoop), steps = [], after = [];
+  let thread = null;
   for (const st of order) {
-    if (st.color !== last || st.pause || st.fabric) {
-      d.color(st.color, st.label); last = st.color;
+    if (st.after && !after.includes(st.after)) after.push(st.after);
+    if (st.color !== thread || st.pause || st.fabric) {
+      d.color(st.color, st.label); thread = st.color;
       steps.push({ color: st.color, sews: [], you: st.you || (steps.length ? "Change to the next thread and press Start." : null),
         fabric: !!st.fabric, under: !!st.under || !!st.fabric, early: false });
     }
@@ -388,5 +405,5 @@ export function compose(pieces, hoop) {
   }
   if (!steps.length) throw new Error("Add some lettering or a frame to start.");
   d.finish();
-  return { design: d, steps };
+  return { design: d, steps, after };
 }
