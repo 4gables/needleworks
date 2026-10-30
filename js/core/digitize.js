@@ -110,7 +110,7 @@ function kmeans(lab, idxs, k, seed = 7) {
 // A picture framed by a band at its edge (a photo of a framed piece, a product card with a coloured border): the
 // border colour isn't the background, and the frame isn't part of the design. Returns the frame's pixels, or null.
 // The inset ring is clean where one colour has 85% of it for 2% of the picture's size inwards; when the edge ring isn't
-// clean but one within 8% is, every piece of another colour that touches the edge and stays within that band is
+// clean but one within 8% is, every piece of another colour that stays within that band (to the end of the clean rings) is
 // the frame. (A flower that runs off the edge reaches further in, so it stays.)
 function findFrame(labels, w, h, C) {
   // colours within ΔE 10 count as one (a lit backdrop's weave splits into two shades)
@@ -140,7 +140,7 @@ function findFrame(labels, w, h, C) {
   let any = false;
   for (let s = 0; s < w * h; s++) {
     const sx = s % w, sy = (s - sx) / w;
-    if (seen[s] || labels[s] < 0 || F(labels[s]) === inside || (sx > 0 && sy > 0 && sx < w - 1 && sy < h - 1)) continue;
+    if (seen[s] || labels[s] < 0 || F(labels[s]) === inside || !band(sx, sy)) continue;
     const l = labels[s], st = [s], comp = [];
     let within = true;
     seen[s] = 1;
@@ -164,11 +164,31 @@ export function analyze(img, opts = {}) {
     frame = findFrame(q.labels, q.w, q.h, q.C);
     if (frame) q = quantize(img, o, frame.frame);
   }
+  // (the frame's blended inner edge, read as a colour of its own once the frame is gone, is the frame too)
+  // Pixels within 2 px of the frame, in the band it was found in (to the end of the clean rings), that aren't the
+  // band's own colour go.
+  const cut = (q) => {
+    if (!frame) return q;
+    const { w, h, labels } = q, L = labels.slice(), b = Math.ceil((frame.inset + 0.025) * Math.max(w, h)), cnt = new Map();
+    const inBand = (x, y) => x < b || y < b || x >= w - b || y >= h - b;
+    for (let i = 0; i < w * h; i++) { const x = i % w; if (labels[i] >= 0 && inBand(x, (i - x) / w)) cnt.set(labels[i], (cnt.get(labels[i]) || 0) + 1); }
+    const own = [...cnt.entries()].sort((p, r) => r[1] - p[1])[0]?.[0];
+    for (let i = 0; i < w * h; i++) {
+      const x = i % w, y = (i - x) / w;
+      if (L[i] < 0 || L[i] === own || !inBand(x, y)) continue;
+      search: for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) {
+        const X = x + dx, Y = y + dy;
+        if (X >= 0 && Y >= 0 && X < w && Y < h && L[Y * w + X] < 0) { labels[i] = -1; break search; }
+      }
+    }
+    return q;
+  };
+  q = cut(q);
   let a = background(img, o, q, frame);
   // a backdrop in two or three shades took threads that were asked for: learn the colours again with as many more
   const extra = a.colors.filter((c) => c.background && c.area > 0).length - 1;
   if (extra > 0) {
-    const b = background(img, o, quantize(img, o, frame?.frame, Math.min(3, extra)), frame);
+    const b = background(img, o, cut(quantize(img, o, frame?.frame, Math.min(3, extra))), frame);
     if (b.merged < a.merged) a = b;
   }
   return a;
@@ -181,21 +201,24 @@ function background(img, o, q, frame) {
   // transparency)
   let bg = -1, ring = () => 0;
   if (o.removeBackground && !hasAlpha) {
-    const cnt = new Map(), f = frame ? frame.inset : 0;
-    const x0 = Math.round(f * w), y0 = Math.round(f * h), x1 = w - 1 - x0, y1 = h - 1 - y0;
-    const add = (i) => { if (labels[i] >= 0) cnt.set(labels[i], (cnt.get(labels[i]) || 0) + 1); };
-    for (let x = x0; x <= x1; x++) { add(y0 * w + x); add(y1 * w + x); }
-    for (let y = y0; y <= y1; y++) { add(y * w + x0); add(y * w + x1); }
+    // (inside a frame, the five clean rings: the first can run along the frame's blended inner edge)
+    const cnt = new Map(), add = (i) => { if (labels[i] >= 0) cnt.set(labels[i], (cnt.get(labels[i]) || 0) + 1); };
+    for (let r = 0; r < (frame ? 5 : 1); r++) {
+      const f = frame ? frame.inset + r * 0.005 : 0;
+      const x0 = Math.round(f * w), y0 = Math.round(f * h), x1 = w - 1 - x0, y1 = h - 1 - y0;
+      for (let x = x0; x <= x1; x++) { add(y0 * w + x); add(y1 * w + x); }
+      for (let y = y0; y <= y1; y++) { add(y * w + x0); add(y * w + x1); }
+    }
     const all = [...cnt.values()].reduce((a, b) => a + b, 0);
     bg = [...cnt.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? -1;
     ring = (j) => (cnt.get(j) || 0) / Math.max(1, all);
   }
   // shades of the background (a white box on an off-white page, paper texture) are background too: within ΔE 8 (a
-  // pale design colour is further off), or within 11 and over a quarter of the border (a lit backdrop's other shade)
+  // pale design colour is further off), or within 15 and over a quarter of the border (a lit backdrop's other shade)
   const isBg = (j) => {
     if (bg < 0) return false;
     const e = Math.hypot(C[j][0] - C[bg][0], C[j][1] - C[bg][1], C[j][2] - C[bg][2]);
-    return j === bg || e < 8 || (e < 11 && ring(j) >= 0.25);
+    return j === bg || e < 8 || (e < 15 && ring(j) >= 0.25);
   };
   const area = new Array(C.length).fill(0), rgb = C.map(() => [0, 0, 0]);
   for (let i = 0; i < n; i++) {
