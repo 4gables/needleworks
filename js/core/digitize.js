@@ -2,10 +2,10 @@
 // hairlines get a double running stitch along their centre; every shape with width gets a solid tatami fill.
 // Other styles: line drawing (`lineArt`) and cross-stitch (`crossStitch`).
 import { Design } from "./design.js";
-import { arclen, run } from "./geom.js";
+import { arclen, followRun, run } from "./geom.js";
 import { MARGIN } from "./machines.js";
 import { distanceTransform, label, order, skeletonEdges } from "./raster.js";
-import { hexToRgb, nearestBrotherThread, rgbToHex } from "./threads.js";
+import { PEC_MATCH, hexToRgb, nearestBrotherThread, pecThread, rgbToHex } from "./threads.js";
 
 export const DEFAULTS = {
   colors: 4,          // thread colours (not counting background)
@@ -24,6 +24,8 @@ export const DENSITY = { solid: 0.35, standard: 0.4 };
 const OVERLAP = 0.35;
 // Moves between parts of one colour up to this far (mm) travel under stitches still to come rather than jump
 const TRAVEL = 10;
+// Parts of a shape narrower than twice this (mm) get no fill rows and are sewn along their centre instead
+const THIN_PART = 0.35;
 
 // Gaps narrower than 0.5 mm between parts of one colour (between small letters, inside an M's notch) close up once
 // sewn. Returns their area in mm²: a morphological closing of the colour, minus the colour, counted only where the
@@ -82,18 +84,148 @@ function kmeans(lab, idxs, k, seed = 7) {
 }
 
 // ---------- quantise the picture into colour regions ----------
+// A picture framed by a band at its edge (a photo of a framed piece, a product card with a coloured border): the
+// border colour isn't the background, and the frame isn't part of the design. Returns the frame's pixels, or null.
+// The inset ring is clean where one colour has 85% of it for 2% of the picture's size inwards; when the edge ring isn't
+// clean but one within 8% is, every piece of another colour that touches the edge and stays within that band is
+// the frame. (A flower that runs off the edge reaches further in, so it stays.)
+function findFrame(labels, w, h, C) {
+  // colours within ΔE 10 count as one (a lit backdrop's weave splits into two shades)
+  const fam = C.map((_, j) => j);
+  for (let a = 0; a < C.length; a++) for (let b = 0; b < a; b++)
+    if (Math.hypot(C[a][0] - C[b][0], C[a][1] - C[b][1], C[a][2] - C[b][2]) < 10) { const f = fam[a]; for (let j = 0; j < C.length; j++) if (fam[j] === f) fam[j] = fam[b]; }
+  const F = (l) => (l < 0 ? -1 : fam[l]);
+  const ring = (f) => {
+    const x0 = Math.round(f * w), y0 = Math.round(f * h), x1 = w - 1 - x0, y1 = h - 1 - y0, cnt = new Map();
+    if (x1 <= x0 || y1 <= y0) return [-1, 0];
+    const add = (i) => cnt.set(F(labels[i]), (cnt.get(F(labels[i])) || 0) + 1);
+    for (let x = x0; x <= x1; x++) { add(y0 * w + x); add(y1 * w + x); }
+    for (let y = y0 + 1; y < y1; y++) { add(y * w + x0); add(y * w + x1); }
+    let best = -1, bn = 0, all = 0;
+    for (const [l, k] of cnt) { all += k; if (k > bn) { bn = k; best = l; } }
+    return [best, bn / all];
+  };
+  const rings = [];
+  for (let k = 0; k <= 20; k++) rings.push(ring(k * 0.005));
+  const clean = (k) => rings[k][0] >= 0 && rings.slice(k, k + 5).every(([l, s]) => l === rings[k][0] && s >= 0.85);
+  if (clean(0)) return null;
+  let k = 1; while (k <= 16 && !clean(k)) k++;
+  if (k > 16) return null;
+  const bx = Math.round((k + 4) * 0.005 * w) + 1, by = Math.round((k + 4) * 0.005 * h) + 1, inside = rings[k][0];   // (to the end of the clean rings)
+  const band = (x, y) => x < bx || y < by || x >= w - bx || y >= h - by;
+  const seen = new Uint8Array(w * h), frame = new Uint8Array(w * h);
+  let any = false;
+  for (let s = 0; s < w * h; s++) {
+    const sx = s % w, sy = (s - sx) / w;
+    if (seen[s] || labels[s] < 0 || F(labels[s]) === inside || (sx > 0 && sy > 0 && sx < w - 1 && sy < h - 1)) continue;
+    const l = labels[s], st = [s], comp = [];
+    let within = true;
+    seen[s] = 1;
+    while (st.length) {
+      const i = st.pop(), x = i % w, y = (i - x) / w;
+      comp.push(i);
+      if (!band(x, y)) within = false;
+      for (const j of [x > 0 ? i - 1 : -1, x < w - 1 ? i + 1 : -1, y > 0 ? i - w : -1, y < h - 1 ? i + w : -1])
+        if (j >= 0 && !seen[j] && labels[j] === l) { seen[j] = 1; st.push(j); }
+    }
+    if (within) { for (const i of comp) frame[i] = 1; any = true; }
+  }
+  return any ? { frame, inset: k * 0.005 } : null;
+}
+
 export function analyze(img, opts = {}) {
   const o = { ...DEFAULTS, ...opts };
+  let q = quantize(img, o, null), frame = null;
+  if (o.removeBackground && !q.hasAlpha) {
+    // learn the colours again without the frame: it took a thread of its own
+    frame = findFrame(q.labels, q.w, q.h, q.C);
+    if (frame) q = quantize(img, o, frame.frame);
+  }
+  let a = background(img, o, q, frame);
+  // a backdrop in two or three shades took threads that were asked for: learn the colours again with as many more
+  const extra = a.colors.filter((c) => c.background && c.area > 0).length - 1;
+  if (extra > 0) {
+    const b = background(img, o, quantize(img, o, frame?.frame, Math.min(3, extra)), frame);
+    if (b.merged < a.merged) a = b;
+  }
+  return a;
+}
+
+// which colours are background, and the colours as threads
+function background(img, o, q, frame) {
+  const { w, h, labels, C, hasAlpha } = q, { data } = img, n = w * h;
+  // background = most common colour along the border, or just inside a frame (only when the picture has no
+  // transparency)
+  let bg = -1, ring = () => 0;
+  if (o.removeBackground && !hasAlpha) {
+    const cnt = new Map(), f = frame ? frame.inset : 0;
+    const x0 = Math.round(f * w), y0 = Math.round(f * h), x1 = w - 1 - x0, y1 = h - 1 - y0;
+    const add = (i) => { if (labels[i] >= 0) cnt.set(labels[i], (cnt.get(labels[i]) || 0) + 1); };
+    for (let x = x0; x <= x1; x++) { add(y0 * w + x); add(y1 * w + x); }
+    for (let y = y0; y <= y1; y++) { add(y * w + x0); add(y * w + x1); }
+    const all = [...cnt.values()].reduce((a, b) => a + b, 0);
+    bg = [...cnt.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? -1;
+    ring = (j) => (cnt.get(j) || 0) / Math.max(1, all);
+  }
+  // shades of the background (a white box on an off-white page, paper texture) are background too: within ΔE 8 (a
+  // pale design colour is further off), or within 11 and over a quarter of the border (a lit backdrop's other shade)
+  const isBg = (j) => {
+    if (bg < 0) return false;
+    const e = Math.hypot(C[j][0] - C[bg][0], C[j][1] - C[bg][1], C[j][2] - C[bg][2]);
+    return j === bg || e < 8 || (e < 11 && ring(j) >= 0.25);
+  };
+  const area = new Array(C.length).fill(0), rgb = C.map(() => [0, 0, 0]);
+  for (let i = 0; i < n; i++) {
+    const l = labels[i]; if (l < 0) continue;
+    area[l]++; rgb[l][0] += data[i * 4]; rgb[l][1] += data[i * 4 + 1]; rgb[l][2] += data[i * 4 + 2];
+  }
+  const colors = C.map((c, j) => {
+    const col = area[j] ? rgb[j].map((v) => Math.round(v / area[j])) : [0, 0, 0];
+    const hex = rgbToHex(col);
+    return { id: j, hex, lightness: c[0], area: area[j], background: isBg(j), thread: nearestBrotherThread(hex) };
+  });
+  snapToThreads(colors);
+  // how many of the asked-for colours came out as the same thread as another (too alike to each other or to the
+  // background, or only anti-aliased edges), so the page can say why there are fewer threads than asked
+  const threads = colors.filter((c) => !c.background && c.area > 0).length;
+  return { w, h, labels, colors, merged: Math.max(0, o.colors - threads), frame: !!frame };
+}
+
+// Each colour to be sewn becomes exactly a Brother thread, the nearest by CIELAB that no bigger colour took. The PES
+// writer matches colours to threads by pyembroidery's red-mean distance, which named a green "Pewter", a pink
+// "Silver" and a black "Olive Green"; given the thread's own colour it picks that thread (distance 0), so the swatch,
+// its name and the machine's screen agree. `picture` keeps the colour the picture had.
+function snapToThreads(colors) {
+  const pec = PEC_MATCH.map((t) => (t ? srgbToLab(t[1], t[2], t[3]) : null)), taken = new Set();
+  for (const c of colors.filter((k) => !k.background && k.area > 0).sort((a, b) => b.area - a.area)) {
+    const [L, A, B] = srgbToLab(...hexToRgb(c.hex));
+    let best = -1, bd = Infinity;
+    pec.forEach((q, i) => {
+      if (!q || taken.has(i)) return;
+      const v = (q[0] - L) ** 2 + (q[1] - A) ** 2 + (q[2] - B) ** 2;
+      if (v < bd) { bd = v; best = i; }
+    });
+    if (best < 0) continue;
+    taken.add(best);
+    const t = pecThread(best);
+    Object.assign(c, { picture: c.hex, hex: t.hex, thread: t });
+  }
+}
+
+// k-means colours and a label per pixel (-1: transparent, or the frame's pixels in `skip`)
+function quantize(img, o, skip, extra = 0) {
   const { width: w, height: h, data } = img;
   const n = w * h, lab = new Float32Array(n * 3), opaque = [];
+  let clear = 0;
   for (let i = 0; i < n; i++) {
-    if (data[i * 4 + 3] < 128) continue;
+    if (data[i * 4 + 3] < 128) { clear++; continue; }
+    if (skip && skip[i]) continue;
     const L = srgbToLab(data[i * 4], data[i * 4 + 1], data[i * 4 + 2]);
     lab[i * 3] = L[0]; lab[i * 3 + 1] = L[1]; lab[i * 3 + 2] = L[2];
     opaque.push(i);
   }
-  const hasAlpha = opaque.length < n * 0.98;
-  const k = Math.max(1, o.colors + (o.removeBackground && !hasAlpha ? 1 : 0));
+  const hasAlpha = clear > n * 0.02;
+  const k = Math.max(1, o.colors + (o.removeBackground && !hasAlpha ? 1 + extra : 0));
   // learn colours from flat pixels only: anti-aliased edges blend two colours and would steal a thread
   const flat = opaque.filter((i) => {
     const x = i % w;
@@ -107,9 +239,16 @@ export function analyze(img, opts = {}) {
   });
   const train = flat.length > opaque.length * 0.2 ? flat : opaque;
   // more clusters than the picture has colours split one colour into near-identical shades: merge those
-  const C = [];
-  for (const c of kmeans(lab, train, Math.min(k, Math.max(1, train.length))))
-    if (!C.some((d) => (c[0] - d[0]) ** 2 + (c[1] - d[1]) ** 2 + (c[2] - d[2]) ** 2 < 36)) C.push(c);   // ΔE < 6
+  // (ΔE < 6). Shades of one big area (a backdrop's weave) can take several clusters while a small colour gets none:
+  // then the clusters are learned again with as many more, twice at most.
+  let C = [];
+  for (let kk = k, tries = 0; tries < 3; tries++) {
+    C = [];
+    for (const c of kmeans(lab, train, Math.min(kk, Math.max(1, train.length))))
+      if (!C.some((d) => (c[0] - d[0]) ** 2 + (c[1] - d[1]) ** 2 + (c[2] - d[2]) ** 2 < 36)) C.push(c);
+    if (C.length >= k || kk >= train.length) break;
+    kk += k - C.length;
+  }
   let labels = new Int16Array(n).fill(-1);
   for (const i of opaque) {
     let best = 0, bd = Infinity;
@@ -154,28 +293,8 @@ export function analyze(img, opts = {}) {
     }
     labels = out;
   }
-  // background = most common colour along the border (only when the picture has no transparency)
-  let bg = -1;
-  if (o.removeBackground && !hasAlpha) {
-    const cnt = new Map();
-    const add = (i) => { if (labels[i] >= 0) cnt.set(labels[i], (cnt.get(labels[i]) || 0) + 1); };
-    for (let x = 0; x < w; x++) { add(x); add((h - 1) * w + x); }
-    for (let y = 0; y < h; y++) { add(y * w); add(y * w + w - 1); }
-    bg = [...cnt.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? -1;
-  }
-  // shades of the background (a white box on an off-white page, paper texture) are background too
-  const isBg = (j) => bg >= 0 && (j === bg || (C[j][0] - C[bg][0]) ** 2 + (C[j][1] - C[bg][1]) ** 2 + (C[j][2] - C[bg][2]) ** 2 < 64);   // ΔE < 8: a pale design colour is further off
-  const area = new Array(C.length).fill(0), rgb = C.map(() => [0, 0, 0]);
-  for (let i = 0; i < n; i++) {
-    const l = labels[i]; if (l < 0) continue;
-    area[l]++; rgb[l][0] += data[i * 4]; rgb[l][1] += data[i * 4 + 1]; rgb[l][2] += data[i * 4 + 2];
-  }
-  const colors = C.map((c, j) => {
-    const col = area[j] ? rgb[j].map((v) => Math.round(v / area[j])) : [0, 0, 0];
-    const hex = rgbToHex(col);
-    return { id: j, hex, lightness: c[0], area: area[j], background: isBg(j), thread: nearestBrotherThread(hex) };
-  });
-  return { w, h, labels, colors };
+  if (skip) for (let i = 0; i < n; i++) if (skip[i]) labels[i] = -1;
+  return { w, h, labels, C, hasAlpha };
 }
 
 // ---------- fills ----------
@@ -273,7 +392,14 @@ function tatami(mask, comp, res, { angle, spacing, stitch, inset = 0, pull = 0.1
 // cell(x, y): 1 where a cell (sampled at its centre pixel) may be crossed, 2 where it may and stitches sewn over it
 // later hide whatever is sewn now (it's never counted as finished). hop(a, b): whether the straight step from a point
 // to the cell it starts from (or ends on) is covered.
-function makeRouter(mask, res, cell, hop = null) {
+// Hard limits on the search, so no picture spends more than a few seconds routing (a framed photo's textured backdrop
+// made one fill of 1782 sections, each tried from each: minutes, and the page never finished): one route gives up
+// after ROUTE_CELLS cells, a router after ROUTER_CELLS and a whole picture after PICTURE_CELLS (`budget`, shared), and
+// the needle jumps instead. Counted in cells, not time, so the browser and Node sew the same file.
+const ROUTE_CELLS = 50000, ROUTER_CELLS = 6e6, PICTURE_CELLS = 12e6;
+export const routeBudget = () => ({ cells: PICTURE_CELLS });
+function makeRouter(mask, res, cell, hop = null, budget = routeBudget()) {
+  let mine = ROUTER_CELLS;
   const C = Math.max(1, Math.round(res * 0.5));   // 0.5 mm cells
   const gw = Math.ceil(mask.w / C), gh = Math.ceil(mask.h / C), n = gw * gh, inside = new Uint8Array(n);
   for (let gy = 0; gy < gh; gy++) for (let gx = 0; gx < gw; gx++)
@@ -315,7 +441,7 @@ function makeRouter(mask, res, cell, hop = null) {
   }
   // A* state reused between calls (a cell's g/from count only if stamped this call); the open list is a binary heap
   // in typed arrays (a linear scan was most of a busy picture's time)
-  const G = new Float64Array(n), FROM = new Int32Array(n), STAMP = new Uint32Array(n), HK = new Float64Array(20010), HC = new Int32Array(20010);
+  const G = new Float64Array(n), FROM = new Int32Array(n), SW = new Float32Array(n), LN = new Float32Array(n), STAMP = new Uint32Array(n), HK = new Float64Array(20010), HC = new Int32Array(20010);
   let hn = 0;
   const push = (k, c) => {
     let i = hn++;
@@ -335,27 +461,36 @@ function makeRouter(mask, res, cell, hop = null) {
     return top;
   };
   let gen = 0;
-  // the way from a to b (px) as { pts, sewnMm (how much of it lies on finished stitches), mm (its length) }, or null
-  function route(a, b) {
+  // the way from a to b (px) as { pts, sewnMm (how much of it lies on finished stitches), mm (its length) }, or null.
+  // Ways with more than maxSewn mm on finished stitches or longer than maxMm aren't followed (a search that can't
+  // succeed stops early instead of flooding the whole shape).
+  function route(a, b, maxSewn = Infinity, maxMm = Infinity) {
     const s = snap(a), t = snap(b);
-    if (s < 0 || t < 0 || region[s] !== region[t]) return null;
+    if (s < 0 || t < 0 || region[s] !== region[t] || mine <= 0 || budget.cells <= 0) return null;
+    let popped = 0;
     gen++;
     const g = (c) => (STAMP[c] === gen ? G[c] : Infinity), from = (c) => (STAMP[c] === gen ? FROM[c] : -1);
     const hx = (c) => Math.hypot((c % gw) - (t % gw), Math.floor(c / gw) - Math.floor(t / gw));
-    STAMP[s] = gen; G[s] = 0; FROM[s] = -1; hn = 0; push(0, s);
+    const mmPer = C / res;
+    STAMP[s] = gen; G[s] = 0; FROM[s] = -1; SW[s] = 0; LN[s] = 0; hn = 0; push(0, s);
     while (hn) {
       const c = pop();
       if (c === t) break;
+      if (++popped > ROUTE_CELLS) { mine -= popped; budget.cells -= popped; return null; }
       const cx = c % gw, cy = (c - cx) / gw;
       for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
         if (!dx && !dy) continue;
         const x = cx + dx, y = cy + dy; if (x < 0 || y < 0 || x >= gw || y >= gh) continue;
         const m = y * gw + x; if (!inside[m]) continue;
-        const v = g(c) + Math.hypot(dx, dy) * ((sewn[m] ? 6 : 1) + 2 * trod[m]);
-        if (v < g(m)) { STAMP[m] = gen; G[m] = v; FROM[m] = c; push(v + hx(m), m); }
+        const step = Math.hypot(dx, dy), v = g(c) + step * ((sewn[m] ? 6 : 1) + 2 * trod[m]);
+        if (v >= g(m)) continue;
+        const sw = SW[c] + (sewn[m] ? step * mmPer : 0), ln = LN[c] + step * mmPer;
+        if (sw > maxSewn || ln + hx(m) * mmPer > maxMm) continue;
+        STAMP[m] = gen; G[m] = v; FROM[m] = c; SW[m] = sw; LN[m] = ln; push(v + hx(m), m);
       }
-      if (hn > 20000) return null;
+      if (hn > 20000) { mine -= popped; budget.cells -= popped; return null; }
     }
+    mine -= popped; budget.cells -= popped;
     if (from(t) < 0 && s !== t) return null;
     const cells = [t]; while (cells[cells.length - 1] !== s) cells.push(from(cells[cells.length - 1]));
     cells.reverse();
@@ -396,8 +531,8 @@ function makeRouter(mask, res, cell, hop = null) {
 // yet, so the fill covers the travel. It only jumps (and trims) when every way would lie on top of finished rows for
 // more than 2 mm. groups: [underlay paths, fill paths] in px; the underlay is covered by the fill, so travel over it is
 // hidden too.
-function routeFill(groups, comp, mask, res) {
-  const { w } = mask, R = makeRouter(mask, res, (x, y) => (comp.labels[y * w + x] === comp.id ? 1 : 0));
+function routeFill(groups, comp, mask, res, budget = routeBudget()) {
+  const { w } = mask, R = makeRouter(mask, res, (x, y) => (comp.labels[y * w + x] === comp.id ? 1 : 0), null, budget);
   const out = [];
   let cur = null;
   groups.forEach((paths, gi) => {
@@ -411,7 +546,7 @@ function routeFill(groups, comp, mask, res) {
       if (cur) search: for (let i = 0; i < left.length; i++) for (const back of [false, true]) {
         const q = back ? left[i][left[i].length - 1] : left[i][0];
         if (Math.hypot(q[0] - cur[0], q[1] - cur[1]) <= res) { k = i; r = null; rev = back; break search; }
-        const ri = R.route(cur, q);
+        const ri = R.route(cur, q, 2);
         if (i === 0 && !back) r = ri;
         if (ri && ri.sewnMm <= 2) { k = i; r = ri; rev = back; break search; }
       }
@@ -436,7 +571,7 @@ export function toPalette(analysis, palette) {
   const pick = (hex) => { const [L, A, B] = srgbToLab(...hexToRgb(hex)); let bj = 0, bd = Infinity;
     labs.forEach((q, j) => { const d = (q[0] - L) ** 2 + (q[1] - A) ** 2 + (q[2] - B) ** 2; if (d < bd) { bd = d; bj = j; } }); return bj; };
   const groups = new Map();
-  for (const c of analysis.colors) if (!c.background && c.area > 0) { const j = pick(c.hex); groups.set(j, [...(groups.get(j) || []), c]); }
+  for (const c of analysis.colors) if (!c.background && c.area > 0) { const j = pick(c.picture || c.hex); groups.set(j, [...(groups.get(j) || []), c]); }
   const to = new Map(), colors = analysis.colors.map((c) => ({ ...c }));
   for (const [j, cs] of groups) {
     const rep = cs.reduce((a, b) => (b.area > a.area ? b : a)), hex = palette[j];
@@ -474,7 +609,7 @@ function build(img, analysis, opts) {
   const minPx = 1.5 * res * res, dotPx = 4 * res * res, dotW = 2.5 * res;
   // where each colour's fill will surely lie: over 0.6 mm inside a shape that isn't a speck. A travel run sewn there
   // by an earlier colour is covered.
-  const solid = new Uint8Array(w * h);
+  const solid = new Uint8Array(w * h), budget = routeBudget();
   for (const col of used) {
     const m = { w, h, data: new Uint8Array(w * h) };
     for (let i = 0; i < w * h; i++) m.data[i] = labels[i] === col.id ? 1 : 0;
@@ -499,20 +634,74 @@ function build(img, analysis, opts) {
     // them, and a bridge between two shapes funnels every fill travel through it.
     const later = new Set(used.slice(k + 1).map((c) => c.id));
     const { labels: cl, count } = label(mask);
-    if (later.size) {
-      const size = new Int32Array(count + 1), bx0 = new Int32Array(count + 1).fill(w), bx1 = new Int32Array(count + 1).fill(-1), by0 = new Int32Array(count + 1).fill(h), by1 = new Int32Array(count + 1).fill(-1);
-      for (let i = 0; i < w * h; i++) {
-        const c = cl[i]; size[c]++; if (!c) continue;
-        const x = i % w, y = (i - x) / w;
-        if (x < bx0[c]) bx0[c] = x; if (x > bx1[c]) bx1[c] = x; if (y < by0[c]) by0[c] = y; if (y > by1[c]) by1[c] = y;
+    // Lines under 1 mm wide (stems, small lettering, outlines) are sewn along their centre, however small each piece
+    // is: a thin line breaks into short pieces in a picture, and dropping those as specks erased whole titles and
+    // most of the stems. Wider specks (dots) go: each was a trim, two locks and often a loose thread.
+    const size = new Int32Array(count + 1), wide = new Float64Array(count + 1), bx0 = new Int32Array(count + 1).fill(w), bx1 = new Int32Array(count + 1).fill(-1), by0 = new Int32Array(count + 1).fill(h), by1 = new Int32Array(count + 1).fill(-1);
+    for (let i = 0; i < w * h; i++) {
+      const c = cl[i]; if (!c) continue;
+      const x = i % w, y = (i - x) / w; size[c]++;
+      if (own[i] > wide[c]) wide[c] = own[i];
+      if (x < bx0[c]) bx0[c] = x; if (x > bx1[c]) bx1[c] = x; if (y < by0[c]) by0[c] = y; if (y > by1[c]) by1[c] = y;
+    }
+    const thinC = (c) => (2 * wide[c]) / res < 1.0;
+    const speck = (c) => size[c] < minPx || (size[c] < dotPx && bx1[c] - bx0[c] < dotW && by1[c] - by0[c] < dotW);
+    // A thin piece lying between the fabric and another colour, in a colour between theirs, is the blend along that
+    // colour's edge (a dark letter's anti-aliasing read as green), not a line of its own.
+    const touch = new Map();
+    for (let i = 0; i < w * h; i++) {
+      const c = cl[i]; if (!c || !thinC(c)) continue;
+      const x = i % w;
+      for (const j of [x > 0 ? i - 1 : -1, x < w - 1 ? i + 1 : -1, i - w, i + w]) {
+        if (j < 0 || j >= w * h || cl[j] === c) continue;
+        const l = labels[j];
+        if (l === col.id) continue;
+        const key = c * 4096 + (stitched.has(l) ? 2048 : 0) + (l + 1);
+        touch.set(key, (touch.get(key) || 0) + 1);
       }
-      const speck = (c) => size[c] < minPx || (size[c] < dotPx && bx1[c] - bx0[c] < dotW && by1[c] - by0[c] < dotW);
+    }
+    const most = new Map();   // per piece: [open colour, count], [other stitched colour, count]
+    for (const [key, k] of touch) {
+      const c = Math.floor(key / 4096), sew = key & 2048 ? 1 : 0, l = (key & 2047) - 1, m = most.get(c) || [[-1, 0], [-1, 0]];
+      if (k > m[sew][1]) m[sew] = [l, k];
+      most.set(c, m);
+    }
+    const labOf = (id) => srgbToLab(...hexToRgb(colors[id].picture || colors[id].hex)), mine = labOf(col.id), dE = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
+    // (only its pixels beside that colour go: a stem that runs past a leaf keeps the rest of its length)
+    const between = new Map();
+    for (const [c, m] of most) {
+      if (m[0][0] < 0 || m[1][0] < 0) continue;
+      const A = labOf(m[0][0]), B = labOf(m[1][0]);
+      if (dE(A, mine) + dE(mine, B) <= 1.25 * dE(A, B)) between.set(c, m[1][0]);
+    }
+    const edgeOf = (i, l) => {
+      const x = i % w;
+      for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+        const X = x + dx, j = i + dy * w + dx;
+        if (X >= 0 && X < w && j >= 0 && j < w * h && labels[j] === l) return true;
+      }
+      return false;
+    };
+    const thin = { w, h, data: new Uint8Array(w * h) };
+    let anyThin = false;
+    for (let i = 0; i < w * h; i++) {
+      if (!cl[i]) continue;
+      if (thinC(cl[i]) && between.has(cl[i]) && edgeOf(i, between.get(cl[i]))) { cl[i] = 0; mask.data[i] = 0; }
+      else if (thinC(cl[i])) { thin.data[i] = 1; anyThin = true; cl[i] = 0; mask.data[i] = 0; }
+      else if (speck(cl[i])) { cl[i] = 0; mask.data[i] = 0; }
+    }
+    // The thin parts of a filled shape (a stem growing out of its leaves) are too narrow for fill rows (rows under
+    // 0.6 mm are dropped): they're sewn as lines too. Thin = not reached by a 0.7 mm disc that fits inside the shape.
+    {
+      const r = THIN_PART * res, core = { w, h, data: new Uint8Array(w * h) };
+      for (let i = 0; i < w * h; i++) core.data[i] = cl[i] && own[i] > r ? 0 : 1;
+      const toCore = distanceTransform(core);
+      for (let i = 0; i < w * h; i++) if (cl[i] && toCore[i] > r + 0.5) { thin.data[i] = 1; anyThin = true; }
+    }
+    if (later.size) {
       const src = new Int32Array(w * h).fill(-1), R = OVERLAP * res;
       let front = [];
-      for (let i = 0; i < w * h; i++) {
-        if (cl[i] && speck(cl[i])) { cl[i] = 0; mask.data[i] = 0; }
-        else if (cl[i]) { src[i] = i; front.push(i); }
-      }
+      for (let i = 0; i < w * h; i++) if (cl[i]) { src[i] = i; front.push(i); }
       const near = (j) => { const x = j % w; return [x > 0 ? j - 1 : -1, x < w - 1 ? j + 1 : -1, j - w, j + w].filter((q) => q >= 0 && q < w * h); };
       while (front.length) {
         const next = [];
@@ -535,67 +724,100 @@ function build(img, analysis, opts) {
     const filled = new Uint8Array(count + 1);   // shapes sewn as fills
     for (const comp of comps) {
       const mine = comp.pixels.filter((i) => labels[i] === col.id);
-      if (mine.length < minPx) continue;
-      if (mine.length < dotPx) {   // (a dot, as above: the last colour's specks weren't dropped)
-        let x0 = w, x1 = -1, y0 = h, y1 = -1;
-        for (const i of mine) { const x = i % w, y = (i - x) / w; x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y); }
-        if (x1 - x0 < dotW && y1 - y0 < dotW) continue;
-      }
+      if (!mine.length) continue;
       let maxDt = 0, sx = 0, sy = 0;
       for (const i of mine) { maxDt = Math.max(maxDt, own[i]); sx += i % w; sy += Math.floor(i / w); }
       const widthMm = (2 * maxDt) / res, centre = [sx / mine.length, sy / mine.length];
-      // only hairlines follow a centre line; anything with width is a solid fill that matches its outline exactly
-      if (widthMm < 1.0) {
+      // anything with width is a solid fill that matches its outline exactly
+      const under = tatami(mask, comp, res, { angle: angle + 90, spacing: 2.5, stitch: 3, inset: 0.4, pull: 0 });
+      // pull compensation widens a fill past its edge; on thin letters that closes the gaps between them
+      const fill = tatami(mask, comp, res, { angle, spacing: o.density, stitch: 3.5, pull: widthMm < 2 ? 0.05 : 0.15 });
+      blocks.push({ centre, paths: routeFill([under, fill], comp, mask, res, budget).map(toMm), kind: "fill" });
+      filled[comp.id] = 1;
+    }
+    if (anyThin) {
+      // thickened a pixel (like a line drawing) so a line broken by a pixel joins up, then walked like lettering:
+      // each line out as a triple run (it shows like a thin outline) and back, so a connected line has no jumps.
+      // A line out and back is four passes: it shows about as well as a thin outline drawn in the picture.
+      const thick = { w, h, data: thin.data.slice() };
+      for (let i = 0; i < w * h; i++) if (thin.data[i]) { const x = i % w; if (x < w - 1) thick.data[i + 1] = 1; if (i + w < w * h) thick.data[i + w] = 1; }
+      const walks = order(skeletonEdges(thick, 2, { spur: 1 })).map((seq) => {
+        const mm = seq.map(([p, kind]) => [toMm(p), kind]);
+        return { mm, len: mm.reduce((a, [p, kind]) => a + (kind === "run" ? arclen(p).at(-1) : 0), 0) };
+      }).filter((t) => t.len >= 0.5);
+      // A piece counts with the pieces of this line colour within LINK of it (the letters of a word, the dashes of a
+      // broken stem): a group under GROUP mm of line in all is a speck (each one a trim and two locks), dropped.
+      const LINK = 2, GROUP = 6;
+      const key = (x, y) => `${Math.floor(x / LINK)},${Math.floor(y / LINK)}`, cells = new Map();
+      const root = walks.map((_, i) => i), find = (i) => (root[i] === i ? i : (root[i] = find(root[i])));
+      walks.forEach((t, i) => { for (const [p] of t.mm) for (const [x, y] of p) { const c = key(x, y); if (!cells.has(c)) cells.set(c, new Set()); cells.get(c).add(i); } });
+      walks.forEach((t, i) => {
+        for (const [p] of t.mm) for (const [x, y] of p) {
+          const gx = Math.floor(x / LINK), gy = Math.floor(y / LINK);
+          for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) for (const j of cells.get(`${gx + dx},${gy + dy}`) || []) {
+            if (find(j) === find(i)) continue;
+            if (walks[j].mm.some(([q]) => q.some(([u, v]) => Math.hypot(u - x, v - y) <= LINK))) root[find(j)] = find(i);
+          }
+        }
+      });
+      const total = new Map();
+      walks.forEach((t, i) => total.set(find(i), (total.get(find(i)) || 0) + t.len));
+      walks.forEach((t, i) => {
+        if (total.get(find(i)) < GROUP) return;
         fine.hairlines++;
-        const cm = { w, h, data: new Uint8Array(w * h) };
-        for (const i of mine) cm.data[i] = 1;
-        const edges = skeletonEdges(cm, Math.max(2, maxDt));
-        if (!edges.length || edges.every((e) => e[2].length < 3)) {   // a dot: fill it instead
-          blocks.push({ centre, paths: tatami(mask, comp, res, { angle, spacing: o.density, stitch: 3.5 }).map(toMm), kind: "fill" });
-          continue;
-        }
-        const paths = [];
-        for (const seq of order(edges)) for (const [p] of seq) {
-          paths.push(run(toMm(p), 1.5));
-        }
-        blocks.push({ centre, paths, kind: "run" });
-      } else {
-        const under = tatami(mask, comp, res, { angle: angle + 90, spacing: 2.5, stitch: 3, inset: 0.4, pull: 0 });
-        // pull compensation widens a fill past its edge; on thin letters that closes the gaps between them
-        const fill = tatami(mask, comp, res, { angle, spacing: o.density, stitch: 3.5, pull: widthMm < 2 ? 0.05 : 0.15 });
-        blocks.push({ centre, paths: routeFill([under, fill], comp, mask, res).map(toMm), kind: "fill" });
-        filled[comp.id] = 1;
-      }
+        const paths = t.mm.map(([p, kind]) => {
+          const q = followRun(p, 1.5, 0.1, 0.6);
+          return kind === "run" && q.length > 1 ? [...q, ...q.slice(0, -1).reverse(), ...q.slice(1)] : q;
+        });
+        blocks.push({ centre: paths[0][0], paths, kind: "run" });
+      });
     }
     if (!blocks.length) continue;
     // Moves between sections and shapes travel where stitches still to come will cover the run: this colour's fills
     // not sewn yet (kept 0.25 mm off their edges) or a later colour's solid fill. Each jump was a trim, two locks and,
     // up to 5 mm (the PE900 never trims those), a loose thread: etsy_8 had 293 trims and 101 loose threads.
-    const toPx = ([x, y]) => [x * res + cx, y * res + cy], ink = (i) => mask.data[i] || later.has(labels[i]);
+    const toPx = ([x, y]) => [x * res + cx, y * res + cy], ink = (i) => mask.data[i] || thin.data[i] || later.has(labels[i]);
     const hop = (a, b) => {   // the step between a point and its first cell: on this colour or one still to come
       const n = Math.ceil(Math.hypot(b[0] - a[0], b[1] - a[1]) / (0.2 * res));
       for (let i = 1; i <= n; i++) if (!ink(Math.round(a[1] + ((b[1] - a[1]) * i) / n) * w + Math.round(a[0] + ((b[0] - a[0]) * i) / n))) return false;
       return true;
     };
+    // ... or along this colour's own thin lines (within 2 px), which are sewn in this thread anyway
+    const near2 = new Uint8Array(w * h);
+    if (anyThin) for (let i = 0; i < w * h; i++) if (thin.data[i]) { const x = i % w, y = (i - x) / w; for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) { const X = x + dx, Y = y + dy; if (X >= 0 && Y >= 0 && X < w && Y < h) near2[Y * w + X] = 1; } }
     const R = makeRouter(mask, res, (x, y) => {
       const i = y * w + x;
-      return solid[i] && later.has(labels[i]) ? 2 : filled[cl[i]] && dt[i] > 0.25 * res ? 1 : 0;
-    }, hop);
+      return solid[i] && later.has(labels[i]) ? 2 : filled[cl[i]] && dt[i] > 0.25 * res ? 1 : near2[i] ? 1 : 0;
+    }, hop, budget);
     // Shapes in nearest-first order, preferring the nearest one a hidden way reaches (keeps travel and trims down),
     // then one far enough for the machine to trim the jump
     const ordered = [];
     blocks = blocks.map((b) => ({ ...b, paths: b.paths.filter((p) => p.length) })).filter((b) => b.paths.length);
     let at = d.cur ? toPx(d.cur) : [0, 0];
+    // A line's walk ends where it began, so it can start anywhere along it: it's entered at its point nearest the
+    // needle (a step of 2 mm or less is sewn, not jumped)
+    // (steps under 0.4 mm, where the walk turns back on a short stroke, are merged: rounded to the file's 0.1 mm a 0.3 mm
+    // step can come out under 0.3, and tiny stitches nest and break thread)
+    for (const b of blocks) if (b.kind === "run") {
+      const t = [];
+      for (const q of b.paths.flat()) if (!t.length || Math.hypot(q[0] - t.at(-1)[0], q[1] - t.at(-1)[1]) >= 0.4) t.push(q);
+      if (Math.hypot(t[0][0] - t.at(-1)[0], t[0][1] - t.at(-1)[1]) < 0.4) t[t.length - 1] = t[0]; else t.push(t[0]);
+      b.tour = t;
+    }
     while (blocks.length) {
       const from = R.regionOf(at);
-      let bi = 0, bd = Infinity;
+      let bi = 0, bk = 0, bd = Infinity;
       blocks.forEach((b, i) => {
-        const q = toPx(b.paths[0][0]), v = Math.hypot(q[0] - at[0], q[1] - at[1]) / res;
-        // (a jump of 2-5 mm is left as a loose thread by the machine: one over 5 mm, trimmed, is better)
-        const score = v <= 2 || (v <= TRAVEL && from && R.regionOf(q) === from) ? v : v > 5 ? v + 1000 : v + 2000;
-        if (score < bd) { bd = score; bi = i; }
+        (b.tour || [b.paths[0][0]]).forEach((qm, k) => {
+          const q = toPx(qm), v = Math.hypot(q[0] - at[0], q[1] - at[1]) / res;
+          // (a jump of 2-5 mm is left as a loose thread by the machine: one over 5 mm, trimmed, is better)
+          const score = v <= 2 || (v <= TRAVEL && from && R.regionOf(q) === from) ? v : v > 5 ? v + 1000 : v + 2000;
+          if (score < bd) { bd = score; bi = i; bk = k; }
+        });
       });
-      const b = blocks.splice(bi, 1)[0], last = b.paths[b.paths.length - 1];
+      const b = blocks.splice(bi, 1)[0];
+      if (b.tour) { const t = b.tour; b.paths = [bk ? [...t.slice(bk), ...t.slice(1, bk + 1)] : t]; }
+      const last = b.paths[b.paths.length - 1];
       ordered.push(b); at = toPx(last[last.length - 1]);
     }
     // a short move to the next piece is sewn straight unless it would cross fabric this colour doesn't cover
@@ -618,7 +840,7 @@ function build(img, analysis, opts) {
       const gap = Math.hypot(p[0][0] - d.cur[0], p[0][1] - d.cur[1]);
       if (gap <= 2 && !crosses(d.cur, p[0])) d.path(p);
       else {
-        const r = gap <= TRAVEL ? R.route(toPx(d.cur), toPx(p[0])) : null;
+        const r = gap <= TRAVEL ? R.route(toPx(d.cur), toPx(p[0]), 2, 1.5 * gap + 3) : null;
         if (r && r.sewnMm <= 2 && r.mm <= 1.5 * gap + 3) d.path([d.cur, ...toMm(R.stitches(r)), ...p]);
         else d.path(p, true, gap > 2);
       }

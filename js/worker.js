@@ -16,7 +16,7 @@ self.onmessage = (e) => {
     const pattern = opts.turn ? turnForMachine(design.pattern()) : design.pattern();
     const bytes = writePES(pattern);
     self.postMessage({ id, ok: true, pattern, bytes, summary, fine,
-      colors: a.colors, labels: a.labels, w: a.w, h: a.h }, [bytes.buffer]);
+      colors: a.colors, merged: analysis.merged, labels: a.labels, w: a.w, h: a.h }, [bytes.buffer]);
   } catch (err) {
     self.postMessage({ id, ok: false, error: err.message || String(err) });
   }
