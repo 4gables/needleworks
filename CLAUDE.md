@@ -272,8 +272,16 @@ Embroidery-file tools for home machines. Two implementations of the same engine:
     hits/mm² otherwise), the rest are running lines (0.5-3.5 mm). gnome/ufront/peace at 0.6x and 1.6x: satin gap
     0.40-0.41, peak density <= 24. `tests/doctor.test.mjs` covers 0.5-2.5x with and without sort (slow: ~3 min).
   - Realistic thread (View menu): the twist drawn across each stitch when zoomed in (`real` in `draw`).
-  - Not done from the gap review: photo stitch, free-standing lace, per-pair kerning, a thread-weight setting,
-    3D puff.
+  - Letter pairs (print fonts, text > More): `kern` = { index of the pair's first letter in the words: % of the
+    height }, added to the font's own kerning (`renderWord` `kern`: letters drawn one by one where the whole word
+    puts them, plus the shifts; dash decorations measured from the drawn ink). Lines and arches map the indices
+    through the trimmed lines; editing the words keeps pairs in the unchanged start and end (`rekern` in ui.js).
+  - Thread weight (Sewing on, `THREADS`, compose opts `thread`, saved with the design): Automatic is byte-identical to
+    before (40 wt, small lettering sewn for 60). 30 wt: lettering satin 0.45, other satins x1.15, fills +0.05 mm;
+    60 wt: lettering 0.34, other satins x0.88, fills unchanged (0.3 mm rows fail the PE900 check), no small-letters
+    tip. Knit adds 0.04 to the lettering satin. `wt` is a module variable set for the length of `compose`; stitch
+    caches key on it.
+  - Not done from the gap review: photo stitch, free-standing lace, 3D puff.
 - The preview is the file: `setView` decodes `v.bytes` with `readEmbroidery` and draws/counts/fit-checks that, and
   thread labels come from the file's own PEC palette.
 

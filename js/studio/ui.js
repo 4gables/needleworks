@@ -9,7 +9,7 @@ import { FILL_PATTERNS } from "../core/digitize.js";
 import { draw } from "../render.js";
 import { QUILTS } from "./quilt.js";
 import { MOTIFS } from "./motifs.js";
-import { BORDERS, FABRICS, SHAPES, TEXT_SHAPES, splitPieces, archRoom, archTight, touching, compose, fileBlocks, fittedSizes, followFrame, label, minSize, pieceBounds, previewLook, smallText } from "./pieces.js";
+import { BORDERS, FABRICS, THREADS, SHAPES, TEXT_SHAPES, splitPieces, archRoom, archTight, touching, compose, fileBlocks, fittedSizes, followFrame, label, minSize, pieceBounds, previewLook, smallText } from "./pieces.js";
 
 const SCRIPT = "NW Great Vibes", PRINT = "NW Josefin Sans";
 // exact Brother PEC thread colours, so the name on screen is the one the machine shows
@@ -97,21 +97,21 @@ export function initStudio(api) {
   nextId = Math.max(0, ...pieces.map((p) => p.id)) + 1;
   let sel = saved?.sel ?? pieces[pieces.length - 1]?.id, seq = 0, timer = 0;
   // what it's sewn on (changes the stitches for knit and towel) and the basting box
-  let fabric = FABRICS[saved?.fabric] ? saved.fabric : "cotton", baste = !!saved?.baste;
+  let fabric = FABRICS[saved?.fabric] ? saved.fabric : "cotton", baste = !!saved?.baste, thread = THREADS[saved?.thread] ? String(saved.thread) : "auto";
 
-  const save = () => api.store.set("studio", { pieces, sel, fabric, baste });
+  const save = () => api.store.set("studio", { pieces, sel, fabric, baste, thread });
   // undo: a snapshot before each change (a burst of slider moves counts as one)
   const history = [];
   let quiet = 0;
   function remember(burst = false) {
     if (burst && Date.now() - quiet < 800) { quiet = Date.now(); return; }
     quiet = burst ? Date.now() : 0;
-    history.push(JSON.stringify({ pieces, sel, fabric, baste })); if (history.length > 60) history.shift();
+    history.push(JSON.stringify({ pieces, sel, fabric, baste, thread })); if (history.length > 60) history.shift();
     $("st-undo").disabled = false;
   }
   function undo() {
     const h = history.pop(); if (!h) return;
-    ({ pieces, sel, fabric, baste } = JSON.parse(h)); quiet = 0;
+    ({ pieces, sel, fabric, baste, thread = "auto" } = JSON.parse(h)); quiet = 0;
     $("st-undo").disabled = !history.length; save(); ui(); make();
   }
   const current = () => pieces.find((p) => p.id === sel);
@@ -158,6 +158,28 @@ export function initStudio(api) {
     + `<span class="custom"><input type="color" data-${k}-any value="${p[k]}" aria-label="Any colour"></span>`;
   const fontSelect = (p) => `<select data-k="font">${FONTS.map((f) => `<option value="${f.family}" ${f.family === p.font ? "selected" : ""}>${f.name}${f.print ? " (print)" : ""}</option>`).join("")}</select>`;
   const range = (k, lab, min, max, v, unit = "mm", step = 1) => `<label class="range"><span>${lab}</span><input type="range" data-k="${k}" data-unit="${unit}" min="${min}" max="${max}" step="${step}" value="${v}"><output>${v} ${unit}</output></label>`;
+  // one letter pair closer or further apart (print fonts): `kern` = { index of the pair's first letter in the words: % of
+  // the height }, on top of the font's own kerning
+  let pairAt = -1, pairOf = null;
+  const pairs = (t) => { const out = []; for (let i = 0; i < t.length - 1; i++) if (/\S/.test(t[i]) && /\S/.test(t[i + 1])) out.push(i); return out; };
+  function pairUI(p) {
+    const all = pairs(p.text || ""); if (!all.length) return "";
+    if (pairOf !== p.id || !all.includes(pairAt)) pairAt = all.find((i) => p.kern?.[i]) ?? all[0];
+    pairOf = p.id;
+    const v = p.kern?.[pairAt] || 0, any = Object.values(p.kern || {}).some((x) => x);
+    return `<label class="field"><span>Letter pair</span><select data-pair>${all.map((i) => `<option value="${i}" ${i === pairAt ? "selected" : ""}>${api.escapeHtml(p.text[i] + " " + p.text[i + 1])}${p.kern?.[i] ? ` (${p.kern[i] > 0 ? "+" : ""}${p.kern[i]}%)` : ""}</option>`).join("")}</select></label>`
+      + `<label class="range"><span>Space in this pair</span><input type="range" data-kern min="-30" max="50" step="1" value="${v}"><output>${v} %</output></label>`
+      + (any ? `<p><button type="button" class="link" data-kern-reset>Even out all pairs</button></p>` : "");
+  }
+  // pair adjustments follow their letters when the words are edited (shared start and end kept, the changed middle dropped)
+  function rekern(kern, old, now) {
+    if (!kern) return kern;
+    let a = 0; while (a < old.length && a < now.length && old[a] === now[a]) a++;
+    let b = 0; while (b < old.length - a && b < now.length - a && old[old.length - 1 - b] === now[now.length - 1 - b]) b++;
+    const out = {};
+    for (const [k, v] of Object.entries(kern)) { const i = +k; if (i + 1 < a) out[i] = v; else if (i >= old.length - b) out[i + now.length - old.length] = v; }
+    return Object.keys(out).length ? out : undefined;
+  }
   const seg = (k, opts, v) => `<div class="seg" data-seg="${k}">${Object.entries(opts).map(([key, name]) => `<button type="button" data-v="${key}" aria-pressed="${key === v}">${name}</button>`).join("")}</div>`;
 
   // satin and fine line, said plainly: bold columns or a thin outline of the letter
@@ -186,7 +208,7 @@ export function initStudio(api) {
       // the rarer settings, folded away
       const print = FONTS.find((f) => f.family === p.font)?.print;
       const more = `<label class="field"><span>Motif either side</span><select data-k="deco"><option value="">None</option>${Object.entries(MOTIFS).map(([k, m]) => `<option value="${k}" ${k === p.deco ? "selected" : ""}>${m.name}</option>`).join("")}</select></label>`
-        + (print ? range("spacing", "Letter spacing", -10, 40, p.spacing || 0, "%") : "")
+        + (print ? range("spacing", "Letter spacing", -10, 40, p.spacing || 0, "%") + `<div data-pairs>${pairUI(p)}</div>` : "")
         + (p.shape === "straight" ? `<p class="hint">Press Enter in Words for a new line (up to 3).</p>` : "")
         + (p.shape === "straight" && lines > 1 ? seg("align", { left: "Left", center: "Centre", right: "Right" }, p.align || "center") + range("leading", "Line spacing", 80, 200, p.leading ?? 130, "%", 5) : "");
       h += `<details class="more" ${moreOpen ? "open" : ""}><summary>More</summary>${more}</details>`;
@@ -240,8 +262,12 @@ export function initStudio(api) {
   function sewnOn() {
     $("st-fabric").innerHTML = Object.entries(FABRICS).map(([k, f]) => `<button type="button" data-fab="${k}" aria-pressed="${k === fabric}">${f.name}</button>`).join("");
     $("st-baste").checked = baste; $("st-fabric-tip").textContent = FABRICS[fabric].tip; $("st-fabric-name").textContent = FABRICS[fabric].name + (baste ? ", basted" : "");
+    // (numeric keys come first in an object, so the order is spelled out)
+    $("st-thread").innerHTML = `<span class="chips-label">Thread</span>` + ["auto", "30", "40", "60"].map((k) => `<button type="button" data-thread="${k}" aria-pressed="${k === thread}">${THREADS[k].name}</button>`).join("");
+    $("st-thread-tip").textContent = THREADS[thread].tip; $("st-thread-name").textContent = thread === "auto" ? "" : `, ${THREADS[thread].name} thread`;
   }
   $("st-fabric").onclick = (e) => { const b = e.target.closest("[data-fab]"); if (!b || b.dataset.fab === fabric) return; remember(); fabric = b.dataset.fab; save(); sewnOn(); make(); };
+  $("st-thread").onclick = (e) => { const b = e.target.closest("[data-thread]"); if (!b || b.dataset.thread === thread) return; remember(); thread = b.dataset.thread; save(); sewnOn(); make(); };
   $("st-baste").onchange = (e) => { remember(); baste = e.target.checked; save(); sewnOn(); make(); };
   // too-small lettering, said plainly (updated in place so typing keeps focus)
   async function warn() {
@@ -274,17 +300,17 @@ export function initStudio(api) {
       await Promise.all(fonts.map((f) => document.fonts.load(`40px "${f}"`)));
       if (s !== seq) return;
       let composed;
-      try { composed = compose(pieces, api.hoop(), { fabric, baste, dragging }); }
+      try { composed = compose(pieces, api.hoop(), { fabric, baste, thread, dragging }); }
       catch (err) { if (!err.overBy) throw err; if (s === seq) split(err); return; }
       const { design, steps, after, before, tip } = composed;
       if (s !== seq) return;
-      const fit = fittedSizes(pieces), small = pieces.some((p) => smallText(fit.has(p.id) ? { ...p, size: fit.get(p.id) } : p));
+      const fit = fittedSizes(pieces), small = thread !== "60" && pieces.some((p) => smallText(fit.has(p.id) ? { ...p, size: fit.get(p.id) } : p));
       stepsUI(steps, after, small, before);
       const look = previewLook(steps);
       api.setView(design.pattern(), `${api.safeName(firstWords(), "design")}.pes`, {
         ...look, fabric: look.fabricShapeBlock != null ? "pink" : "linen", steps: steps.length,
         sheet: { steps: steps.map((st) => ({ you: st.you, sews: st.sews.join(" ") })), after, cut: steps.filter((st) => st.cut).map((st) => st.cut),
-          notes: [...before.map((b) => "Have ready: " + b), $("st-tip").hidden ? "" : $("st-tip").textContent, tip, small ? SMALL_TIP : ""] } });
+          notes: [...before.map((b) => "Have ready: " + b), $("st-tip").hidden ? "" : $("st-tip").textContent, tip, thread === "auto" ? "" : THREADS[thread].tip, small ? SMALL_TIP : ""] } });
     } catch (err) { if (s === seq) { console.error(err); api.setView(null); api.showError(err.message); } }
   }
   // too big for the hoop: two hoopings if whole pieces can be shared out, else say how much to shrink
@@ -293,11 +319,11 @@ export function initStudio(api) {
     // can't be shared out: show it whole (a big pretend hoop) so it can be seen and dragged back; setView turns
     // Download into "Too big for this hoop"
     if (!parts) {
-      try { api.setView(compose(pieces, { ...hoop, w: 2000, h: 2000 }, { fabric, baste }).design.pattern(), `${api.safeName(firstWords(), "design")}.pes`, { fabric: "linen", steps: 0 }); }
+      try { api.setView(compose(pieces, { ...hoop, w: 2000, h: 2000 }, { fabric, baste, thread }).design.pattern(), `${api.safeName(firstWords(), "design")}.pes`, { fabric: "linen", steps: 0 }); }
       catch { api.setView(null); }
       api.showError(err.message + " Use Fit to hoop, or make the biggest piece smaller."); return;
     }
-    const opts = { fabric, baste }, base = api.safeName(firstWords(), "design");
+    const opts = { fabric, baste, thread }, base = api.safeName(firstWords(), "design");
     const built = parts.map((pt, i) => ({ ...compose(pt.pieces, hoop, { ...opts, marks: { pts: pt.marks, end: pt.end } }), filename: `${base}_hooping_${i + 1}_of_2.pes` }));
     // the whole design for the preview (a big pretend hoop), and every step of both hoopings in order
     const all = compose(pieces, { ...hoop, w: 2000, h: 2000 }, opts);
@@ -379,9 +405,21 @@ export function initStudio(api) {
     if (t.matches("[data-fill-any]")) { change((p) => (p.fill = t.value)); return; }
     if (t.matches("[data-blend-any]")) { change((p) => (p.blend = t.value)); return; }
     if (t.matches("[data-blend]")) { change((p) => (t.checked ? (p.blend = p.fill === RED ? NAVY : RED) : delete p.blend), true); editor(); return; }
+    if (t.matches("[data-pair]")) { pairAt = +t.value; editor(); return; }
+    if (t.matches("[data-kern]")) {
+      t.nextElementSibling.textContent = `${t.value} %`;
+      change((p) => { p.kern = { ...p.kern, [pairAt]: +t.value }; if (!+t.value) delete p.kern[pairAt]; });
+      const o = edit.querySelector(`[data-pair] option[value="${pairAt}"]`), p = current();
+      if (o) o.textContent = p.text[pairAt] + " " + p.text[pairAt + 1] + (+t.value ? ` (${+t.value > 0 ? "+" : ""}${t.value}%)` : "");
+      return;
+    }
     if (!k) return;
     if (t.type === "range") t.nextElementSibling.textContent = `${t.value} ${t.dataset.unit}`;
-    change((p) => (p[k] = t.type === "range" ? +t.value : t.value));
+    change((p) => {
+      if (k === "text") { if (p.kern) p.kern = rekern(p.kern, p.text, t.value); pairAt = +Object.keys(rekern({ [pairAt]: 1 }, p.text, t.value) || { [-1]: 1 })[0]; }
+      p[k] = t.type === "range" ? +t.value : t.value;
+    });
+    if (k === "text") { const box = edit.querySelector("[data-pairs]"); if (box) box.innerHTML = pairUI(current()); }   // (the pairs follow the words)
     if (["size", "text", "letters", "font", "radius", "ry", "spacing"].includes(k)) { clearTimeout(warnTimer); warnTimer = setTimeout(warn, 300); }
     // a new line in the words shows the alignment and line spacing
     if (k === "text" && (t.value.split("\n").length > 1) !== !!edit.querySelector('[data-seg="align"]') && current().shape === "straight") editor();
@@ -397,6 +435,7 @@ export function initStudio(api) {
     if (f) { change((p) => (p.fill = f.dataset.fill), true); editor(); return; }
     const bl = e.target.closest("button[data-blend]");
     if (bl) { change((p) => (p.blend = bl.dataset.blend), true); editor(); return; }
+    if (e.target.closest("[data-kern-reset]")) { change((p) => delete p.kern, true); editor(); return; }
     if (e.target.closest("[data-room]")) { change((p) => Object.assign(p, archRoom(p) || {}), true); editor(); return; }
     if (e.target.closest("[data-follow]")) { change((p) => Object.assign(p, followFrame(p, pieces)), true); editor(); return; }
     const s = e.target.closest("[data-seg] button");
@@ -448,7 +487,7 @@ export function initStudio(api) {
   $("st-undo").onclick = undo;
   // a design file to keep and change later (the pieces, not the stitches)
   $("st-save").onclick = () => {
-    api.saveFile(new Blob([JSON.stringify({ needleworks: 1, pieces, fabric, baste }, null, 1)], { type: "application/json" }),
+    api.saveFile(new Blob([JSON.stringify({ needleworks: 1, pieces, fabric, baste, thread }, null, 1)], { type: "application/json" }),
       `${api.safeName(firstWords(), "design")}.needleworks.json`);
   };
   $("st-load").onchange = async (e) => {
@@ -460,7 +499,7 @@ export function initStudio(api) {
       const loaded = data.pieces.filter((p) => p && kinds.has(p.kind) && Number.isFinite(p.x) && Number.isFinite(p.y));
       if (!loaded.length) throw new Error("it has no pieces");
       remember(); nextId = 1; pieces = loaded.map((p) => ({ ...p, id: nextId++ })); sel = pieces[pieces.length - 1].id;
-      fabric = FABRICS[data.fabric] ? data.fabric : "cotton"; baste = !!data.baste;
+      fabric = FABRICS[data.fabric] ? data.fabric : "cotton"; baste = !!data.baste; thread = THREADS[data.thread] ? String(data.thread) : "auto";
       save(); ui(); make();
     } catch (err) { api.showError("That design couldn't be opened: " + err.message); }
   };
@@ -493,7 +532,7 @@ export function initStudio(api) {
       // shrink: a name too long for the hoop is tried at 90 %, 80 %… down to half its size
       build: (name, shrink = false) => {
         for (let f = 1; ; f -= 0.1) {
-          try { return { pattern: compose(pieces.map((q) => (q.id === p.id ? { ...q, text: name, size: Math.round(p.size * f * 2) / 2 } : q)), api.hoop(), { fabric, baste }).design.pattern(), name, smaller: f < 1 }; }
+          try { return { pattern: compose(pieces.map((q) => (q.id === p.id ? { ...q, text: name, size: Math.round(p.size * f * 2) / 2 } : q)), api.hoop(), { fabric, baste, thread }).design.pattern(), name, smaller: f < 1 }; }
           catch (err) { if (!shrink || !err.overBy || f < 0.55) throw err; }
         }
       },

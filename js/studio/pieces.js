@@ -18,11 +18,11 @@ const lettering = new Map();   // font + text -> centre-line strokes (rendering 
 // Nothing drawn before its font has loaded is cached: it was drawn in the browser's fallback font, and caching it
 // kept that lettering after the font arrived.
 const fontReady = (family) => !family || typeof document === "undefined" || document.fonts.check(`40px "${family}"`);
-function letterStrokes(text, family, spacing = 0) {
-  const key = family + "\n" + text + "\n" + spacing;
+function letterStrokes(text, family, spacing = 0, kern = null) {
+  const key = family + "\n" + text + "\n" + spacing + (kern ? "\n" + kern.join() : "");
   if (lettering.has(key)) return lettering.get(key);
   const print = !!fontOf(family).print;
-  const { edges, info } = strokes(text, family, { ...(print ? { deco: "dash", join: false } : {}), ...(spacing ? { spacing } : {}) }), out = { comps: order(edges), info };
+  const { edges, info } = strokes(text, family, { ...(print ? { deco: "dash", join: false } : {}), ...(spacing ? { spacing } : {}), ...(kern ? { kern } : {}) }), out = { comps: order(edges), info };
   if (fontReady(family)) {
     lettering.set(key, out);
     if (lettering.size > 60) lettering.delete(lettering.keys().next().value);
@@ -31,10 +31,11 @@ function letterStrokes(text, family, spacing = 0) {
 }
 
 // Letters as [pts, "run"|"satin"] in mm: `size` is the height of the lettering, baseline at y = 0, centred across.
-function letters(text, family, size, style = "auto", spacing = 0) {
+// `kern`: room after each letter (fractions of the size), for the text as given (one line, already trimmed)
+function letters(text, family, size, style = "auto", spacing = 0, kern = null) {
   text = (text || "").replace(/\s*\n\s*/g, " ").trim();
   if (!text) return { parts: [], satinW: 0 };
-  const { comps, info } = letterStrokes(text, family, spacing);
+  const { comps, info } = letterStrokes(text, family, spacing, kern && kern.some((v) => v) ? kern : null);
   const all = comps.flatMap((c) => c.flatMap(([p]) => p));
   if (!all.length) return { parts: [], satinW: 0 };
   const [x0, y0, x1, y1] = bounds(all), s = size / Math.max(y1 - y0, 1e-9), cx = (x0 + x1) / 2;
@@ -130,7 +131,8 @@ function densify(p, step) {
 // hits/mm²); cotton, felt and denim sew as they always have. `small` lettering (under a 6 mm x-height, where the steps
 // suggest 60 wt thread) gets a 0.34 mm satin: the thinner thread needs it closer to cover.
 function stitchLetters(parts, satinW, fab = "cotton", small = false) {
-  const zz = fab === "knit" ? 1.5 : 2.5, pull = fab === "knit" ? 0.3 : 0, density = fab === "knit" ? 0.42 : small ? 0.34 : 0.38;
+  const zz = fab === "knit" ? 1.5 : 2.5, pull = fab === "knit" ? 0.3 : 0;
+  const density = wt === "auto" ? (fab === "knit" ? 0.42 : small ? 0.34 : 0.38) : THREADS[wt].satin + (fab === "knit" ? 0.04 : 0);
   return parts.map(([p, mode]) => {
     // thin lettering: a stroke under ~0.6 mm is a speck of the skeleton; skip it (the next stroke picks up there)
     if (!satinW && length(p) < 0.6) return [];
@@ -236,7 +238,7 @@ const cut = (w, h, extra = 25) => `${Math.ceil((w + extra) / 10)} × ${Math.ceil
 // Stitches don't change when a piece only moves or turns, so they're built once per shape and placed after.
 const built = new Map();
 export function pieceStages(p, fab = "cotton") {
-  const { x, y, rot, id, flip, ...shape } = p, key = JSON.stringify(shape) + fab;
+  const { x, y, rot, id, flip, ...shape } = p, key = JSON.stringify(shape) + fab + wt;
   if (!built.has(key)) {
     const st = localStages(p, fab);
     if (!fontReady(p.font)) return st.map((s) => ({ ...s, paths: s.paths.map((q) => q.map(placer(p))) }));
@@ -258,22 +260,27 @@ export const TEXT_SHAPES = { straight: "Straight", up: "Arch up", down: "Arch do
 function textRows(p, fab = "cotton") {
   // spacing and leading are percentages of the size; spacing only for print fonts (script letters pulled apart came
   // out unjoined, which reads as broken handwriting)
-  const style = styleOn(p, fab), sp = fontOf(p.font).print ? (p.spacing || 0) / 100 : 0;
-  const lines = (p.text || "").split("\n").map((t) => t.trim()).filter(Boolean).slice(0, 3);
+  const style = styleOn(p, fab), print = fontOf(p.font).print, sp = print ? (p.spacing || 0) / 100 : 0;
+  // each line with where it starts in the words (pair adjustments are keyed by that)
+  const raw = (p.text || "").split("\n"), at = raw.map((_, i) => raw.slice(0, i).reduce((a, l) => a + l.length + 1, 0));
+  const kept = raw.map((l, i) => [l.trim(), at[i] + l.length - l.trimStart().length]).filter(([l]) => l).slice(0, 3);
+  const lines = kept.map(([l]) => l);
   if (!lines.length) return [];
+  const kerns = kept.map(([l, s]) => Array.from({ length: l.length }, (_, i) => (print && p.kern?.[s + i]) || 0).map((v) => v / 100));
+  const joined = kerns.flatMap((k, i) => (i ? [0, ...k] : k));   // (lines joined by a space: none after it)
   if (p.shape === "up" || p.shape === "down") {
-    const l = letters(lines.join(" "), p.font, p.size, style, sp);
+    const l = letters(lines.join(" "), p.font, p.size, style, sp, joined);
     return l.parts.length ? [{ parts: bend(l.parts, p.shape, Math.max(p.radius, 8), Math.max(p.ry ?? p.radius, 8)), satinW: l.satinW, xh: l.xh }] : [];
   }
   if (p.shape === "wave" || p.shape === "bridge") {
-    const l = letters(lines.join(" "), p.font, p.size, style, sp);
+    const l = letters(lines.join(" "), p.font, p.size, style, sp, joined);
     if (!l.parts.length) return [];
     const mid = (l.top + l.bottom) / 2;   // (letters come with the baseline at y = 0)
     return [{ parts: p.shape === "wave" ? wave(l.parts.map(([q, m]) => [q.map(([x, y]) => [x, y - mid]), m]), p) : bridge(l.parts, p), satinW: l.satinW, xh: l.xh }];
   }
   // straight: one size for every line (scaled to the first line's x-height), baselines `leading` x size apart
-  let ls = lines.map((t) => letters(t, p.font, p.size, style, sp));
-  if (ls.length > 1) ls = ls.map((l, i) => (i && l.xh ? letters(lines[i], p.font, (p.size * ls[0].xh) / l.xh, style, sp) : l));
+  let ls = lines.map((t, i) => letters(t, p.font, p.size, style, sp, kerns[i]));
+  if (ls.length > 1) ls = ls.map((l, i) => (i && l.xh ? letters(lines[i], p.font, (p.size * ls[0].xh) / l.xh, style, sp, kerns[i]) : l));
   ls = ls.filter((l) => l.parts.length);
   if (!ls.length) return [];
   const pitch = (p.size * (p.leading ?? 130)) / 100, span = (l) => { const xs = l.parts.flatMap(([q]) => q.map((v) => v[0])); return [Math.min(...xs), Math.max(...xs)]; };
@@ -338,7 +345,7 @@ const loop = (q) => [...q, q[0]];
 // a tack-down: round the outline and back again
 const tack = (e) => [loop(run(e, 2.0, true)), loop(run(e.slice().reverse(), 2.0, true))];
 // the 3.6 mm satin border of appliqué, patch and in-the-hoop edges: edge walk, zigzag, satin
-const satinBorder = (e) => [edgeWalk(e, 3.6, true), loop(zigzag(e, 2.6, 2.0, true)), loop(satin(e, 3.6, 0.4, 0.3, true))];
+const satinBorder = (e) => [edgeWalk(e, 3.6, true), loop(zigzag(e, 2.6, 2.0, true)), loop(satin(e, 3.6, sd(0.4), 0.3, true))];
 
 function localStages(p, fab = "cotton") {
   let stages = [];
@@ -408,7 +415,7 @@ function localStages(p, fab = "cotton") {
       // cuts the fill away under what's sewn on it (`carve`)
       stages = [...patchFill(p, [inset(edge, 1.0)], fab), { color: p.color, paths: satinBorder(edge), sews: `Sews the patch's satin edge.` }];
     } else {
-      const paths = p.border === "satin" ? [edgeWalk(edge, 3.0, true), zigzag(edge, 2.1, 2.0, true), satin(edge, 3.0, 0.4, 0.3, true)]
+      const paths = p.border === "satin" ? [edgeWalk(edge, 3.0, true), zigzag(edge, 2.1, 2.0, true), satin(edge, 3.0, sd(0.4), 0.3, true)]
         : p.border === "bold" ? [run(edge, 2.0, true), run(edge.slice().reverse(), 2.0, true), run(edge, 2.0, true)]
         : [run(edge, 2.2, true)];
       stages = [{ color: p.color, paths: paths.map(loop), sews: `Sews the ${name} frame.` }];
@@ -430,7 +437,7 @@ function localStages(p, fab = "cotton") {
 // thinning out as the second fills in (row spacing changes gradually in each), the second with no underlay of its
 // own (Hatch's colour blend, on one needle)
 function patchFill(p, loops, fab, name = shapeOf(p).name.toLowerCase()) {
-  const base = { ...(fab === "knit" ? { density: DENSITY.standard } : {}), pattern: p.pattern || "tatami" }, color = p.fill || p.color;
+  const base = { density: fd(fab === "knit" ? DENSITY.standard : DENSITY.solid), pattern: p.pattern || "tatami" }, color = p.fill || p.color;
   if (!p.blend || p.blend === color) return [{ color, paths: fillPolygon(loops, base), sews: `Fills the ${name} patch.`, patchFill: true }];
   return [{ color, paths: fillPolygon(loops, { ...base, share: (f) => 1 - f }), sews: `Fills the ${name} patch, fading out.`, patchFill: true },
     { color: p.blend, paths: fillPolygon(loops, { ...base, underlay: false, share: (f) => f }), sews: `Blends the second colour in across the patch.`, patchFill: true }];
@@ -439,14 +446,14 @@ function patchFill(p, loops, fab, name = shapeOf(p).name.toLowerCase()) {
 // a motif filled (tatami inside, then a narrow satin edge over the row ends) or as a satin outline
 function motifStitches(loops, style) {
   if (style === "outline") return loops.flatMap((l) => edgeSatin(l, 2.2));
-  return [...fillPolygon(loops, { inset: 0.6 }), ...loops.flatMap((l) => [loop(run(l, 2.0, true)), loop(satin(l, 1.4, 0.4, 0.2, true))])];
+  return [...fillPolygon(loops, { inset: 0.6, density: fd(DENSITY.solid) }), ...loops.flatMap((l) => [loop(run(l, 2.0, true)), loop(satin(l, 1.4, sd(0.4), 0.2, true))])];
 }
 
 // a satin edge round a closed outline: as wide as `max`, narrower round a small hole (a 2.8 mm satin in the top of an
 // A overlaps itself), over an edge walk and a zigzag
 function edgeSatin(l, max, min = 1.2) {
   const [x0, y0, x1, y1] = bounds(l), w = Math.max(min, Math.min(max, Math.min(x1 - x0, y1 - y0) / 3.5));
-  return [edgeWalk(l, w, true, Math.min(0.4, w / 4), true), loop(zigzag(l, w * 0.7, 2.0, true, true)), loop(satin(l, w, 0.4, w > 2 ? 0.3 : 0.2, true, true))];
+  return [edgeWalk(l, w, true, Math.min(0.4, w / 4), true), loop(zigzag(l, w * 0.7, 2.0, true, true)), loop(satin(l, w, sd(0.4), w > 2 ? 0.3 : 0.2, true, true))];
 }
 
 // every loop moved d mm away from the inside of the shape (even-odd over all the loops, so holes move into the hole)
@@ -597,6 +604,20 @@ export const FABRICS = {
   denim: { name: "Denim", tip: "On denim use a 75/11 sharp or 80/12 needle (90/14 only for heavy denim and canvas) and cut-away or heavy tear-away stabilizer." },
 };
 
+// thread weight (compose opts `thread`): satin and fill spacing follow the thread's thickness. Automatic is what the
+// site always did: 40 wt, with lettering under a 6 mm x-height sewn for the 60 wt the steps suggest. 30 wt is ~1.3x
+// as thick as 40 (satins 15% more open, fills 0.05 mm); 60 wt ~0.75x (satins 12% closer; fills stay at 0.35 mm,
+// closer rows make the row links shorter than the PE900 check's 0.3 mm).
+export const THREADS = {
+  auto: { name: "Automatic", tip: "Standard 40 wt thread; small letters are sewn for 60 wt (the steps say when)." },
+  30: { name: "30 wt", satin: 0.45, tip: "30 wt is heavier and bolder: use a 90/14 topstitch needle and slow the machine down." },
+  40: { name: "40 wt", satin: 0.38, tip: "40 wt is the standard machine embroidery thread: a 75/11 embroidery needle." },
+  60: { name: "60 wt", satin: 0.34, tip: "60 wt is fine, for small letters and fine detail: a 65/9 or 70/10 needle and 60 wt bobbin thread." },
+};
+let wt = "auto";   // set by compose for the length of a build
+const sd = (x) => (wt === "30" ? +(x * 1.15).toFixed(3) : wt === "60" ? +(x * 0.88).toFixed(3) : x);
+const fd = (x) => (wt === "30" ? x + 0.05 : x);
+
 // Quilting in a frame (`quilt`: stipple or echo) fills it around everything else on it, sewn right after the frame
 // (after the front fabric on an in-the-hoop frame, before what goes on it). Kept for the last few layouts: it's the
 // slowest thing in compose.
@@ -632,7 +653,7 @@ function carve(p, stages, above, fab) {
   const local = ink.map((q) => q.map(([x, y]) => [((x - p.x) * c + (y - p.y) * sn) * f, -(x - p.x) * sn + (y - p.y) * c]));
   let h = local.length;
   for (const q of local) for (const [x, y] of q) h = (Math.imul(h ^ Math.round(x * 10), 16777619) ^ Math.round(y * 10)) | 0;
-  const key = JSON.stringify([{ ...p, x: 0, y: 0, rot: 0 }, h, fab]);
+  const key = JSON.stringify([{ ...p, x: 0, y: 0, rot: 0 }, h, fab, wt]);
   if (!carved.has(key)) {
     const R = 4, edge = inset(shapeOf(p).path(p.w, p.h), 1.0), [x0, y0, x1, y1] = bounds(edge);
     const w = Math.ceil((x1 - x0) * R) + 2, hh = Math.ceil((y1 - y0) * R) + 2, m = { w, h: hh, data: new Uint8Array(w * hh) };
@@ -706,10 +727,15 @@ const crosses = (marks) => marks.map(([x, y]) => [[x, y], [x + 5, y], [x - 5, y]
 // needs a pause. A stage in a thread used earlier moves up to join it (one pause fewer) when it overlaps nothing
 // it would jump ahead of, so what lies on top of what never changes; appliqué stages never move.
 // Returns the design and the steps to show (what the machine sews, what the person does at pauses).
-// opts: { fabric: key of FABRICS, baste: a basting box round everything first (floating, towels), dragging (a piece
+// opts: { fabric: key of FABRICS, thread: key of THREADS, baste: a basting box round everything first (floating, towels), dragging (a piece
 //         is mid-drag: quilting stays as it was, for speed; the drop composes it properly),
 //         marks: { pts, end } alignment crosses for a split design (end: after everything, else first) }
 export function compose(pieces, hoop, opts = {}) {
+  const was = wt;
+  wt = THREADS[opts.thread] ? String(opts.thread) : "auto";
+  try { return build(pieces, hoop, opts); } finally { wt = was; }
+}
+function build(pieces, hoop, opts) {
   const fab = FABRICS[opts.fabric] ? opts.fabric : "cotton";
   const fit = fittedSizes(pieces);
   pieces = pieces.map((p) => (fit.has(p.id) ? { ...p, size: fit.get(p.id) } : p));

@@ -346,6 +346,8 @@ body[data-mode="design"] #view { cursor: grab; }
   .actions > .extras { grid-row: 2; grid-column: 1 / span 2; margin: 0; }
 }
 .chips.plain button { padding: 6px 14px; }
+#st-thread { margin-top: 8px; }
+.chips .chips-label { align-self: center; font-size: 14px; color: var(--muted); margin-right: 2px; }
 .field label.check { justify-content: flex-start; align-items: center; font-weight: 400; gap: 10px; }
 .edit textarea { resize: none; field-sizing: content; display: block; }
 .edit details.more > summary { cursor: pointer; color: var(--accent); font-size: 14px; }

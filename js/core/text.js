@@ -60,26 +60,37 @@ function swash(p0, d, length, xh, ybase, s) {
 // lengths of lead-in / tail are in x-heights. deco "swash" curls off the letters; "dash" is a straight
 // rule on the middle of the x-height, apart from the letters (print fonts, which are also left unjoined).
 // spacing: extra room between letters, as a fraction of the font size (canvas letterSpacing; the joins below bridge
-// script letters it pulls apart)
-export function renderWord(text, family, { leadIn = 0, tail = 0, join = true, deco = "swash", spacing = 0 } = {}) {
+// script letters it pulls apart). kern: room added after letter i (kern[i], a fraction of the size, may be negative),
+// on top of the font's own kerning: the letters are then drawn one by one where the whole word would put them.
+export function renderWord(text, family, { leadIn = 0, tail = 0, join = true, deco = "swash", spacing = 0, kern = null } = {}) {
   const probe = canvas(10, 10).getContext("2d");
   const font = `${PX}px "${family}"`;
   probe.font = font;
   if (spacing) probe.letterSpacing = `${spacing * PX}px`;
   const m = probe.measureText(text), mx = probe.measureText("x");
-  const inkL = -m.actualBoundingBoxLeft, inkR = m.actualBoundingBoxRight;
+  const shift = [0];
+  for (let i = 1; i < text.length; i++) shift.push(shift[i - 1] + (kern?.[i - 1] || 0) * PX);
+  const kerned = shift.some((v) => v), lo = Math.min(0, ...shift), hi = Math.max(0, ...shift);
+  let inkL = -m.actualBoundingBoxLeft, inkR = m.actualBoundingBoxRight;
   const asc = m.actualBoundingBoxAscent, desc = m.actualBoundingBoxDescent;
   const xh = mx.actualBoundingBoxAscent + mx.actualBoundingBoxDescent;
   // height of the bulk of the letters: the x-height, or the capitals for an all-caps name
   const mid = /\p{Ll}/u.test(text) ? xh : probe.measureText("H").actualBoundingBoxAscent;
   const pad = Math.ceil(PX * (0.2 + leadIn + tail));
-  const w = Math.ceil(inkR - inkL + 2 * pad), h = Math.ceil(asc + desc + PX);
-  const ox = pad - inkL, baseline = PX / 2 + asc;
+  const w = Math.ceil(inkR - inkL + hi - lo + 2 * pad), h = Math.ceil(asc + desc + PX);
+  const ox = pad - inkL - lo, baseline = PX / 2 + asc;
   const c = canvas(w, h), ctx = c.getContext("2d", { willReadFrequently: true });
   ctx.font = font; ctx.fillStyle = "#000"; ctx.textBaseline = "alphabetic";
   if (spacing) ctx.letterSpacing = probe.letterSpacing;
-  ctx.fillText(text, ox, baseline);
+  if (!kerned) ctx.fillText(text, ox, baseline);
+  else for (let i = 0; i < text.length; i++)   // (where letter i starts in the whole word, so the font's kerning stays)
+    ctx.fillText(text[i], ox + shift[i] + probe.measureText(text.slice(0, i + 1)).width - probe.measureText(text[i]).width, baseline);
   let mask = maskOf(ctx, w, h);
+  if (kerned) {   // the ink's real ends, for the dashes
+    let a = w, b = -1;
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) if (mask.data[y * w + x]) { if (x < a) a = x; if (x > b) b = x; }
+    if (b >= a) { inkL = a - ox; inkR = b + 1 - ox; }
+  }
 
   // thinned once: the stroke width, the stroke ends and (when nothing gets drawn on) the lettering's own skeleton
   const sk = skeletonize(mask), stroke = strokeWidth(mask, sk);
@@ -90,7 +101,7 @@ export function renderWord(text, family, { leadIn = 0, tail = 0, join = true, de
   const ends = needEnds ? endpoints(sk, stroke) : [];
   const { labels } = join ? label(mask) : { labels: null };
   let drew = false;
-  const adv = Array.from({ length: text.length + 1 }, (_, i) => ox + probe.measureText(text.slice(0, i)).width);
+  const adv = Array.from({ length: text.length + 1 }, (_, i) => ox + probe.measureText(text.slice(0, i)).width + (shift[Math.min(i, text.length - 1)] || 0));
   const low = ends.filter(([p]) => p[1] >= baseline - 0.75 * xh && p[1] <= baseline + 0.2 * xh);
   // lowest ink point (above descenders) in letter i's left half, as a stroke centre heading left
   const bottom = (i) => {
