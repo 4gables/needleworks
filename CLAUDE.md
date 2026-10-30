@@ -53,7 +53,9 @@ Embroidery-file tools for home machines. Two implementations of the same engine:
   earlier frame shrinks to fit across it (`fittedSizes`), and the editor says so. Starter cards are one scrolling
   row so the pieces and editor stay in view at desktop height (checked at 1413 x 717 and 390 x 844). `tests/browser/studio_batch.html` builds ~70 Design-tab files
   (starters x hoops, shapes x borders, every font as monogram and arcs, turns, a file combo) for `pe900_check.py`;
-  look at a rendered contact sheet too, the checker can't see mush.
+  look at a rendered contact sheet too, the checker can't see mush. Running the browser batches: Chrome caches the
+  ES modules, so load with a fresh `?v=N` and hard-reload (Cmd+Shift+R) after code changes; if a batch page stops
+  writing files (it happened once), navigate to it again. Its title reads `DONE <files> <problems>`.
 - Lessons from other open-source projects (researched 2026-10-29), now handled:
   - PEC palette 62-64 are applique codes on Brother machines ("Applique Material/Position"), not Orange/Cream Yellow
     as pyembroidery named them: `PEC_MATCH` excludes them (inkstitch/pyembroidery#140, SE700-verified).
