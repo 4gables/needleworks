@@ -25,10 +25,20 @@ export class Design {
 
   // stitch a run of points; jumps (with a trim) if it starts away from the needle, or when told the way there
   // would show (it crosses open fabric)
-  path(pts, lock = true, jump = false) {
+  // lockAt: a point under stitches still to come (1 mm along a lettering stroke that's satined back over): the needle
+  // comes down and locks there, then stitches to the run's start. A lock on the start itself, a column's end, put two
+  // hits on the letter's outer edge (Josefin's h, at the top of its stem).
+  path(pts, lock = true, jump = false, lockAt = null) {
     if (!pts.length) return;
     const far = !this.cur || jump || Math.hypot(pts[0][0] - this.cur[0], pts[0][1] - this.cur[1]) > 2.0;
     if (this.cur && far) { this.tieOff(); this.stitches.push([0, 0, TRIM]); }
+    if (far && lock && lockAt && Math.hypot(lockAt[0] - pts[0][0], lockAt[1] - pts[0][1]) >= 0.7) {
+      this.path([lockAt, pts[0]], true, false);
+      for (let i = 1; i < pts.length; i++) this.st(STITCH, pts[i]);
+      this.cur = pts[pts.length - 1]; this.recent = pts.slice(-7, -1);
+      this.back = pts.slice().reverse().find((q) => Math.hypot(q[0] - this.cur[0], q[1] - this.cur[1]) > 0.3) || null;
+      return;
+    }
     if (far) {
       this.st(JUMP, pts[0]);
       if (lock) {

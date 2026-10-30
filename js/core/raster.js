@@ -163,8 +163,8 @@ export function skeletonGraph(sk) {
   return { pos, edges: edges.map(([a, b, path]) => [a, b, path.map((i) => [i % w, Math.floor(i / w)])]) };
 }
 
-// drop short spurs, merge pass-through nodes
-export function prune(edges, minLen) {
+// drop short spurs, merge pass-through nodes (`keep(edge)`: a short spur to keep after all)
+export function prune(edges, minLen, keep = null) {
   edges = edges.slice();
   for (;;) {
     const deg = new Map(), inc = new Map();
@@ -172,8 +172,8 @@ export function prune(edges, minLen) {
       for (const k of [e[0], e[1]]) { deg.set(k, (deg.get(k) || 0) + 1); }
       for (const k of new Set([e[0], e[1]])) { if (!inc.has(k)) inc.set(k, []); inc.get(k).push(i); }
     });
-    const spur = edges.findIndex(([a, b, p]) => a !== b && p.length < minLen &&
-      ((deg.get(a) === 1 && deg.get(b) >= 3) || (deg.get(b) === 1 && deg.get(a) >= 3)));
+    const spur = edges.findIndex((e) => { const [a, b, p] = e; return a !== b && p.length < minLen &&
+      ((deg.get(a) === 1 && deg.get(b) >= 3) || (deg.get(b) === 1 && deg.get(a) >= 3)) && !(keep && keep(e, deg.get(a) === 1)); });
     if (spur >= 0) { edges.splice(spur, 1); continue; }
     let merged = false;
     for (const [k, d] of deg) {
@@ -198,9 +198,21 @@ export function prune(edges, minLen) {
 // reach: carry each loose stroke end on along its own direction to the ink's edge (thinning stops about half a stroke
 // short). A single-storey a, d or q has its stem running along the bowl, so all that's left of the stem past the bowl
 // is two short ends; stopped half a stroke short they hid inside the bowl's satin and the a sewed as an o.
-export function skeletonEdges(mask, stroke, { spur = 1.3, dots = false, sk = null, reach = false } = {}) {
+// tongues (px, or 0): keep a short dead end whose ink reaches on past 1.5 strokes and this far from the stroke it leaves
+// (Yellowtail's e is a c with a tongue curled in from the top: script pruning cut it, and the e sewed as a c)
+export function skeletonEdges(mask, stroke, { spur = 1.3, dots = false, sk = null, reach = false, tongues = 0 } = {}) {
   const { pos, edges } = skeletonGraph(sk || skeletonize(mask));
-  const out = prune(edges, stroke * spur).map(([a, b, path]) => {
+  const ink = (x, y) => { const X = Math.round(x), Y = Math.round(y); return X >= 0 && Y >= 0 && X < mask.w && Y < mask.h && mask.data[Y * mask.w + X]; };
+  const tongue = ([, , p], fromA) => {
+    const q = fromA ? p : p.slice().reverse(), e = q[0], k = Math.min(q.length - 1, Math.max(2, Math.round(stroke * 0.6))), c = q[k];
+    const L = Math.hypot(e[0] - c[0], e[1] - c[1]);
+    if (L < 1) return false;
+    const u = [(e[0] - c[0]) / L, (e[1] - c[1]) / L];
+    let t = 0;
+    while (t < stroke * 2 && ink(e[0] + u[0] * (t + 0.5), e[1] + u[1] * (t + 0.5))) t += 0.5;
+    return q.length + t >= Math.max(stroke * 1.5, tongues);
+  };
+  const out = prune(edges, stroke * spur, tongues ? tongue : null).map(([a, b, path]) => {
     const pts = path.map((q) => q.slice());
     pts[0] = pos.get(a).slice(); pts[pts.length - 1] = pos.get(b).slice();
     return [a, b, smooth(pts, Math.max(3, Math.floor(stroke * 0.8) | 1))];
@@ -266,7 +278,7 @@ export function strokeWidth(mask, sk = skeletonize(mask)) {
 }
 
 // Euler-style walk: each stroke is a centre run on the way out and a satin back over it,
-// so a connected shape is stitched with no jumps. Returns [[[pts, "run"|"satin"], ...] per component]
+// so a connected shape is stitched with no jumps. Returns [[[pts, "run"|"satin", edge index], ...] per component]
 export function order(edges) {
   const adj = new Map();
   edges.forEach(([a, b], i) => {
@@ -288,14 +300,61 @@ export function order(edges) {
       const fr = stack[stack.length - 1], list = adj.get(fr.u) || [];
       let next = -1;
       while (fr.k < list.length) { const i = list[fr.k++]; if (!used[i]) { next = i; break; } }
-      if (next < 0) { stack.pop(); if (fr.back) seq.push([fr.back, "satin"]); continue; }
+      if (next < 0) { stack.pop(); if (fr.back) seq.push([fr.back, "satin", fr.e]); continue; }
       used[next] = true;
       const [ea, eb, ep] = edges[next];
       const fwd = ea === fr.u ? ep : ep.slice().reverse();
-      seq.push([fwd, "run"]);
-      stack.push({ u: ea === fr.u ? eb : ea, k: 0, back: fwd.slice().reverse() });
+      seq.push([fwd, "run", next]);
+      stack.push({ u: ea === fr.u ? eb : ea, k: 0, back: fwd.slice().reverse(), e: next });
     }
     comps.push(seq);
   }
   return comps;
+}
+
+// The counters of lettering sewn as columns on `lines` (the strokes' centre lines, in px): every pocket of space between
+// the lines (an o, an e's eye even when the font leaves it a hair open, an l's loop), as { peak, saddle, area, at }:
+// peak is the radius of the widest circle that fits in it between the centre lines, saddle the half-width of its way
+// out to open space. A column of half-width r (pull comp included) seals the pocket once r reaches the saddle, and
+// leaves 2 (peak - r) open in it. Found as the persistence pairs of the distance to the lines (flooding from the
+// widest spots down, a pocket ends where it runs into a wider one). Pockets wholly under the font's own ink (peak
+// under 0.55 stroke) and pixel noise (peak - saddle under 0.1 stroke) are left out.
+export function counterPockets(mask, lines, stroke) {
+  const { w, h, data } = mask;
+  let x0 = w, y0 = h, x1 = -1, y1 = -1;
+  for (let i = 0; i < w * h; i++) if (data[i]) { const x = i % w, y = (i - x) / w; if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
+  if (x1 < 0) return [];
+  const m = Math.ceil(stroke * 2);   // (a ring of open space round the ink: the way out)
+  x0 = Math.max(0, x0 - m); y0 = Math.max(0, y0 - m); x1 = Math.min(w - 1, x1 + m); y1 = Math.min(h - 1, y1 + m);
+  const cw = x1 - x0 + 1, ch = y1 - y0 + 1, N = cw * ch, g = { w: cw, h: ch, data: new Uint8Array(N).fill(1) };
+  const put = (x, y) => { const X = Math.round(x) - x0, Y = Math.round(y) - y0; if (X >= 0 && Y >= 0 && X < cw && Y < ch) g.data[Y * cw + X] = 0; };
+  for (const p of lines) for (let i = 0; i < p.length; i++) {
+    const a = p[i], b = p[i + 1] || a, n = Math.max(1, Math.ceil(Math.hypot(b[0] - a[0], b[1] - a[1]) * 2));
+    for (let k = 0; k <= n; k++) put(a[0] + ((b[0] - a[0]) * k) / n, a[1] + ((b[1] - a[1]) * k) / n);
+  }
+  const dt = distanceTransform(g);
+  // pixels from the widest down (bucketed by quarter pixels)
+  let top = 0;
+  for (let i = 0; i < N; i++) if (dt[i] > top) top = dt[i];
+  const L = Math.ceil(top * 4) + 1, cnt = new Int32Array(L + 2), idx = new Int32Array(N);
+  for (let i = 0; i < N; i++) cnt[L - Math.round(dt[i] * 4) + 1]++;
+  for (let k = 1; k <= L + 1; k++) cnt[k] += cnt[k - 1];
+  for (let i = 0; i < N; i++) idx[cnt[L - Math.round(dt[i] * 4)]++] = i;
+  const parent = new Int32Array(N).fill(-1), peak = new Float32Array(N), area = new Int32Array(N), at = new Int32Array(N), out = new Uint8Array(N);
+  const find = (i) => { while (parent[i] !== i) { parent[i] = parent[parent[i]]; i = parent[i]; } return i; };
+  const pockets = [];
+  for (const i of idx) {
+    const x = i % cw, y = (i - x) / cw;
+    parent[i] = i; peak[i] = dt[i]; area[i] = 1; at[i] = i; out[i] = x === 0 || y === 0 || x === cw - 1 || y === ch - 1 ? 1 : 0;
+    for (const j of [x > 0 ? i - 1 : -1, x < cw - 1 ? i + 1 : -1, y > 0 ? i - cw : -1, y < ch - 1 ? i + cw : -1]) {
+      if (j < 0 || parent[j] < 0) continue;
+      let a = find(i), b = find(j);
+      if (a === b) continue;
+      // a: the elder (reaches open space, or the wider), b: the pocket that ends at this pixel's level
+      if (out[a] < out[b] || (out[a] === out[b] && peak[a] < peak[b])) [a, b] = [b, a];
+      if (!out[b] && peak[b] > 0.55 * stroke && peak[b] - dt[i] > 0.1 * stroke) pockets.push({ peak: peak[b], saddle: dt[i], area: area[b], at: [(at[b] % cw) + x0, Math.floor(at[b] / cw) + y0] });
+      parent[b] = a; area[a] += area[b]; out[a] |= out[b];
+    }
+  }
+  return pockets;
 }
