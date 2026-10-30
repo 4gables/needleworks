@@ -1,6 +1,7 @@
 // Letter outlines for appliqué: render the word, trace every edge (outsides and the holes in A, B, O...) with
 // marching squares, then round the corners (1.6 mm) so a satin can turn them cleanly. mm, y down.
 import { filletPolygon, resample, smooth } from "../core/geom.js";
+import { distanceTransform, label } from "../core/raster.js";
 
 const PX = 300;
 const traced = new Map();
@@ -10,20 +11,47 @@ function canvas(w, h) {
   const c = document.createElement("canvas"); c.width = w; c.height = h; return c;
 }
 
-// closed loops of the ink's edge, in pixels
-function trace(text, family) {
+// closed loops of the ink's edge, in pixels, the letters drawn `size` mm tall. Gaps inside a letter narrower than
+// 2 x CLOSE mm (the slivers where an M's diagonal meets its stem, the bottom of its V) are filled first: the satins
+// either side cover them anyway, and a satin round a notch that sharp fanned out in spikes past its edge.
+const CLOSE = 1.4;
+function trace(text, family, size) {
   const probe = canvas(10, 10).getContext("2d");
   probe.font = `${PX}px "${family}"`;
-  const m = probe.measureText(text);
-  const w = Math.ceil(m.actualBoundingBoxLeft + m.actualBoundingBoxRight) + 8;
-  const h = Math.ceil(m.actualBoundingBoxAscent + m.actualBoundingBoxDescent) + 8;
-  return { loops: traceDrawn(w, h, (ctx) => { ctx.font = probe.font; ctx.fillText(text, 4 + m.actualBoundingBoxLeft, 4 + m.actualBoundingBoxAscent); }),
-    inkH: m.actualBoundingBoxAscent + m.actualBoundingBoxDescent, w, h };
+  const m = probe.measureText(text), inkH = m.actualBoundingBoxAscent + m.actualBoundingBoxDescent;
+  const r = (CLOSE * inkH) / size, pad = 4 + Math.ceil(r);
+  const w = Math.ceil(m.actualBoundingBoxLeft + m.actualBoundingBoxRight) + 2 * pad, h = Math.ceil(inkH) + 2 * pad;
+  return { loops: traceDrawn(w, h, (ctx) => { ctx.font = probe.font; ctx.fillText(text, pad + m.actualBoundingBoxLeft, pad + m.actualBoundingBoxAscent); }, r),
+    inkH, w, h };
 }
-function traceDrawn(w, h, draw) {
+// morphological closing (grown by r px, then shrunk by r px), each piece of ink on its own: closing them together
+// joined letters that nearly touch and an i to its dot ("Mia" in Alfa Slab came out as one blob)
+function closeMask(d, w, h, r) {
+  const { labels, count } = label({ w, h, data: d }), out = d.slice(), R = Math.ceil(r) + 2;
+  const box = Array.from({ length: count + 1 }, () => [w, h, -1, -1]);
+  for (let i = 0; i < w * h; i++) if (labels[i]) {
+    const b = box[labels[i]], x = i % w, y = (i - x) / w;
+    if (x < b[0]) b[0] = x; if (y < b[1]) b[1] = y; if (x > b[2]) b[2] = x; if (y > b[3]) b[3] = y;
+  }
+  for (let c = 1; c <= count; c++) {
+    const x0 = Math.max(0, box[c][0] - R), y0 = Math.max(0, box[c][1] - R), x1 = Math.min(w - 1, box[c][2] + R), y1 = Math.min(h - 1, box[c][3] + R);
+    const cw = x1 - x0 + 1, ch = y1 - y0 + 1, bg = new Uint8Array(cw * ch);
+    for (let y = 0; y < ch; y++) for (let x = 0; x < cw; x++) bg[y * cw + x] = labels[(y + y0) * w + x + x0] === c ? 0 : 1;
+    const toInk = distanceTransform({ w: cw, h: ch, data: bg }), grown = new Uint8Array(cw * ch);
+    for (let i = 0; i < cw * ch; i++) grown[i] = toInk[i] <= r ? 1 : 0;
+    const toBg = distanceTransform({ w: cw, h: ch, data: grown });
+    for (let y = 0; y < ch; y++) for (let x = 0; x < cw; x++) if (toBg[y * cw + x] > r) out[(y + y0) * w + x + x0] = 1;
+  }
+  return out;
+}
+function traceDrawn(w, h, draw, close = 0) {
   const c = canvas(w, h), ctx = c.getContext("2d", { willReadFrequently: true });
   ctx.fillStyle = "#000"; draw(ctx);
-  const a = ctx.getImageData(0, 0, w, h).data, ink = (x, y) => x >= 0 && y >= 0 && x < w && y < h && a[(y * w + x) * 4 + 3] > 127;
+  const a = ctx.getImageData(0, 0, w, h).data;
+  let m = new Uint8Array(w * h);
+  for (let i = 0; i < w * h; i++) m[i] = a[i * 4 + 3] > 127 ? 1 : 0;
+  if (close) m = closeMask(m, w, h, close);
+  const ink = (x, y) => x >= 0 && y >= 0 && x < w && y < h && m[y * w + x];
   // marching squares on pixel corners: each cell edge crossing is a point; link segments into loops
   const next = new Map();
   const key = (x, y) => x * 2 + "," + y * 2;   // half-pixel points as integers
@@ -90,9 +118,9 @@ export function motifOutlines(d, size) {
 export function letterOutlines(text, family, size) {
   text = (text || "").trim();
   if (!text) return [];
-  const k = family + "\n" + text;
+  const k = family + "\n" + text + "\n" + size;
   // not cached until the font has loaded (before that it's the browser's fallback font)
-  const t = traced.get(k) || trace(text, family);
+  const t = traced.get(k) || trace(text, family, size);
   if (!traced.has(k) && document.fonts.check(`40px "${family}"`)) { traced.set(k, t); if (traced.size > 30) traced.delete(traced.keys().next().value); }
   const { loops, inkH, w, h } = t, s = size / Math.max(inkH, 1);
   return loops

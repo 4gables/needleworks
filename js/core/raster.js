@@ -195,14 +195,19 @@ export function prune(edges, minLen) {
 // spur: dead ends shorter than this many stroke widths are thinning noise and get cut.
 // dots: also stitch blobs that thin to a lone point (lettering's i dots)
 // sk: the mask's skeleton if it's already been thinned
-export function skeletonEdges(mask, stroke, { spur = 1.3, dots = false, sk = null } = {}) {
+// reach: carry each loose stroke end on along its own direction to the ink's edge (thinning stops about half a stroke
+// short). A single-storey a, d or q has its stem running along the bowl, so all that's left of the stem past the bowl
+// is two short ends; stopped half a stroke short they hid inside the bowl's satin and the a sewed as an o.
+export function skeletonEdges(mask, stroke, { spur = 1.3, dots = false, sk = null, reach = false } = {}) {
   const { pos, edges } = skeletonGraph(sk || skeletonize(mask));
   const out = prune(edges, stroke * spur).map(([a, b, path]) => {
     const pts = path.map((q) => q.slice());
     pts[0] = pos.get(a).slice(); pts[pts.length - 1] = pos.get(b).slice();
     return [a, b, smooth(pts, Math.max(3, Math.floor(stroke * 0.8) | 1))];
   });
-  if (!dots) return out;
+  // (`before`: the strokes before the ends reach out; lettering is sized by them, so a word keeps the size it had)
+  const done = () => { if (reach) { const b = out.map((e) => e[2]); reachEnds(out, mask, stroke); out.before = b; } return out; };
+  if (!dots) return done();
   // a dot (the i's, a full stop) thins to a lone point with no edge: give it a short stroke so it's stitched
   const { labels, count } = label(mask), hit = new Uint8Array(count + 1), sum = new Float64Array((count + 1) * 3);
   for (const [, , p] of out) for (const [x, y] of p) hit[labels[Math.round(y) * mask.w + Math.round(x)]] = 1;
@@ -215,7 +220,32 @@ export function skeletonEdges(mask, stroke, { spur = 1.3, dots = false, sk = nul
     const x = sum[c * 3] / n, y = sum[c * 3 + 1] / n, r = stroke * 0.3;
     out.push([`dot${c}a`, `dot${c}b`, [[x - r, y], [x, y], [x + r, y]]]);
   }
-  return out;
+  return done();
+}
+
+// (in place) loose ends of `edges` carried on to 0.1 stroke short of the ink's edge, along the last ~0.6 stroke
+function reachEnds(edges, mask, stroke) {
+  const deg = new Map();
+  for (const [a, b] of edges) { deg.set(a, (deg.get(a) || 0) + 1); deg.set(b, (deg.get(b) || 0) + 1); }   // (a loop counts twice)
+  const ink = (x, y) => { const X = Math.round(x), Y = Math.round(y); return X >= 0 && Y >= 0 && X < mask.w && Y < mask.h && mask.data[Y * mask.w + X]; };
+  const k = Math.max(2, Math.round(stroke * 0.6));
+  const out = (p) => {   // p runs toward the loose end
+    const e = p[p.length - 1], q = p[Math.max(0, p.length - 1 - k)], L = Math.hypot(e[0] - q[0], e[1] - q[1]);
+    if (L < 1) return null;
+    const u = [(e[0] - q[0]) / L, (e[1] - q[1]) / L];
+    let t = 0;
+    while (t < stroke && ink(e[0] + u[0] * (t + 0.5), e[1] + u[1] * (t + 0.5))) t += 0.5;
+    t -= stroke * 0.1;
+    return t > 1 ? [e[0] + u[0] * t, e[1] + u[1] * t] : null;
+  };
+  for (const ed of edges) {
+    const [a, b] = ed;
+    if (a === b || typeof a === "string") continue;   // (a loop, or a dot: those stay as they are)
+    let p = ed[2];
+    if (deg.get(b) === 1) { const t = out(p); if (t) p = [...p, t]; }
+    if (deg.get(a) === 1) { const t = out(p.slice().reverse()); if (t) p = [t, ...p]; }
+    ed[2] = p;
+  }
 }
 
 // the median stroke width: twice the distance to the background along the skeleton (sk: the mask's, if already

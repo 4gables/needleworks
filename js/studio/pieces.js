@@ -38,8 +38,12 @@ function letters(text, family, size, style = "auto", spacing = 0, kern = null) {
   const { comps, info } = letterStrokes(text, family, spacing, kern && kern.some((v) => v) ? kern : null);
   const all = comps.flatMap((c) => c.flatMap(([p]) => p));
   if (!all.length) return { parts: [], satinW: 0 };
-  const [x0, y0, x1, y1] = bounds(all), s = size / Math.max(y1 - y0, 1e-9), cx = (x0 + x1) / 2;
-  const parts = comps.flatMap((c) => c.map(([p, mode]) => [p.map(([x, y]) => [(x - cx) * s, (y - info.baseline) * s]), mode]));
+  // (sized by the strokes before their loose ends reached out to the ink's edge, so a word keeps its size)
+  const [x0, y0, x1, y1] = bounds(info.sized), s = size / Math.max(y1 - y0, 1e-9), cx = (x0 + x1) / 2;
+  // (print letters: the third entry marks the first stroke of each separate piece after the first, so the needle jumps
+  // to it and never stitches across, however close: an i's stem reaching up to its dot was sewn to it)
+  const print = !!fontOf(family).print;
+  const parts = comps.flatMap((c, k) => c.map(([p, mode], j) => [p.map(([x, y]) => [(x - cx) * s, (y - info.baseline) * s]), mode, print && k > 0 && j === 0]));
   // A satin column as wide as the font's own stroke but at least 12% of the x-height (thin scripts and monoline
   // fonts get a satin sized to the letters), never more than a fifth of it or 3.5 mm. Under 1 mm a satin can't be
   // sewn cleanly and fills small loops, so those letters get a fine line instead. (Until 2026-10-30 two rules met at
@@ -70,7 +74,7 @@ function bend(parts, shape, a, b = a) {
   const f = shape === "up"
     ? ([x, y]) => { const [px, py, nx, ny] = at(x); return [px - y * nx, py - y * ny]; }
     : ([x, y]) => { const [px, py, nx, ny] = at(half - x); return [px + y * nx, py + y * ny]; };
-  return parts.map(([p, mode]) => [densify(p, 1).map(f), mode]);
+  return parts.map(([p, mode, gap]) => [densify(p, 1).map(f), mode, gap]);
 }
 // Arched lettering whose letters reach further inside the curve than ~0.8 x its radius of curvature (somewhere
 // under the word) crowd into a knot there: "down" letters point inward, "up" ones only dip in with descenders.
@@ -135,7 +139,14 @@ function densify(p, step) {
 function stitchLetters(parts, satinW, fab = "cotton", small = false) {
   const zz = fab === "knit" ? 1.5 : 2.5, pull = fab === "knit" ? 0.3 : 0;
   const density = wt === "auto" ? (fab === "knit" ? 0.42 : small ? 0.34 : 0.38) : THREADS[wt].satin + (fab === "knit" ? 0.04 : 0);
-  return parts.map(([p, mode]) => {
+  let gap = false;   // (a skipped stroke hands its jump on to the next one sewn)
+  return parts.map(([p, mode, g]) => {
+    const r = sewPart(p, mode);
+    gap ||= !!g;
+    if (gap && r.length) { r.gap = true; gap = false; }
+    return r;
+  });
+  function sewPart(p, mode) {
     // thin lettering: a stroke under ~0.6 mm is a speck of the skeleton; skip it (the next stroke picks up there),
     // unless it stands alone: that's a dot (a full stop, an i's dot) and sews as a 0.7 mm stroke out and back
     // (small print lettering lost its full stops: "Sam R." sewed as "Sam R")
@@ -161,7 +172,7 @@ function stitchLetters(parts, satinW, fab = "cotton", small = false) {
     if (satinW) return [p[0], ...satin(p, satinW, density, (satinW >= 1.5 ? 0.3 : 0.1) + pull)];
     const r = spaced(followRun(p, 1.6, 0.1, 0.8)), back = r.slice().reverse();   // the walk's way back: back, forth and back again
     return r.length > 1 ? [...r, ...back.slice(1), ...r.slice(1)] : r;
-  });
+  }
 }
 const length = (p) => p.reduce((a, q, i) => (i ? a + Math.hypot(q[0] - p[i - 1][0], q[1] - p[i - 1][1]) : 0), 0);
 // no stitch shorter than 0.4 mm (tiny letters have tiny strokes; short stitches pile thread and break it)
@@ -230,10 +241,28 @@ function heart(w, h, n = 180) {
   });
   // the dip at the top is a sharp inside corner: a satin border can't turn it (the underlay poked out 1.75 mm and both
   // sides piled up), so it's filled in with a 3 mm round, the circle that just fits the notch
-  const pts = fitBox(raw, w, h), r = Math.min(3, w * 0.06), near = pts.filter(([x, y]) => y < 0 && Math.abs(x) < r);
-  if (!near.length) return pts;
-  const yc = Math.min(...near.map(([x, y]) => y - Math.sqrt(r * r - x * x)));
-  return pts.map(([x, y]) => (y < 0 && Math.abs(x) < r ? [x, Math.min(y, yc + Math.sqrt(r * r - x * x))] : [x, y]));
+  let pts = fitBox(raw, w, h);
+  const r = Math.min(3, w * 0.06), near = pts.filter(([x, y]) => y < 0 && Math.abs(x) < r);
+  if (near.length) {
+    const yc = Math.min(...near.map(([x, y]) => y - Math.sqrt(r * r - x * x)));
+    pts = pts.map(([x, y]) => (y < 0 && Math.abs(x) < r ? [x, Math.min(y, yc + Math.sqrt(r * r - x * x))] : [x, y]));
+  }
+  // the point at the bottom is a cusp (both sides meet upright): a satin can't turn it, so its edge stopped flat at the
+  // tip and the placement and tack lines showed past it (and the edge walk poked out 2 mm). It's rounded to the 1.8 mm
+  // circle that fits the point (half the 3.6 mm border, so the inside edge doesn't fold), then stretched back to h.
+  const R = 1.8, low = pts.filter(([, y]) => y > 0);
+  const gap = (yc) => Math.min(...low.map(([x, y]) => Math.hypot(x, y - yc)));
+  let lo = 0, hi = h / 2;   // lowest centre whose circle fits: as the centre rises, the nearest point gets further
+  for (let k = 0; k < 40; k++) { const m = (lo + hi) / 2; if (gap(m) < R) hi = m; else lo = m; }
+  const yc = lo, touch = low.reduce((a, q) => (Math.hypot(q[0], q[1] - yc) < Math.hypot(a[0], a[1] - yc) ? q : a));
+  const xt = Math.min(R, Math.abs(touch[0]));   // (between the two points where the circle touches the sides)
+  const cut = (q) => q[1] > yc && Math.abs(q[0]) <= xt, i0 = pts.findIndex(cut), i1 = pts.length - 1 - [...pts].reverse().findIndex(cut);
+  if (i0 >= 0) {   // (the curve runs down the right side to the point, then up the left)
+    const a0 = Math.atan2(pts[i0 - 1][1] - yc, pts[i0 - 1][0]), a1 = Math.atan2(pts[i1 + 1][1] - yc, pts[i1 + 1][0]);
+    const arc = Array.from({ length: 11 }, (_, k) => { const a = a0 + ((a1 - a0) * (k + 1)) / 12; return [R * Math.cos(a), yc + R * Math.sin(a)]; });
+    pts = [...pts.slice(0, i0), ...arc, ...pts.slice(i1 + 1)];
+  }
+  return fitBox(pts, w, h);
 }
 // soft waves, not cusps: a satin border can't turn a sharp inside corner cleanly
 function scallop(rx, ry, n = 360) {
@@ -272,13 +301,15 @@ export function pieceStages(p, fab = "cotton") {
   const { x, y, rot, id, flip, ...shape } = p, key = JSON.stringify(shape) + fab + wt;
   if (!built.has(key)) {
     const st = localStages(p, fab);
-    if (!fontReady(p.font)) return st.map((s) => ({ ...s, paths: s.paths.map((q) => q.map(placer(p))) }));
+    if (!fontReady(p.font)) return st.map((s) => ({ ...s, paths: s.paths.map((q) => moved(q, placer(p))) }));
     built.set(key, st);
     if (built.size > 80) built.delete(built.keys().next().value);
   }
   const place = placer(p);
-  return built.get(key).map((st) => ({ ...st, paths: st.paths.map((q) => q.map(place)) }));
+  return built.get(key).map((st) => ({ ...st, paths: st.paths.map((q) => moved(q, place)) }));
 }
+// a path's points moved, keeping its `gap` (sewn after a jump: the first stroke of a separate letter)
+const moved = (q, f) => { const r = q.map(f); if (q.gap) r.gap = true; return r; };
 // mirrored (left to right) before it's turned
 function placer({ x, y, rot, flip }) {
   const a = ((rot || 0) * Math.PI) / 180, c = Math.cos(a), sn = Math.sin(a), f = flip ? -1 : 1;
@@ -307,7 +338,7 @@ function textRows(p, fab = "cotton") {
     const l = letters(lines.join(" "), p.font, p.size, style, sp, joined);
     if (!l.parts.length) return [];
     const mid = (l.top + l.bottom) / 2;   // (letters come with the baseline at y = 0)
-    return [{ parts: p.shape === "wave" ? wave(l.parts.map(([q, m]) => [q.map(([x, y]) => [x, y - mid]), m]), p) : bridge(l.parts, p), satinW: l.satinW, xh: l.xh }];
+    return [{ parts: p.shape === "wave" ? wave(l.parts.map(([q, m, g]) => [q.map(([x, y]) => [x, y - mid]), m, g]), p) : bridge(l.parts, p), satinW: l.satinW, xh: l.xh }];
   }
   // straight: one size for every line (scaled to the first line's x-height), baselines `leading` x size apart
   let ls = lines.map((t, i) => letters(t, p.font, p.size, style, sp, kerns[i]));
@@ -319,7 +350,7 @@ function textRows(p, fab = "cotton") {
   const top = Math.min(...ls.map((l, i) => l.top + i * pitch)), bottom = Math.max(...ls.map((l, i) => l.bottom + i * pitch));
   return ls.map((l, i) => {
     const [a, b] = spans[i], dx = p.align === "left" ? -W / 2 - a : p.align === "right" ? W / 2 - b : -(a + b) / 2, dy = i * pitch - (top + bottom) / 2;
-    return { parts: l.parts.map(([q, m]) => [q.map(([x, y]) => [x + dx, y + dy]), m]), satinW: l.satinW, xh: l.xh };
+    return { parts: l.parts.map(([q, m, g]) => [q.map(([x, y]) => [x + dx, y + dy]), m, g]), satinW: l.satinW, xh: l.xh };
   });
 }
 // along y = amp·sin(waves·2πx/W), letters spaced by arc length and turned with the curve
@@ -335,18 +366,18 @@ function wave(parts, p) {
     const t = (s - len[i]) / Math.max(len[i + 1] - len[i], 1e-9), [ax, ay] = pts[i], [bx, by] = pts[i + 1], L = Math.hypot(bx - ax, by - ay);
     return [ax + (bx - ax) * t, ay + (by - ay) * t, -(by - ay) / L, (bx - ax) / L];
   };
-  const out = parts.map(([q, m]) => [densify(q, 1).map(([x, y]) => { const [px, py, nx, ny] = at(s0 + x - x0); return [px + y * nx, py + y * ny]; }), m]);
+  const out = parts.map(([q, m, g]) => [densify(q, 1).map(([x, y]) => { const [px, py, nx, ny] = at(s0 + x - x0); return [px + y * nx, py + y * ny]; }), m, g]);
   const cx = (Math.min(...out.flatMap(([q]) => q.map((v) => v[0]))) + Math.max(...out.flatMap(([q]) => q.map((v) => v[0])))) / 2;
   const ys = out.flatMap(([q]) => q.map((v) => v[1])), cy = (Math.min(...ys) + Math.max(...ys)) / 2;
-  return out.map(([q, m]) => [q.map(([x, y]) => [x - cx, y - cy]), m]);
+  return out.map(([q, m, g]) => [q.map(([x, y]) => [x - cx, y - cy]), m, g]);
 }
 // letters stretched upward toward the middle: the tops make an arch, the baseline stays put
 function bridge(parts, p) {
   const xs = parts.flatMap(([q]) => q.map((v) => v[0])), x0 = Math.min(...xs), x1 = Math.max(...xs), W = Math.max(x1 - x0, 1);
   const k = (p.bulge ?? 30) / 100;
-  const out = parts.map(([q, m]) => [densify(q, 1).map(([x, y]) => { const u = (2 * (x - (x0 + x1) / 2)) / W; return [x, y < 0 ? y * (1 + k * (1 - u * u)) : y]; }), m]);
+  const out = parts.map(([q, m, g]) => [densify(q, 1).map(([x, y]) => { const u = (2 * (x - (x0 + x1) / 2)) / W; return [x, y < 0 ? y * (1 + k * (1 - u * u)) : y]; }), m, g]);
   const ys2 = out.flatMap(([q]) => q.map((v) => v[1])), cy = (Math.min(...ys2) + Math.max(...ys2)) / 2;
-  return out.map(([q, m]) => [q.map(([x, y]) => [x, y - cy]), m]);
+  return out.map(([q, m, g]) => [q.map(([x, y]) => [x, y - cy]), m, g]);
 }
 
 // a towel's loops swallow a fine line, so lettering there is always satin
@@ -366,7 +397,10 @@ function lettersOn(laid, satinW, fab, xh = Infinity) {
   for (let i = 1; i <= laid.length; i++) {
     const a = laid[i - 1][0], b = laid[i]?.[0];
     if (b && Math.hypot(b[0][0] - a[a.length - 1][0], b[0][1] - a[a.length - 1][1]) < 0.5) continue;
+    const at = out.length;
     for (const [p] of laid.slice(from, i)) out.push(spaced([p[0], ...zigzag(p, w, 2), p[p.length - 1]]));
+    // (a separate letter's jump goes before its lattice, which ends where its letters start)
+    if (sewn.slice(from, i).some((q) => q.gap)) { out[at].gap = true; for (const q of sewn.slice(from, i)) delete q.gap; }
     out.push(...sewn.slice(from, i)); from = i;
   }
   return out;
@@ -509,8 +543,10 @@ function outward(loops, d) {
 function appliqued(loops, color, what, cover, trim, them = "it") {
   if (!loops.length) return [];
   const turn = (l, f) => { const k = Math.floor(l.length * f); return [...l.slice(k), ...l.slice(0, k)]; };
+  const placed = chained(loops);
+  loops = placed.loops;
   return [
-    { color, paths: loops.map((l) => loop(run(l, 2.5, true))), sews: `Sews the outline of ${what} on the base fabric.`, fabric: true },
+    { color, paths: placed.paths, sews: `Sews the outline of ${what} on the base fabric.`, fabric: true },
     { color, pause: true, paths: loops.map((l) => turn(l, 1 / 3)).flatMap(tack),
       you: `Lay the appliqué fabric over ${cover}, right side up, covering ${them} by ½ in. Press Start. Then take the hoop off (leave everything hooped), trim the fabric close to the stitching ${trim}, and put the hoop back.`,
       sews: "Tacks the appliqué fabric down.", under: true },
@@ -519,6 +555,66 @@ function appliqued(loops, color, what, cover, trim, them = "it") {
     { color, pause: true, paths: outward(loops, 0.4).map((l) => turn(l, 2 / 3)).flatMap((l) => edgeSatin(l, 2.8, 2.0)), you: "Press Start.", sews: "Covers the raw edges with satin." },
   ];
 }
+
+// Appliqué outlines in sewing order, each piece (an outline and the holes inside it) together, pieces left to right,
+// every loop turned to start where the last one left off. The placement lines of a piece's holes are reached by a
+// straight run across the piece itself, which the appliqué fabric then covers: "AB" placed with 4 trims, now 1.
+// (Tack-down and satin can't: a run across the piece would sit on top of the fabric.)
+function chained(loops) {
+  const inside = ([x, y]) => {
+    let k = false;
+    for (const l of loops) for (let i = 0, j = l.length - 1; i < l.length; j = i++)
+      if ((l[i][1] > y) !== (l[j][1] > y) && x < ((l[j][0] - l[i][0]) * (y - l[i][1])) / (l[j][1] - l[i][1]) + l[i][0]) k = !k;
+    return k;
+  };
+  const contains = (l, [x, y]) => {
+    let k = false;
+    for (let i = 0, j = l.length - 1; i < l.length; j = i++)
+      if ((l[i][1] > y) !== (l[j][1] > y) && x < ((l[j][0] - l[i][0]) * (y - l[i][1])) / (l[j][1] - l[i][1]) + l[i][0]) k = !k;
+    return k;
+  };
+  // each loop's piece: the outline it sits directly inside (a hole), or itself (an outline: inside an even number)
+  const depth = loops.map((l, i) => loops.filter((m, j) => j !== i && contains(m, l[0])));
+  const pieces = loops.map((l, i) => ({ l, holes: [] })).filter((_, i) => depth[i].length % 2 === 0);
+  loops.forEach((l, i) => {
+    if (depth[i].length % 2 === 0) return;
+    const host = pieces.filter((p) => contains(p.l, l[0])).sort((a, b) => Math.abs(area(a.l)) - Math.abs(area(b.l)))[0];
+    if (host) host.holes.push(l); else pieces.push({ l, holes: [] });
+  });
+  pieces.sort((a, b) => bounds(a.l)[0] - bounds(b.l)[0]);
+  const near = (l, q) => { let bi = 0, bd = Infinity; l.forEach((p, i) => { const d = Math.hypot(p[0] - q[0], p[1] - q[1]); if (d < bd) { bd = d; bi = i; } }); return bi; };
+  const from = (l, i) => [...l.slice(i), ...l.slice(0, i)];
+  const across = (a, b) => {   // a straight run from a to b that stays on the piece (0.3 mm clear of both ends)
+    const L = Math.hypot(b[0] - a[0], b[1] - a[1]);
+    for (let s = 0.3; s < L - 0.3; s += 0.25) if (!inside([a[0] + ((b[0] - a[0]) * s) / L, a[1] + ((b[1] - a[1]) * s) / L])) return null;
+    return run([a, b], 2.5);
+  };
+  const out = [], paths = [];
+  for (const { l, holes } of pieces) {
+    // (the outline starts at its point nearest a hole)
+    let s0 = 0;
+    if (holes.length) {
+      let bd = Infinity;
+      l.forEach((p, i) => { for (const h of holes) for (const q of h) { const d = (p[0] - q[0]) ** 2 + (p[1] - q[1]) ** 2; if (d < bd) { bd = d; s0 = i; } } });
+    }
+    const first = from(l, s0);
+    let cur = first, path = loop(run(first, 2.5, true));
+    out.push(first);
+    const left = holes.slice();
+    while (left.length) {
+      const at = cur[0];
+      left.sort((a, b) => { const p = a[near(a, at)], q = b[near(b, at)]; return Math.hypot(p[0] - at[0], p[1] - at[1]) - Math.hypot(q[0] - at[0], q[1] - at[1]); });
+      const h = left.shift(), hs = from(h, near(h, at)), link = across(at, hs[0]);
+      if (link) path.push(...link.slice(1));
+      else { paths.push(path); path = []; }
+      path.push(...loop(run(hs, 2.5, true)).slice(link ? 1 : 0));
+      out.push(hs); cur = hs;
+    }
+    paths.push(path);
+  }
+  return { loops: out, paths };
+}
+const area = (l) => l.reduce((a, p, i) => { const q = l[(i + 1) % l.length]; return a + p[0] * q[1] - q[0] * p[1]; }, 0) / 2;
 
 // shrink a closed outline toward its centre by d mm (fine for the convex-ish frame shapes)
 function inset(pts, d) {
@@ -553,7 +649,7 @@ function monogram(p, fab = "cotton") {
   const out = [];
   ls.forEach((l, i) => {
     const mid = (l.top + l.bottom) / 2, cx = x + widths[i] / 2;
-    out.push(...lettersOn(l.parts.map(([q, m]) => [q.map(([a, b]) => [a + cx, b - mid]), m]), l.satinW, fab, l.xh));
+    out.push(...lettersOn(l.parts.map(([q, m, g]) => [q.map(([a, b]) => [a + cx, b - mid]), m, g]), l.satinW, fab, l.xh));
     x += widths[i] + gap;
   });
   return out;
@@ -729,7 +825,7 @@ function carve(p, stages, above, fab) {
     if (carved.size > 12) carved.delete(carved.keys().next().value);
   }
   const fill = carved.get(key); if (!fill) return stages;
-  const place = placer(p), placed = fill.map((st) => ({ ...st, label: label(p), paths: st.paths.map((q) => q.map(place)) }));
+  const place = placer(p), placed = fill.map((st) => ({ ...st, label: label(p), paths: st.paths.map((q) => moved(q, place)) }));
   return [...placed, ...stages.filter((s) => !s.patchFill)];
 }
 
@@ -845,7 +941,7 @@ function build(pieces, hoop, opts) {
     // the tack line sits at the edge, under the satin that comes later
     const cur = steps[steps.length - 1];
     if (cur.under && !st.under && !st.fabric) cur.under = false;
-    for (const q of st.paths) d.path(q);
+    for (const q of st.paths) d.path(q, true, !!q.gap);
   }
   if (!steps.length) throw Object.assign(new Error("Nothing to stitch yet: type some words, or pick a starting idea."), { empty: true });
   if (opts.baste) after.push("Unpick the basting box (snip every few stitches on the back, then pull it out from the front).");

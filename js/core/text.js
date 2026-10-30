@@ -168,5 +168,8 @@ export function strokes(text, family, opts) {
   const { sk, ...r } = renderWord(text, family, opts);
   // print letters have real short strokes (t's crossbar, a's stem) that script-sized pruning would cut (print fonts are
   // the ones drawn with dash decorations: both callers pass deco "dash" for them)
-  return { edges: skeletonEdges(r.mask, r.stroke, { spur: opts?.deco === "dash" ? 0.45 : 1.3, dots: true, sk }), info: { ...r, firstX: r.span[0], lastX: r.span[1] } };
+  // and their loose ends reach out to the ink's edge (an a's stem past its bowl); `sized` are the points to size the
+  // lettering by: the strokes as they were before that, so words keep their size
+  const edges = skeletonEdges(r.mask, r.stroke, { spur: opts?.deco === "dash" ? 0.45 : 1.3, dots: true, sk, reach: opts?.deco === "dash" });
+  return { edges, info: { ...r, firstX: r.span[0], lastX: r.span[1], sized: (edges.before || edges.map((e) => e[2])).flat() } };
 }
