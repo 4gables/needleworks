@@ -8,7 +8,8 @@ import { MARGIN } from "../core/machines.js";
 import { edgeWalk, filletPolygon, followRun, run, satin, zigzag } from "../core/geom.js";
 import { order } from "../core/raster.js";
 import { strokes } from "../core/text.js";
-import { letterOutlines } from "./outline.js";
+import { MOTIFS } from "./motifs.js";
+import { letterOutlines, motifOutlines } from "./outline.js";
 import { echo, stipple } from "./quilt.js";
 
 // ---------- lettering ----------
@@ -290,8 +291,15 @@ function lettersOn(laid, satinW, fab) {
 function localStages(p, fab = "cotton") {
   let stages = [];
   if (p.kind === "text") {
-    const rows = textRows(p, fab), paths = [];
-    for (const { parts, satinW } of rows) paths.push(...lettersOn(parts, satinW, fab));
+    const rows = textRows(p, fab);
+    let paths = rows.flatMap(({ parts, satinW }) => lettersOn(parts, satinW, fab));
+    // a small filled motif either side (`deco`), sized to the letters and centred on them
+    if (paths.length && MOTIFS[p.deco]) {
+      const all = paths.flat(), x0 = Math.min(...all.map((q) => q[0])), x1 = Math.max(...all.map((q) => q[0]));
+      const y0 = Math.min(...all.map((q) => q[1])), y1 = Math.max(...all.map((q) => q[1])), s = Math.max(6, Math.min(p.size * 0.75, 30)), gap = s * 0.35;
+      const side = (dx) => motifStitches(motifOutlines(MOTIFS[p.deco].d, s), "fill").map((q) => q.map(([x, y]) => [x + dx, y + (y0 + y1) / 2]));
+      paths = [...side(x0 - gap - s / 2), ...paths, ...side(x1 + gap + s / 2)];
+    }
     const words = (p.text || "").replace(/\s*\n\s*/g, " / ").trim();
     if (paths.length) stages = [{ color: p.color, paths, sews: fab === "towel" ? `Sews a light base to flatten the towel loops, then “${words}” on it.` : `Sews “${words}”.` }];
   } else if (p.kind === "monogram") {
@@ -337,25 +345,44 @@ function localStages(p, fab = "cotton") {
     }
   } else if (p.kind === "letters") {
     // appliqué letters: one piece of fabric for the whole word, outlined letter by letter (holes too)
-    const loops = letterOutlines(p.text, p.font, p.size), loop = (q) => [...q, q[0]];
-    // each stage starts a third further round, so the three seams (and their locks) don't stack in one spot
-    const turn = (l, f) => { const k = Math.floor(l.length * f); return [...l.slice(k), ...l.slice(0, k)]; };
-    if (loops.length) stages = [
-      { color: p.color, paths: loops.map((l) => loop(run(l, 2.5, true))), sews: `Sews the outline of ${p.text.trim()} on the base fabric.`, fabric: true },
-      { color: p.color, pause: true, paths: loops.map((l) => turn(l, 1 / 3)).flatMap((l) => [loop(run(l, 2.0, true)), loop(run(l.slice().reverse(), 2.0, true))]),
-        you: "Lay the appliqué fabric over the letters, right side up, covering them by ½ in. Press Start. Then take the hoop off (leave everything hooped), trim the fabric close to the stitching around each letter (and inside the holes), and put the hoop back.",
-        sews: "Tacks the appliqué fabric down.", under: true },
-      // a small hole (the top of an A) can't take a 2.8 mm satin around it: it would overlap itself; narrow it to fit
-      { color: p.color, pause: true, paths: loops.map((l) => turn(l, 2 / 3)).flatMap((l) => {
-        const xs = l.map((q) => q[0]), ys = l.map((q) => q[1]);
-        const w = Math.max(1.2, Math.min(2.8, Math.min(Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys)) / 3.5));
-        return [edgeWalk(l, w, true, Math.min(0.4, w / 4)), loop(zigzag(l, w * 0.7, 2.0, true)), loop(satin(l, w, 0.4, w > 2 ? 0.3 : 0.2, true))];
-      }), you: "Press Start.", sews: "Covers the raw edges with satin." },
-    ];
+    stages = appliqued(letterOutlines(p.text, p.font, p.size), p.color, p.text.trim(), "the letters", "around each letter (and inside the holes)", "them");
+  } else if (p.kind === "motif") {
+    const m = MOTIFS[p.motif] || MOTIFS.heart, loops = motifOutlines(m.d, p.size), name = m.name.toLowerCase();
+    if (p.style === "applique") stages = appliqued(loops, p.color, `the ${name}`, `the ${name}`, "around it (and inside any holes)");
+    else if (loops.length) stages = [{ color: p.color, paths: motifStitches(loops, p.style), sews: `Sews the ${name}${p.style === "outline" ? " outline" : ""}.` }];
   } else if (p.kind === "file") {
     stages = p.blocks.map((b) => ({ color: b.color, paths: b.paths, sews: `Sews ${p.name}${p.blocks.length > 1 ? ` (${b.name || "colour " + (p.blocks.indexOf(b) + 1)})` : ""}.` }));
   }
   return stages.map((st) => ({ ...st, paths: st.paths.filter((q) => q.length) }));
+}
+
+// a motif filled (tatami inside, then a narrow satin edge over the row ends) or as a satin outline
+function motifStitches(loops, style) {
+  const loop = (q) => [...q, q[0]];
+  if (style === "outline") return loops.flatMap((l) => edgeSatin(l, 2.2));
+  return [...fillPolygon(loops, { inset: 0.6 }), ...loops.flatMap((l) => [loop(run(l, 2.0, true)), loop(satin(l, 1.4, 0.4, 0.2, true))])];
+}
+
+// a satin edge round a closed outline: as wide as `max`, narrower round a small hole (a 2.8 mm satin in the top of an
+// A overlaps itself), over an edge walk and a zigzag
+function edgeSatin(l, max) {
+  const xs = l.map((q) => q[0]), ys = l.map((q) => q[1]), loop = (q) => [...q, q[0]];
+  const w = Math.max(1.2, Math.min(max, Math.min(Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys)) / 3.5));
+  return [edgeWalk(l, w, true, Math.min(0.4, w / 4)), loop(zigzag(l, w * 0.7, 2.0, true)), loop(satin(l, w, 0.4, w > 2 ? 0.3 : 0.2, true))];
+}
+
+// appliqué from outlines (letters, a motif): one piece of fabric for all of it; placement, tack-down, satin, each stage
+// starting a third further round so the three seams (and their locks) don't stack in one spot
+function appliqued(loops, color, what, cover, trim, them = "it") {
+  if (!loops.length) return [];
+  const loop = (q) => [...q, q[0]], turn = (l, f) => { const k = Math.floor(l.length * f); return [...l.slice(k), ...l.slice(0, k)]; };
+  return [
+    { color, paths: loops.map((l) => loop(run(l, 2.5, true))), sews: `Sews the outline of ${what} on the base fabric.`, fabric: true },
+    { color, pause: true, paths: loops.map((l) => turn(l, 1 / 3)).flatMap((l) => [loop(run(l, 2.0, true)), loop(run(l.slice().reverse(), 2.0, true))]),
+      you: `Lay the appliqué fabric over ${cover}, right side up, covering ${them} by ½ in. Press Start. Then take the hoop off (leave everything hooped), trim the fabric close to the stitching ${trim}, and put the hoop back.`,
+      sews: "Tacks the appliqué fabric down.", under: true },
+    { color, pause: true, paths: loops.map((l) => turn(l, 2 / 3)).flatMap((l) => edgeSatin(l, 2.8)), you: "Press Start.", sews: "Covers the raw edges with satin." },
+  ];
 }
 
 // shrink a closed outline toward its centre by d mm (fine for the convex-ish frame shapes)
@@ -399,7 +426,7 @@ export function pieceBounds(p) {
   return [x0, y0, x1, y1];
 }
 
-export const label = (p) => p.kind === "text" ? `“${p.text.replace(/\s*\n\s*/g, " / ")}”` : p.kind === "letters" ? `Appliqué ${p.text}` : p.kind === "monogram" ? `Monogram ${p.letters}`
+export const label = (p) => p.kind === "motif" ? `${(MOTIFS[p.motif] || MOTIFS.heart).name}` : p.kind === "text" ? `“${p.text.replace(/\s*\n\s*/g, " / ")}”` : p.kind === "letters" ? `Appliqué ${p.text}` : p.kind === "monogram" ? `Monogram ${p.letters}`
   : p.kind === "file" ? p.name : `${(SHAPES[p.shape] || SHAPES.circle).name}${p.border === "applique" ? " appliqué" : ""}`;
 
 // An opened design as a piece: its stitches split into runs at jumps/trims, per colour block, centred.

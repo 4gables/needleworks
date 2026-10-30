@@ -75,6 +75,13 @@ for (const shape of Object.keys(SHAPES)) for (const quilt of ["stipple", "echo"]
   await save(`st_quilt_${shape}_${quilt}`, [P({ kind: "frame", shape, border: shape === "heart" ? "applique" : "satin", w: 100, h: 84, quilt, color: "#ed171f" }),
     P({ kind: "text", text: "Rosie", font: FONTS[1].family, size: 16 })]);
 log("quilting: done");
+// motifs in every style, sizes from small to large; lettering with motifs either side
+const { MOTIFS } = await import("../../js/studio/motifs.js");
+for (const [k, i] of Object.keys(MOTIFS).map((k, i) => [k, i]))
+  await save(`st_motif_${k}`, [P({ kind: "motif", motif: k, size: [20, 45, 80][i % 3], style: ["fill", "outline", "applique"][i % 3], color: "#ed171f" })]);
+await save("st_motif_small_fill", [P({ kind: "motif", motif: "cat", size: 12, style: "fill" }), P({ kind: "motif", motif: "paw", size: 10, style: "fill", x: 20 })]);
+for (const f of [FONTS[0], FONTS.find((x) => x.print)]) await save(`st_deco_${f.family.slice(3).replace(/ /g, "")}`, [P({ kind: "text", text: "Emma", font: f.family, size: 14, deco: "heart" })]);
+log("motifs: done");
 for (const f of APPLIQUE_FONTS) for (const [text, size] of [["AB", 60], ["Mia", 35], ["Q&8", 44]]) {
   const tag = f.family.slice(3).replace(/ /g, "");
   await save(`st_appl_${tag}_${text.replace(/[^A-Za-z0-9]/g, "")}_${size}`, [P({ kind: "letters", text, font: f.family, size })]);

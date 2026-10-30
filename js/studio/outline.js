@@ -17,9 +17,12 @@ function trace(text, family) {
   const m = probe.measureText(text);
   const w = Math.ceil(m.actualBoundingBoxLeft + m.actualBoundingBoxRight) + 8;
   const h = Math.ceil(m.actualBoundingBoxAscent + m.actualBoundingBoxDescent) + 8;
+  return { loops: traceDrawn(w, h, (ctx) => { ctx.font = probe.font; ctx.fillText(text, 4 + m.actualBoundingBoxLeft, 4 + m.actualBoundingBoxAscent); }),
+    inkH: m.actualBoundingBoxAscent + m.actualBoundingBoxDescent, w, h };
+}
+function traceDrawn(w, h, draw) {
   const c = canvas(w, h), ctx = c.getContext("2d", { willReadFrequently: true });
-  ctx.font = probe.font; ctx.fillStyle = "#000";
-  ctx.fillText(text, 4 + m.actualBoundingBoxLeft, 4 + m.actualBoundingBoxAscent);
+  ctx.fillStyle = "#000"; draw(ctx);
   const a = ctx.getImageData(0, 0, w, h).data, ink = (x, y) => x >= 0 && y >= 0 && x < w && y < h && a[(y * w + x) * 4 + 3] > 127;
   // marching squares on pixel corners: each cell edge crossing is a point; link segments into loops
   const next = new Map();
@@ -44,7 +47,20 @@ function trace(text, family) {
     while (!seen.has(k)) { seen.add(k); loop.push(q); k = kq; const n = next.get(k); if (!n) break; [q, kq] = n; }
     if (loop.length > 8) loops.push(loop);
   }
-  return { loops, inkH: m.actualBoundingBoxAscent + m.actualBoundingBoxDescent, w, h };
+  return loops;
+}
+
+// a motif (an SVG path in a 256 box, js/studio/motifs.js) as outlines, `size` mm across its longer side, centred
+const motifs = new Map();
+export function motifOutlines(d, size) {
+  if (!motifs.has(d)) {
+    motifs.set(d, traceDrawn(PX + 8, PX + 8, (ctx) => { ctx.translate(4, 4); ctx.scale(PX / 256, PX / 256); ctx.fill(new Path2D(d)); }));
+    if (motifs.size > 40) motifs.delete(motifs.keys().next().value);
+  }
+  const loops = motifs.get(d), all = loops.flat();
+  const x0 = Math.min(...all.map((p) => p[0])), x1 = Math.max(...all.map((p) => p[0])), y0 = Math.min(...all.map((p) => p[1])), y1 = Math.max(...all.map((p) => p[1]));
+  const s = size / Math.max(x1 - x0, y1 - y0, 1), cx = (x0 + x1) / 2, cy = (y0 + y1) / 2;
+  return loops.map((l) => smooth(resample(l.map(([x, y]) => [(x - cx) * s, (y - cy) * s]), 0.3, true), 5, true)).filter((l) => l.length > 6);
 }
 
 // outlines of `text` at `size` mm tall (the ink), centred on (0, 0)

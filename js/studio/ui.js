@@ -7,6 +7,7 @@ import { nearestBrotherThread } from "../core/threads.js";
 import { readEmbroidery } from "../core/formats.js";
 import { draw } from "../render.js";
 import { QUILTS } from "./quilt.js";
+import { MOTIFS } from "./motifs.js";
 import { BORDERS, FABRICS, SHAPES, TEXT_SHAPES, archTight, compose, fileBlocks, fittedSizes, followFrame, label, minSize, pieceBounds, smallText } from "./pieces.js";
 
 const SCRIPT = "NW Great Vibes", PRINT = "NW Josefin Sans";
@@ -21,6 +22,7 @@ const piece = (o) => ({ id: nextId++, x: 0, y: 0, color: NAVY, ...o });
 const text = (o) => piece({ kind: "text", text: "Ashley", font: SCRIPT, size: 18, shape: "straight", radius: 30, ...o });
 const mono = (o) => piece({ kind: "monogram", letters: "aMs", font: SCRIPT, size: 30, ...o });
 const appl = (o) => piece({ kind: "letters", text: "AB", font: APPLIQUE_FONTS[0].family, size: 60, color: NAVY, ...o });
+const motif = (o) => piece({ kind: "motif", motif: "heart", size: 40, style: "fill", color: RED, ...o });
 const frame = (o) => piece({ kind: "frame", shape: "circle", w: 80, h: 80, border: "satin", color: RED, ...o });
 
 // `mode` cards open another part of the page (the bookmark has its own engine and controls) instead of pieces
@@ -73,6 +75,7 @@ export const STARTERS = [
   { id: "patch", name: "Patch", note: "a filled badge with an edge", make: () => [
     frame({ shape: "circle", w: 76, h: 76, border: "patch", fill: NAVY, color: RED }),
     mono({ letters: "JD", size: 26, font: PRINT, color: "#f0f0f0" })] },
+  { id: "decorated", name: "Name with motifs", note: "a little heart either side", make: () => [text({ text: "Emma", size: 20, deco: "heart", color: RED })] },
   { id: "words", name: "Just lettering", note: "a word or name on its own", make: () => [text({ size: 24 })] },
 ];
 
@@ -167,16 +170,23 @@ export function initStudio(api) {
       if (p.shape === "bridge") h += range("bulge", "Bulge", 10, 80, p.bulge ?? 30, "%", 5);
       // the rarer settings, folded away
       const print = FONTS.find((f) => f.family === p.font)?.print;
-      const more = (print ? range("spacing", "Letter spacing", -10, 40, p.spacing || 0, "%") : "")
+      const more = `<label class="field"><span>Motif either side</span><select data-k="deco"><option value="">None</option>${Object.entries(MOTIFS).map(([k, m]) => `<option value="${k}" ${k === p.deco ? "selected" : ""}>${m.name}</option>`).join("")}</select></label>`
+        + (print ? range("spacing", "Letter spacing", -10, 40, p.spacing || 0, "%") : "")
         + (p.shape === "straight" ? `<p class="hint">Press Enter in Words for a new line (up to 3).</p>` : "")
         + (p.shape === "straight" && lines > 1 ? seg("align", { left: "Left", center: "Centre", right: "Right" }, p.align || "center") + range("leading", "Line spacing", 80, 200, p.leading ?? 130, "%", 5) : "");
-      if (more) h += `<details class="more" ${moreOpen ? "open" : ""}><summary>More</summary>${more}</details>`;
+      h += `<details class="more" ${moreOpen ? "open" : ""}><summary>More</summary>${more}</details>`;
     } else if (p.kind === "monogram") {
       h += `<label class="field"><span>Initials</span><input type="text" data-k="letters" value="${api.escapeHtml(p.letters)}" maxlength="3" autocomplete="off" spellcheck="false"></label>`;
       h += `<p class="hint">Traditional order: first, LAST, middle. The middle letter is stitched biggest.</p>`;
       h += `<label class="field"><span>Font</span>${fontSelect(p)}</label>`;
       h += range("size", "Height", 15, 90, p.size);
       h += seg("style", { auto: "Stitch: automatic", satin: "Satin", line: "Fine line" }, p.style || "auto");
+    } else if (p.kind === "motif") {
+      h += `<div class="field"><span>Motif</span><div class="motifs" role="group" aria-label="Motif">${Object.entries(MOTIFS).map(([k, m]) => `<button type="button" data-motif="${k}" aria-pressed="${k === p.motif}" title="${m.name}"><svg viewBox="0 0 256 256" aria-hidden="true"><path d="${m.d}"/></svg></button>`).join("")}</div></div>`;
+      h += range("size", "Size", 10, 120, p.size);
+      h += seg("style", { fill: "Filled", outline: "Outline", applique: "Appliqué" }, p.style || "fill");
+      if ((p.style || "fill") === "fill" && p.size < 25) h += `<p class="hint warn">Filled this small, the detail closes up. Make it 25 mm or more, or choose Outline.</p>`;
+      if (p.style === "applique") h += `<p class="hint">Sews an outline, pauses for you to lay fabric on and trim it, then satins the edges. 50 mm or bigger cuts most easily.</p>`;
     } else if (p.kind === "letters") {
       h += `<label class="field"><span>Letters</span><input type="text" data-k="text" value="${api.escapeHtml(p.text)}" maxlength="12" autocomplete="off" spellcheck="false"></label>`;
       h += `<label class="field"><span>Font</span><select data-k="font">${APPLIQUE_FONTS.map((f) => `<option value="${f.family}" ${f.family === p.font ? "selected" : ""}>${f.name} (${f.note})</option>`).join("")}</select></label>`;
@@ -295,7 +305,7 @@ export function initStudio(api) {
     const b = e.target.closest("[data-add]"); if (!b) return;
     if (b.dataset.add === "file") { $("st-file").click(); return; }
     remember();
-    const p = b.dataset.add === "text" ? text({ y: 20 }) : b.dataset.add === "monogram" ? mono() : b.dataset.add === "letters" ? appl() : frame({ border: "line" });
+    const p = b.dataset.add === "text" ? text({ y: 20 }) : b.dataset.add === "monogram" ? mono() : b.dataset.add === "letters" ? appl() : b.dataset.add === "motif" ? motif() : frame({ border: "line" });
     pieces.push(p); sel = p.id; save(); ui(); make();
   };
   $("st-pieces").onclick = (e) => {
@@ -327,10 +337,12 @@ export function initStudio(api) {
     if (k === "text" && (t.value.split("\n").length > 1) !== !!edit.querySelector('[data-seg="align"]') && current().shape === "straight") editor();
   });
   let warnTimer = 0;
-  edit.addEventListener("change", (e) => { if (e.target.dataset.k === "font" || e.target.matches("[data-color-any], [data-fill-any]")) editor(); });
+  edit.addEventListener("change", (e) => { if (e.target.dataset.k === "font" || e.target.dataset.k === "deco" || e.target.matches("[data-color-any], [data-fill-any]")) editor(); });
   edit.addEventListener("click", (e) => {
     const c = e.target.closest("[data-color]");
     if (c) { change((p) => (p.color = c.dataset.color), true); editor(); return; }
+    const mo = e.target.closest("[data-motif]");
+    if (mo) { change((p) => (p.motif = mo.dataset.motif), true); editor(); list(); return; }
     const f = e.target.closest("[data-fill]");
     if (f) { change((p) => (p.fill = f.dataset.fill), true); editor(); return; }
     if (e.target.closest("[data-follow]")) { change((p) => Object.assign(p, followFrame(p, pieces)), true); editor(); return; }
@@ -389,7 +401,7 @@ export function initStudio(api) {
     try {
       const data = JSON.parse(await f.text());
       if (!data || data.needleworks !== 1 || !Array.isArray(data.pieces)) throw new Error("it isn't a design saved from this page");
-      const kinds = new Set(["text", "monogram", "frame", "file", "letters"]);
+      const kinds = new Set(["text", "monogram", "frame", "file", "letters", "motif"]);
       const loaded = data.pieces.filter((p) => p && kinds.has(p.kind) && Number.isFinite(p.x) && Number.isFinite(p.y));
       if (!loaded.length) throw new Error("it has no pieces");
       remember(); nextId = 1; pieces = loaded.map((p) => ({ ...p, id: nextId++ })); sel = pieces[pieces.length - 1].id;

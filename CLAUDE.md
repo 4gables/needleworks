@@ -159,6 +159,12 @@ Embroidery-file tools for home machines. Two implementations of the same engine:
   `last` stage) in the frame's thread. A visible stage that joins a tack-down block un-hides that block in the
   preview (the quilting, or same-thread lettering on an ITH frame, was hidden with the tack line). Starters: Mug rug,
   Coaster, Quilt block.
+- Motifs (`js/studio/motifs.js`: 29 filled icons from Phosphor Icons, MIT; `kind: "motif"`, `motif`, `size` mm across
+  the longer side, `style` fill | outline | applique): the SVG path is filled on a canvas and traced like appliqué
+  letters (`motifOutlines` in outline.js, holes included). Fill = `fillPolygon(loops, { inset: 0.6 })` (it now takes
+  several loops, even-odd) plus a 1.4 mm satin edge; outline = `edgeSatin` (narrower round small holes); appliqué =
+  `appliqued()`, shared with appliqué letters. Filled under 25 mm the detail closes up (the editor says so). Lettering
+  `deco` puts a small filled motif either side (More > Motif either side; the "Name with motifs" starter).
 - Sew sheet + cut file (`js/sheet.js`, links under Download): "Print a sew sheet" fills a hidden `#sheet` and calls
   `window.print()` (print CSS hides the app). Page 1 is the hoop field at 1:1 (SVG sized in mm) with the design centred
   as the machine centres it, a crosshair and a 5 cm check bar; page 2 the steps with the machine's thread names
