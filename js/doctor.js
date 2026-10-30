@@ -103,9 +103,9 @@ function satinGap(st) {
 
 // colour blocks: [{ stitches (no colour changes or END), thread }]
 function blocksOf(pattern) {
-  const out = [{ stitches: [], thread: pattern.threads[0] }];
+  const out = [{ stitches: [], thread: pattern.threads[0], i: 0 }];
   for (const s of pattern.stitches) {
-    if (s[2] === COLOR_CHANGE) out.push({ stitches: [], thread: pattern.threads[out.length] || pattern.threads[pattern.threads.length - 1] });
+    if (s[2] === COLOR_CHANGE) out.push({ stitches: [], thread: pattern.threads[out.length] || pattern.threads[pattern.threads.length - 1], i: out.length });
     else if (s[2] !== END) out[out.length - 1].stitches.push(s);
   }
   return out.filter((b) => b.stitches.some((s) => s[2] === STITCH));
@@ -155,18 +155,32 @@ export function sortColors(pattern) {
 export const sortedChanges = (pattern) => { const s = sortColors(pattern); return s && s.threads.length - 1; };
 
 // Resizing past 80-120 % by re-stitching (Embrilliance's stitch processor): each colour block's runs are scaled and
-// then rebuilt at the right density for the new size. A zigzag run (satin) keeps its two edges and gets stations
-// every 0.2 mm along them again (0.4 mm on each edge), split where it's grown past 6.8 mm; a fill (most of its length in one direction, many stitches)
-// is traced as a shape and filled again at 0.4 mm rows in its own direction; anything else is a running line,
-// resampled so no stitch is over 3.5 mm or under 0.5 mm. Locks come back from the Design writer. (A run counts as a
-// fill when it's over 3 mm both ways and 70% of its length runs one way, or 45% one way and 80% with the 90° underlay.)
+// then rebuilt at the source's own density (where it's sane) for the new size. A zigzag run (satin) keeps its two
+// edges and is sewn again at its own gap on each edge (SATIN), split where it's grown past 6.8 mm; a fill (most of its
+// length in one direction, many stitches) is traced as a shape and filled again at its own row spacing (ROWS) in its
+// own direction; open zigzags (underlay) and anything else are running lines, resampled so no stitch is over 3.5 mm
+// or under 0.5 mm. Locks come back from the Design writer. (A run counts as a fill when it's over 3 mm both ways and
+// 70% of its length runs one way, or 45% one way and 80% with the 90° underlay.)
 export function restitch(pattern, scale) {
   const pts = pattern.stitches.filter((s) => s[2] === STITCH || s[2] === JUMP);
   let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
   for (const [x, y] of pts) { if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
   const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2, mm = ([x, y]) => [((x - cx) * scale) / 10, ((y - cy) * scale) / 10];
   const d = new Design({ w: 2000, h: 2000, name: "" });
+  // where the source sews (0.25 mm cells -> the last colour block that does): a column end reaches on only into
+  // these, and a fill is reached by a run only where this block or a later one sews over it
+  COV = new Map(); BOX = [...mm([x0, y0]), ...mm([x1, y1])];
+  let last = null, bi = 0;
+  for (const s of pattern.stitches) {
+    if (s[2] === COLOR_CHANGE) bi++;
+    if (s[2] === STITCH && last) {
+      const a = mm(last), b = mm(s), n = Math.ceil(Math.hypot(b[0] - a[0], b[1] - a[1]) * 8) || 1;
+      for (let k = 0; k <= n; k++) COV.set(Math.floor((a[0] + ((b[0] - a[0]) * k) / n) * 4) + "," + Math.floor((a[1] + ((b[1] - a[1]) * k) / n) * 4), bi);
+    }
+    last = s[2] === STITCH || s[2] === JUMP ? s : null;
+  }
   for (const b of blocksOf(pattern)) {
+    const hidden = ([x, y]) => COV.get(Math.floor(x * 4) + "," + Math.floor(y * 4)) >= b.i;
     d.color(b.thread?.color || "#000000", b.thread?.description || b.thread?.name || "");
     G = new Map();
     // a block's fill runs in one direction are refilled together, where the first of them was (one shape sewn in
@@ -189,17 +203,44 @@ export function restitch(pattern, scale) {
     flush();
     const taken = new Set();   // (this block's refilled area so far: a fill in another direction leaves it out)
     const paths = [];
-    for (const r of runs) paths.push(...(r.paths || refill(fills.get(r.fill), r.fill, taken) || fills.get(r.fill).map(line)));
+    for (const r of runs) {
+      const prev = paths[paths.length - 1]?.at(-1), ps = r.paths || refill(fills.get(r.fill), r.fill, taken, scale, prev) || fills.get(r.fill).map(line);
+      // a refilled fill starts where its rows do, not where the source's did, and its separate parts jump: reached by
+      // a run under the fill or where the source sews this thread or a later one, when one fits, not a trim (trims in
+      // colour: gnome 24 -> 20 at 250 %, ufront 24 -> 18)
+      if (ps.inside) {
+        const ok = (q) => ps.inside(q) || hidden(q);
+        if (prev) ps[0] = [...travel(prev, ps[0][0], ok, 20), ...ps[0]];
+        for (let k = 1; k < ps.length; k++) ps[k] = [...travel(ps[k - 1].at(-1), ps[k][0], ok, 12), ...ps[k]];
+      }
+      paths.push(...ps);
+    }
     spread(paths);
     for (const p of paths) d.path(p);
   }
   d.finish();
   return d.pattern();
 }
+// stitches up to 2 mm from a to b (neither included) when that line lies where `inside` says (bar 0.75 mm at either
+// end), and the move is over 2 mm (shorter is sewn anyway) and at most `most` mm; else none
+function travel(a, b, inside, most) {
+  const g = Math.hypot(b[0] - a[0], b[1] - a[1]);
+  if (g <= 2 || g > most) return [];
+  // (both ends may sit on the edge)
+  for (let t = 0.75; t < g - 0.75; t += 0.25) if (!inside([a[0] + ((b[0] - a[0]) * t) / g, a[1] + ((b[1] - a[1]) * t) / g])) return [];
+  const n = Math.ceil(g / 2), out = [];
+  for (let k = 1; k < n; k++) out.push([a[0] + ((b[0] - a[0]) * k) / n, a[1] + ((b[1] - a[1]) * k) / n]);
+  return out;
+}
 // one sewn run (mm, already scaled) -> rebuilt paths
 function rebuild(p, scale) {
-  const out = [], lens = [], dir = [];
-  for (let i = 1; i < p.length; i++) { const dx = p[i][0] - p[i - 1][0], dy = p[i][1] - p[i - 1][1]; lens.push(Math.hypot(dx, dy)); dir.push([dx, dy]); }
+  const out = [];
+  let lens = [], dir = [];
+  const measure = () => {
+    lens = []; dir = [];
+    for (let i = 1; i < p.length; i++) { const dx = p[i][0] - p[i - 1][0], dy = p[i][1] - p[i - 1][1]; lens.push(Math.hypot(dx, dy)); dir.push([dx, dy]); }
+  };
+  measure();
   // satin: 6+ stitches in a row, each turning back on the last
   const back = (k) => lens[k] > 0.5 * scale && lens[k + 1] > 0.5 * scale && (dir[k][0] * dir[k + 1][0] + dir[k][1] * dir[k + 1][1]) / (lens[k] * lens[k + 1]) < -0.6;
   const isFill = () => {
@@ -213,13 +254,27 @@ function rebuild(p, scale) {
   };
   const angle = isFill();
   if (angle !== false && !lens.every((_, k) => k >= lens.length - 1 || back(k))) return { fill: angle, pts: p };
+  // a satin sewn as a square wave (across, a short step along the edge, back: star_badge's border) is a zigzag
+  // whose edge points are the steps' middles; left as a line it grew 2.5 times as open at 250 %
+  // (a step only where the next or last step goes the same way: a lone one is a satin turning back over itself, and
+  // merged it lost peace.pes's column end)
+  const step = (k) => k > 0 && k < lens.length - 1 && lens[k] > 0 && lens[k] < 0.3 * Math.min(lens[k - 1], lens[k + 1])
+    && (dir[k - 1][0] * dir[k + 1][0] + dir[k - 1][1] * dir[k + 1][1]) / (lens[k - 1] * lens[k + 1]) < -0.8;
+  const along = (k, j) => step(j) && dir[k][0] * dir[j][0] + dir[k][1] * dir[j][1] > 0;
+  const q = [p[0]];
+  for (let k = 1; k < p.length; k++) {
+    if (step(k) && (along(k, k - 2) || along(k, k + 2))) {
+      q.push([(p[k][0] + p[k + 1][0]) / 2, (p[k][1] + p[k + 1][1]) / 2]); k++;
+    } else q.push(p[k]);
+  }
+  if (q.length < p.length) { p = q; measure(); }
   let i = 0, run = [p[0]];
   while (i < lens.length) {
     let j = i;
     while (j < lens.length - 1 && back(j)) j++;
     if (j - i >= 6) {   // p[i..j+1] is a satin column
       if (run.length > 1) out.push(line(run));
-      out.push(...column(p.slice(i, j + 2)));
+      out.push(...column(p.slice(i, j + 2), scale));
       run = [p[j + 1]]; i = j + 1;
     } else { run.push(p[i + 1]); i++; }
   }
@@ -238,21 +293,54 @@ function line(p) {
   if (out.length === 1) out.push(p[p.length - 1]);
   return out;
 }
-// a satin column: its two edges (alternate needle points), resampled to a station every 0.2 mm of the centre line.
+// a satin column: its two edges (alternate needle points), resampled to a station every gap / 2 of the centre line
+// (`keep`: in place at full size, from and to its own first and last hole, ends not moved: `respace`).
 // Grown wide it stays a satin, split (`split`): filling each wide column on its own (everything over 8 mm until
 // 2026-10-30) criss-crossed the peace sign's ring with travel, trims 49 -> 103 at 150 %. Only a column over 30 mm
 // wide is filled.
-function column(p) {
-  const widths = p.slice(1).map((q, k) => Math.hypot(q[0] - p[k][0], q[1] - p[k][1])).sort((a, b) => a - b);
-  if (widths[widths.length >> 1] > WIDE) return refill([p], 45) || [line(p)];
-  const A = p.filter((_, k) => k % 2 === 0), B = p.filter((_, k) => k % 2 === 1), n = Math.min(A.length, B.length);
+function column(p, scale = 1, keep = false) {
+  const dist = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1]), mid = (v) => v.sort((a, b) => a - b)[v.length >> 1];
+  // the source's own spacing (hits on one edge, mm at its own size) where it's sane (sold designs 0.28-0.42); more
+  // open or denser comes out at the nearest sane value
+  const gap = satinGap1(p, scale);
+  // (an open zigzag, underlay mostly, stays as it was: it's under the satin, and resampled it missed spots the scaled
+  // original covered where peace.pes's bars meet its ring)
+  if (gap > OPEN) return [line(p)];
+  if (!keep && mid(p.slice(1).map((q, k) => dist(q, p[k]))) > WIDE) return refill([p], 45) || [line(p)];
+  // (a half stitch into the middle at either end isn't an edge point: taken as one, it pulled the edge in and left
+  // the corner where two columns meet bare at 150-250 %)
+  // (still sewn from and to the run's own ends, so what comes before and after stays joined)
+  let q = p, head = null, tail = null;
+  if (!keep) {
+    const l = (i) => dist(q[i], q[i + 1]);
+    if (q.length > 8 && l(q.length - 2) < 0.65 * l(q.length - 3)) { tail = q[q.length - 1]; q = q.slice(0, -1); }
+    if (q.length > 8 && l(0) < 0.65 * l(1)) { head = q[0]; q = q.slice(1); }
+  }
+  const A = q.filter((_, k) => k % 2 === 0), B = q.filter((_, k) => k % 2 === 1);
+  // each column end reaches a little further on (`EXT`, half the end's width at a tip) so it tucks under the column
+  // it meets: resampled flush, the joins opened (ursula at 250 %: 21 bare spots)
+  if (!keep) for (const end of [0, 1]) {
+    const c = (k) => { const a = end ? A[A.length - 1 - k] : A[k], b = end ? B[B.length - 1 - k] : B[k]; return a && b && [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2]; };
+    const c0 = c(0); let k = 1;
+    while (c(k + 1) && dist(c(k), c0) < 1) k++;
+    const ck = c(k), l = ck && dist(ck, c0);
+    if (!l) continue;
+    const a = end ? A[A.length - 1] : A[0], b = end ? B[B.length - 1] : B[0], e = Math.min(EXT, dist(a, b) / 2) / l;
+    const out = (r, f = 1) => [r[0] + (c0[0] - ck[0]) * e * f, r[1] + (c0[1] - ck[1]) * e * f];
+    // (only into other stitching, a little past where it would reach: an end at the design's edge stays put, or the
+    // shape grew)
+    if ([a, b, c0].filter((r) => sewn(out(r, 1 + 0.3 / EXT))).length < 2 || !inside(out(a)) || !inside(out(b))) continue;
+    if (end) { A.push(out(a)); B.push(out(b)); } else { A.unshift(out(a)); B.unshift(out(b)); }
+  }
+  const n = Math.min(A.length, B.length);
   let L = 0;
   for (let k = 1; k < n; k++) L += Math.hypot((A[k][0] + B[k][0] - A[k - 1][0] - B[k - 1][0]) / 2, (A[k][1] + B[k][1] - A[k - 1][1] - B[k - 1][1]) / 2);
   // (an even count when the run ends on its first edge, odd on the other: the next run starts where it ended, and a
   // column that stopped on the wrong edge, a satin width away, jumped there: ursula at 150 % had 20 loose threads)
-  let m = Math.max(2, Math.round(L / 0.2));
-  if (m % 2 !== (p.length - 1) % 2) m++;
-  const at = (E, t) => { const f = t * (n - 1), i = Math.min(n - 2, Math.floor(f)), r = f - i; return [E[i][0] + (E[i + 1][0] - E[i][0]) * r, E[i][1] + (E[i + 1][1] - E[i][1]) * r]; };
+  let m = Math.max(2, Math.round(L / (gap / 2)));
+  if (m % 2 !== (q.length - 1) % 2) m++;
+  // (each edge by its own points, so both ends are its real ends when one edge has a hit more)
+  const at = (E, t) => { const f = t * (E.length - 1), i = Math.min(E.length - 2, Math.floor(f)), r = f - i; return [E[i][0] + (E[i + 1][0] - E[i][0]) * r, E[i][1] + (E[i + 1][1] - E[i][1]) * r]; };
   // (a hit landing where the block is already crowded, at a fan's pivot or where columns overlap, becomes a short
   // stitch: moved in along its stitch toward the other edge to the first spot with room, at most 40% of the way)
   const room = (q, o) => {
@@ -266,18 +354,28 @@ function column(p) {
     }
     return best;
   };
+  const t = (k) => k / m;
   const out = [at(A, 0)];
   hit(out[0]);
   for (let k = 1, prev = out[0]; k <= m; k++) {
-    const e = k === m ? p[p.length - 1] : at(k % 2 ? B : A, k / m), q = k === m ? e : room(e, at(k % 2 ? A : B, k / m));
-    for (const s of split(prev, q, k)) { out.push(s); hit(s); }
-    out.push(q); hit(q); prev = q;
+    const e = k === m && keep ? p[p.length - 1] : at(k % 2 ? B : A, t(k)), r = k === m ? e : room(e, at(k % 2 ? A : B, t(k)));
+    for (const s of split(prev, r, k)) { out.push(s); hit(s); }
+    out.push(r); hit(r); prev = r;
   }
+  if (head) out.unshift(head);
+  if (tail) out.push(tail);
   return [out];
 }
 // needle hits so far in this colour block's columns, on a 0.5 mm grid (`G`, reset per block by restitch)
-let G = new Map();
-const hit = ([x, y]) => { const k = Math.floor(x * 2) + "," + Math.floor(y * 2); G.set(k, (G.get(k) || 0) + 1); };
+let G = new Map(), COV = new Map(), BOX = [0, 0, 0, 0];
+const inside = ([x, y]) => x >= BOX[0] && y >= BOX[1] && x <= BOX[2] && y <= BOX[3];
+// thread from the source within a cell of a point (mm, scaled)
+const sewn = ([x, y]) => {
+  const X = Math.floor(x * 4), Y = Math.floor(y * 4);
+  for (let i = -1; i <= 1; i++) for (let j = -1; j <= 1; j++) if (COV.has(X + i + "," + (Y + j))) return true;
+  return false;
+};
+const hit = ([x, y], v = 1) => { const k = Math.floor(x * 2) + "," + Math.floor(y * 2); G.set(k, (G.get(k) || 0) + v); };
 // hits in the densest 1 mm window holding a point
 function crowd([x, y]) {
   const X = Math.floor(x * 2), Y = Math.floor(y * 2), c = (i, j) => G.get(X + i + "," + (Y + j)) || 0;
@@ -394,10 +492,22 @@ const MAXS = 6.8;   // the writer splits stitches over 7 mm in equal parts (the 
 // split satin: pieces at most 5.5 mm; a hit where a 1 mm window already holds 16 becomes a short stitch; columns
 // over 30 mm wide (median) are filled instead (the peace ring at 250 % is 25 mm: filling those columns took trims 54 -> 82)
 const PIECE = 5.5, SHORT = 16, WIDE = 30;
-// fills: the area their stitches cover (closed over 1.2 mm on a 4 px/mm grid) filled again at 0.4 mm rows, less what
+// a column end reaches 0.5 mm further on; satin same-edge gaps and fill rows (mm) kept from the source within these
+const EXT = 0.5, SATIN = [0.3, 0.5], ROWS = [0.35, 0.5];
+const clamp = (v, [a, b]) => Math.min(b, Math.max(a, v));
+// a satin column's gap between hits on one edge, at the source's own size, brought into SATIN. Over OPEN it's a
+// zigzag underlay (or meant open) and stays a line: rebuilt as satin, peace.pes's underlay took 81 % more thread.
+// (Satins in the samples measure 0.2-0.9, underlay 1.0-3.)
+const OPEN = 1;
+function satinGap1(p, scale) {
+  const g = p.slice(2).map((q, k) => Math.hypot(q[0] - p[k][0], q[1] - p[k][1])).sort((a, b) => a - b), raw = g[g.length >> 1] / scale;
+  return raw > OPEN ? raw : clamp(raw, SATIN);
+}
+// fills: the area their stitches cover (closed over 1.2 mm on a 4 px/mm grid) filled again at the source's row
+// spacing (`scale` given; else 0.4 mm), started from the end nearer `from`, less what
 // `taken` (global 1/4 mm cells) already holds, bar a 0.5 mm overlap so the two don't open a gap (the peace sign's
 // ring and bars, three directions, piled 37 hits/mm² where they met)
-function refill(runs, angle, taken = new Set()) {
+function refill(runs, angle, taken = new Set(), scale = 0, from = null) {
   let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
   for (const p of runs) for (const [x, y] of p) { if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
   const R = 4; x0 -= 3; y0 -= 3;
@@ -416,7 +526,27 @@ function refill(runs, angle, taken = new Set()) {
   for (const i of cut) shape.data[i] = 0;
   const loops = contours(shape).filter((l) => l.length > 8).map((l) => l.map(([x, y]) => [x0 + x / R, y0 + y / R]));
   if (!loops.length) return null;
-  const paths = fillPolygon(loops, { angle, density: 0.4 });
+  // the source's row spacing: its area over the length of its rows (stitches within 15° of the fill's direction),
+  // at its own size, kept within ROWS (peace.pes's fills, re-stitched at 0.4, took 41-67 % more thread than the source)
+  let rows = 0;
+  if (scale) for (const p of runs) for (let i = 1; i < p.length; i++) {
+    const dx = p[i][0] - p[i - 1][0], dy = p[i][1] - p[i - 1][1], a = ((Math.atan2(dy, dx) * 180) / Math.PI + 360) % 180, off = Math.abs(a - angle);
+    if (Math.min(off, 180 - off) <= 15) rows += Math.hypot(dx, dy);
+  }
+  const density = rows ? clamp(mine.length / (R * R) / rows / scale, ROWS) : 0.4;
+  // (rows the same way round, started from the end nearer the needle: the tatami starts at the outline's far point
+  // along its angle turned by (1, -1), and at the opposite one at angle + 180°)
+  let dir = angle;
+  if (from) {
+    const r = (angle * Math.PI) / 180, v = [Math.cos(r) + Math.sin(r), Math.sin(r) - Math.cos(r)], pts = loops.flat();
+    let hi = pts[0], lo = pts[0];
+    for (const q of pts) { const t = q[0] * v[0] + q[1] * v[1]; if (t > hi[0] * v[0] + hi[1] * v[1]) hi = q; if (t < lo[0] * v[0] + lo[1] * v[1]) lo = q; }
+    if (Math.hypot(lo[0] - from[0], lo[1] - from[1]) < Math.hypot(hi[0] - from[0], hi[1] - from[1])) dir = angle + 180;
+  }
+  const paths = fillPolygon(loops, { angle: dir, density });
+  // (a point this fill will cover, 0.25 mm in from its edge)
+  const on = (X, Y) => X >= 0 && Y >= 0 && X < w && Y < h && shape.data[Y * w + X];
+  paths.inside = ([x, y]) => { const X = Math.round((x - x0) * R), Y = Math.round((y - y0) * R); return on(X, Y) && on(X - 1, Y) && on(X + 1, Y) && on(X, Y - 1) && on(X, Y + 1); };
   return paths.length ? paths : null;
 }
 
@@ -437,12 +567,50 @@ export function landJumps(pattern) {
   return { ...pattern, stitches: out };
 }
 
+// Satin columns (6+ stitches over 0.5 mm, each turning back on the last) whose gap between hits on one edge is out of
+// SATIN (gnome at 80 %: 0.22, packed stiff; rosacea at 80 %: 0.71, fabric showing) sewn again at the nearest sane
+// gap, in place: each keeps its own first and last hole, so nothing around it moves. Underlay (over OPEN) is left.
+// Stitch units 0.1 mm.
+export function respace(st, scale = 1) {
+  const out = [];
+  // (the crowding grid holds the whole block, less each column as it's replaced, so a re-spaced column's hits make
+  // room where it meets others: peace.pes at 110 % piled 25 hits/mm² without)
+  const block = (i) => {
+    G = new Map();
+    for (let k = i; k < st.length && st[k][2] !== COLOR_CHANGE; k++) if (st[k][2] === STITCH) hit([st[k][0] / 10, st[k][1] / 10]);
+  };
+  block(0);
+  for (let i = 0; i < st.length;) {
+    if (st[i][2] !== STITCH) { if (st[i][2] === COLOR_CHANGE) block(i + 1); out.push(st[i++]); continue; }
+    let j = i;
+    while (j < st.length && st[j][2] === STITCH) j++;
+    const p = st.slice(i, j).map(([x, y]) => [x / 10, y / 10]), lens = [], dir = [];
+    for (let k = 1; k < p.length; k++) { const dx = p[k][0] - p[k - 1][0], dy = p[k][1] - p[k - 1][1]; lens.push(Math.hypot(dx, dy)); dir.push([dx, dy]); }
+    const back = (k) => lens[k] > 0.5 && lens[k + 1] > 0.5 && (dir[k][0] * dir[k + 1][0] + dir[k][1] * dir[k + 1][1]) / (lens[k] * lens[k + 1]) < -0.6;
+    const run = [p[0]];
+    for (let a = 0; a < lens.length;) {
+      let b = a;
+      while (b < lens.length - 1 && back(b)) b++;
+      const col = p.slice(a, b + 2), g = b - a >= 6 && col.slice(2).map((q, k) => Math.hypot(q[0] - col[k][0], q[1] - col[k][1])).sort((x, y) => x - y)[(col.length - 2) >> 1];
+      if (g && (g < SATIN[0] - 0.005 || g > SATIN[1] + 0.005) && g / scale <= OPEN) {
+        for (const q of col) hit(q, -1);
+        run.push(...column(col, 1, true)[0].slice(1)); a = b + 1;
+      }
+      else { run.push(p[a + 1]); a++; }
+    }
+    for (const q of run) out.push([Math.round(q[0] * 10), Math.round(q[1] * 10), STITCH]);
+    i = j;
+  }
+  return out;
+}
+
 // a new pattern: scaled about its centre, tiny stitches merged into the next, long ones split, dense spots thinned;
 // `sort` merges same-thread blocks first; past 80-120 % it's re-stitched (`restitch`)
-export function fix(pattern, { scale = 1, tiny = false, thin = false, sort = false } = {}) {
+export function fix(pattern, { scale = 1, tiny = false, thin = false, sort = false, satin = false } = {}) {
   pattern = landJumps(pattern);
   if (sort) pattern = sortColors(pattern) || pattern;
-  if (scale < 0.8 - 1e-9 || scale > 1.2 + 1e-9) pattern = restitch(pattern, scale), scale = 1;
+  if (scale < 0.8 - 1e-9 || scale > 1.2 + 1e-9) pattern = restitch(pattern, scale), scale = 1, satin = false;
+  else if (scale !== 1) satin = true;
   let st = pattern.stitches;
   if (scale !== 1) {
     // (a loop, not Math.min(...pts): spreading 110k+ stitches overflows the stack)
@@ -452,6 +620,7 @@ export function fix(pattern, { scale = 1, tiny = false, thin = false, sort = fal
     // whole 0.1 mm units here, so the writer's rounding can't collapse a stitch the check then misses
     st = st.map(([x, y, c]) => [Math.round(cx + (x - cx) * scale), Math.round(cy + (y - cy) * scale), c]);
   }
+  if (satin) st = respace(st, scale);
   // a file that starts with a stitch at the origin (gnome.pes) starts somewhere else once scaled: jump there first,
   // as our own designs do, or the needle sews a stitch out from the origin
   const first = st.find((s) => s[2] === STITCH || s[2] === JUMP), out = first && first[2] === STITCH ? [[first[0], first[1], JUMP]] : [];

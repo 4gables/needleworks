@@ -15,6 +15,12 @@ for (const dir of dirs) for (const f of readdirSync(dir).filter((x) => /\.(pes|d
     const p = fix(d, { scale, tiny, thin }), v = validatePES(writePES(p), p);
     if (!v.ok) { bad++; console.error(`FAIL ${f} scale ${scale} tiny ${tiny} thin ${thin}: ${v.error}`); }
   }
+  {
+    // satins evened out at full size (within 80-120 % every resize does it)
+    n++;
+    const p = fix(d, { satin: true }), v = validatePES(writePES(p), p);
+    if (!v.ok) { bad++; console.error(`FAIL ${f} satin: ${v.error}`); }
+  }
   for (const scale of [0.5, 0.7, 1, 1.5, 2.5]) for (const sort of [false, true]) {
     n++;
     try {
