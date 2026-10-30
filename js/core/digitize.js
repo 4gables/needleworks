@@ -2,7 +2,7 @@
 // hairlines get a double running stitch along their centre; every shape with width gets a solid tatami fill.
 // Other styles: line drawing (`lineArt`) and cross-stitch (`crossStitch`).
 import { Design } from "./design.js";
-import { run } from "./geom.js";
+import { arclen, run } from "./geom.js";
 import { MARGIN } from "./machines.js";
 import { distanceTransform, label, order, skeletonEdges } from "./raster.js";
 import { hexToRgb, nearestBrotherThread, rgbToHex } from "./threads.js";
@@ -22,6 +22,8 @@ export const DENSITY = { solid: 0.35, standard: 0.4 };
 // A colour's fill reaches this far (mm) under the colours sewn after it, so thread pull can't open a gap of fabric
 // where two colours meet (digitizing guides: 0.2-0.4 mm).
 const OVERLAP = 0.35;
+// Moves between parts of one colour up to this far (mm) travel under stitches still to come rather than jump
+const TRAVEL = 10;
 
 // Gaps narrower than 0.5 mm between parts of one colour (between small letters, inside an M's notch) close up once
 // sewn. Returns their area in mm²: a morphological closing of the colour, minus the colour, counted only where the
@@ -250,25 +252,33 @@ function tatami(mask, comp, res, { angle, spacing, stitch, inset = 0, pull = 0.1
       const fwd = k % 2 === 0, off = (FILL_PATTERNS[pattern] || FILL_PATTERNS.tatami).off(row.r) * L, line = [a];
       for (let u = Math.ceil((a - off) / L) * L + off; u < b; u += L) if (u - a > L * 0.3 && b - u > L * 0.3) line.push(u);
       line.push(b);
+      // a short remainder at a row's end is merged into the last stitch (up to 1.3 x L, more with pull): halve
+      // the ones over 4 mm, which lay loose on top of the fill
+      for (let i = line.length - 1; i > 0; i--) if (line[i] - line[i - 1] > 4 * res) line.splice(i, 0, (line[i] + line[i - 1]) / 2);
       const pts = (fwd ? line : line.reverse()).map((u) => toXY(u, row.v)), cur = paths[paths.length - 1];
-      if (cur.length && leaves(cur[cur.length - 1], pts[0])) paths.push(pts); else cur.push(...pts);
+      if (cur.length && leaves(cur[cur.length - 1], pts[0])) { paths.push(pts); return; }
+      // where the edge runs nearly along the rows, the step to the next row is long (up to 7.6 mm): a loose stitch
+      // lying on top. Split into steps of 3 mm at most along it.
+      const q = cur[cur.length - 1], n = q ? Math.ceil(Math.hypot(pts[0][0] - q[0], pts[0][1] - q[1]) / (3 * res)) : 1;
+      for (let i = 1; i < n; i++) cur.push([q[0] + ((pts[0][0] - q[0]) * i) / n, q[1] + ((pts[0][1] - q[1]) * i) / n]);
+      cur.push(...pts);
     });
     return paths;
   });
 }
 
-// Sew a fill's sections in one go: between sections the needle travels inside the shape, through rows not sewn
-// yet, so the fill covers the travel (Ink/Stitch's tatami travel, heatstitch's travel grid). It only jumps (and
-// trims) when every way would lie on top of finished rows for more than 2 mm. groups: [underlay paths, fill
-// paths] in px; the underlay is covered by the fill, so travel over it is hidden too.
-function routeFill(groups, comp, mask, res) {
-  const { w } = mask, C = Math.max(1, Math.round(res * 0.5));   // 0.5 mm routing cells
-  const gw = Math.ceil(mask.w / C), gh = Math.ceil(mask.h / C), n = gw * gh;
-  const inside = new Uint8Array(n), sewn = new Uint8Array(n), trod = new Uint8Array(n);
-  for (let gy = 0; gy < gh; gy++) for (let gx = 0; gx < gw; gx++) {
-    const x = Math.min(mask.w - 1, gx * C + (C >> 1)), y = Math.min(mask.h - 1, gy * C + (C >> 1));
-    inside[gy * gw + gx] = comp.labels[y * w + x] === comp.id ? 1 : 0;
-  }
+// Travel routing on a grid of 0.5 mm cells over the picture (Ink/Stitch's tatami travel, heatstitch's travel grid):
+// A* over 8-neighbour cells that may be crossed (`inside`), where cells already sewn cost 6x and every earlier travel
+// through a cell costs more, so ways hide under stitches still to come and don't funnel through one spot.
+// cell(x, y): 1 where a cell (sampled at its centre pixel) may be crossed, 2 where it may and stitches sewn over it
+// later hide whatever is sewn now (it's never counted as finished). hop(a, b): whether the straight step from a point
+// to the cell it starts from (or ends on) is covered.
+function makeRouter(mask, res, cell, hop = null) {
+  const C = Math.max(1, Math.round(res * 0.5));   // 0.5 mm cells
+  const gw = Math.ceil(mask.w / C), gh = Math.ceil(mask.h / C), n = gw * gh, inside = new Uint8Array(n);
+  for (let gy = 0; gy < gh; gy++) for (let gx = 0; gx < gw; gx++)
+    inside[gy * gw + gx] = cell(Math.min(mask.w - 1, gx * C + (C >> 1)), Math.min(mask.h - 1, gy * C + (C >> 1)));
+  const sewn = new Uint8Array(n), trod = new Uint8Array(n);
   const cellOf = ([x, y]) => Math.min(gh - 1, Math.max(0, Math.floor(y / C))) * gw + Math.min(gw - 1, Math.max(0, Math.floor(x / C)));
   const centre = (c) => [(c % gw) * C + C / 2, Math.floor(c / gw) * C + C / 2];
   // f returning false stops the walk (and along returns false)
@@ -277,16 +287,15 @@ function routeFill(groups, comp, mask, res) {
     for (let k = 0; k <= steps; k++) if (f(cellOf([a[0] + ((b[0] - a[0]) * k) / steps, a[1] + ((b[1] - a[1]) * k) / steps])) === false) return false;
     return true;
   };
-  const markSewn = (p) => { for (let i = 1; i < p.length; i++) along(p[i - 1], p[i], (c) => (sewn[c] = 1)); };
-  // A* over 8-neighbour cells; finished rows cost 6x so travel hides under rows still to come
   // row ends sit on (or a pull-compensation past) the edge: start from the nearest cell inside
-  const snap = (c) => {
-    if (inside[c]) return c;
+  const snap = (p) => {
+    const c = cellOf(p);
+    if (inside[c] && (!hop || hop(p, centre(c)))) return c;
     const cx = c % gw, cy = (c - cx) / gw;
     let best = -1, bd = Infinity;
     for (let dy = -3; dy <= 3; dy++) for (let dx = -3; dx <= 3; dx++) {
       const x = cx + dx, y = cy + dy, m = y * gw + x;
-      if (x >= 0 && y >= 0 && x < gw && y < gh && inside[m] && dx * dx + dy * dy < bd) { bd = dx * dx + dy * dy; best = m; }
+      if (x >= 0 && y >= 0 && x < gw && y < gh && inside[m] && dx * dx + dy * dy < bd && (!hop || hop(p, centre(m)))) { bd = dx * dx + dy * dy; best = m; }
     }
     return best;
   };
@@ -326,8 +335,9 @@ function routeFill(groups, comp, mask, res) {
     return top;
   };
   let gen = 0;
+  // the way from a to b (px) as { pts, sewnMm (how much of it lies on finished stitches), mm (its length) }, or null
   function route(a, b) {
-    const s = snap(cellOf(a)), t = snap(cellOf(b));
+    const s = snap(a), t = snap(b);
     if (s < 0 || t < 0 || region[s] !== region[t]) return null;
     gen++;
     const g = (c) => (STAMP[c] === gen ? G[c] : Infinity), from = (c) => (STAMP[c] === gen ? FROM[c] : -1);
@@ -341,7 +351,6 @@ function routeFill(groups, comp, mask, res) {
         if (!dx && !dy) continue;
         const x = cx + dx, y = cy + dy; if (x < 0 || y < 0 || x >= gw || y >= gh) continue;
         const m = y * gw + x; if (!inside[m]) continue;
-        // each earlier travel through a cell costs more, so ways don't all funnel through one spot (needle hits pile up)
         const v = g(c) + Math.hypot(dx, dy) * ((sewn[m] ? 6 : 1) + 2 * trod[m]);
         if (v < g(m)) { STAMP[m] = gen; G[m] = v; FROM[m] = c; push(v + hx(m), m); }
       }
@@ -357,8 +366,38 @@ function routeFill(groups, comp, mask, res) {
     const pts = [a], cs = cells.map(centre); let i = 0;
     while (i < cs.length - 1) { let j = cs.length - 1; while (j > i + 1 && !ok(pts[pts.length - 1], cs[j])) j--; pts.push(cs[j]); i = j; }
     pts.push(b);
-    return { pts, sewnMm };
+    let mm = 0;
+    for (let k = 1; k < pts.length; k++) mm += Math.hypot(pts[k][0] - pts[k - 1][0], pts[k][1] - pts[k - 1][1]) / res;
+    return { pts, sewnMm, mm };
   }
+  // the route as travel stitches up to 2.5 mm, none under 0.6 mm (ending exactly on b, which isn't included)
+  function stitches(r) {
+    const travel = [];
+    let at = r.pts[0];
+    for (let k = 1; k < r.pts.length; k++) {
+      const [ax, ay] = r.pts[k - 1], [bx, by] = r.pts[k], m = Math.max(1, Math.ceil(Math.hypot(bx - ax, by - ay) / (2.5 * res)));
+      for (let q = 1; q <= m; q++) {
+        const t = [ax + ((bx - ax) * q) / m, ay + ((by - ay) * q) / m];
+        if (Math.hypot(t[0] - at[0], t[1] - at[1]) >= 0.6 * res) { travel.push(t); at = t; }
+      }
+    }
+    const b = r.pts[r.pts.length - 1];
+    while (travel.length && Math.hypot(travel[travel.length - 1][0] - b[0], travel[travel.length - 1][1] - b[1]) < 0.6 * res) travel.pop();
+    for (let k = 1; k < r.pts.length; k++) along(r.pts[k - 1], r.pts[k], (c) => (trod[c] = Math.min(255, trod[c] + 1)));
+    return travel;
+  }
+  const markSewn = (p) => { for (let i = 1; i < p.length; i++) along(p[i - 1], p[i], (c) => { if (inside[c] !== 2) sewn[c] = 1; }); };
+  // which connected stretch of crossable cells a point starts in (0: none), so a route between two can't exist
+  const regionOf = (p) => { const c = snap(p); return c < 0 ? 0 : region[c]; };
+  return { route, stitches, markSewn, regionOf };
+}
+
+// Sew a fill's sections in one go: between sections the needle travels inside the shape, through rows not sewn
+// yet, so the fill covers the travel. It only jumps (and trims) when every way would lie on top of finished rows for
+// more than 2 mm. groups: [underlay paths, fill paths] in px; the underlay is covered by the fill, so travel over it is
+// hidden too.
+function routeFill(groups, comp, mask, res) {
+  const { w } = mask, R = makeRouter(mask, res, (x, y) => (comp.labels[y * w + x] === comp.id ? 1 : 0));
   const out = [];
   let cur = null;
   groups.forEach((paths, gi) => {
@@ -372,7 +411,7 @@ function routeFill(groups, comp, mask, res) {
       if (cur) search: for (let i = 0; i < left.length; i++) for (const back of [false, true]) {
         const q = back ? left[i][left[i].length - 1] : left[i][0];
         if (Math.hypot(q[0] - cur[0], q[1] - cur[1]) <= res) { k = i; r = null; rev = back; break search; }
-        const ri = route(cur, q);
+        const ri = R.route(cur, q);
         if (i === 0 && !back) r = ri;
         if (ri && ri.sewnMm <= 2) { k = i; r = ri; rev = back; break search; }
       }
@@ -380,24 +419,9 @@ function routeFill(groups, comp, mask, res) {
       const d = cur ? Math.hypot(p[0][0] - cur[0], p[0][1] - cur[1]) : Infinity;
       // within 1 mm: sew straight on (skipping a first point that would make a stitch under 0.4 mm)
       if (cur && d <= res) out[out.length - 1].push(...(d < 0.4 * res ? p.slice(1) : p));
-      else {
-        if (r && r.sewnMm <= 2) {
-          // travel stitches up to 2.5 mm, none under 0.6 mm (it ends exactly on the section's first point)
-          const travel = [];
-          let at = cur;
-          for (let k = 1; k < r.pts.length; k++) {
-            const [ax, ay] = r.pts[k - 1], [bx, by] = r.pts[k], m = Math.max(1, Math.ceil(Math.hypot(bx - ax, by - ay) / (2.5 * res)));
-            for (let q = 1; q <= m; q++) {
-              const t = [ax + ((bx - ax) * q) / m, ay + ((by - ay) * q) / m];
-              if (Math.hypot(t[0] - at[0], t[1] - at[1]) >= 0.6 * res) { travel.push(t); at = t; }
-            }
-          }
-          while (travel.length && Math.hypot(travel[travel.length - 1][0] - p[0][0], travel[travel.length - 1][1] - p[0][1]) < 0.6 * res) travel.pop();
-          for (let k = 1; k < r.pts.length; k++) along(r.pts[k - 1], r.pts[k], (c) => (trod[c] = Math.min(255, trod[c] + 1)));
-          out[out.length - 1].push(...travel, ...p);
-        } else out.push(p.slice());
-      }
-      if (gi === groups.length - 1) markSewn(p);
+      else if (r && r.sewnMm <= 2) out[out.length - 1].push(...R.stitches(r), ...p);
+      else out.push(p.slice());
+      if (gi === groups.length - 1) R.markSewn(p);
       cur = p[p.length - 1];
     }
   });
@@ -445,14 +469,31 @@ function build(img, analysis, opts) {
     .sort((a, b) => b.lightness - a.lightness);   // light first, dark details on top
   const summary = [], stitched = new Set(used.map((c) => c.id));
   const fine = { narrowMm2: 0, hairlines: 0 };   // details too small to stitch cleanly (shown as a hint)
+  // ignore specks: under 1.5 mm², or under 4 mm² and under 2.5 mm across (a dot, not a stem: each speck left was a
+  // trim, two locks and often a loose thread; 4 mm² for all erased the thin stems of a line-art bouquet)
+  const minPx = 1.5 * res * res, dotPx = 4 * res * res, dotW = 2.5 * res;
+  // where each colour's fill will surely lie: over 0.6 mm inside a shape that isn't a speck. A travel run sewn there
+  // by an earlier colour is covered.
+  const solid = new Uint8Array(w * h);
+  for (const col of used) {
+    const m = { w, h, data: new Uint8Array(w * h) };
+    for (let i = 0; i < w * h; i++) m.data[i] = labels[i] === col.id ? 1 : 0;
+    const dt = distanceTransform(m), { labels: cl, count } = label(m), big = new Uint8Array(count + 1);
+    const size = new Int32Array(count + 1), x0 = new Int32Array(count + 1).fill(w), x1 = new Int32Array(count + 1).fill(-1), y0 = new Int32Array(count + 1).fill(h), y1 = new Int32Array(count + 1).fill(-1);
+    for (let i = 0; i < w * h; i++) {
+      const c = cl[i]; if (!c) continue;
+      const x = i % w, y = (i - x) / w; size[c]++;
+      if (x < x0[c]) x0[c] = x; if (x > x1[c]) x1[c] = x; if (y < y0[c]) y0[c] = y; if (y > y1[c]) y1[c] = y;
+    }
+    for (let c = 1; c <= count; c++) big[c] = size[c] >= dotPx || (size[c] >= minPx && (x1[c] - x0[c] >= dotW || y1[c] - y0[c] >= dotW)) ? 1 : 0;
+    for (let i = 0; i < w * h; i++) if (cl[i] && big[cl[i]] && dt[i] > 0.6 * res) solid[i] = 1;
+  }
   for (const [k, col] of used.entries()) {
     const mask = { w, h, data: new Uint8Array(w * h) };
     for (let i = 0; i < w * h; i++) mask.data[i] = labels[i] === col.id ? 1 : 0;
     fine.narrowMm2 += narrowGaps(mask, res, (i) => !stitched.has(labels[i]));
     const own = distanceTransform(mask);   // the colour's own shapes, for their widths
-    // ignore specks: under 1.5 mm², or under 4 mm² and under 2.5 mm across (a dot, not a stem: each speck left was a
-    // trim, two locks and often a loose thread; 4 mm² for all erased the thin stems of a line-art bouquet)
-    const minPx = 1.5 * res * res, dotPx = 4 * res * res, dotW = 2.5 * res;
+    // (specks: see minPx above)
     // Each shape grows under the colours sewn later (they cover the join), never into the background or an
     // earlier colour. Specks go first, and shapes grow apart: merged, scattered specks would fill the colour above
     // them, and a bridge between two shapes funnels every fill travel through it.
@@ -491,6 +532,7 @@ function build(img, analysis, opts) {
     for (let id = 1; id <= count; id++) comps.push({ id, pixels: [], labels: cl, dt });
     for (let i = 0; i < w * h; i++) if (cl[i]) comps[cl[i] - 1].pixels.push(i);
     let blocks = [];
+    const filled = new Uint8Array(count + 1);   // shapes sewn as fills
     for (const comp of comps) {
       const mine = comp.pixels.filter((i) => labels[i] === col.id);
       if (mine.length < minPx) continue;
@@ -522,18 +564,40 @@ function build(img, analysis, opts) {
         // pull compensation widens a fill past its edge; on thin letters that closes the gaps between them
         const fill = tatami(mask, comp, res, { angle, spacing: o.density, stitch: 3.5, pull: widthMm < 2 ? 0.05 : 0.15 });
         blocks.push({ centre, paths: routeFill([under, fill], comp, mask, res).map(toMm), kind: "fill" });
+        filled[comp.id] = 1;
       }
     }
     if (!blocks.length) continue;
-    // nearest-neighbour order between shapes of one colour keeps travel and trims down
+    // Moves between sections and shapes travel where stitches still to come will cover the run: this colour's fills
+    // not sewn yet (kept 0.25 mm off their edges) or a later colour's solid fill. Each jump was a trim, two locks and,
+    // up to 5 mm (the PE900 never trims those), a loose thread: etsy_8 had 293 trims and 101 loose threads.
+    const toPx = ([x, y]) => [x * res + cx, y * res + cy], ink = (i) => mask.data[i] || later.has(labels[i]);
+    const hop = (a, b) => {   // the step between a point and its first cell: on this colour or one still to come
+      const n = Math.ceil(Math.hypot(b[0] - a[0], b[1] - a[1]) / (0.2 * res));
+      for (let i = 1; i <= n; i++) if (!ink(Math.round(a[1] + ((b[1] - a[1]) * i) / n) * w + Math.round(a[0] + ((b[0] - a[0]) * i) / n))) return false;
+      return true;
+    };
+    const R = makeRouter(mask, res, (x, y) => {
+      const i = y * w + x;
+      return solid[i] && later.has(labels[i]) ? 2 : filled[cl[i]] && dt[i] > 0.25 * res ? 1 : 0;
+    }, hop);
+    // Shapes in nearest-first order, preferring the nearest one a hidden way reaches (keeps travel and trims down),
+    // then one far enough for the machine to trim the jump
     const ordered = [];
-    let at = [0, 0];
+    blocks = blocks.map((b) => ({ ...b, paths: b.paths.filter((p) => p.length) })).filter((b) => b.paths.length);
+    let at = d.cur ? toPx(d.cur) : [0, 0];
     while (blocks.length) {
+      const from = R.regionOf(at);
       let bi = 0, bd = Infinity;
-      blocks.forEach((b, i) => { const v = Math.hypot(b.centre[0] - at[0], b.centre[1] - at[1]); if (v < bd) { bd = v; bi = i; } });
-      const b = blocks.splice(bi, 1)[0]; ordered.push(b); at = b.centre;
+      blocks.forEach((b, i) => {
+        const q = toPx(b.paths[0][0]), v = Math.hypot(q[0] - at[0], q[1] - at[1]) / res;
+        // (a jump of 2-5 mm is left as a loose thread by the machine: one over 5 mm, trimmed, is better)
+        const score = v <= 2 || (v <= TRAVEL && from && R.regionOf(q) === from) ? v : v > 5 ? v + 1000 : v + 2000;
+        if (score < bd) { bd = score; bi = i; }
+      });
+      const b = blocks.splice(bi, 1)[0], last = b.paths[b.paths.length - 1];
+      ordered.push(b); at = toPx(last[last.length - 1]);
     }
-    d.color(col.hex, col.thread.name);
     // a short move to the next piece is sewn straight unless it would cross fabric this colour doesn't cover
     const covered = ([x, y]) => mask.data[Math.round(y * res + cy) * w + Math.round(x * res + cx)] === 1;
     // (fill rows end a little past the shape's edge, so the last 0.3 mm at each end isn't checked)
@@ -546,12 +610,19 @@ function build(img, analysis, opts) {
       }
       return false;
     };
-    // inside a fill, a move of more than 2 mm between sections would lie on top of finished stitches: jump it
-    // (trimmed). Up to 2 mm it's sewn straight across: a jump that short is never trimmed by the machine, so it was
-    // a loose thread plus two locks (1 mm until 2026-10-30)
-    for (const b of ordered) for (const p of b.paths) if (p.length) {
-      const far = !!d.cur && b.kind === "fill" && Math.hypot(p[0][0] - d.cur[0], p[0][1] - d.cur[1]) > 2.0;
-      d.path(p, true, !!d.cur && (far || crosses(d.cur, p[0])));
+    d.color(col.hex, col.thread.name);
+    // Within 2 mm a move is sewn straight when it doesn't cross open fabric, and otherwise too if there's no hidden
+    // way: a jump that short is never trimmed by the machine (a loose thread plus two locks).
+    for (const b of ordered) for (const p of b.paths) {
+      if (!d.cur) { d.path(p); continue; }
+      const gap = Math.hypot(p[0][0] - d.cur[0], p[0][1] - d.cur[1]);
+      if (gap <= 2 && !crosses(d.cur, p[0])) d.path(p);
+      else {
+        const r = gap <= TRAVEL ? R.route(toPx(d.cur), toPx(p[0])) : null;
+        if (r && r.sewnMm <= 2 && r.mm <= 1.5 * gap + 3) d.path([d.cur, ...toMm(R.stitches(r)), ...p]);
+        else d.path(p, true, gap > 2);
+      }
+      if (b.kind === "fill") R.markSewn(p.map(toPx));
     }
     summary.push({ ...col, shapes: ordered.length, kinds: [...new Set(ordered.map((b) => b.kind))] });
   }
@@ -585,13 +656,63 @@ function lineArt(img, analysis, opts) {
   // thicken the 1 px outlines so the skeleton follows them smoothly
   const thick = { w, h, data: lines.data.slice() };
   for (let i = 0; i < w * h; i++) if (lines.data[i]) { const x = i % w; if (x < w - 1) thick.data[i + 1] = 1; if (i + w < w * h) thick.data[i + w] = 1; }
-  const comps = order(skeletonEdges(thick, 3, { spur: 1 }));
+  // (pruning dead ends under 2 mm too took the strokes off small lettering)
+  const edges = skeletonEdges(thick, 3, { spur: 1 });
+  // each connected drawing walked out and back: a closed tour (mm) that ends where it starts; pieces under 2 mm long
+  // in all are specks (each one a trim, two locks and often a loose thread)
+  const tours = order(edges).map((comp) => comp.flatMap(([p], k) => run(toMm(p), 2.0).slice(k ? 1 : 0)))
+    .filter((t) => t.length > 1 && arclen(t).at(-1) >= 4);
+  // A line end within 2 mm of another drawing is joined to it: the needle steps across, sews that drawing and steps
+  // back over the same stitch, instead of jumping (a gap that short is a loose thread the machine never trims; 3 mm
+  // drew visible bars between small letters)
+  const key = ([x, y]) => `${Math.floor(x / 3)},${Math.floor(y / 3)}`, cells = new Map();
+  tours.forEach((t, i) => t.forEach((q, k) => { const c = key(q); if (!cells.has(c)) cells.set(c, []); cells.get(c).push([i, k]); }));
+  const deg = new Map();
+  for (const [a, b] of edges) { deg.set(a, (deg.get(a) || 0) + 1); deg.set(b, (deg.get(b) || 0) + 1); }
+  const ends = edges.flatMap(([a, b, p]) => [...(deg.get(a) === 1 ? [p[0]] : []), ...(deg.get(b) === 1 ? [p[p.length - 1]] : [])]).map((q) => toMm([q])[0]);
+  const near = (q, skip, r) => {   // the nearest tour point within r of q, not in tour `skip`
+    const [gx, gy] = key(q).split(",").map(Number);
+    let best = null, bd = r;
+    for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) for (const [i, k] of cells.get(`${gx + dx},${gy + dy}`) || []) {
+      const v = Math.hypot(tours[i][k][0] - q[0], tours[i][k][1] - q[1]);
+      if (i !== skip && v <= bd) { bd = v; best = [i, k, v]; }
+    }
+    return best;
+  };
+  const joins = [];
+  for (const e of ends) {
+    const at = near(e, -1, 0.05);
+    if (!at) continue;
+    const to = near(e, at[0], 2);
+    if (to) joins.push({ a: at[0], ka: at[1], b: to[0], kb: to[1], v: to[2] });
+  }
+  joins.sort((p, q) => p.v - q.v);
+  const root = tours.map((_, i) => i), find = (i) => (root[i] === i ? i : (root[i] = find(root[i])));
+  const links = tours.map(() => []);
+  for (const j of joins) if (find(j.a) !== find(j.b)) { root[find(j.a)] = find(j.b); links[j.a].push([j.ka, j.b, j.kb]); links[j.b].push([j.kb, j.a, j.ka]); }
+  // a tour from its point k, with every joined drawing sewn where it's joined (and the step back)
+  const rotate = (t, k) => [...t.slice(k), ...t.slice(1, k + 1)];
+  const nest = (i, k, from) => {
+    const t = tours[i], n = t.length - 1, at = new Map();
+    for (const [ka, j, kb] of links[i]) if (j !== from) { const r = (ka - k + n) % n; if (!at.has(r)) at.set(r, []); at.get(r).push([j, kb]); }
+    const out = [];
+    rotate(t, k).forEach((q, r) => { out.push(q); for (const [j, kb] of at.get(r) || []) out.push(...nest(j, kb, i), q); });
+    return out;
+  };
+  let left = tours.map((_, i) => i).filter((i) => find(i) === i).map((i) => nest(i, 0, -1));
   const d = new Design(o.hoop);
   d.color(ink.hex, ink.thread.name);
-  let shapes = 0;
-  for (const comp of comps) {
-    const walk = comp.flatMap(([p], k) => run(toMm(p), 2.0).slice(k ? 1 : 0));
-    if (walk.length > 1) { d.path(walk); shapes++; }
+  const shapes = left.length;
+  // nearest drawing next, entered at its nearest point; rather one over 5 mm away (the machine trims the jump) than
+  // a loose 2-5 mm thread
+  while (left.length) {
+    let bi = 0, bk = 0, bd = Infinity;
+    left.forEach((t, i) => t.forEach((q, k) => {
+      const v = d.cur ? Math.hypot(q[0] - d.cur[0], q[1] - d.cur[1]) : q[0], s = !d.cur || v <= 2 || v > 5 ? v : v + 1e3;
+      if (s < bd) { bd = s; bi = i; bk = k; }
+    }));
+    d.path(rotate(left[bi], bk));
+    left.splice(bi, 1);
   }
   if (!d.stitches.length) throw new Error("No lines found to stitch. Try more colours.");
   d.finish();
@@ -614,24 +735,102 @@ function crossStitch(img, analysis, opts) {
     for (const [l, k] of n) { all += k; if (bg.has(l)) continue; fg += k; if (k > bn) { bn = k; best = l; } }
     if (fg * 2 > all) grid[gy * gw + gx] = best;
   }
+  // a speck on open fabric (no cell of its colour within two, no other colour beside it) cost a trim and two locks:
+  // dropped. (Every cell with no neighbour of its colour went too, but a small sprigged picture lost half its flowers.)
+  const at = (gx, gy) => (gx >= 0 && gy >= 0 && gx < gw && gy < gh ? grid[gy * gw + gx] : -1), lone = [];
+  for (let gy = 0; gy < gh; gy++) for (let gx = 0; gx < gw; gx++) {
+    const k = at(gx, gy);
+    let near = 0;
+    if (k >= 0) for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) {
+      const q = (dx || dy) ? at(gx + dx, gy + dy) : -1;
+      if (q === k || (q >= 0 && Math.abs(dx) < 2 && Math.abs(dy) < 2)) near++;
+    }
+    if (k >= 0 && !near) lone.push(gy * gw + gx);
+  }
+  for (const i of lone) grid[i] = -1;
   const used = colors.filter((k) => grid.includes(k.id)).sort((a, b) => b.lightness - a.lightness);
   if (!used.length) throw new Error("Nothing to stitch. Try more colours or bigger crosses.");
-  const ox = (gw * c) / 2, oy = (gh * c) / 2, mm = (gx, gy) => [(gx * c - ox) / res, (gy * c - oy) / res];
+  const ox = (gw * c) / 2, oy = (gh * c) / 2, mm = ([gx, gy]) => [(gx * c - ox) / res, (gy * c - oy) / res];
+  // cell corners are the vertices, v = gy * W + gx
+  const W = gw + 1, V = W * (gh + 1), X = (v) => v % W, Y = (v) => Math.floor(v / W);
   const d = new Design(o.hoop), summary = [];
   for (const col of used) {
     d.color(col.hex, col.thread.name);
-    let crosses = 0;
-    for (let gy = 0; gy < gh; gy++) {
-      const runs = [];
-      for (let gx = 0; gx < gw; gx++) if (grid[gy * gw + gx] === col.id) { if (runs.length && runs[runs.length - 1][1] === gx - 1) runs[runs.length - 1][1] = gx; else runs.push([gx, gx]); }
-      if (gy % 2) runs.reverse();   // serpentine: odd rows from the right
-      for (const [a, b] of runs) {
-        const n = b - a + 1, pts = [];
-        for (let k = 0; k <= n; k++) pts.push(mm(a + k, gy + (k % 2 ? 0 : 1)));
-        for (let k = n; k >= 0; k--) pts.push(mm(a + k, gy + (k % 2 ? 1 : 0)));
-        d.path(pts); crosses += n;
+    const done = new Uint8Array(gw * gh);   // cells whose cross is sewn
+    // Runs are chained by travel instead of a jump (etsy_8 at 2 mm had 722 trims, most runs under 20 stitches plus
+    // two locks): a step along a cell edge costs 1 beside a cell of this colour, 2 beside another colour's, 3 across
+    // open fabric, and back over a sewn diagonal 1; at most 6 (so open fabric two cells across at most)
+    const edge = (c1, c2) => { const a = at(...c1), b = at(...c2); return a === col.id || b === col.id ? 1 : a >= 0 || b >= 0 ? 2 : 4; };
+    const moves = (v) => {
+      const x = X(v), y = Y(v), out = [];
+      if (x < gw) out.push([v + 1, edge([x, y - 1], [x, y])]);
+      if (x > 0) out.push([v - 1, edge([x - 1, y - 1], [x - 1, y])]);
+      if (y < gh) out.push([v + W, edge([x - 1, y], [x, y])]);
+      if (y > 0) out.push([v - W, edge([x - 1, y - 1], [x, y - 1])]);
+      for (const [dx, dy] of [[1, 1], [1, -1], [-1, 1], [-1, -1]]) {
+        const cx = dx > 0 ? x : x - 1, cy = dy > 0 ? y : y - 1;
+        if (cx >= 0 && cy >= 0 && cx < gw && cy < gh && done[cy * gw + cx]) out.push([v + dy * W + dx, 1]);
       }
+      return out;
+    };
+    // runs of cells in a row; each can be sewn from any of its four corners (it ends on the other corner that side)
+    const runs = [];
+    for (let gy = 0; gy < gh; gy++) for (let gx = 0; gx < gw; gx++) if (grid[gy * gw + gx] === col.id) {
+      const r = runs[runs.length - 1];
+      if (r && r.y === gy && r.b === gx - 1) r.b = gx; else runs.push({ y: gy, a: gx, b: gx });
     }
+    const corners = (r) => [r.y * W + r.a, (r.y + 1) * W + r.a, r.y * W + r.b + 1, (r.y + 1) * W + r.b + 1];
+    const starts = new Map();
+    for (const r of runs) for (const s of corners(r)) { if (!starts.has(s)) starts.set(s, []); starts.get(s).push(r); }
+    // the run's corners from corner s: zigzag out along one side's diagonals, up (or down) the far edge, zigzag back
+    const sew = (r, s) => {
+      const n = r.b - r.a + 1, fromLeft = X(s) === r.a, s0 = Y(s) - r.y, pts = [];
+      const p = (k, off) => [fromLeft ? r.a + k : r.b + 1 - k, r.y + off];
+      for (let k = 0; k <= n; k++) pts.push(p(k, k % 2 ? 1 - s0 : s0));
+      for (let k = n; k >= 0; k--) pts.push(p(k, k % 2 ? s0 : 1 - s0));
+      for (let x = r.a; x <= r.b; x++) done[r.y * gw + x] = 1;
+      r.done = true;
+      return pts;
+    };
+    const dist = new Float64Array(V).fill(Infinity), from = new Int32Array(V).fill(-1);
+    let path = null, cur = -1, left = runs.length, crosses = 0;
+    const flush = () => { if (path) d.path(path.map(mm)); path = null; };
+    while (left--) {
+      let pick = null;
+      if (cur >= 0) {   // the nearest run start within reach (Dijkstra)
+        const seen = [cur], open = [[0, cur]];
+        dist[cur] = 0;
+        while (open.length) {
+          open.sort((a, b) => b[0] - a[0]);
+          const [g, v] = open.pop();
+          if (g > dist[v]) continue;
+          const r = (starts.get(v) || []).find((q) => !q.done);
+          if (r) { pick = [r, v]; break; }
+          for (const [m, k] of moves(v)) if (g + k <= 6 && g + k < dist[m]) { if (dist[m] === Infinity) seen.push(m); dist[m] = g + k; from[m] = v; open.push([g + k, m]); }
+        }
+        if (pick) {
+          const way = [];
+          for (let v = pick[1]; v !== cur; v = from[v]) way.push([X(v), Y(v)]);
+          path.push(...way.reverse());
+        }
+        for (const v of seen) { dist[v] = Infinity; from[v] = -1; }
+      }
+      if (!pick) {
+        // jump to the nearest run, but rather one over 5 mm away (the machine trims it) than a loose 2-5 mm thread
+        flush();
+        let bd = Infinity;
+        for (const r of runs) if (!r.done) for (const s of corners(r)) {
+          const v = cur < 0 ? Y(s) * W + X(s) : (Math.hypot(X(s) - X(cur), Y(s) - Y(cur)) * c) / res;
+          const score = cur < 0 || v > 5 ? v : v + 1e6;
+          if (score < bd) { bd = score; pick = [r, s]; }
+        }
+        path = [[X(pick[1]), Y(pick[1])]];
+      }
+      const pts = sew(...pick), [ex, ey] = pts[pts.length - 1];
+      path.push(...pts.slice(1));
+      cur = ey * W + ex; crosses += pick[0].b - pick[0].a + 1;
+    }
+    flush();
     summary.push({ ...col, shapes: crosses, kinds: ["cross"] });
   }
   d.finish();
