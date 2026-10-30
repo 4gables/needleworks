@@ -69,6 +69,11 @@ Embroidery-file tools for home machines. Two implementations of the same engine:
   writing files (it happened once), navigate to it again. Its title reads `DONE <files> <problems>`. Without the
   Chrome extension: headless Chrome with `--remote-debugging-port`, then over CDP import the page's module script as a
   blob with absolute URLs (the inline module doesn't start on its own in headless).
+- Second study (2026-10-29, Ink/Stitch + its 142 fonts, PEmbroider, libembroidery, Wilcom docs) found most numbers
+  already match (stagger, max stitch, row spacing, underlay angle, satin density, contour inset). Not done, and why:
+  Ink/Stitch-style short stitches and 3-hole locks (would change the bookmark for a small gain), contour underlay
+  under picture fills (more stitches; the overlap fixed the gaps), a fabric preset (later), split satin (nothing over
+  3.6 mm yet; split at 7 mm if added).
 - Lessons from other open-source projects (researched 2026-10-29), now handled:
   - PEC palette 62-64 are applique codes on Brother machines ("Applique Material/Position"), not Orange/Cream Yellow
     as pyembroidery named them: `PEC_MATCH` excludes them (inkstitch/pyembroidery#140, SE700-verified).
@@ -83,7 +88,11 @@ Embroidery-file tools for home machines. Two implementations of the same engine:
   edge was hit every 0.8 mm: half the coverage, fabric showing through (found by the cross-library study; the
   bookmark Ashley was sent has it). Satin samples the line every 0.02 mm (0.05 rounded every setting up to 0.4).
   `zigzag(p, w, spacing)` is unchanged (same-edge gap = spacing). Lettering pull comp 0.15 mm a side on satins
-  >= 1.5 mm. Measure with the same-edge statistic, not by eye on a PNG. Satin borders 2.5-4 mm (frames, patch and
+  >= 1.5 mm, 0.05 below (Ink/Stitch small fonts: 0.02-0.05; more closes counters). Lettering satins >= 2.5 mm get a
+  zigzag underlay (width - 0.4, 2.5 mm) as the walk's way out instead of the centre run (every forward run in `order()`
+  is satined back exactly once, so it's always covered). Fine-line lettering uses `followRun` (geom.js): stitches up to
+  1.6 mm but within 0.1 mm of the line and a hole on every turn over 30° (uniform 1.6 mm cut a 1 mm loop by 0.3 mm).
+  Lettering under a 6 mm x-height adds a "Small letters" tip (60 wt thread, 65/9-70/10 needle) to the steps. Measure with the same-edge statistic, not by eye on a PNG. Satin borders 2.5-4 mm (frames, patch and
   appliqué edges, the bookmark border) sew `edgeWalk` first: a run 0.4 mm inside each edge, then the zigzag, then
   the satin (Ink/Stitch contour underlay), for a firm edge on felt.
 - `edgeWalk` ends on the side where zigzag/satin start (ending on the other side left a 2 mm gap: a jump, trim and
@@ -147,6 +156,13 @@ Embroidery-file tools for home machines. Two implementations of the same engine:
   batch pictures, thread coverage unchanged. Travel stitches 0.6-2.5 mm; `relieve()` may merge stitches up to 4 mm. Pictures are
   sampled at 8 px/mm (5 lost the notches of small lettering); thin shapes (< 2 mm) get 0.05 mm pull, not 0.15, so the
   gaps between small letters stay open. Notches under ~0.5 mm can't be kept by any thread: open them in the artwork.
+- Picture colours overlap (second study, 2026-10-29): each shape's fill grows `OVERLAP` 0.35 mm under the colours
+  sewn after it (never into background or earlier colours), so thread pull can't open fabric at a join. Specks under
+  1.5 mm² are dropped first and each shape grows on its own (BFS, never touching another shape): growing the raw mask
+  merged scattered specks into big shapes filled under the next colour (stitches x2, trims x4). Neighbouring colours
+  alternate fill angle (base, base + 90°). `routeFill` charges +2 per earlier travel through a cell, or travel funnels
+  through one spot (50 hits/mm²). Net on the batch pictures: trims down, stitches +1-18%, max density unchanged.
+  Ashley's School of Medicine file has no touching colours, so it gains nothing; it wasn't resent.
 - Fill density (`DENSITY` in digitize.js): Solid 0.35 mm rows (default) or Lighter 0.4. 0.3 fails the PE900 check
   (row links become < 0.3 mm stitches). `digitize()` also returns `fine`: area of gaps < 0.5 mm that stay narrow over a
   length (clusters >= 0.3 mm²; corner tips don't count) and the count of hairline (< 1 mm) shapes. The site warns at

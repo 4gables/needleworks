@@ -6,7 +6,7 @@ import { hoop as getHoop } from "../core/machines.js";
 import { nearestBrotherThread } from "../core/threads.js";
 import { readEmbroidery } from "../core/formats.js";
 import { draw } from "../render.js";
-import { BORDERS, SHAPES, archTight, compose, fileBlocks, fittedSizes, followFrame, label, minSize, pieceBounds } from "./pieces.js";
+import { BORDERS, SHAPES, archTight, compose, fileBlocks, fittedSizes, followFrame, label, minSize, pieceBounds, smallText } from "./pieces.js";
 
 const SCRIPT = "NW Great Vibes", PRINT = "NW Josefin Sans";
 // exact Brother PEC thread colours, so the name on screen is the one the machine shows
@@ -203,7 +203,8 @@ export function initStudio(api) {
       if (s !== seq) return;
       const { design, steps, after } = compose(pieces, api.hoop());
       if (s !== seq) return;
-      stepsUI(steps, after);
+      const fit = fittedSizes(pieces);
+      stepsUI(steps, after, pieces.some((p) => smallText(fit.has(p.id) ? { ...p, size: fit.get(p.id) } : p)));
       // preview: appliqué fabric under its satin, placement and tack-down lines hidden beneath it
       const fabricBlock = steps.findIndex((st) => st.fabric);
       api.setView(design.pattern(), `${api.safeName(firstWords(), "design")}.pes`, {
@@ -220,7 +221,7 @@ export function initStudio(api) {
   }
   $("st-appl-close").onclick = () => { $("st-appl").hidden = true; api.store.set("studio.applSeen", true); };
   $("st-appl-open").onclick = () => { $("st-appl").hidden = false; $("st-appl").scrollIntoView({ block: "nearest", behavior: "smooth" }); };
-  function stepsUI(steps, after = []) {
+  function stepsUI(steps, after = [], small = false) {
     applGuide(steps);
     const pauses = steps.length - 1;
     $("st-steps-count").textContent = `· ${steps.length} ${steps.length === 1 ? "step" : "steps"}, ${pauses} ${pauses === 1 ? "pause" : "pauses"}`;
@@ -229,6 +230,7 @@ export function initStudio(api) {
       <b><span class="n">${i + 1}</span><i style="background:${st.color}"></i>Brother ${nearestBrotherThread(st.color).name}</b>
       ${st.you ? `<span class="you">${api.escapeHtml(st.you)}</span>` : ""}<span>${api.escapeHtml(st.sews.join(" "))}</span>
       ${st.early ? `<small>Sewn early, with the other ${api.escapeHtml(nearestBrotherThread(st.color).name)} parts, to save a thread change.</small>` : ""}</button></li>`).join("")
+      + (small ? `<li class="after"><b>Small letters</b><span>They come out crisper with 60 wt thread and a 65/9 or 70/10 needle, and with the machine slowed down.</span></li>` : "")
       + (after.length ? `<li class="after"><b>When it's done</b><span>${api.escapeHtml(after.join(" "))}</span></li>` : "");
   }
   $("st-steps").onclick = (e) => { const b = e.target.closest("[data-step]"); if (b) api.showStep(api.step() === +b.dataset.step ? null : +b.dataset.step); };

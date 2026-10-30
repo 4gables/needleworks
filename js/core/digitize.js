@@ -18,6 +18,9 @@ export const DEFAULTS = {
 // fill row spacing in mm. Solid covers the fabric; standard is lighter and faster. 0.3 fails the PE900 check:
 // the links between rows become stitches under 0.3 mm, which nest.
 export const DENSITY = { solid: 0.35, standard: 0.4 };
+// A colour's fill reaches this far (mm) under the colours sewn after it, so thread pull can't open a gap of fabric
+// where two colours meet (digitizing guides: 0.2-0.4 mm).
+const OVERLAP = 0.35;
 
 // Gaps narrower than 0.5 mm between parts of one colour (between small letters, inside an M's notch) close up once
 // sewn. Returns their area in mm²: a morphological closing of the colour, minus the colour, counted only where the
@@ -246,7 +249,7 @@ function tatami(mask, comp, res, { angle, spacing, stitch, inset = 0, pull = 0.1
 function routeFill(groups, comp, mask, res) {
   const { w } = mask, C = Math.max(1, Math.round(res * 0.5));   // 0.5 mm routing cells
   const gw = Math.ceil(mask.w / C), gh = Math.ceil(mask.h / C), n = gw * gh;
-  const inside = new Uint8Array(n), sewn = new Uint8Array(n);
+  const inside = new Uint8Array(n), sewn = new Uint8Array(n), trod = new Uint8Array(n);
   for (let gy = 0; gy < gh; gy++) for (let gx = 0; gx < gw; gx++) {
     const x = Math.min(mask.w - 1, gx * C + (C >> 1)), y = Math.min(mask.h - 1, gy * C + (C >> 1));
     inside[gy * gw + gx] = comp.labels[y * w + x] === comp.id ? 1 : 0;
@@ -285,7 +288,8 @@ function routeFill(groups, comp, mask, res) {
         if (!dx && !dy) continue;
         const x = cx + dx, y = cy + dy; if (x < 0 || y < 0 || x >= gw || y >= gh) continue;
         const m = y * gw + x; if (!inside[m]) continue;
-        const v = g[c] + Math.hypot(dx, dy) * (sewn[m] ? 6 : 1);
+        // each earlier travel through a cell costs more, so ways don't all funnel through one spot (needle hits pile up)
+        const v = g[c] + Math.hypot(dx, dy) * ((sewn[m] ? 6 : 1) + 2 * trod[m]);
         if (v < g[m]) { g[m] = v; from[m] = c; heap.push([v + hx(m), m]); }
       }
       if (heap.length > 20000) return null;
@@ -336,6 +340,7 @@ function routeFill(groups, comp, mask, res) {
             }
           }
           while (travel.length && Math.hypot(travel[travel.length - 1][0] - p[0][0], travel[travel.length - 1][1] - p[0][1]) < 0.6 * res) travel.pop();
+          for (let k = 1; k < r.pts.length; k++) along(r.pts[k - 1], r.pts[k], (c) => (trod[c] = Math.min(255, trod[c] + 1)));
           out[out.length - 1].push(...travel, ...p);
         } else out.push(p.slice());
       }
@@ -368,30 +373,59 @@ function build(img, analysis, opts) {
     .sort((a, b) => b.lightness - a.lightness);   // light first, dark details on top
   const summary = [], stitched = new Set(used.map((c) => c.id));
   const fine = { narrowMm2: 0, hairlines: 0 };   // details too small to stitch cleanly (shown as a hint)
-  for (const col of used) {
+  for (const [k, col] of used.entries()) {
     const mask = { w, h, data: new Uint8Array(w * h) };
     for (let i = 0; i < w * h; i++) mask.data[i] = labels[i] === col.id ? 1 : 0;
     fine.narrowMm2 += narrowGaps(mask, res, (i) => !stitched.has(labels[i]));
+    const own = distanceTransform(mask);   // the colour's own shapes, for their widths
+    const minPx = 1.5 * res * res;   // ignore specks under 1.5 mm²
+    // Each shape grows under the colours sewn later (they cover the join), never into the background or an
+    // earlier colour. Specks go first, and shapes grow apart: merged, scattered specks would fill the colour above
+    // them, and a bridge between two shapes funnels every fill travel through it.
+    const later = new Set(used.slice(k + 1).map((c) => c.id));
     const { labels: cl, count } = label(mask);
+    if (later.size) {
+      const size = new Int32Array(count + 1);
+      for (let i = 0; i < w * h; i++) size[cl[i]]++;
+      const src = new Int32Array(w * h).fill(-1), R = OVERLAP * res;
+      let front = [];
+      for (let i = 0; i < w * h; i++) {
+        if (cl[i] && size[cl[i]] < minPx) { cl[i] = 0; mask.data[i] = 0; }
+        else if (cl[i]) { src[i] = i; front.push(i); }
+      }
+      const near = (j) => { const x = j % w; return [x > 0 ? j - 1 : -1, x < w - 1 ? j + 1 : -1, j - w, j + w].filter((q) => q >= 0 && q < w * h); };
+      while (front.length) {
+        const next = [];
+        for (const i of front) for (const j of near(i)) {
+          if (cl[j] || !later.has(labels[j])) continue;
+          const s0 = src[i], dx = (j % w) - (s0 % w), dy = Math.floor(j / w) - Math.floor(s0 / w);
+          if (dx * dx + dy * dy > R * R || near(j).some((q) => cl[q] && cl[q] !== cl[i])) continue;
+          cl[j] = cl[i]; src[j] = s0; mask.data[j] = 1; next.push(j);
+        }
+        front = next;
+      }
+    }
+    // neighbouring colours alternate the row direction so their joins don't open into one seam
+    const angle = o.fillAngle + (k % 2) * 90;
     const dt = distanceTransform(mask);
     const comps = [];
     for (let id = 1; id <= count; id++) comps.push({ id, pixels: [], labels: cl, dt });
     for (let i = 0; i < w * h; i++) if (cl[i]) comps[cl[i] - 1].pixels.push(i);
-    const minPx = 1.5 * res * res;   // ignore specks under 1.5 mm²
     let blocks = [];
     for (const comp of comps) {
-      if (comp.pixels.length < minPx) continue;
+      const mine = comp.pixels.filter((i) => labels[i] === col.id);
+      if (mine.length < minPx) continue;
       let maxDt = 0, sx = 0, sy = 0;
-      for (const i of comp.pixels) { maxDt = Math.max(maxDt, dt[i]); sx += i % w; sy += Math.floor(i / w); }
-      const widthMm = (2 * maxDt) / res, centre = [sx / comp.pixels.length, sy / comp.pixels.length];
+      for (const i of mine) { maxDt = Math.max(maxDt, own[i]); sx += i % w; sy += Math.floor(i / w); }
+      const widthMm = (2 * maxDt) / res, centre = [sx / mine.length, sy / mine.length];
       // only hairlines follow a centre line; anything with width is a solid fill that matches its outline exactly
       if (widthMm < 1.0) {
         fine.hairlines++;
         const cm = { w, h, data: new Uint8Array(w * h) };
-        for (const i of comp.pixels) cm.data[i] = 1;
+        for (const i of mine) cm.data[i] = 1;
         const edges = skeletonEdges(cm, Math.max(2, maxDt));
         if (!edges.length || edges.every((e) => e[2].length < 3)) {   // a dot: fill it instead
-          blocks.push({ centre, paths: tatami(mask, comp, res, { angle: o.fillAngle, spacing: o.density, stitch: 3.5 }).map(toMm), kind: "fill" });
+          blocks.push({ centre, paths: tatami(mask, comp, res, { angle, spacing: o.density, stitch: 3.5 }).map(toMm), kind: "fill" });
           continue;
         }
         const paths = [];
@@ -400,9 +434,9 @@ function build(img, analysis, opts) {
         }
         blocks.push({ centre, paths, kind: "run" });
       } else {
-        const under = tatami(mask, comp, res, { angle: o.fillAngle + 90, spacing: 2.5, stitch: 3, inset: 0.4, pull: 0 });
+        const under = tatami(mask, comp, res, { angle: angle + 90, spacing: 2.5, stitch: 3, inset: 0.4, pull: 0 });
         // pull compensation widens a fill past its edge; on thin letters that closes the gaps between them
-        const fill = tatami(mask, comp, res, { angle: o.fillAngle, spacing: o.density, stitch: 3.5, pull: widthMm < 2 ? 0.05 : 0.15 });
+        const fill = tatami(mask, comp, res, { angle, spacing: o.density, stitch: 3.5, pull: widthMm < 2 ? 0.05 : 0.15 });
         blocks.push({ centre, paths: routeFill([under, fill], comp, mask, res).map(toMm), kind: "fill" });
       }
     }

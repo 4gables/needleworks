@@ -4,7 +4,7 @@
 import { Design } from "../core/design.js";
 import { fillPolygon } from "../core/digitize.js";
 import { fontOf } from "../core/fonts.js";
-import { edgeWalk, filletPolygon, run, satin, zigzag } from "../core/geom.js";
+import { edgeWalk, filletPolygon, followRun, run, satin, zigzag } from "../core/geom.js";
 import { order } from "../core/raster.js";
 import { strokes } from "../core/text.js";
 import { letterOutlines } from "./outline.js";
@@ -100,9 +100,11 @@ function stitchLetters(parts, satinW) {
   return parts.map(([p, mode]) => {
     // thin lettering: a stroke under ~0.6 mm is a speck of the skeleton; skip it (the next stroke picks up there)
     if (!satinW && length(p) < 0.6) return [];
-    if (mode === "run") return satinW ? run(p, 1.2) : spaced(run(p, 1.6));
-    if (satinW) return satin(p, satinW, 0.38, satinW >= 1.5 ? 0.3 : 0.2);   // pull comp 0.15 mm a side (0.1 on thin columns)
-    const r = spaced(run(p, 1.6)), back = r.slice().reverse();   // the walk's way back: back, forth and back again
+    // the way out under a satin: a centre run, or a zigzag under wide columns (Ink/Stitch fonts' usual underlay)
+    if (mode === "run") return satinW >= 2.5 ? zigzag(p, satinW - 0.4, 2.5) : satinW ? run(p, 1.2) : spaced(followRun(p, 1.6, 0.1, 0.8));
+    // pull comp 0.15 mm a side; 0.05 on thin columns (more widens them enough to close small counters)
+    if (satinW) return satin(p, satinW, 0.38, satinW >= 1.5 ? 0.3 : 0.1);
+    const r = spaced(followRun(p, 1.6, 0.1, 0.8)), back = r.slice().reverse();   // the walk's way back: back, forth and back again
     return r.length > 1 ? [...r, ...back.slice(1), ...r.slice(1)] : r;
   });
 }
@@ -123,6 +125,15 @@ export function minSize(p) {
   const l = letters(t, p.font, size, p.style);
   if (!l.parts.length || l.xh >= 4) return 0;
   return Math.ceil((p.size * 4) / l.xh);
+}
+
+// Lettering under ~6 mm (x-height, or caps) stitches cleanest with thinner thread and needle (Ink/Stitch's small
+// fonts: "thin thread (60) and thin needle (60) is mandatory").
+export function smallText(p) {
+  if (p.kind !== "text" && p.kind !== "monogram") return false;
+  const t = p.kind === "text" ? p.text : [...(p.letters || "")][1] || p.letters, size = p.kind === "monogram" && [...(p.letters || "")].length === 3 ? p.size * 0.68 : p.size;
+  const l = letters(t, p.font, size, p.style);
+  return l.parts.length > 0 && l.xh < 6;
 }
 
 // ---------- frames ----------

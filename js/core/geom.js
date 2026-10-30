@@ -65,6 +65,37 @@ export function normals(p, closed = false) {
 
 export const run = (p, length = 2.0, closed = false) => resample(p, length, closed);
 
+// A run that keeps to the line (Ink/Stitch's running-stitch tolerance): stitches up to `length`, shortened so no
+// point of the line between two needle holes strays more than `tol` from the stitch, never shorter than `min`, and a
+// hole on every turn sharper than 30°. Uniform stitches cut tight curves: 1.6 mm round a 1 mm loop is 0.32 mm off.
+export function followRun(p, length = 1.6, tol = 0.1, min = 0.8) {
+  const c = resample(p, 0.05);
+  if (c.length < 3) return c;
+  const sharp = new Set();
+  for (let i = 8; i < c.length - 8; i++) {   // the line's direction 0.4 mm before and after
+    const a = c[i - 8], b = c[i], d = c[i + 8];
+    const t1 = Math.atan2(b[1] - a[1], b[0] - a[0]), t2 = Math.atan2(d[1] - b[1], d[0] - b[0]);
+    let turn = Math.abs(t2 - t1); if (turn > Math.PI) turn = 2 * Math.PI - turn;
+    if (turn > Math.PI / 6) sharp.add(i);
+  }
+  const out = [c[0]];
+  let i = 0;
+  while (i < c.length - 1) {
+    let best = i + 1;
+    for (let j = i + 1; j < c.length; j++) {
+      const [ax, ay] = c[i], [bx, by] = c[j], L = Math.hypot(bx - ax, by - ay);
+      if (L > length) break;
+      let ok = true;
+      for (let k = i + 1; k < j && ok; k++) ok = Math.abs((bx - ax) * (ay - c[k][1]) - (ax - c[k][0]) * (by - ay)) / (L || 1) <= tol;
+      if (!ok && L >= min) break;
+      best = j;
+      if (sharp.has(j) && L >= min * 0.5) break;   // land on the corner
+    }
+    out.push(c[best]); i = best;
+  }
+  return out;
+}
+
 // Satin column centred on p. `density` is the gap between needle hits on the same edge (0.4 mm: Ink/Stitch's
 // default and what Brother-made files measure, 0.30-0.42). Stitches alternate edges, so stations are density / 2
 // apart, spaced by the outer edge so curves don't gap; where the inner edge crowds, every other stitch is shortened.
