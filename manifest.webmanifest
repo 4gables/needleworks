@@ -1,0 +1,20 @@
+{
+  "name": "Needleworks",
+  "short_name": "Needleworks",
+  "description": "Embroidery files for your machine: names, pictures, in-the-hoop projects.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#fbf6f1",
+  "theme_color": "#b3133a",
+  "icons": [
+    { "src": "assets/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "assets/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ],
+  "share_target": {
+    "action": "./?share",
+    "method": "POST",
+    "enctype": "multipart/form-data",
+    "params": { "files": [{ "name": "file", "accept": ["image/*", ".pes", ".pec", ".dst"] }] }
+  }
+}

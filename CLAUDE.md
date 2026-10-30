@@ -175,6 +175,16 @@ Embroidery-file tools for home machines. Two implementations of the same engine:
   shape uses only the block's closed outlines (the pouch's topstitch lines share it), and a visible stage joining any
   hidden block (fabric too) shows it.
 - Phones (<= 600 px): the sewing controls and the links under Download wrap (Thickness made the row overflow to 481 px).
+- Sew along (link under Download, `#along` dialog): one step per screen, the preview after the step (`draw` with
+  `upto`/`ghost`), thread + spool, what to do, minutes (block stitches / 550), Back/Next, "Finished" with the `after`
+  text; Screen Wake Lock while open (taken again on visibilitychange). Steps come from `v.sheet.steps` or the colour
+  blocks. The preview's fabric shape keeps segments whose ends are within 5 mm: R15's 1.5 mm dropped the bookmark's
+  fabric (its outline stops one 2.5 mm stitch short) and only a screenshot of the bookmark caught it.
+- Installable/offline: `manifest.webmanifest` (icons in assets/, share target) and `sw.js` (precaches `FILES`, then
+  network first with the cache as fallback; the Google UI fonts are cached too). `tests/sw.test.mjs` (CI) fails when a
+  module, font or icon is missing from `FILES`: add new files there. Registered only over https (not the local test
+  server). A share POSTs to `./?share`; the worker stores the file in the `needleworks-shared` cache and redirects to
+  `./?shared`, and app.js opens it with `route()`.
 - Sew sheet + cut file (`js/sheet.js`, links under Download): "Print a sew sheet" fills a hidden `#sheet` and calls
   `window.print()` (print CSS hides the app). Page 1 is the hoop field at 1:1 (SVG sized in mm) with the design centred
   as the machine centres it, a crosshair and a 5 cm check bar; page 2 the steps with the machine's thread names

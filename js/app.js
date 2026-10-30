@@ -73,7 +73,7 @@ function setView(v) {
   state.view = v; state.views[state.mode] = v; state.upto = null; $("progress").value = 1000;
   if (state.step != null && !(v?.steps > state.step)) showStep(null);   // the design changed under a step view
   $("turn").setAttribute("aria-pressed", turned());
-  if (!v) { $("facts").innerHTML = ""; $("threads").innerHTML = ""; $("download").disabled = true; $("share").disabled = true; $("sheet-print").disabled = true; $("cut-file").hidden = true; paint(); return; }
+  if (!v) { $("facts").innerHTML = ""; $("threads").innerHTML = ""; $("download").disabled = true; $("share").disabled = true; $("sheet-print").disabled = $("along-open").disabled = true; $("cut-file").hidden = true; paint(); return; }
   // the preview is the file: decode the PES bytes and draw those, not the design they were made from
   if (!v.file) {
     try { v.file = v.source ? v.pattern : readEmbroidery(v.bytes, v.filename); }
@@ -103,7 +103,7 @@ function setView(v) {
   v.facts = [`${st.widthMm.toFixed(0)} × ${st.heightMm.toFixed(0)} mm (${inch(st.widthMm)} × ${inch(st.heightMm)} in)`, `${st.stitches.toLocaleString()} stitches`,
     `${st.colorChanges} ${st.colorChanges === 1 ? "pause" : "pauses"}`, `≈ ${minutes} min`, `${h.machineName} ${h.name}`];
   $("download").disabled = !fits; $("share").disabled = !fits;
-  $("sheet-print").disabled = !fits; $("cut-file").hidden = !v.sheet?.cut?.length; $("names-open").hidden = !namesFor();
+  $("sheet-print").disabled = $("along-open").disabled = !fits; $("cut-file").hidden = !v.sheet?.cut?.length; $("names-open").hidden = !namesFor();
   $("download").textContent = fits ? `Download ${v.filename}` : "Too big for this hoop";
   paint();
 }
@@ -249,6 +249,55 @@ $("cut-file").onclick = () => {
   const a = document.createElement("a"); a.href = url; a.download = `${name}_cut.svg`; document.body.append(a); a.click(); a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 2000);
 };
+
+// ---------- sew along ----------
+// one step per screen at the machine: the design as it is after the step, the thread, what to do, how long it takes;
+// the screen stays on while it's open
+const along = { i: 0, lock: null };
+function alongSteps(v) {
+  const blocks = v.cache.blocks;
+  const steps = v.sheet?.steps?.length ? v.sheet.steps : blocks.map((b, i) => ({ you: i ? "Change to the next thread and press Start." : null, sews: "" }));
+  return steps.map((s, i) => {
+    const b = blocks.find((x) => x.index === i), n = b ? b.segs.reduce((a, sg) => a + sg.length, 0) : 0;
+    return { ...s, block: b, minutes: Math.max(1, Math.round(n / 550)) };
+  });
+}
+function alongShow() {
+  const v = state.view, steps = alongSteps(v), i = along.i, done = i >= steps.length, mt = machineThreadList(v);
+  $("along-count").textContent = done ? "All done" : `Step ${i + 1} of ${steps.length}`;
+  $("along-back").disabled = i === 0;
+  $("along-next").textContent = done ? "Close" : i === steps.length - 1 ? "Finish" : "Next step";
+  let upto, hide = v.hide, fab = v.fabricShapeBlock;
+  if (done) {
+    $("along-title").textContent = "Finished";
+    $("along-you").textContent = (v.sheet?.after || []).join(" ") || "Take the hoop off, cut the jump threads, and tear or cut away the stabilizer.";
+    $("along-sews").textContent = ""; $("along-time").textContent = "";
+  } else {
+    const s = steps[i], t = mt[i], sp = s.block && spool(s.block.color);
+    $("along-title").innerHTML = `<i style="background:${s.block?.color || "#999"}"></i>${s.title ? escapeHtml(s.title) + " · " : ""}Brother ${escapeHtml(t?.name || "")}${sp ? ` <small>${escapeHtml(sp)}</small>` : ""}`;
+    $("along-you").textContent = s.you || (i ? "" : "Thread the machine, put the hoop on, and press Start.");
+    $("along-sews").textContent = s.sews || "";
+    $("along-time").textContent = `About ${s.minutes} min of sewing.`;
+    if (s.block) upto = Math.max(...s.block.segs.map((sg) => sg[sg.length - 1][2])) + 1;
+    hide = new Set([...(v.hide || [])].filter((k) => k < i));
+    if (fab != null && i <= fab) fab = undefined;
+  }
+  draw($("along-view"), v.shown, { cache: v.cache, fabric: v.fabric, fabricShapeBlock: fab, hide, upto, ghost: upto != null, hoop: shownHoop(), showHoop: false, pad: 12 });
+}
+$("along-open").onclick = async () => {
+  if (!state.view?.cache) return;
+  along.i = 0; $("along").showModal(); alongShow();
+  try { along.lock = await navigator.wakeLock?.request("screen"); } catch { along.lock = null; }
+};
+$("along-next").onclick = () => { if (along.i >= alongSteps(state.view).length) { $("along").close(); return; } along.i++; alongShow(); };
+$("along-back").onclick = () => { if (along.i > 0) { along.i--; alongShow(); } };
+$("along-close").onclick = () => $("along").close();
+$("along").addEventListener("close", () => { along.lock?.release?.(); along.lock = null; });
+// the wake lock lapses when the page is hidden; take it again on return
+document.addEventListener("visibilitychange", async () => {
+  if (document.visibilityState === "visible" && $("along").open && !along.lock) try { along.lock = await navigator.wakeLock?.request("screen"); } catch {}
+});
+new ResizeObserver(() => { if ($("along").open) alongShow(); }).observe($("along-view"));
 
 // one file per name, in a zip: the Design tab swaps its lettering, the bookmark its name
 function namesFor() {
@@ -704,5 +753,15 @@ const studio = initStudio({
 });
 
 setMode((location.hash || "#picture").slice(1), false);
+
+// installable and offline (sw.js); a picture or design shared to the installed app opens straight away
+if ("serviceWorker" in navigator && location.protocol === "https:") navigator.serviceWorker.register("sw.js").catch(() => {});
+if (new URLSearchParams(location.search).has("shared")) (async () => {
+  try {
+    const c = await caches.open("needleworks-shared"), r = await c.match("shared");
+    if (r) { const blob = await r.blob(); await c.delete("shared"); route(new File([blob], decodeURIComponent(r.headers.get("x-name") || "shared"), { type: blob.type })); }
+  } catch {}
+  history.replaceState(null, "", location.pathname + location.hash);
+})();
 // a link to another tab on this page (#bookmark, #design...) switches to it
 addEventListener("hashchange", () => { const m = location.hash.slice(1); if (m !== state.mode && MODES.includes(m)) setMode(m, false); });

@@ -10,6 +10,9 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=IBM+Plex+Mono:wght@500&family=Sacramento&display=swap">
 <link rel="stylesheet" href="css/app.css">
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#b3133a">
+<link rel="apple-touch-icon" href="assets/icon-192.png">
 </head>
 <body>
 <header class="top">
@@ -232,7 +235,7 @@
         <label class="ghost pick" id="pick-design" for="open-file">Open a design file</label>
         <button type="button" id="share" class="ghost share" hidden>Send by text or email</button>
         <button type="button" id="download" class="primary" disabled>Download PES</button>
-        <p class="extras"><button type="button" id="sheet-print" class="link" disabled>Print a sew sheet</button><button type="button" id="names-open" class="link" hidden>One for each name</button><button type="button" id="cut-file" class="link" hidden title="The appliqué fabric shapes at actual size, for a Cricut or ScanNCut">Cut file for the fabric (SVG)</button></p>
+        <p class="extras"><button type="button" id="along-open" class="link" disabled>Sew along</button><button type="button" id="sheet-print" class="link" disabled>Print a sew sheet</button><button type="button" id="names-open" class="link" hidden>One for each name</button><button type="button" id="cut-file" class="link" hidden title="The appliqué fabric shapes at actual size, for a Cricut or ScanNCut">Cut file for the fabric (SVG)</button></p>
       </div>
     </div>
   </section>
@@ -260,6 +263,17 @@
     <div id="spools-chips" class="spool-chips"></div>
     <div class="row"><button type="submit" class="ghost" value="cancel">Cancel</button><button type="button" class="primary" id="spools-save">Save</button></div>
   </form>
+</dialog>
+<dialog id="along" class="along" aria-labelledby="along-title">
+  <header><span id="along-count"></span><button type="button" id="along-close" class="link">Close</button></header>
+  <canvas id="along-view" aria-hidden="true"></canvas>
+  <div class="along-body">
+    <h2 id="along-title"></h2>
+    <p id="along-you" class="you"></p>
+    <p id="along-sews"></p>
+    <p id="along-time" class="hint"></p>
+  </div>
+  <nav><button type="button" id="along-back" class="ghost">Back</button><button type="button" id="along-next" class="primary">Next step</button></nav>
 </dialog>
 <div id="sheet" class="sheet" aria-hidden="true"></div>
 <script type="module" src="js/app.js"></script>
