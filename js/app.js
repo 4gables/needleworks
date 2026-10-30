@@ -15,7 +15,10 @@ import { initStudio } from "./studio/ui.js";
 const $ = (id) => document.getElementById(id);
 const store = {
   get(k, d) { try { return JSON.parse(localStorage.getItem("nw:" + k)) ?? d; } catch { return d; } },
-  set(k, v) { try { localStorage.setItem("nw:" + k, JSON.stringify(v)); } catch {} },
+  set(k, v) {
+    try { localStorage.setItem("nw:" + k, JSON.stringify(v)); }
+    catch { if (k === "studio" && !store.warned) { store.warned = true; showError("This design is too big to keep in the browser between visits. Use Save design to keep it."); } }
+  },
 };
 
 // exact Brother PEC colours, so the name on the machine's screen is the swatch's (#1a1a1a showed as "Olive Green")
@@ -66,10 +69,13 @@ function paint() {
     cache: v.cache, fabric: v.fabric, ...look,
     heat: state.heat ? (v.heat ||= heat(v.shown)) : null, backdrop: state.backdrop,
     hoop: shownHoop(), showHoop: state.showHoop && !state.backdrop, zoom: state.zoom, pan: state.pan, showNeedle: state.upto != null,
+    fieldColor: dark.matches && state.showHoop && !state.backdrop ? "#ece5da" : undefined,
     padTop: $("facts").offsetHeight + 16,
   });
 }
 new ResizeObserver(() => paint()).observe(canvas);
+const dark = matchMedia("(prefers-color-scheme: dark)");
+dark.addEventListener("change", () => paint());
 
 function setView(v) {
   stopPlay();
@@ -272,11 +278,13 @@ function downloaded(v, zipped) {
 $("done-close").onclick = () => { if ($("done-never").checked) store.set("doneSeen", true); $("done").close(); };
 
 // sew sheet: the design at 1:1 on the hoop field, the steps, appliqué shapes; printed from a hidden block
-$("sheet-print").onclick = () => {
-  const v = state.view; if (!v?.file) return;
+function fillSheet() {
+  const v = state.view; if (!v?.file || v.split) return false;
   $("sheet").innerHTML = sewSheet({ pattern: v.file, filename: v.filename, hoop: hoop(), facts: v.facts, threads: machineThreadList(v), hide: v.hide, sheet: v.sheet, spool });
-  window.print();
-};
+  return true;
+}
+$("sheet-print").onclick = () => { if (fillSheet()) window.print(); };
+addEventListener("beforeprint", () => { if (!$("sheet").innerHTML) fillSheet(); });
 addEventListener("afterprint", () => { $("sheet").innerHTML = ""; });
 $("cut-file").onclick = () => {
   const v = state.view; if (!v?.sheet?.cut?.length) return;
@@ -293,7 +301,9 @@ $("item-open").onclick = () => {
 };
 $("item-file").onchange = async (e) => {
   const f = e.target.files[0]; e.target.value = ""; if (!f) return;
-  try { cal.bmp = await createImageBitmap(f, { imageOrientation: "from-image" }); } catch { showError("That photo couldn't be opened."); return; }
+  $("item-error").hidden = true;
+  try { cal.bmp = await createImageBitmap(f, { imageOrientation: "from-image" }); }
+  catch { $("item-error").textContent = "That photo couldn't be opened. Try a JPG or PNG."; $("item-error").hidden = false; return; }
   cal.a = [0.25, 0.5]; cal.b = [0.75, 0.5]; $("item-done").disabled = false; calDraw();
 };
 function calDraw() {
@@ -317,6 +327,12 @@ $("item-cal").addEventListener("pointerdown", (e) => {
 });
 $("item-cal").addEventListener("pointermove", (e) => { if (cal.drag) { cal[cal.drag] = calAt(e); calDraw(); } });
 $("item-cal").addEventListener("pointerup", () => { cal.drag = null; });
+// keyboard: arrows move the first dot, Shift + arrows the second
+$("item-cal").addEventListener("keydown", (e) => {
+  const d = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] }[e.key]; if (!d || !cal.bmp) return;
+  e.preventDefault(); const k = e.shiftKey ? "b" : "a";
+  cal[k] = [Math.min(1, Math.max(0, cal[k][0] + d[0] * 0.005)), Math.min(1, Math.max(0, cal[k][1] + d[1] * 0.005))]; calDraw();
+});
 $("item-done").onclick = () => {
   const mm = +$("item-len").value * +$("item-unit").value, px = Math.hypot((cal.a[0] - cal.b[0]) * cal.bmp.width, (cal.a[1] - cal.b[1]) * cal.bmp.height);
   if (!(mm > 0) || px < 5) return;
@@ -516,9 +532,26 @@ document.querySelector(".tabs").addEventListener("keydown", (e) => {
   }
 });
 
+// Redraw part of the page without losing keyboard focus: the focused control is found again in the new markup by its
+// data- attributes (and its [data-seg] group), so Enter on a swatch doesn't send focus back to the top of the page.
+function keepFocus(root, render) {
+  const f = document.activeElement;
+  let sel = null;
+  if (f && f !== root && root.contains(f)) {
+    const attrs = [...f.attributes].filter((x) => x.name.startsWith("data-")).map((x) => `[${x.name}="${CSS.escape(x.value)}"]`).join("");
+    const group = f.closest("[data-seg]");
+    if (attrs || f.id) sel = (group ? `[data-seg="${CSS.escape(group.dataset.seg)}"] ` : "") + (f.id ? `#${CSS.escape(f.id)}` : f.tagName.toLowerCase() + attrs);
+  }
+  const caret = f && "selectionStart" in f ? [f.selectionStart, f.selectionEnd] : null;
+  render();
+  const n = sel && root.querySelector(sel);
+  if (n) { n.focus(); if (caret && "setSelectionRange" in n) try { n.setSelectionRange(...caret); } catch {} }
+}
+
 // ---------- bookmark ----------
 let bmTimer = 0, bmSeq = 0;
-function bookmarkUI() {
+function bookmarkUI() { keepFocus($("panel-bookmark"), drawBookmarkUI); }
+function drawBookmarkUI() {
   $("bm-name").value = state.bm.name;
   $("bm-lead").checked = state.bm.lead; $("bm-tail").checked = state.bm.tail; $("bm-blank").checked = state.bm.blank;
   const kind = fontOf(state.bm.font).print ? "Dash" : "Swash";
@@ -833,7 +866,7 @@ function showStep(i) {
   state.step = i; document.dispatchEvent(new CustomEvent("nw:step", { detail: i })); paint();
 }
 const studio = initStudio({
-  hoop, store, showError, busy, safeName, escapeHtml, saveFile, showStep, step: () => state.step, setMode, spool,
+  hoop, store, showError, busy, safeName, escapeHtml, saveFile, keepFocus, showStep, step: () => state.step, setMode, spool,
   setView(pattern, filename, look = {}) {
     if (!pattern) { state.views.design = null; if (state.mode === "design") setView(null); return; }
     const v = { pattern, verifyAgainst: pattern, bytes: writePES(pattern), filename, fabric: "linen", ...look };

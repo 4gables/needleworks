@@ -593,17 +593,19 @@ export const FABRICS = {
 // (after the front fabric on an in-the-hoop frame, before what goes on it). Kept for the last few layouts: it's the
 // slowest thing in compose.
 const QUILTED = (p) => p.kind === "frame" && (p.quilt === "stipple" || p.quilt === "echo") && p.border !== "patch";
-const quilted = new Map();
-function withQuilt(p, stages, obstacles) {
+const quilted = new Map(), lastQuilt = new Map();   // (lastQuilt: per frame, reused while a piece is being dragged)
+function withQuilt(p, stages, obstacles, dragging = false) {
   // keyed on every obstacle point: moving a middle piece reused the old quilting, sewn through it
   let h = obstacles.length;
   for (const o of obstacles) for (const [x, y] of o) h = (Math.imul(h ^ Math.round(x * 10), 16777619) ^ Math.round(y * 10)) | 0;
-  const edge = shapeOf(p).path(p.w, p.h).map(placer(p)), key = JSON.stringify([p, h]);
-  if (!quilted.has(key)) {
+  const edge = shapeOf(p).path(p.w, p.h).map(placer(p)), key = JSON.stringify([p, h]), frame = JSON.stringify(p);
+  if (!quilted.has(key) && !(dragging && lastQuilt.has(frame))) {
     quilted.set(key, (p.quilt === "echo" ? echo : stipple)(edge, obstacles, { inset: p.border === "line" || p.border === "bold" ? 3 : 4.5 }));
     if (quilted.size > 12) quilted.delete(quilted.keys().next().value);
   }
-  const paths = quilted.get(key); if (!paths.length) return stages;
+  const paths = quilted.get(key) || lastQuilt.get(frame);
+  lastQuilt.set(frame, paths); if (lastQuilt.size > 12) lastQuilt.delete(lastQuilt.keys().next().value);
+  if (!paths.length) return stages;
   const q = { color: p.color, paths, sews: `Quilts the ${shapeOf(p).name.toLowerCase()} (${p.quilt}).`, label: label(p) };
   const at = stages.findIndex((s) => s.last);
   return at < 0 ? [...stages, q] : [...stages.slice(0, at), q, ...stages.slice(at)];
@@ -647,7 +649,8 @@ const crosses = (marks) => marks.map(([x, y]) => [[x, y], [x + 5, y], [x - 5, y]
 // needs a pause. A stage in a thread used earlier moves up to join it (one pause fewer) when it overlaps nothing
 // it would jump ahead of, so what lies on top of what never changes; appliqué stages never move.
 // Returns the design and the steps to show (what the machine sews, what the person does at pauses).
-// opts: { fabric: key of FABRICS, baste: a basting box round everything first (floating, towels),
+// opts: { fabric: key of FABRICS, baste: a basting box round everything first (floating, towels), dragging (a piece
+//         is mid-drag: quilting stays as it was, for speed; the drop composes it properly),
 //         marks: { pts, end } alignment crosses for a split design (end: after everything, else first) }
 export function compose(pieces, hoop, opts = {}) {
   const fab = FABRICS[opts.fabric] ? opts.fabric : "cotton";
@@ -656,7 +659,7 @@ export function compose(pieces, hoop, opts = {}) {
   const box = (paths) => { const [x0, y0, x1, y1] = bounds(paths.flat()); return [x0 - 1, y0 - 1, x1 + 1, y1 + 1]; };
   const hits = (a, b) => a[0] < b[2] && b[0] < a[2] && a[1] < b[3] && b[1] < a[3];
   const order = [], last = [], staged = pieces.map((p) => pieceStages(p, fab).map((st) => ({ ...st, label: label(p) })));
-  pieces.forEach((p, i) => { if (QUILTED(p)) staged[i] = withQuilt(p, staged[i], staged.filter((_, j) => j !== i).flat().flatMap((s) => s.paths)); });
+  pieces.forEach((p, i) => { if (QUILTED(p)) staged[i] = withQuilt(p, staged[i], staged.filter((_, j) => j !== i).flat().flatMap((s) => s.paths), opts.dragging); });
   for (const st of staged.flat()) {
     if (!st.paths.length) continue;
     const s = { ...st, box: box(st.paths) };

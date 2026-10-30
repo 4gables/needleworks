@@ -55,7 +55,7 @@ export const CLOTHS = {
 };
 
 // opts: { fabric (CLOTHS key), fabricShapeBlock, hide: Set, upto, ghost (stitches after upto drawn faint), heat (Map "cx,cy" -> hits per mm²), backdrop ({ bmp, unit, center }: a photo under it), hoop: {w,h} (mm), showHoop, zoom, pan: [x,y], center: [x,y] (0.1 mm),
-//         pad, padTop (px kept clear), cache (colorBlocks result), showNeedle (a needle at upto) }
+//         pad, padTop (px kept clear), cache (colorBlocks result), showNeedle (a needle at upto), fieldColor (fill inside the hoop) }
 export function draw(canvas, design, opts = {}) {
   const dpr = window.devicePixelRatio || 1;
   const W = canvas.clientWidth, H = canvas.clientHeight;
@@ -86,7 +86,8 @@ export function draw(canvas, design, opts = {}) {
     const hw = hoop.w * 10 * s, hh = hoop.h * 10 * s, r = Math.min(hw, hh) * 0.12;
     const hx = W / 2 - hw / 2 + pan[0], hy = top + (H - pad - top) / 2 - hh / 2 + pan[1];
     ctx.save();
-    ctx.fillStyle = opts.fieldColor || "rgba(255,255,255,0.0)";
+    // a light field inside the hoop when asked (dark mode: navy and black thread vanished on the dark stage)
+    if (opts.fieldColor) { ctx.fillStyle = opts.fieldColor; roundRect(ctx, hx, hy, hw, hh, r * 0.6); ctx.fill(); }
     ctx.lineWidth = Math.max(6, 3.2 * s);
     ctx.strokeStyle = opts.hoopColor || "#d9c3a5";
     roundRect(ctx, hx - 8, hy - 8, hw + 16, hh + 16, r + 6); ctx.stroke();

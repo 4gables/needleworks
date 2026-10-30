@@ -144,7 +144,7 @@ export function initStudio(api) {
   }
   function list() {
     $("st-pieces").innerHTML = pieces.map((p, i) => `<li data-id="${p.id}" aria-selected="${p.id === sel}">
-      <button type="button" class="pick" data-id="${p.id}"><i style="background:${p.color}"></i><span class="nm">${api.escapeHtml(label(p))}</span></button>
+      <button type="button" class="pick" data-id="${p.id}" ${p.id === sel ? `aria-current="true"` : ""}><i style="background:${p.color}"></i><span class="nm">${api.escapeHtml(label(p))}</span></button>
       <span class="ops">
         <button type="button" data-op="up" data-id="${p.id}" aria-label="Sew earlier" ${i ? "" : "disabled"}>↑</button>
         <button type="button" data-op="down" data-id="${p.id}" aria-label="Sew later" ${i < pieces.length - 1 ? "" : "disabled"}>↓</button>
@@ -163,7 +163,8 @@ export function initStudio(api) {
   const STITCHES = { auto: "Stitch: automatic", satin: "Bold", line: "Thin line" };
   let moreOpen = false;
   $("st-edit").addEventListener("toggle", (e) => { if (e.target.matches("details.more")) moreOpen = e.target.open; }, true);
-  function editor() {
+  const editor = () => api.keepFocus($("st-edit"), drawEditor);
+  function drawEditor() {
     const p = current();
     if (!p) { $("st-edit").innerHTML = `<p class="hint">Pick a piece above, or add one.</p>`; return; }
     let h = "";
@@ -227,7 +228,7 @@ export function initStudio(api) {
     $("st-edit").innerHTML = h;
     warn();
   }
-  function ui() { list(); editor(); sewnOn(); }
+  function ui() { api.keepFocus($("panel-design"), () => { list(); editor(); sewnOn(); }); }
   function sewnOn() {
     $("st-fabric").innerHTML = Object.entries(FABRICS).map(([k, f]) => `<button type="button" data-fab="${k}" aria-pressed="${k === fabric}">${f.name}</button>`).join("");
     $("st-baste").checked = baste; $("st-fabric-tip").textContent = FABRICS[fabric].tip; $("st-fabric-name").textContent = FABRICS[fabric].name + (baste ? ", basted" : "");
@@ -256,7 +257,7 @@ export function initStudio(api) {
     clearTimeout(timer); timer = setTimeout(make, now ? 0 : 160);
   }
 
-  async function make() {
+  async function make(dragging = false) {
     thumbs();
     const s = ++seq;
     api.showError("");
@@ -265,7 +266,7 @@ export function initStudio(api) {
       await Promise.all(fonts.map((f) => document.fonts.load(`40px "${f}"`)));
       if (s !== seq) return;
       let composed;
-      try { composed = compose(pieces, api.hoop(), { fabric, baste }); }
+      try { composed = compose(pieces, api.hoop(), { fabric, baste, dragging }); }
       catch (err) { if (!err.overBy) throw err; if (s === seq) split(err); return; }
       const { design, steps, after, before, tip } = composed;
       if (s !== seq) return;
@@ -409,9 +410,12 @@ export function initStudio(api) {
     if (!drag) return;
     if (!drag.moved) { remember(); drag.moved = true; }
     drag.p.x = Math.round((drag.x + mm[0] - drag.from[0]) * 2) / 2; drag.p.y = Math.round((drag.y + mm[1] - drag.from[1]) * 2) / 2;
-    clearTimeout(timer); timer = setTimeout(make, 40);
+    // once a frame while dragging (restarting a timer on every move showed nothing until the pointer stopped), with
+    // the quilting left as it was until the drop
+    dragFrame ||= requestAnimationFrame(() => { dragFrame = 0; if (drag) make(true); });
   }
-  function end() { if (drag) { drag = null; save(); } }
+  let dragFrame = 0;
+  function end() { if (drag) { const moved = drag.moved; drag = null; save(); if (moved) make(); } }
   function nudge(dx, dy) { change((p) => { p.x += dx; p.y += dy; }); }
   function center() { change((p) => { p.x = 0; p.y = 0; }, true); }
   $("st-center").onclick = center;
@@ -452,7 +456,7 @@ export function initStudio(api) {
     if (document.body.dataset.mode !== "design" || e.defaultPrevented || e.target.matches("input[type=text], textarea, [role=tab]")) return;
     if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "z") { e.preventDefault(); undo(); }
     const arrows = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] }[e.key];
-    if (arrows && !e.target.matches("input, select")) { e.preventDefault(); nudge(arrows[0] * (e.shiftKey ? 5 : 1), arrows[1] * (e.shiftKey ? 5 : 1)); }
+    if (arrows && (e.target === document.body || e.target.id === "view")) { e.preventDefault(); nudge(arrows[0] * (e.shiftKey ? 5 : 1), arrows[1] * (e.shiftKey ? 5 : 1)); }
   });
   // add an opened design (PES/PEC/DST) as a piece, to combine a motif with lettering
   $("st-file").onchange = async (e) => {

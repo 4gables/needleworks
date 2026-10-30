@@ -244,6 +244,16 @@ Embroidery-file tools for home machines. Two implementations of the same engine:
   a View menu, Sewing on folded to one line, Fill direction and Fill under More settings, no hex codes under threads,
   the appliqué guide only for real appliqué (not the pouch) and not on top of the 3-step guide. Phones: Download is a
   fixed bar at the bottom; the arrow-key hint hides on touch screens.
+- UI engineering (2026-10-29): file inputs are `.sr-file` (visually hidden but focusable; `hidden` ones couldn't be
+  reached by keyboard), their labels show the focus ring via `:has()`. Redraws of the studio editor/list and the
+  bookmark panel go through `keepFocus` (app.js: the focused control is found again by its data- attributes and
+  `[data-seg]` group, caret kept), so Enter on a swatch no longer drops focus to the page. Arrow keys nudge a piece
+  only from the page or the focused preview (`#view` has tabindex). Dragging composes once a frame (`compose`
+  `dragging`: quilting reused from the last layout until the drop). Colours come from `--danger/--warn/--good` tokens
+  with dark variants; dark mode fills the hoop field light (`fieldColor`; navy vanished on the dark stage);
+  `forced-colors` keeps thread colours and outlines what's selected; coarse pointers get 44 px targets. Cmd+P fills
+  the sew sheet on `beforeprint` (it printed a blank page). `sw.js` (cache v2) serves the cached copy when the network
+  takes over 3 s and refreshes in the background. A studio save too big for localStorage says so once.
 - The preview is the file: `setView` decodes `v.bytes` with `readEmbroidery` and draws/counts/fit-checks that, and
   thread labels come from the file's own PEC palette.
 

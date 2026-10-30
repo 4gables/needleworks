@@ -83,7 +83,7 @@
       <h1>Turn a picture into stitches</h1>
       <p class="lede">Works best with logos, clip art and simple drawings with a few solid colours. Photos won't stitch well.</p>
       <label class="drop" id="pic-drop">
-        <input id="pic-file" type="file" accept="image/*" hidden>
+        <input id="pic-file" type="file" accept="image/*" class="sr-file">
         <img id="pic-thumb" alt="" hidden>
         <span class="drop-text"><b>Choose a picture</b> or drop it here. You can also paste one.</span>
       </label>
@@ -141,8 +141,8 @@
       <ol class="guide" id="st-guide">
         <li><b>Pick a starting idea</b> below.</li>
         <li><b>Tap a piece</b> to change its words, size or thread. Drag it on the preview to move it.</li>
-        <li><b>Download</b> and copy the file to a USB stick. “How to stitch it” lists every pause.</li>
-        <button type="button" class="link" id="st-guide-close" aria-label="Hide these tips">Got it</button>
+        <li><b>Download</b> and copy the file to a USB stick. “How to stitch it” lists every pause.
+          <button type="button" class="link" id="st-guide-close" aria-label="Hide these tips">Got it</button></li>
       </ol>
       <fieldset class="field">
         <legend>Start from <span class="hint inline" id="st-cards-count"></span></legend>
@@ -178,7 +178,7 @@
           <button type="button" class="ghost" id="st-undo" disabled title="Undo (⌘Z)">↶ Undo</button>
           <button type="button" class="ghost" id="st-save" title="Keep this design to change it later (not for the machine: use Download PES for that)">Save design</button>
           <label class="ghost st-load" for="st-load" title="Open a design saved from here">Open saved</label>
-          <input type="file" id="st-load" accept=".json,application/json" hidden>
+          <input type="file" id="st-load" accept=".json,application/json" class="sr-file">
         </div>
       </fieldset>
       <fieldset class="field">
@@ -204,7 +204,7 @@
       <h1>See any design before you stitch it</h1>
       <p class="lede">Open a PES, PEC or DST file to see the stitches, the thread colours and whether it fits your hoop.</p>
       <label class="drop" id="open-drop">
-        <input id="open-file" type="file" hidden>
+        <input id="open-file" type="file" class="sr-file">
         <span class="drop-text"><b>Choose a design file</b> or drop it here.</span>
       </label>
       <div id="open-info" class="info" hidden></div>
@@ -218,8 +218,8 @@
 
   <section class="stage" aria-label="Preview">
     <div class="canvas-wrap">
-      <canvas id="view" aria-label="Stitch preview"></canvas>
-      <div class="facts" id="facts" aria-live="polite"></div>
+      <canvas id="view" tabindex="0" aria-label="Stitch preview. In Design your own, the arrow keys move the selected piece."></canvas>
+      <div class="facts" id="facts"></div>
       <div class="zoom">
         <button type="button" id="zoom-out" aria-label="Zoom out">−</button>
         <button type="button" id="zoom-fit">Fit</button>
@@ -277,7 +277,7 @@
   <form method="dialog">
     <h2 id="names-title">One for each name</h2>
     <p class="hint" id="names-what"></p>
-    <textarea id="names-list" rows="6" placeholder="Emma&#10;Liam&#10;Olivia" spellcheck="false"></textarea>
+    <textarea id="names-list" rows="6" aria-label="Names, one per line" placeholder="Emma&#10;Liam&#10;Olivia" spellcheck="false"></textarea>
     <p class="hint" id="names-note">One name per line, up to 40. You get one file for each, in a single .zip.</p>
     <label class="check small" id="names-shrink-row"><input type="checkbox" id="names-shrink" checked> Make long names smaller so they fit</label>
     <div class="names-thumbs" id="names-thumbs"></div>
@@ -288,7 +288,7 @@
   <form method="dialog">
     <h2 id="spools-title">Threads I own</h2>
     <label class="field"><span>Brand</span><select id="spools-brand"></select></label>
-    <textarea id="spools-list" rows="4" placeholder="The numbers on your spools, e.g. 0020 1902 3541" spellcheck="false"></textarea>
+    <textarea id="spools-list" rows="4" aria-label="Spool numbers you own" placeholder="The numbers on your spools, e.g. 0020 1902 3541" spellcheck="false"></textarea>
     <p class="hint" id="spools-note"></p>
     <div id="spools-chips" class="spool-chips"></div>
     <div class="row"><button type="submit" class="ghost" value="cancel">Cancel</button><button type="button" class="primary" id="spools-save">Save</button></div>
@@ -309,9 +309,10 @@
   <form method="dialog">
     <h2 id="item-title">See it on your item</h2>
     <p class="hint">Take or choose a photo of the bib, towel or shirt, straight on and flat. Then drag the two dots to the ends of something you can measure, like the item's width or a ruler in the photo, and type how long it is.</p>
-    <label class="ghost item-pick">Choose a photo<input type="file" accept="image/*" id="item-file" hidden></label>
-    <canvas id="item-cal" hidden></canvas>
-    <p class="item-len" id="item-len-row" hidden>Between the dots: <input type="number" id="item-len" min="1" max="200" step="0.5" value="20"> <select id="item-unit"><option value="10">cm</option><option value="25.4">in</option></select></p>
+    <label class="ghost item-pick">Choose a photo<input type="file" accept="image/*" id="item-file" class="sr-file"></label>
+    <canvas id="item-cal" hidden tabindex="0" aria-label="The photo with two dots: drag them, or use the arrow keys (Shift moves the second dot)"></canvas>
+    <p class="error-inline" id="item-error" role="alert" hidden></p>
+    <p class="item-len" id="item-len-row" hidden><label for="item-len">Between the dots:</label> <input type="number" id="item-len" min="1" max="200" step="0.5" value="20"> <select id="item-unit" aria-label="Unit"><option value="10">cm</option><option value="25.4">in</option></select></p>
     <p class="hint">The photo stays on this device. Drag it under the design to place it.</p>
     <div class="row"><button type="submit" class="ghost" value="cancel">Cancel</button><button type="button" class="primary" id="item-done" disabled>Show it on my item</button></div>
   </form>

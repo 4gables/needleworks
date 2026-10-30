@@ -1,7 +1,7 @@
 // Offline and installable: every file the page needs is cached on install; after that each request tries the
 // network first (so a new version shows up at once) and falls back to the cache. A picture or design shared to
 // the installed app arrives as a POST to ./?share and is handed to the page through a cache.
-const CACHE = "needleworks-v1", SHARED = "needleworks-shared";
+const CACHE = "needleworks-v2", SHARED = "needleworks-shared";
 const FILES = [
   "./", "index.html", "manifest.webmanifest", "css/app.css",
   "assets/icon-192.png",
@@ -67,13 +67,20 @@ self.addEventListener("fetch", (e) => {
   if (req.method !== "GET") return;
   // the page's own files, and the Google fonts it uses for its text
   if (url.origin !== location.origin && !/fonts\.(googleapis|gstatic)\.com$/.test(url.hostname)) return;
+  // network first, but on weak Wi-Fi by the machine a fetch can hang for a long time: after 3 s the cached copy is
+  // served and the fetch keeps going in the background to refresh the cache
+  const cached = () => caches.match(req, { ignoreSearch: url.origin === location.origin });
+  const net = fetch(req).then(async (res) => {
+    if (res.ok || res.type === "opaque") await (await caches.open(CACHE)).put(req, res.clone());
+    return res;
+  });
+  e.waitUntil(net.catch(() => {}));
   e.respondWith((async () => {
     try {
-      const res = await fetch(req);
-      if (res.ok || res.type === "opaque") (await caches.open(CACHE)).put(req, res.clone());
-      return res;
+      const first = await Promise.race([net, new Promise((r) => setTimeout(r, 3000, "slow"))]);
+      return first !== "slow" ? first : (await cached()) || (await net);
     } catch (err) {
-      return (await caches.match(req, { ignoreSearch: url.origin === location.origin })) || Promise.reject(err);
+      return (await cached()) || Promise.reject(err);
     }
   })());
 });
