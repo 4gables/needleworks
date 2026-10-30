@@ -5,6 +5,7 @@ import { Design, relieve } from "./core/design.js";
 import { fillPolygon } from "./core/digitize.js";
 import { distanceTransform } from "./core/raster.js";
 import { contours } from "./studio/quilt.js";
+import { pyRound } from "./core/threads.js";
 
 const LIMIT = 24;   // needle hits per mm² per colour block: the densest spot in sold designs (pe900_check.py)
 
@@ -24,18 +25,34 @@ export function heat(pattern) {
 
 export function checkup(pattern) {
   const st = pattern.stitches, h = heat(pattern);
-  let tiny = 0, long = 0, last = null, x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity, n = 0;
+  let tiny = 0, long = 0, over = 0, longest = 0, last = null, x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity, n = 0;
   for (const [x, y, c] of st) {
     if (c === STITCH) {
       n++; x0 = Math.min(x0, x); y0 = Math.min(y0, y); x1 = Math.max(x1, x); y1 = Math.max(y1, y);
-      if (last) { const d = Math.hypot(x - last[0], y - last[1]); if (d > 0 && d < 3) tiny++; if (d > 100) long++; }
+      if (last) { const d = Math.hypot(x - last[0], y - last[1]); if (d > 0 && d < 3) tiny++; if (d > 100) long++; if (d > 121) over++; if (d > longest) longest = d; }
       last = [x, y];
     } else if (c === JUMP) last = [x, y];
     else if (c === TRIM || c === COLOR_CHANGE) last = null;
   }
   const max = Math.max(0, ...h.values()), hot = [...h.values()].filter((v) => v > LIMIT).length;
   const sqin = Math.max(((x1 - x0) / 254) * ((y1 - y0) / 254), 0.1);
-  return { stitches: n, tiny, long, max, hot, perSqIn: Math.round(n / sqin), satinGap: satinGap(st) };
+  return { stitches: n, tiny, long, over, longest: longest / 10, max, hot, perSqIn: Math.round(n / sqin), satinGap: satinGap(st) };
+}
+
+// moves between 1 and 5 mm, from the last stitch to the next: too short for the PE900 to trim (its lowest setting is
+// 5 mm), left as loose thread
+export function shortJumps(p) {
+  if (p.shortJumps != null) return p.shortJumps;
+  let n = 0, from = null, last = null;
+  for (const [x, y, c] of p.stitches) {
+    if (c === JUMP) { if (!from) from = last; last = [x, y]; continue; }
+    if (c === STITCH) {
+      if (from) { const d = Math.hypot(x - from[0], y - from[1]); if (d > 10 && d <= 50) n++; from = null; }
+      last = [x, y];
+    }
+    if (c === COLOR_CHANGE) { from = null; last = null; }
+  }
+  return (p.shortJumps = n);
 }
 
 // satin coverage, as pe900_check.py measures it: in long zigzags, the gap between hits on the same edge (mm, median);
@@ -110,7 +127,7 @@ export const sortedChanges = (pattern) => { const s = sortColors(pattern); retur
 
 // Resizing past 80-120 % by re-stitching (Embrilliance's stitch processor): each colour block's runs are scaled and
 // then rebuilt at the right density for the new size. A zigzag run (satin) keeps its two edges and gets stations
-// every 0.2 mm along them again (0.4 mm on each edge); a fill (most of its length in one direction, many stitches)
+// every 0.2 mm along them again (0.4 mm on each edge), split where it's grown past 6.8 mm; a fill (most of its length in one direction, many stitches)
 // is traced as a shape and filled again at 0.4 mm rows in its own direction; anything else is a running line,
 // resampled so no stitch is over 3.5 mm or under 0.5 mm. Locks come back from the Design writer. (A run counts as a
 // fill when it's over 3 mm both ways and 70% of its length runs one way, or 45% one way and 80% with the 90° underlay.)
@@ -122,6 +139,7 @@ export function restitch(pattern, scale) {
   const d = new Design({ w: 2000, h: 2000, name: "" });
   for (const b of blocksOf(pattern)) {
     d.color(b.thread?.color || "#000000", b.thread?.description || b.thread?.name || "");
+    G = new Map();
     // a block's fill runs in one direction are refilled together, where the first of them was (one shape sewn in
     // several runs, refilled run by run, came out doubled: 37 hits/mm²)
     const runs = [], fills = new Map();
@@ -141,7 +159,10 @@ export function restitch(pattern, scale) {
     }
     flush();
     const taken = new Set();   // (this block's refilled area so far: a fill in another direction leaves it out)
-    for (const r of runs) for (const p of r.paths || refill(fills.get(r.fill), r.fill, taken) || fills.get(r.fill).map(line)) d.path(p);
+    const paths = [];
+    for (const r of runs) paths.push(...(r.paths || refill(fills.get(r.fill), r.fill, taken) || fills.get(r.fill).map(line)));
+    spread(paths);
+    for (const p of paths) d.path(p);
   }
   d.finish();
   return d.pattern();
@@ -188,17 +209,162 @@ function line(p) {
   if (out.length === 1) out.push(p[p.length - 1]);
   return out;
 }
-// a satin column: its two edges (alternate needle points), resampled to a station every 0.2 mm of the centre line;
-// grown past 8 mm wide it's no satin any more (long loose stitches) and is filled instead
+// a satin column: its two edges (alternate needle points), resampled to a station every 0.2 mm of the centre line.
+// Grown wide it stays a satin, split (`split`): filling each wide column on its own (everything over 8 mm until
+// 2026-10-30) criss-crossed the peace sign's ring with travel, trims 49 -> 103 at 150 %. Only a column over 30 mm
+// wide is filled.
 function column(p) {
   const widths = p.slice(1).map((q, k) => Math.hypot(q[0] - p[k][0], q[1] - p[k][1])).sort((a, b) => a - b);
-  if (widths[widths.length >> 1] > 8) return refill([p], 45) || [line(p)];
+  if (widths[widths.length >> 1] > WIDE) return refill([p], 45) || [line(p)];
   const A = p.filter((_, k) => k % 2 === 0), B = p.filter((_, k) => k % 2 === 1), n = Math.min(A.length, B.length);
   let L = 0;
   for (let k = 1; k < n; k++) L += Math.hypot((A[k][0] + B[k][0] - A[k - 1][0] - B[k - 1][0]) / 2, (A[k][1] + B[k][1] - A[k - 1][1] - B[k - 1][1]) / 2);
-  const m = Math.max(2, Math.round(L / 0.2)), at = (E, t) => { const f = t * (n - 1), i = Math.min(n - 2, Math.floor(f)), r = f - i; return [E[i][0] + (E[i + 1][0] - E[i][0]) * r, E[i][1] + (E[i + 1][1] - E[i][1]) * r]; };
-  return [Array.from({ length: m + 1 }, (_, k) => at(k % 2 ? B : A, k / m))];
+  // (an even count when the run ends on its first edge, odd on the other: the next run starts where it ended, and a
+  // column that stopped on the wrong edge, a satin width away, jumped there: ursula at 150 % had 20 loose threads)
+  let m = Math.max(2, Math.round(L / 0.2));
+  if (m % 2 !== (p.length - 1) % 2) m++;
+  const at = (E, t) => { const f = t * (n - 1), i = Math.min(n - 2, Math.floor(f)), r = f - i; return [E[i][0] + (E[i + 1][0] - E[i][0]) * r, E[i][1] + (E[i + 1][1] - E[i][1]) * r]; };
+  // (a hit landing where the block is already crowded, at a fan's pivot or where columns overlap, becomes a short
+  // stitch: moved in along its stitch toward the other edge to the first spot with room, at most 40% of the way)
+  const room = (q, o) => {
+    if (crowd(q) < SHORT) return q;
+    const l = Math.hypot(o[0] - q[0], o[1] - q[1]);
+    let best = q, bc = crowd(q);
+    for (let d = 0.3; d <= 0.4 * l; d += 0.3) {
+      const r = [q[0] + ((o[0] - q[0]) * d) / l, q[1] + ((o[1] - q[1]) * d) / l], c = crowd(r);
+      if (c < bc) { bc = c; best = r; }
+      if (c < SHORT) break;
+    }
+    return best;
+  };
+  const out = [at(A, 0)];
+  hit(out[0]);
+  for (let k = 1, prev = out[0]; k <= m; k++) {
+    const e = k === m ? p[p.length - 1] : at(k % 2 ? B : A, k / m), q = k === m ? e : room(e, at(k % 2 ? A : B, k / m));
+    for (const s of split(prev, q, k)) { out.push(s); hit(s); }
+    out.push(q); hit(q); prev = q;
+  }
+  return [out];
 }
+// needle hits so far in this colour block's columns, on a 0.5 mm grid (`G`, reset per block by restitch)
+let G = new Map();
+const hit = ([x, y]) => { const k = Math.floor(x * 2) + "," + Math.floor(y * 2); G.set(k, (G.get(k) || 0) + 1); };
+// hits in the densest 1 mm window holding a point
+function crowd([x, y]) {
+  const X = Math.floor(x * 2), Y = Math.floor(y * 2), c = (i, j) => G.get(X + i + "," + (Y + j)) || 0;
+  let best = 0;
+  for (const i of [-1, 0]) for (const j of [-1, 0]) best = Math.max(best, c(i, j) + c(i + 1, j) + c(i, j + 1) + c(i + 1, j + 1));
+  return best;
+}
+// split satin: a stitch over 6.8 mm is cut into equal pieces of at most 5.5 mm (the writer would halve anything over
+// 7 mm wherever the middle fell), every cut shifted by up to a quarter piece in golden-ratio steps from stitch to
+// stitch so the cuts don't line up into a seam
+function split(a, b, k) {
+  const l = Math.hypot(b[0] - a[0], b[1] - a[1]);
+  if (l <= MAXS) return [];
+  const n = Math.ceil(l / PIECE), piece = l / n, off = (((k * 0.618034) % 1) - 0.5) * piece * 0.5, out = [];
+  for (let j = 1; j < n; j++) {
+    const t = (j * piece + off) / l, q = [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
+    q.cut = true; out.push(q);
+  }
+  return out;
+}
+// Thinning that changes nothing you can see: in a 1 mm window (any 0.1 mm offset, as pe900_check.py) with over
+// `limit` hits in one colour block, a hit in the middle of a straight line (a split satin's cut, a point along a
+// running line) slides along that line, so the thread lies exactly as before, to where the windows round it are
+// thinnest, keeping both stitches 1-6.8 mm. Locks (5 points round any command) stay. Stitch units 0.1 mm.
+export function slide(st, limit = LIMIT) {
+  const n = st.length, blk = new Int32Array(n), cells = new Map();
+  for (let i = 0, b = 0; i < n; i++) { if (st[i][2] === COLOR_CHANGE) b++; blk[i] = b; }
+  const R = pyRound, key = (b, cx, cy) => b + "," + cx + "," + cy;
+  const place = (i, v) => {
+    const k = key(blk[i], Math.floor(R(st[i][0]) / 10), Math.floor(R(st[i][1]) / 10));
+    if (v > 0) { if (!cells.has(k)) cells.set(k, []); cells.get(k).push(i); } else { const a = cells.get(k); a.splice(a.indexOf(i), 1); }
+  };
+  for (let i = 0; i < n; i++) if (st[i][2] === STITCH) place(i, 1);
+  // hits in the window with corner (x0, y0)
+  const count = (b, x0, y0) => {
+    let c = 0;
+    for (let i = 0; i < 2; i++) for (let j = 0; j < 2; j++) for (const k of cells.get(key(b, Math.floor(x0 / 10) + i, Math.floor(y0 / 10) + j)) || []) {
+      const x = R(st[k][0]), y = R(st[k][1]);
+      if (x >= x0 && x < x0 + 10 && y >= y0 && y < y0 + 10) c++;
+    }
+    return c;
+  };
+  // the fullest window holding (x, y)
+  const worst = (b, x, y) => { let w = 0; for (let ox = 0; ox < 10; ox++) for (let oy = 0; oy < 10; oy++) w = Math.max(w, count(b, R(x) - ox, R(y) - oy)); return w; };
+  const free = (i) => {
+    for (let j = i - 5; j <= i + 5; j++) if (j < 0 || j >= n || st[j][2] !== STITCH) return false;
+    const [a, p, b] = [st[i - 1], st[i], st[i + 1]], dx = b[0] - a[0], dy = b[1] - a[1], l = Math.hypot(dx, dy);
+    return l > 20 && Math.abs(dx * (p[1] - a[1]) - dy * (p[0] - a[0])) / l < 0.5 && ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / l > 0 && ((b[0] - p[0]) * dx + (b[1] - p[1]) * dy) / l > 0;
+  };
+  for (const k0 of [...cells.keys()]) {
+    const [b, cx, cy] = k0.split(",").map(Number);
+    // (a window with its corner in this cell lies in it and its right/lower neighbours: never fuller than those four)
+    let most = 0;
+    for (let i = 0; i < 2; i++) for (let j = 0; j < 2; j++) most += (cells.get(key(b, cx + i, cy + j)) || []).length;
+    if (most <= limit) continue;
+    for (let ox = 0; ox < 10; ox++) for (let oy = 0; oy < 10; oy++) {
+      const x0 = cx * 10 + ox, y0 = cy * 10 + oy;
+      for (let tries = 0, now; (now = count(b, x0, y0)) > limit && tries < 40; tries++) {
+        // the movable hits in this window; the one that finds the thinnest spot moves
+        let best = null;
+        for (let i0 = 0; i0 < 2; i0++) for (let j0 = 0; j0 < 2; j0++) for (const i of cells.get(key(b, cx + i0, cy + j0)) || []) {
+          const x = R(st[i][0]), y = R(st[i][1]);
+          if (x < x0 || x >= x0 + 10 || y < y0 || y >= y0 + 10 || !free(i)) continue;
+          const a = st[i - 1], c = st[i + 1], l = Math.hypot(c[0] - a[0], c[1] - a[1]);
+          for (let t = 10; t <= l - 10; t += 2.5) {
+            if (t > MAXS * 10 || l - t > MAXS * 10) continue;
+            const q = [a[0] + ((c[0] - a[0]) * t) / l, a[1] + ((c[1] - a[1]) * t) / l];
+            if (R(q[0]) >= x0 && R(q[0]) < x0 + 10 && R(q[1]) >= y0 && R(q[1]) < y0 + 10) continue;
+            const w = worst(b, q[0], q[1]);
+            if (w + 1 < now - 1 && (!best || w < best.w)) best = { i, q, w };   // (the move must leave both windows better off)
+          }
+        }
+        if (!best) break;
+        place(best.i, -1); st[best.i] = [best.q[0], best.q[1], STITCH]; place(best.i, 1);
+      }
+    }
+  }
+  return st;
+}
+// Where a colour block's columns put over 16 hits in a 1 mm window (where the peace sign's bars meet its ring, split
+// cuts in fixed places piled 33-40), the split satin's cuts in it slide along their own stitch (the thread lies
+// exactly as before) to the least crowded spot that keeps both pieces 1-6.8 mm. A 0.25 mm grid, every 1 mm window;
+// `slide` then checks the finished stitches exactly.
+function spread(paths) {
+  const C = new Map(), cell = (q) => [Math.floor(q[0] * 4), Math.floor(q[1] * 4)];
+  const add = (q, v) => { const [X, Y] = cell(q), k = X + "," + Y; C.set(k, (C.get(k) || 0) + v); };
+  const win = (q) => {
+    const [X, Y] = cell(q), c = (i, j) => C.get(X + i + "," + (Y + j)) || 0;
+    let best = 0;
+    for (let i0 = -3; i0 <= 0; i0++) for (let j0 = -3; j0 <= 0; j0++) {
+      let s = 0;
+      for (let i = i0; i < i0 + 4; i++) for (let j = j0; j < j0 + 4; j++) s += c(i, j);
+      if (s > best) best = s;
+    }
+    return best;
+  };
+  for (const p of paths) for (const q of p) add(q, 1);
+  for (let pass = 0; pass < 4; pass++) for (const p of paths) for (let k = 1; k < p.length - 1; k++) {
+    const q = p[k];
+    if (!q.cut || win(q) <= LIMIT - 8) continue;
+    const a = p[k - 1], b = p[k + 1], l = Math.hypot(b[0] - a[0], b[1] - a[1]);
+    add(q, -1);
+    let best = null, bc = Infinity;
+    for (let t = 1; t <= l - 1; t += 0.25) {
+      if (t > MAXS || l - t > MAXS) continue;
+      const r = [a[0] + ((b[0] - a[0]) * t) / l, a[1] + ((b[1] - a[1]) * t) / l], c = win(r);
+      if (c < bc) { bc = c; best = r; }
+    }
+    if (best && bc < win(q)) { q[0] = best[0]; q[1] = best[1]; }
+    add(q, 1);
+  }
+}
+const MAXS = 6.8;   // the writer splits stitches over 7 mm in equal parts (the 0.1 mm rounding can add 0.07)
+// split satin: pieces at most 5.5 mm; a hit where a 1 mm window already holds 16 becomes a short stitch; columns
+// over 30 mm wide (median) are filled instead (the peace ring at 250 % is 25 mm: filling those columns took trims 54 -> 82)
+const PIECE = 5.5, SHORT = 16, WIDE = 30;
 // fills: the area their stitches cover (closed over 1.2 mm on a 4 px/mm grid) filled again at 0.4 mm rows, less what
 // `taken` (global 1/4 mm cells) already holds, bar a 0.5 mm overlap so the two don't open a gap (the peace sign's
 // ring and bars, three directions, piled 37 hits/mm² where they met)
@@ -225,9 +391,27 @@ function refill(runs, angle, taken = new Set()) {
   return paths.length ? paths : null;
 }
 
+// Jumps land where their first stitch goes in. Our writer (like pyembroidery's) puts the needle down where a jump
+// ends before the first stitch, so a file whose jumps stop short of it (all 49 of peace.pes's, by 0.5-12 mm) gained a
+// hole there, often 2-5 mm from the last stitch: a loose thread too short for the machine to trim (3 -> 31 when
+// re-saved). A run of jumps becomes one (the writer splits any over 121 mm).
+export function landJumps(pattern) {
+  const st = pattern.stitches, out = [];
+  for (let i = 0; i < st.length; i++) {
+    if (st[i][2] !== JUMP) { out.push(st[i]); continue; }
+    let j = i;
+    while (st[j + 1]?.[2] === JUMP) j++;
+    const s = st[j + 1];
+    out.push(s?.[2] === STITCH ? [s[0], s[1], JUMP] : st[j]);
+    i = j;
+  }
+  return { ...pattern, stitches: out };
+}
+
 // a new pattern: scaled about its centre, tiny stitches merged into the next, long ones split, dense spots thinned;
 // `sort` merges same-thread blocks first; past 80-120 % it's re-stitched (`restitch`)
 export function fix(pattern, { scale = 1, tiny = false, thin = false, sort = false } = {}) {
+  pattern = landJumps(pattern);
   if (sort) pattern = sortColors(pattern) || pattern;
   if (scale < 0.8 - 1e-9 || scale > 1.2 + 1e-9) pattern = restitch(pattern, scale), scale = 1;
   let st = pattern.stitches;
@@ -247,13 +431,17 @@ export function fix(pattern, { scale = 1, tiny = false, thin = false, sort = fal
     const [x, y, c] = st[i];
     if (c === STITCH && last) {
       const d = Math.hypot(x - last[0], y - last[1]);
-      if (scale !== 1 && d === 0) continue;
+      // (not the stitch a jump lands on: it's the run's first hole, which the writer would add anyway, out of sight of
+      // relieve and slide: peace.pes at 80 % thinned read back 25 hits/mm²)
+      if (scale !== 1 && d === 0 && st[i - 1][2] !== JUMP) continue;
       // (keep the stitch before a command: it's the end of a run or a lock)
-      if (tiny && d < 3 && st[i + 1]?.[2] === STITCH) continue;
-      if (d > 120) { const k = Math.ceil(d / 100); for (let j = 1; j < k; j++) out.push([last[0] + ((x - last[0]) * j) / k, last[1] + ((y - last[1]) * j) / k, STITCH]); }
+      if (tiny && d < 3 && st[i + 1]?.[2] === STITCH && st[i - 1][2] !== JUMP) continue;
+      // (split here as split satin, not by the writer, which halves anything over 7 mm where relieve and slide can't
+      // see it: those halves piled peace.pes at 80 % to 25 hits/mm² even thinned)
+      if (d > MAXS * 10) for (const q of split([last[0] / 10, last[1] / 10], [x / 10, y / 10], i)) out.push([Math.round(q[0] * 10), Math.round(q[1] * 10), STITCH]);
     }
     out.push([x, y, c]);
     if (c === STITCH || c === JUMP) last = [x, y]; else if (c === TRIM || c === COLOR_CHANGE) last = null;
   }
-  return { stitches: thin ? relieve(out, LIMIT) : out, threads: pattern.threads };
+  return { stitches: slide(thin ? relieve(out, LIMIT) : out), threads: pattern.threads };
 }
