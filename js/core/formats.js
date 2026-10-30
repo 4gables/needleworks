@@ -1,6 +1,7 @@
 // Embroidery file formats: write PES (v6: header + CEmbOne/CSewSeg blocks + PEC) and read PES / PEC / DST.
 // Ported from pyembroidery so files match what it writes, byte for byte.
 // Units are pyembroidery's: 0.1 mm, y down.
+import { MARGIN } from "./machines.js";
 import { PEC_MATCH, PEC_THREADS, PEC_BLANK_ICON, hexToRgb, nearestIndex, pecThread, pyRound, rgbToHex } from "./threads.js";
 
 export const STITCH = 0, JUMP = 1, TRIM = 2, STOP = 3, END = 4, COLOR_CHANGE = 5;
@@ -524,8 +525,9 @@ export function validatePES(bytes, source = null, hoop = null) {
       return fail("The PES design block has the wrong size or position.");
   }
   if (hoop) {
-    const b = bounds(got), w = (b[2] - b[0]) / 10, h = (b[3] - b[1]) / 10;
-    if (w > hoop.w || h > hoop.h) return fail(`The design is ${w.toFixed(0)} × ${h.toFixed(0)} mm, bigger than the ${hoop.name}.`);
+    // the same field every other check uses: the hoop less a 2 mm margin all round
+    const b = bounds(got), w = (b[2] - b[0]) / 10, h = (b[3] - b[1]) / 10, lw = hoop.w - 2 * MARGIN, lh = hoop.h - 2 * MARGIN;
+    if (w > lw || h > lh) return fail(`The design is ${w.toFixed(0)} × ${h.toFixed(0)} mm, but the ${hoop.name} fits ${lw} × ${lh} mm.`);
   }
   return { ok: true, decoded: d };
 }

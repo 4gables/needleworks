@@ -298,7 +298,8 @@ Embroidery-file tools for home machines. Two implementations of the same engine:
   pyembroidery read oracles in `tests/external/oracle/`.
 - Every download goes through `validatePES()` (js/core/formats.js): re-reads the bytes and requires the same needle
   movements as the source design (PEC's zero-length anchor stitches after jumps are ignored), an END marker, enough
-  threads, colour-change toggle bytes alternating 2,1,2… (what Brother writes; real files follow it), and hoop fit.
+  threads, colour-change toggle bytes alternating 2,1,2… (what Brother writes; real files follow it), and fit in the hoop field (less the 2 mm margin,
+  like every other check; it used the whole hoop until 2026-10-29). Validation only: the written bytes are unchanged.
   Opened PES files are offered as their original bytes after the same structural checks. Tests: re-encode of all
   samples, 300 fuzz designs, and 50 byte-flip corruptions must all behave.
 - Hosting: 4gables.com is the `4gables/website` repo's custom domain (a *project* site). Other repos only appear under
