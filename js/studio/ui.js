@@ -9,7 +9,7 @@ import { FILL_PATTERNS } from "../core/digitize.js";
 import { draw } from "../render.js";
 import { QUILTS } from "./quilt.js";
 import { MOTIFS } from "./motifs.js";
-import { BORDERS, FABRICS, THREADS, SHAPES, TEXT_SHAPES, splitPieces, archRoom, archTight, touching, towelMin, fineLine, compose, fileBlocks, fittedSizes, followFrame, label, minSize, pieceBounds, previewLook, smallText } from "./pieces.js";
+import { BORDERS, FABRICS, THREADS, SHAPES, TEXT_SHAPES, splitPieces, archFit, archRoom, archTight, touching, towelMin, fineLine, compose, fileBlocks, fittedSizes, followFrame, label, minSize, pieceBounds, previewLook, smallText } from "./pieces.js";
 
 const SCRIPT = "NW Great Vibes", PRINT = "NW Josefin Sans", ROUND = "NW Quicksand";
 // exact Brother PEC thread colours, so the name on screen is the one the machine shows
@@ -327,9 +327,10 @@ export function initStudio(api) {
     w.innerHTML = [
       gone.length ? `This font has no ${gone.map((c) => `“${api.escapeHtml(c)}”`).join(" ")}: ${gone.length === 1 ? "it" : "they"} would be stitched in a stand-in letter. Take ${gone.length === 1 ? "it" : "them"} out or try another font.` : "",
       m ? `These letters are too small to stitch cleanly. <button type="button" class="link" data-size="${m}">Make it ${m} mm</button>` : "",
-      towel ? `On a towel these letters close up (the loops need a wide satin). Make the height ${towel} mm or more. <button type="button" class="link" data-size="${towel}">Make it ${towel} mm</button>` : "",
+      towel > (p.kind === "monogram" ? 90 : 60) ? `On a towel these letters close up (the loops need a wide satin), even at the biggest size. Try a bolder font, like Yellowtail or Satisfy.`
+        : towel ? `On a towel these letters close up (the loops need a wide satin). Make the height ${towel} mm or more, or pick a bolder font. <button type="button" class="link" data-size="${towel}">Make it ${towel} mm</button>` : "",
       room ? `The words wrap most of the way round the curve${room.full ? " and run into themselves" : ""}. <button type="button" class="link" data-room>Widen the curve</button>` : "",
-      archTight(p) ? "The curve is too tight for letters this tall: they'd bunch up. Make the curve bigger or the letters smaller." : "",
+      !room && archTight(p) ? `The curve is too tight for letters this tall: they'd bunch up. ${archFit(p) ? `<button type="button" class="link" data-room>Widen the curve</button> or make the letters smaller.` : "Make the curve bigger or the letters smaller."}` : "",
       near ? `This runs into ${api.escapeHtml(label(near))}. Drag it apart or make it smaller.` : "",
       !m && !towel && fabric !== "towel" && fineLine(q) ? `At this size it sews as a thin line. <button type="button" class="link" data-seg-set="style:satin">Make it bold</button> (small loops may fill in).` : "",
     ].filter(Boolean).map((t) => `<span>${t}</span>`).join("<br>");
@@ -527,8 +528,9 @@ export function initStudio(api) {
     const ss = e.target.closest("[data-seg-set]");
     if (ss) { const [k, v] = ss.dataset.segSet.split(":"); change((p) => (p[k] = v), true); editor(); return; }
     const sz = e.target.closest("[data-size]");
-    if (sz) { change((p) => (p.size = Math.min(+sz.dataset.size, p.kind === "monogram" ? 90 : 60)), true); editor(); return; }
-    if (e.target.closest("[data-room]")) { change((p) => Object.assign(p, archRoom(p) || {}), true); editor(); return; }
+    // (an arched word made bigger gets the curve it then needs too, so the size it was told reads)
+    if (sz) { change((p) => { p.size = Math.min(+sz.dataset.size, p.kind === "monogram" ? 90 : 60); Object.assign(p, archFit(p) || {}); }, true); editor(); return; }
+    if (e.target.closest("[data-room]")) { change((p) => { Object.assign(p, archRoom(p) || {}); Object.assign(p, archFit(p) || {}); }, true); editor(); return; }
     if (e.target.closest("[data-follow]")) { change((p) => Object.assign(p, followFrame(p, pieces)), true); editor(); return; }
     const s = e.target.closest("[data-seg] button");
     if (s) { change((p) => (p[s.closest("[data-seg]").dataset.seg] = s.dataset.v), true); editor(); }
