@@ -6,6 +6,7 @@ import { hoop as getHoop } from "../core/machines.js";
 import { nearestBrotherThread } from "../core/threads.js";
 import { readEmbroidery } from "../core/formats.js";
 import { draw } from "../render.js";
+import { QUILTS } from "./quilt.js";
 import { BORDERS, FABRICS, SHAPES, TEXT_SHAPES, archTight, compose, fileBlocks, fittedSizes, followFrame, label, minSize, pieceBounds, smallText } from "./pieces.js";
 
 const SCRIPT = "NW Great Vibes", PRINT = "NW Josefin Sans";
@@ -54,6 +55,18 @@ export const STARTERS = [
     text({ text: "Emma", size: 20, y: -4 }),
     text({ text: "2026", font: PRINT, size: 8, y: 14 })],
     tip: "Made in the hoop, front and back. Have ready: tear-away stabilizer, front and back fabric cut 1 in bigger than the circle, tape, and a 6 in ribbon for hanging. Smaller (Fit to hoop or the size slider) makes a keychain." },
+  { id: "mugrug", name: "Mug rug", note: "quilted, sewn in the hoop", make: () => [
+    frame({ shape: "square", w: 120, h: 90, border: "ith", quilt: "stipple", color: NAVY }),
+    text({ text: "Tea time", size: 18, color: RED })],
+    tip: "Made in the hoop: front fabric with thin batting under it, then backing. Have ready: tear-away stabilizer, front and back fabric and batting 1 in bigger than the rug, and tape." },
+  { id: "coaster", name: "Coaster", note: "echo-quilted round a letter", make: () => [
+    frame({ shape: "circle", w: 96, h: 96, border: "ith", quilt: "echo", color: RED }),
+    mono({ letters: "A", size: 34, color: NAVY })],
+    tip: "Made in the hoop, front and back. Thin batting under the front fabric makes the echo lines puff up." },
+  { id: "quiltblock", name: "Quilt block", note: "a stippled square with a heart", make: () => [
+    frame({ shape: "square", w: 112, h: 112, border: "bold", quilt: "stipple", color: BLACK }),
+    frame({ shape: "heart", w: 52, h: 48, border: "satin", color: RED })],
+    tip: "Hoop the quilt sandwich (top, batting, backing) or float it on tear-away stabilizer. Stitch the blocks, then sew them together." },
   { id: "applique", name: "Appliqué", note: "a fabric shape with a name", make: () => [
     frame({ shape: "heart", w: 84, h: 76, border: "applique", y: -4 }), text({ size: 18, y: -6, color: NAVY })] },
   { id: "initials", name: "Appliqué letters", note: "fabric letters with satin edges", make: () => [appl({ text: "AB", size: 60 })] },
@@ -175,6 +188,8 @@ export function initStudio(api) {
       if (p.shape !== "circle") h += range("h", "Height", 20, 170, p.h);
       h += seg("border", BORDERS, p.border);
       if (p.border === "patch") { p.fill ||= NAVY; h += `<div class="field"><span>Fill thread</span><div class="swatches">${swatches(p, "fill")}</div><p class="hint">Brother ${nearestBrotherThread(p.fill).name}. The edge uses the thread below.</p></div>`; }
+      if (p.border !== "patch") h += `<div class="field"><span>Quilting</span>${seg("quilt", QUILTS, p.quilt || "none")}</div>`
+        + (p.quilt && p.quilt !== "none" ? `<p class="hint">Fills the frame around everything on it, in the frame's thread.</p>` : "");
       if (p.border === "ith") h += `<p class="hint">Two-sided, made in the hoop: an appliqué front, then the pieces below it in the list, then backing fabric under the hoop and a satin edge through everything. The steps are under “How to stitch it”.</p>`;
       if (p.border === "applique") h += `<p class="hint">Sews an outline, pauses for you to lay fabric on and trim it, then covers the edge in satin. The steps are under “How to stitch it”.</p>`;
     } else {

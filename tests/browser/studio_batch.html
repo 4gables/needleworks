@@ -70,6 +70,11 @@ for (const f of [FONTS[0], FONTS[3], FONTS.find((x) => x.print), FONTS[FONTS.len
 }
 await save("st_flip", [P({ kind: "frame", shape: "heart", border: "satin", w: 60, h: 54, x: -30, rot: 20, flip: true }), P({ kind: "text", text: "Ana", font: FONTS[1].family, size: 16, x: 30, flip: true })]);
 log("layout: done");
+// quilting round the pieces on a frame
+for (const shape of Object.keys(SHAPES)) for (const quilt of ["stipple", "echo"])
+  await save(`st_quilt_${shape}_${quilt}`, [P({ kind: "frame", shape, border: shape === "heart" ? "applique" : "satin", w: 100, h: 84, quilt, color: "#ed171f" }),
+    P({ kind: "text", text: "Rosie", font: FONTS[1].family, size: 16 })]);
+log("quilting: done");
 for (const f of APPLIQUE_FONTS) for (const [text, size] of [["AB", 60], ["Mia", 35], ["Q&8", 44]]) {
   const tag = f.family.slice(3).replace(/ /g, "");
   await save(`st_appl_${tag}_${text.replace(/[^A-Za-z0-9]/g, "")}_${size}`, [P({ kind: "letters", text, font: f.family, size })]);

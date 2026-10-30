@@ -9,6 +9,7 @@ import { edgeWalk, filletPolygon, followRun, run, satin, zigzag } from "../core/
 import { order } from "../core/raster.js";
 import { strokes } from "../core/text.js";
 import { letterOutlines } from "./outline.js";
+import { echo, stipple } from "./quilt.js";
 
 // ---------- lettering ----------
 const lettering = new Map();   // font + text -> centre-line strokes (rendering is the slow part)
@@ -472,6 +473,23 @@ export const FABRICS = {
   denim: { name: "Denim", tip: "On denim and canvas use a 90/14 denim needle and cut-away or heavy tear-away stabilizer." },
 };
 
+// Quilting in a frame (`quilt`: stipple or echo) fills it around everything else on it, sewn right after the frame
+// (after the front fabric on an in-the-hoop frame, before what goes on it). Kept for the last few layouts: it's the
+// slowest thing in compose.
+const QUILTED = (p) => p.kind === "frame" && (p.quilt === "stipple" || p.quilt === "echo") && p.border !== "patch";
+const quilted = new Map();
+function withQuilt(p, stages, obstacles) {
+  const edge = (SHAPES[p.shape] || SHAPES.circle).path(p.w, p.h).map(placer(p)), key = JSON.stringify([p, obstacles.length, obstacles[0]?.[0], obstacles.at(-1)?.at(-1)]);
+  if (!quilted.has(key)) {
+    quilted.set(key, (p.quilt === "echo" ? echo : stipple)(edge, obstacles, { inset: p.border === "line" || p.border === "bold" ? 3 : 4.5 }));
+    if (quilted.size > 12) quilted.delete(quilted.keys().next().value);
+  }
+  const paths = quilted.get(key); if (!paths.length) return stages;
+  const q = { color: p.color, paths, sews: `Quilts the ${(SHAPES[p.shape] || SHAPES.circle).name.toLowerCase()} (${p.quilt}).`, label: label(p) };
+  const at = stages.findIndex((s) => s.last);
+  return at < 0 ? [...stages, q] : [...stages.slice(0, at), q, ...stages.slice(at)];
+}
+
 // opts: { fabric: key of FABRICS, baste: a basting box round everything first (floating, towels) }
 export function compose(pieces, hoop, opts = {}) {
   const fab = FABRICS[opts.fabric] ? opts.fabric : "cotton";
@@ -483,10 +501,11 @@ export function compose(pieces, hoop, opts = {}) {
     return [x0 - 1, y0 - 1, x1 + 1, y1 + 1];
   };
   const hits = (a, b) => a[0] < b[2] && b[0] < a[2] && a[1] < b[3] && b[1] < a[3];
-  const order = [], last = [];
-  for (const p of pieces) for (const st of pieceStages(p, fab)) {
+  const order = [], last = [], staged = pieces.map((p) => pieceStages(p, fab).map((st) => ({ ...st, label: label(p) })));
+  pieces.forEach((p, i) => { if (QUILTED(p)) staged[i] = withQuilt(p, staged[i], staged.filter((_, j) => j !== i).flat().flatMap((s) => s.paths)); });
+  for (const st of staged.flat()) {
     if (!st.paths.length) continue;
-    const s = { ...st, label: label(p), box: box(st.paths) };
+    const s = { ...st, box: box(st.paths) };
     if (s.last) { last.push(s); continue; }   // two-sided in-the-hoop edge: after everything that goes on the front
     let at = order.length;
     if (!s.pause && !s.fabric) {
@@ -520,6 +539,10 @@ export function compose(pieces, hoop, opts = {}) {
     }
     steps[steps.length - 1].sews.push(st.sews);
     if (st.early) steps[steps.length - 1].early = true;
+    // something you'd see joining a tack-down (quilting, lettering in the same thread) shows the block in the preview;
+    // the tack line sits at the edge, under the satin that comes later
+    const cur = steps[steps.length - 1];
+    if (cur.under && !cur.fabric && !st.under) cur.under = false;
     for (const q of st.paths) d.path(q);
   }
   if (!steps.length) throw new Error("Add some lettering or a frame to start.");

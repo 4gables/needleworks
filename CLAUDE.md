@@ -151,6 +151,14 @@ Embroidery-file tools for home machines. Two implementations of the same engine:
   Cross-stitch (`crossStitch`: `cross` mm cells, majority colour or empty when mostly background; a row run is two
   diagonal zigzags, out and back, with one straight stitch up its last edge; climbing every cell edge drew bowties).
   The batch adds 4 line/cross cases per picture. Not done: "make it stitchable" (thicken/drop too-fine detail).
+- Quilting (`js/studio/quilt.js`, frame `quilt`: stipple | echo): the free space is the frame inset 3-4.5 mm minus a
+  2.5 mm disc round every other piece's stitches, on a 4 px/mm mask. Stipple: 7 mm cells wholly free, a random (fixed
+  seed) spanning tree, the closed walk round it through the 2 x 2 sub-cells (each once, never crossing), points nudged
+  and averaged over ~7 mm (the plain walk looked like a maze). Echo: marching-squares contours of the free space's
+  distance field every 4 mm. `compose` adds the quilt stage right after the frame (before an in-the-hoop frame's
+  `last` stage) in the frame's thread. A visible stage that joins a tack-down block un-hides that block in the
+  preview (the quilting, or same-thread lettering on an ITH frame, was hidden with the tack line). Starters: Mug rug,
+  Coaster, Quilt block.
 - Sew sheet + cut file (`js/sheet.js`, links under Download): "Print a sew sheet" fills a hidden `#sheet` and calls
   `window.print()` (print CSS hides the app). Page 1 is the hoop field at 1:1 (SVG sized in mm) with the design centred
   as the machine centres it, a crosshair and a 5 cm check bar; page 2 the steps with the machine's thread names
