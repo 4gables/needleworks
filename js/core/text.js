@@ -17,8 +17,8 @@ function maskOf(ctx, w, h) {
   return { w, h, data };
 }
 
-function endpoints(mask, stroke) {
-  const { pos, edges: raw } = skeletonGraph(skeletonize(mask));
+function endpoints(sk, stroke) {
+  const { pos, edges: raw } = skeletonGraph(sk);
   const edges = prune(raw, stroke * 1.3);
   const deg = new Map();
   for (const [a, b] of edges) { deg.set(a, (deg.get(a) || 0) + 1); deg.set(b, (deg.get(b) || 0) + 1); }
@@ -81,11 +81,15 @@ export function renderWord(text, family, { leadIn = 0, tail = 0, join = true, de
   ctx.fillText(text, ox, baseline);
   let mask = maskOf(ctx, w, h);
 
-  const stroke = strokeWidth(mask);
+  // thinned once: the stroke width, the stroke ends and (when nothing gets drawn on) the lettering's own skeleton
+  const sk = skeletonize(mask), stroke = strokeWidth(mask, sk);
   const sw = Math.max(2, Math.round(stroke)), ybase = baseline - stroke / 2;
   const span = [ox + inkL, ox + inkR];
-  const ends = endpoints(mask, stroke);
-  const { labels } = label(mask);
+  // stroke ends and letter pieces only matter for joins and swashes (not print letters with dashes)
+  const needEnds = join || (deco !== "dash" && (leadIn || tail));
+  const ends = needEnds ? endpoints(sk, stroke) : [];
+  const { labels } = join ? label(mask) : { labels: null };
+  let drew = false;
   const adv = Array.from({ length: text.length + 1 }, (_, i) => ox + probe.measureText(text.slice(0, i)).width);
   const low = ends.filter(([p]) => p[1] >= baseline - 0.75 * xh && p[1] <= baseline + 0.2 * xh);
   // lowest ink point (above descenders) in letter i's left half, as a stroke centre heading left
@@ -121,13 +125,16 @@ export function renderWord(text, family, { leadIn = 0, tail = 0, join = true, de
       const dist = Math.hypot(en[0][0] - ex[0][0], en[0][1] - ex[0][1]);
       brush(ctx, cubic(ex[0], [ex[0][0] + ex[1][0] * dist * 0.4, ex[0][1] + ex[1][1] * dist * 0.4],
         [en[0][0] + en[1][0] * dist * 0.4, en[0][1] + en[1][1] * dist * 0.4], en[0]), sw);
+      drew = true;
     }
   }
   if (deco === "dash") {
     const y = baseline - mid / 2, gap = 0.6 * mid;
     if (leadIn) brush(ctx, [[span[0] - gap - leadIn * xh, y], [span[0] - gap, y]], sw);
     if (tail) brush(ctx, [[span[1] + gap, y], [span[1] + gap + tail * xh, y]], sw);
+    drew ||= !!(leadIn || tail);
   } else {
+    drew ||= !!(leadIn || tail);
     if (leadIn) {
       // first letter's entry stroke; letters without one (E, O) are joined tangentially at their lowest point
       const en = entry(0) || bottom(0);
@@ -142,13 +149,13 @@ export function renderWord(text, family, { leadIn = 0, tail = 0, join = true, de
       span[1] = p0[0];
     }
   }
-  mask = maskOf(ctx, w, h);
-  return { mask, stroke, baseline, xh, mid, span };
+  if (!drew) return { mask, stroke, baseline, xh, mid, span, sk };
+  return { mask: maskOf(ctx, w, h), stroke, baseline, xh, mid, span };
 }
 
 export function strokes(text, family, opts) {
-  const r = renderWord(text, family, opts);
+  const { sk, ...r } = renderWord(text, family, opts);
   // print letters have real short strokes (t's crossbar, a's stem) that script-sized pruning would cut (print fonts are
   // the ones drawn with dash decorations: both callers pass deco "dash" for them)
-  return { edges: skeletonEdges(r.mask, r.stroke, { spur: opts?.deco === "dash" ? 0.45 : 1.3, dots: true }), info: { ...r, firstX: r.span[0], lastX: r.span[1] } };
+  return { edges: skeletonEdges(r.mask, r.stroke, { spur: opts?.deco === "dash" ? 0.45 : 1.3, dots: true, sk }), info: { ...r, firstX: r.span[0], lastX: r.span[1] } };
 }

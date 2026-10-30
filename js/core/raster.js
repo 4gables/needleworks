@@ -194,8 +194,9 @@ export function prune(edges, minLen) {
 // centerline strokes of a mask, smoothed: [[a, b, [[x, y], ...]]] in pixels
 // spur: dead ends shorter than this many stroke widths are thinning noise and get cut.
 // dots: also stitch blobs that thin to a lone point (lettering's i dots)
-export function skeletonEdges(mask, stroke, { spur = 1.3, dots = false } = {}) {
-  const { pos, edges } = skeletonGraph(skeletonize(mask));
+// sk: the mask's skeleton if it's already been thinned
+export function skeletonEdges(mask, stroke, { spur = 1.3, dots = false, sk = null } = {}) {
+  const { pos, edges } = skeletonGraph(sk || skeletonize(mask));
   const out = prune(edges, stroke * spur).map(([a, b, path]) => {
     const pts = path.map((q) => q.slice());
     pts[0] = pos.get(a).slice(); pts[pts.length - 1] = pos.get(b).slice();
@@ -217,9 +218,19 @@ export function skeletonEdges(mask, stroke, { spur = 1.3, dots = false } = {}) {
   return out;
 }
 
-export function strokeWidth(mask) {
-  const dt = distanceTransform(mask), sk = skeletonize(mask), vals = [];
-  for (let i = 0; i < sk.data.length; i++) if (sk.data[i]) vals.push(dt[i]);
+// the median stroke width: twice the distance to the background along the skeleton (sk: the mask's, if already
+// thinned). The distance transform runs on the ink's box plus a 1 px ring of background, which gives the same
+// distances as the whole (padded, mostly empty) canvas at a fraction of the cost.
+export function strokeWidth(mask, sk = skeletonize(mask)) {
+  const { w, h, data } = mask;
+  let x0 = w, y0 = h, x1 = -1, y1 = -1;
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) if (data[y * w + x]) { if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
+  if (x1 < 0) return 1;
+  x0--; y0--; x1++; y1++;
+  const cw = x1 - x0 + 1, ch = y1 - y0 + 1, crop = { w: cw, h: ch, data: new Uint8Array(cw * ch) };
+  for (let y = Math.max(0, y0); y <= Math.min(h - 1, y1); y++) for (let x = Math.max(0, x0); x <= Math.min(w - 1, x1); x++) crop.data[(y - y0) * cw + x - x0] = data[y * w + x];
+  const dt = distanceTransform(crop), vals = [];
+  for (let i = 0; i < sk.data.length; i++) if (sk.data[i]) { const x = i % w, y = (i - x) / w; vals.push(dt[(y - y0) * cw + x - x0]); }
   vals.sort((a, b) => a - b);
   return vals.length ? 2 * vals[Math.floor(vals.length / 2)] : 1;
 }

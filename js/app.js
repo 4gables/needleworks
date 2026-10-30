@@ -137,12 +137,15 @@ function busy(on, text = "Stitching…") { $("busy").hidden = !on; $("busy-text"
 $("zoom-in").onclick = () => { state.zoom = Math.min(12, state.zoom * 1.4); paint(); };
 $("zoom-out").onclick = () => { state.zoom = Math.max(0.4, state.zoom / 1.4); paint(); };
 $("zoom-fit").onclick = () => { state.zoom = 1; state.pan = [0, 0]; paint(); };
+// pan, pinch and wheel move faster than the screen redraws: at most one paint a frame
+let paintQueued = 0;
+const paintSoon = () => { paintQueued ||= requestAnimationFrame(() => { paintQueued = 0; paint(); }); };
 canvas.addEventListener("wheel", (e) => {
   e.preventDefault();
   const f = Math.exp(-e.deltaY * 0.0015), r = canvas.getBoundingClientRect();
   const mx = e.clientX - r.left - r.width / 2, my = e.clientY - r.top - r.height / 2;
   const nz = Math.min(12, Math.max(0.4, state.zoom * f)), k = nz / state.zoom;
-  state.pan = [mx - (mx - state.pan[0]) * k, my - (my - state.pan[1]) * k]; state.zoom = nz; paint();
+  state.pan = [mx - (mx - state.pan[0]) * k, my - (my - state.pan[1]) * k]; state.zoom = nz; paintSoon();
 }, { passive: false });
 const pointers = new Map();
 // screen point -> design mm (undoing the on-screen hoop turn)
@@ -166,14 +169,14 @@ canvas.addEventListener("pointermove", (e) => {
     const [a, b] = [...pointers.values()], d0 = Math.hypot(a[0] - b[0], a[1] - b[1]);
     pointers.set(e.pointerId, [e.clientX, e.clientY]);
     const [c, d] = [...pointers.values()], d1 = Math.hypot(c[0] - d[0], c[1] - d[1]);
-    if (d0 > 0) { state.zoom = Math.min(12, Math.max(0.4, state.zoom * (d1 / d0))); paint(); }
+    if (d0 > 0) { state.zoom = Math.min(12, Math.max(0.4, state.zoom * (d1 / d0))); paintSoon(); }
     return;
   }
   // on a photo of the item, a drag that isn't on a piece slides the photo under the design
   if (state.backdrop && state.tf) {
     const k = 1 / state.tf.scale; state.backdrop.center = [state.backdrop.center[0] + (e.clientX - prev[0]) * k, state.backdrop.center[1] + (e.clientY - prev[1]) * k];
   } else state.pan = [state.pan[0] + e.clientX - prev[0], state.pan[1] + e.clientY - prev[1]];
-  pointers.set(e.pointerId, [e.clientX, e.clientY]); paint();
+  pointers.set(e.pointerId, [e.clientX, e.clientY]); paintSoon();
 });
 const up = (e) => { pointers.delete(e.pointerId); if (dragging && !pointers.size) { dragging = false; studio.end(); } };
 canvas.addEventListener("pointerup", up); canvas.addEventListener("pointercancel", up);

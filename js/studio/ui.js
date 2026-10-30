@@ -118,14 +118,17 @@ export function initStudio(api) {
   function cards() {
     $("st-cards").innerHTML = STARTERS.map((s) => `<button type="button" data-start="${s.id}" title="${s.note}"><canvas aria-hidden="true"></canvas><b>${s.name}</b><small>${s.note}</small></button>`).join("");
   }
-  // a small stitched preview of each starter (drawn once the tab is on screen and has a size)
+  // a small stitched preview of each starter (drawn once the tab is on screen and has a size), one at a time when
+  // the page is idle: composing all of them at once held the first visit to the tab up for 1.6 s
   let thumbed = false;
+  const idle = () => new Promise((r) => ("requestIdleCallback" in window ? requestIdleCallback(() => r(), { timeout: 600 }) : setTimeout(r, 0)));
   async function thumbs() {
     if (thumbed || !$("st-cards").offsetWidth) return;
     thumbed = true;
     const fonts = [...new Set(STARTERS.flatMap((s) => (s.make ? s.make() : [])).filter((p) => p.font).map((p) => p.font).concat(SCRIPT))];
     await Promise.all(fonts.map((f) => document.fonts.load(`40px "${f}"`)));
     for (const s of STARTERS) {
+      await idle();
       const c = $("st-cards").querySelector(`[data-start="${s.id}"] canvas`);
       try {
         if (s.mode === "bookmark") {   // lying down, like the bookmark tab shows it
@@ -136,7 +139,6 @@ export function initStudio(api) {
         const { design, steps } = compose(s.make(), { w: 1000, h: 1000, name: "" });
         draw(c, design.pattern(), { pad: 4, ...previewLook(steps) });
       } catch { c.remove(); }
-      await new Promise((r) => setTimeout(r, 0));
     }
   }
   function list() {

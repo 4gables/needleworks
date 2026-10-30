@@ -1,24 +1,24 @@
 /* Needleworks — crisp white workroom, cranberry thread, script wordmark.
    Layout: header, segmented tabs, then controls (left) beside a large live preview (right); stacks on phones. */
-@font-face { font-family: "NW Sacramento"; src: url("../fonts/Sacramento-Regular.ttf") format("truetype"); font-display: block; }
-@font-face { font-family: "NW Allura"; src: url("../fonts/Allura-Regular.ttf") format("truetype"); font-display: block; }
-@font-face { font-family: "NW Parisienne"; src: url("../fonts/Parisienne-Regular.ttf") format("truetype"); font-display: block; }
-@font-face { font-family: "NW Corinthia"; src: url("../fonts/Corinthia-Regular.ttf") format("truetype"); font-display: block; }
-@font-face { font-family: "NW Ephesis"; src: url("../fonts/Ephesis-Regular.ttf") format("truetype"); font-display: block; }
-@font-face { font-family: "NW Meow Script"; src: url("../fonts/MeowScript-Regular.ttf") format("truetype"); font-display: block; }
-@font-face { font-family: "NW Great Vibes"; src: url("../fonts/GreatVibes-Regular.ttf") format("truetype"); font-display: block; }
-@font-face { font-family: "NW Alex Brush"; src: url("../fonts/AlexBrush-Regular.ttf") format("truetype"); font-display: block; }
-@font-face { font-family: "NW Ms Madi"; src: url("../fonts/MsMadi-Regular.ttf") format("truetype"); font-display: block; }
-@font-face { font-family: "NW Satisfy"; src: url("../fonts/Satisfy-Regular.ttf") format("truetype"); font-display: block; }
-@font-face { font-family: "NW Cookie"; src: url("../fonts/Cookie-Regular.ttf") format("truetype"); font-display: block; }
-@font-face { font-family: "NW Yellowtail"; src: url("../fonts/Yellowtail-Regular.ttf") format("truetype"); font-display: block; }
-@font-face { font-family: "NW Graduate"; src: url("../fonts/Graduate-Regular.ttf") format("truetype"); font-display: block; }
-@font-face { font-family: "NW Lilita One"; src: url("../fonts/LilitaOne-Regular.ttf") format("truetype"); font-display: block; }
-@font-face { font-family: "NW Alfa Slab One"; src: url("../fonts/AlfaSlabOne-Regular.ttf") format("truetype"); font-display: block; }
-@font-face { font-family: "NW Rouge Script"; src: url("../fonts/RougeScript-Regular.ttf") format("truetype"); font-display: block; }
-@font-face { font-family: "NW Italianno"; src: url("../fonts/Italianno-Regular.ttf") format("truetype"); font-display: block; }
-@font-face { font-family: "NW Quicksand"; src: url("../fonts/Quicksand-SemiBold.ttf") format("truetype"); font-display: block; }
-@font-face { font-family: "NW Josefin Sans"; src: url("../fonts/JosefinSans-SemiBold.ttf") format("truetype"); font-display: block; }
+@font-face { font-family: "NW Sacramento"; src: url("../fonts/Sacramento-Regular.woff2") format("woff2"); font-display: block; }
+@font-face { font-family: "NW Allura"; src: url("../fonts/Allura-Regular.woff2") format("woff2"); font-display: block; }
+@font-face { font-family: "NW Parisienne"; src: url("../fonts/Parisienne-Regular.woff2") format("woff2"); font-display: block; }
+@font-face { font-family: "NW Corinthia"; src: url("../fonts/Corinthia-Regular.woff2") format("woff2"); font-display: block; }
+@font-face { font-family: "NW Ephesis"; src: url("../fonts/Ephesis-Regular.woff2") format("woff2"); font-display: block; }
+@font-face { font-family: "NW Meow Script"; src: url("../fonts/MeowScript-Regular.woff2") format("woff2"); font-display: block; }
+@font-face { font-family: "NW Great Vibes"; src: url("../fonts/GreatVibes-Regular.woff2") format("woff2"); font-display: block; }
+@font-face { font-family: "NW Alex Brush"; src: url("../fonts/AlexBrush-Regular.woff2") format("woff2"); font-display: block; }
+@font-face { font-family: "NW Ms Madi"; src: url("../fonts/MsMadi-Regular.woff2") format("woff2"); font-display: block; }
+@font-face { font-family: "NW Satisfy"; src: url("../fonts/Satisfy-Regular.woff2") format("woff2"); font-display: block; }
+@font-face { font-family: "NW Cookie"; src: url("../fonts/Cookie-Regular.woff2") format("woff2"); font-display: block; }
+@font-face { font-family: "NW Yellowtail"; src: url("../fonts/Yellowtail-Regular.woff2") format("woff2"); font-display: block; }
+@font-face { font-family: "NW Graduate"; src: url("../fonts/Graduate-Regular.woff2") format("woff2"); font-display: block; }
+@font-face { font-family: "NW Lilita One"; src: url("../fonts/LilitaOne-Regular.woff2") format("woff2"); font-display: block; }
+@font-face { font-family: "NW Alfa Slab One"; src: url("../fonts/AlfaSlabOne-Regular.woff2") format("woff2"); font-display: block; }
+@font-face { font-family: "NW Rouge Script"; src: url("../fonts/RougeScript-Regular.woff2") format("woff2"); font-display: block; }
+@font-face { font-family: "NW Italianno"; src: url("../fonts/Italianno-Regular.woff2") format("woff2"); font-display: block; }
+@font-face { font-family: "NW Quicksand"; src: url("../fonts/Quicksand-SemiBold.woff2") format("woff2"); font-display: block; }
+@font-face { font-family: "NW Josefin Sans"; src: url("../fonts/JosefinSans-SemiBold.woff2") format("woff2"); font-display: block; }
 
 :root {
   --bg: #fcfbfa;
@@ -34,7 +34,7 @@
   --display: "Bricolage Grotesque", "Avenir Next", system-ui, sans-serif;
   --body: "Atkinson Hyperlegible", "Helvetica Neue", Arial, sans-serif;
   --mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
-  --script: "Sacramento", "NW Sacramento", cursive;
+  --script: "NW Sacramento", cursive;
   --radius: 12px;
   color-scheme: light;
 }

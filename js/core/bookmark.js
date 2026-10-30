@@ -37,10 +37,24 @@ function outline(L) {
 
 // Letters are sized the same with or without decorations: their own band fills LETTERS of the width,
 // and the whole word only shrinks if it (with swashes/dashes) won't fit the length.
+// lettering kept for the last few names: colour, fabric and turn changes rebuild the bookmark but not its letters
+// (nothing drawn before the font loaded: that's the fallback font)
+const lettered = new Map();
+function letterStrokes(name, family, deco) {
+  const key = JSON.stringify([name, family, deco]);
+  if (lettered.has(key)) return lettered.get(key);
+  const out = strokes(name, family, deco);
+  if (typeof document === "undefined" || document.fonts.check(`40px "${family}"`)) {
+    lettered.set(key, out);
+    if (lettered.size > 8) lettered.delete(lettered.keys().next().value);
+  }
+  return out;
+}
+
 function textPaths(name, family, boxLen, boxH, lead, tail, print) {
   const deco = print ? { deco: "dash", join: false, leadIn: lead ? 2.2 : 0, tail: tail ? 2.2 : 0 }
     : { leadIn: lead ? 1.8 : 0, tail: tail ? 2.6 : 0 };
-  const { edges, info } = strokes(name, family, deco);
+  const { edges, info } = letterStrokes(name, family, deco);
   const comps = order(edges);
   const all = edges.flatMap((e) => e[2]);
   const mn = [Math.min(...all.map((p) => p[0])), Math.min(...all.map((p) => p[1]))];

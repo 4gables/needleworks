@@ -216,6 +216,11 @@ Embroidery-file tools for home machines. Two implementations of the same engine:
   `routeFill`'s A* gives up at once between 8-connected regions it can't cross, and reuses typed arrays with the same
   linear-scan open list (a binary heap breaks ties differently and changes stitches): etsy_3 6.2 s -> 2.7 s. The
   picture worker runs one job at a time and keeps only the newest waiting.
+- Speed (2026-10-29, byte-identical): `renderWord` thins the word once (stroke width, stroke ends and, when no join or
+  swash was drawn, the final skeleton) and finds stroke ends/letter pieces only when joins or swashes need them;
+  `strokeWidth` runs the distance transform on the ink's box plus a 1 px ring (same distances). The bookmark caches its
+  lettering. Pan, pinch and wheel paint at most once a frame; starter thumbnails compose one per idle moment.
+  `index.html` modulepreloads the module graph.
 - The preview is the file: `setView` decodes `v.bytes` with `readEmbroidery` and draws/counts/fit-checks that, and
   thread labels come from the file's own PEC palette.
 
@@ -286,7 +291,7 @@ Embroidery-file tools for home machines. Two implementations of the same engine:
   sample is named in the font's `note`. The store's own PES letters aren't used (paid, 1–2 letters per sample).
   To try more, add an `@font-face` and look at `tests/browser/fonts.html?name=<word>` (every font, stitched);
   reject fonts whose stitched letters come out unjoined or with spurs (Petit Formal, Comforter, Damion did).
-- Script fonts render via CSS `@font-face` families named `NW <Font>` (local TTFs in `fonts/`, OFL); the
+- Script fonts render via CSS `@font-face` families named `NW <Font>` (local WOFF2 in `fonts/` (converted from the OFL TTFs with fontTools; stitches byte-identical), OFL); the
   lettering engine needs `document.fonts.load()` before drawing.
 - `tests/external/` (gitignored) holds third-party PES/DST samples and Etsy images used for manual testing, with
   pyembroidery read oracles in `tests/external/oracle/`.
