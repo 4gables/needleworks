@@ -53,7 +53,7 @@ export const FABRICS = {
   black: { label: "Black", solid: "#232022" },
 };
 
-// opts: { fabric, fabricShapeBlock, hide: Set, upto, ghost (stitches after upto drawn faint), heat (Map "cx,cy" -> hits per mm²), hoop: {w,h} (mm), showHoop, zoom, pan: [x,y], center: [x,y] (0.1 mm) }
+// opts: { fabric, fabricShapeBlock, hide: Set, upto, ghost (stitches after upto drawn faint), heat (Map "cx,cy" -> hits per mm²), backdrop ({ bmp, unit, center }: a photo under it), hoop: {w,h} (mm), showHoop, zoom, pan: [x,y], center: [x,y] (0.1 mm) }
 export function draw(canvas, design, opts = {}) {
   const dpr = window.devicePixelRatio || 1;
   const W = canvas.clientWidth, H = canvas.clientHeight;
@@ -69,13 +69,17 @@ export function draw(canvas, design, opts = {}) {
   // centred on the design, or on a fixed point (the Design tab keeps the hoop centre still while pieces move)
   const cxd = opts.center ? opts.center[0] : (x0 + x1) / 2, cyd = opts.center ? opts.center[1] : (y0 + y1) / 2;
   const hoop = opts.hoop && opts.showHoop !== false ? opts.hoop : null;
-  const spanW = Math.max(x1 - x0, hoop ? hoop.w * 10 : 0), spanH = Math.max(y1 - y0, hoop ? hoop.h * 10 : 0);
+  const bd = opts.backdrop, bw = bd ? bd.bmp.width * bd.unit : 0, bh = bd ? bd.bmp.height * bd.unit : 0;
+  const spanW = Math.max(x1 - x0, hoop ? hoop.w * 10 : 0, bw * 0.9), spanH = Math.max(y1 - y0, hoop ? hoop.h * 10 : 0, bh * 0.9);
   // leave room at the top for the info chips (they wrap to more rows on a phone)
   const pad = opts.pad ?? 24, top = opts.padTop ?? pad, fit = Math.min((W - pad * 2) / spanW, (H - pad - top) / spanH);
   const s = fit * (opts.zoom || 1), pan = opts.pan || [0, 0];
   const ox = W / 2 - cxd * s + pan[0], oy = top + (H - pad - top) / 2 - cyd * s + pan[1];
   const X = (x) => x * s + ox, Y = (y) => y * s + oy;
 
+  if (bd) {   // a photo of the item at true size (bd.unit: 0.1 mm per photo pixel), its centre at bd.center
+    ctx.drawImage(bd.bmp, X(cxd + bd.center[0] - bw / 2), Y(cyd + bd.center[1] - bh / 2), bw * s, bh * s);
+  }
   if (hoop) {   // hoop: wooden ring around the sewable field
     const hw = hoop.w * 10 * s, hh = hoop.h * 10 * s, r = Math.min(hw, hh) * 0.12;
     const hx = W / 2 - hw / 2 + pan[0], hy = top + (H - pad - top) / 2 - hh / 2 + pan[1];

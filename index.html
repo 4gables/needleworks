@@ -226,6 +226,7 @@
       <input id="progress" autocomplete="off" type="range" min="0" max="1000" value="1000" aria-label="Sewing progress">
       <label class="check small"><input id="show-hoop" type="checkbox" checked> Hoop</label>
       <label class="check small" title="Shows where the needle goes in most often: yellow is busy, red is too dense (more than 24 per mm²)"><input id="show-heat" type="checkbox"> Thickness</label>
+      <button type="button" id="item-open" class="ghost" title="See the design at its real size on a photo of the bib, towel or shirt">On my item</button>
       <button type="button" id="turn" class="ghost turn" aria-pressed="false" title="Turn the hoop sideways on screen. The file still loads the right way on the machine.">⟲ Turn hoop</button>
     </div>
     <div class="bottom">
@@ -274,6 +275,17 @@
     <p id="along-time" class="hint"></p>
   </div>
   <nav><button type="button" id="along-back" class="ghost">Back</button><button type="button" id="along-next" class="primary">Next step</button></nav>
+</dialog>
+<dialog id="item" class="names item-dlg" aria-labelledby="item-title">
+  <form method="dialog">
+    <h2 id="item-title">See it on your item</h2>
+    <p class="hint">Take or choose a photo of the bib, towel or shirt, straight on and flat. Then drag the two dots to the ends of something you can measure, like the item's width or a ruler in the photo, and type how long it is.</p>
+    <label class="ghost item-pick">Choose a photo<input type="file" accept="image/*" id="item-file" hidden></label>
+    <canvas id="item-cal" hidden></canvas>
+    <p class="item-len" id="item-len-row" hidden>Between the dots: <input type="number" id="item-len" min="1" max="200" step="0.5" value="20"> <select id="item-unit"><option value="10">cm</option><option value="25.4">in</option></select></p>
+    <p class="hint">The photo stays on this device. Drag it under the design to place it.</p>
+    <div class="row"><button type="submit" class="ghost" value="cancel">Cancel</button><button type="button" class="primary" id="item-done" disabled>Show it on my item</button></div>
+  </form>
 </dialog>
 <div id="sheet" class="sheet" aria-hidden="true"></div>
 <script type="module" src="js/app.js"></script>

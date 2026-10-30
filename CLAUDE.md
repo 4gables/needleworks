@@ -185,6 +185,11 @@ Embroidery-file tools for home machines. Two implementations of the same engine:
   module, font or icon is missing from `FILES`: add new files there. Registered only over https (not the local test
   server). A share POSTs to `./?share`; the worker stores the file in the `needleworks-shared` cache and redirects to
   `./?shared`, and app.js opens it with `route()`.
+- On my item (button by Turn hoop, `#item` dialog): a photo of the real item; two dots dragged onto something measured
+  plus its length set `state.backdrop = { bmp, unit (0.1 mm per photo px), center }`; `draw` puts it under everything at
+  true size (the hoop is hidden), and a drag that isn't on a piece slides the photo. Nothing leaves the device and
+  nothing is saved. (Found doing this: since round 2 a trailing comment in app.js's state had swallowed `showHoop`, so
+  the Hoop box showed unticked while the hoop was drawn and the saved choice was ignored.)
 - Sew sheet + cut file (`js/sheet.js`, links under Download): "Print a sew sheet" fills a hidden `#sheet` and calls
   `window.print()` (print CSS hides the app). Page 1 is the hoop field at 1:1 (SVG sized in mm) with the design centred
   as the machine centres it, a crosshair and a 5 cm check bar; page 2 the steps with the machine's thread names

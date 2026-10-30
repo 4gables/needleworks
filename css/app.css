@@ -391,3 +391,9 @@ body[data-mode="design"] #view { cursor: grab; }
 .along-body .hint { font-size: 15px; }
 .along nav { display: flex; gap: 12px; padding: 12px max(18px, env(safe-area-inset-left)) max(18px, env(safe-area-inset-bottom)); max-width: 760px; width: 100%; margin: 0 auto; box-sizing: border-box; }
 .along nav button { flex: 1; min-height: 60px; font-size: 20px; }
+.item-dlg { width: min(640px, 94vw); }
+.item-dlg canvas { display: block; border-radius: 10px; touch-action: none; cursor: crosshair; max-width: 100%; }
+.item-pick { display: inline-flex; justify-content: center; align-items: center; font-weight: 700; color: var(--accent); cursor: pointer; }
+.item-len { display: flex; align-items: center; gap: 8px; margin: 0; flex-wrap: wrap; }
+.item-len input { width: 6em; font: inherit; padding: 6px 8px; border: 1.5px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--ink); }
+.item-len select { font: inherit; }
