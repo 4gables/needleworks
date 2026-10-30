@@ -689,6 +689,8 @@ function onPicture(e) {
   showError("");
   const stitched = new Set(r.summary.map((c) => c.id));
   state.pic.colorsInfo = r.colors.filter((c) => stitched.has(c.id) || state.pic.skip.includes(c.id));
+  // (asked for 4, got 3: say why, instead of a slider that looks ignored)
+  state.pic.merged = r.merged || 0;
   const mt = machineThreads(r.pattern.threads);
   state.pic.machineName = new Map(r.pattern.threads.map((t, i) => [t.color, mt[i].name]));
   paletteUI();
@@ -703,6 +705,8 @@ startWorker();
 
 function paletteUI() {
   const cols = state.pic.colorsInfo.filter((c) => !c.background && c.area > 0);
+  $("pic-merged").hidden = !state.pic.merged;
+  $("pic-merged").textContent = state.pic.merged ? `${state.pic.merged === 1 ? "One colour was" : `${state.pic.merged} colours were`} too close to another (or to the fabric) to need a thread of its own, so this picture uses ${cols.length} ${cols.length === 1 ? "thread" : "threads"}.` : "";
   $("pic-palette").innerHTML = cols.map((c) => `<button type="button" data-id="${c.id}" aria-pressed="${!state.pic.skip.includes(c.id)}">
     <i style="background:${c.hex}"></i><span>Brother ${state.pic.machineName?.get(c.hex) || c.thread.name}${spool(c.hex) ? `<small>${spool(c.hex)}</small>` : ""}</span></button>`).join("");
 }
