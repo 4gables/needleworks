@@ -183,7 +183,7 @@ export function initStudio(api) {
     if (p.kind === "text") h += `<p class="hint" data-fit hidden></p>`;
     if (p.kind === "text" || p.kind === "monogram") h += `<p class="hint warn" data-warn hidden></p>`;
     h += range("rot", "Turn", -180, 180, p.rot || 0, "°", 5);
-    if (p.kind !== "file") h += `<div class="field"><span>Thread</span><div class="swatches">${swatches(p)}</div><p class="hint">Brother ${nearestBrotherThread(p.color).name}</p></div>`;
+    if (p.kind !== "file") h += `<div class="field"><span>Thread</span><div class="swatches">${swatches(p)}</div><p class="hint">Brother ${nearestBrotherThread(p.color).name}${api.spool(p.color) ? ` · ${api.escapeHtml(api.spool(p.color))}` : ""}</p></div>`;
     $("st-edit").innerHTML = h;
     warn();
   }
@@ -249,7 +249,7 @@ export function initStudio(api) {
     $("st-steps-count").textContent = `· ${steps.length} ${steps.length === 1 ? "step" : "steps"}, ${pauses} ${pauses === 1 ? "pause" : "pauses"}`;
     // each step is a button: the preview shows the design as it is after that step, what's still to come faint
     $("st-steps").innerHTML = steps.map((st, i) => `<li><button type="button" data-step="${i}" aria-pressed="${api.step() === i}">
-      <b><span class="n">${i + 1}</span><i style="background:${st.color}"></i>Brother ${nearestBrotherThread(st.color).name}</b>
+      <b><span class="n">${i + 1}</span><i style="background:${st.color}"></i>Brother ${nearestBrotherThread(st.color).name}${api.spool(st.color) ? ` <small>${api.escapeHtml(api.spool(st.color))}</small>` : ""}</b>
       ${st.you ? `<span class="you">${api.escapeHtml(st.you)}</span>` : ""}<span>${api.escapeHtml(st.sews.join(" "))}</span>
       ${st.early ? `<small>Sewn early, with the other ${api.escapeHtml(nearestBrotherThread(st.color).name)} parts, to save a thread change.</small>` : ""}</button></li>`).join("")
       + (small ? `<li class="after"><b>Thread and needle</b><span>${SMALL_TIP}</span></li>` : "")

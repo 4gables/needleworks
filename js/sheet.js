@@ -45,12 +45,12 @@ ${groups.map((g, i) => `  <g id="fabric-${i + 1}"><path d="${path(g)}" fill="non
 }
 
 // sheet: { steps: [{ title?, you?, sews? }], after: [], notes: [], cut: [[loop...]...] }, thread names as the machine shows them
-export function sewSheet({ pattern, filename, hoop, facts, threads, hide, sheet = {} }) {
+export function sewSheet({ pattern, filename, hoop, facts, threads, hide, sheet = {}, spool = () => "" }) {
   const { blocks } = colorBlocks(pattern);
   const steps = sheet.steps?.length ? sheet.steps : blocks.map(() => ({}));
   const rows = steps.map((s, i) => {
     const b = blocks.find((x) => x.index === i), t = threads[i];
-    return `<li><b><span class="sw" style="background:${b?.color || t?.color || "#999"}"></span>${s.title ? esc(s.title) + " · " : ""}Brother ${esc(t?.name || "")}</b>
+    return `<li><b><span class="sw" style="background:${b?.color || t?.color || "#999"}"></span>${s.title ? esc(s.title) + " · " : ""}Brother ${esc(t?.name || "")}${b && spool(b.color) ? ` <small>(${esc(spool(b.color))})</small>` : ""}</b>
       ${s.you ? `<p class="you">${esc(s.you)}</p>` : ""}${s.sews ? `<p>${esc(s.sews)}</p>` : ""}</li>`;
   }).join("");
   const cut = sheet.cut?.length ? sheet.cut : null;

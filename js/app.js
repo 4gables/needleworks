@@ -8,6 +8,7 @@ import { nearestBrotherThread, pecThread } from "./core/threads.js";
 import { FABRICS, colorBlocks, draw } from "./render.js";
 import { cutSVG, sewSheet } from "./sheet.js";
 import { zip } from "./zip.js";
+import { BRANDS, nearestSpool, spools } from "./core/brands.js";
 import { initStudio } from "./studio/ui.js";
 
 const $ = (id) => document.getElementById(id);
@@ -31,7 +32,9 @@ const state = {
   // hoop turned sideways on screen, per tab; the bookmark reads best lying down
   turn: { picture: false, bookmark: true, design: false, open: false, ...store.get("turn", {}) },
   bm: { name: store.get("bm.name", "ashley"), font: store.get("bm.font", FONTS[0].family), color: (c => OLD_THREADS[c] || c)(store.get("bm.color", RED)), fabric: store.get("bm.fabric", "pink"), lead: store.get("bm.lead", true), tail: store.get("bm.tail", true), blank: store.get("bm.blank", false) },
-  pic: { file: null, bitmap: null, key: 0, skip: [], colors: 4, size: 100, angle: 45, bg: true, density: store.get("pic.density", "solid"), req: 0, colorsInfo: [] },
+  brand: BRANDS[store.get("brand", "")] ? store.get("brand", "") : "",   // thread brand for spool numbers ("" = Brother only)
+  spools: store.get("spools", {}),   // { brand: [spool numbers owned] }
+  pic: { mine: store.get("pic.mine", false), file: null, bitmap: null, key: 0, skip: [], colors: 4, size: 100, angle: 45, bg: true, density: store.get("pic.density", "solid"), req: 0, colorsInfo: [] },
 };
 if (!MACHINES[state.machine]) state.machine = DEFAULT_MACHINE;
 const hoop = () => getHoop(state.machine, state.hoopId);
@@ -93,7 +96,7 @@ function setView(v) {
     .map((b) => {
       const t = mt[b.index] || nearestBrotherThread(b.color), label = v.threadLabel ? v.threadLabel(b, t) : `Brother ${t.name}`;
       const k = b.color + label; if (seen.has(k)) return ""; seen.add(k);
-      return `<li><i style="background:${b.color}"></i><span>${label}<br><small>${b.color}</small></span></li>`;
+      return `<li><i style="background:${b.color}"></i><span>${label}<br><small>${spool(b.color) || b.color}</small></span></li>`;
     }).join("");
   v.facts = [`${st.widthMm.toFixed(0)} × ${st.heightMm.toFixed(0)} mm (${inch(st.widthMm)} × ${inch(st.heightMm)} in)`, `${st.stitches.toLocaleString()} stitches`,
     `${st.colorChanges} ${st.colorChanges === 1 ? "pause" : "pauses"}`, `≈ ${minutes} min`, `${h.machineName} ${h.name}`];
@@ -233,7 +236,7 @@ $("download").onclick = () => {
 // sew sheet: the design at 1:1 on the hoop field, the steps, appliqué shapes; printed from a hidden block
 $("sheet-print").onclick = () => {
   const v = state.view; if (!v?.file) return;
-  $("sheet").innerHTML = sewSheet({ pattern: v.file, filename: v.filename, hoop: hoop(), facts: v.facts, threads: machineThreadList(v), hide: v.hide, sheet: v.sheet });
+  $("sheet").innerHTML = sewSheet({ pattern: v.file, filename: v.filename, hoop: hoop(), facts: v.facts, threads: machineThreadList(v), hide: v.hide, sheet: v.sheet, spool });
   window.print();
 };
 addEventListener("afterprint", () => { $("sheet").innerHTML = ""; });
@@ -285,6 +288,54 @@ $("names-make").onclick = async () => {
   $("names-note").classList.add("warn");
   $("names-note").textContent = `${files.length ? `Made ${files.length} ${files.length === 1 ? "file" : "files"}. ` : ""}Couldn't make: ${bad.join(", ")}.`;
 };
+
+// ---------- thread brand ----------
+// "≈ Isacord 1306", or the nearest spool they own ("your Isacord 1902"); "" when they use Brother thread
+function spool(hex) {
+  if (!state.brand) return "";
+  const own = state.spools[state.brand], s = nearestSpool(state.brand, hex, own);
+  return s ? (own?.length ? `your ${s.label}` : `≈ ${s.label}`) : "";
+}
+function brandUI() {
+  $("brand").innerHTML = `<option value="">Brother thread</option>` + Object.entries(BRANDS).map(([k, n]) => `<option value="${k}">${n}</option>`).join("")
+    + `<option value="@mine">Threads I own…</option>`;
+  $("brand").value = state.brand;
+  const mine = state.brand && state.spools[state.brand]?.length;
+  $("pic-mine-row").hidden = !mine; $("pic-mine").checked = !!mine && state.pic.mine;
+}
+function relabel() { if (state.view) setView(state.view); paletteUI(); if (state.mode === "design") studio.make(); }
+$("brand").onchange = (e) => {
+  if (e.target.value === "@mine") { e.target.value = state.brand; openSpools(); return; }
+  state.brand = e.target.value; store.set("brand", state.brand); brandUI(); relabel();
+  if (state.pic.mine && state.mode === "picture") makePicture();
+};
+function openSpools() {
+  $("spools-brand").innerHTML = Object.entries(BRANDS).map(([k, n]) => `<option value="${k}">${n}</option>`).join("");
+  $("spools-brand").value = state.brand || "isacord";
+  $("spools-list").value = (state.spools[$("spools-brand").value] || []).join(" ");
+  spoolsPreview(); $("spools").showModal();
+}
+function spoolsPreview() {
+  const b = $("spools-brand").value, typed = $("spools-list").value.split(/[\s,;]+/).filter(Boolean), got = spools(b, $("spools-list").value);
+  const missing = typed.filter((t) => !spools(b, t).length);
+  $("spools-note").textContent = (got.length ? `${got.length} ${BRANDS[b]} ${got.length === 1 ? "spool" : "spools"} found.` : "Type the numbers printed on your spools, separated by spaces.")
+    + (missing.length ? ` Not in our ${BRANDS[b]} chart: ${missing.join(", ")}.` : "");
+  $("spools-chips").innerHTML = got.map((n) => { const s = nearestSpool(b, "#000000", [n]); return `<span><i style="background:${s.hex}"></i>${n}</span>`; }).join("");
+}
+$("spools-brand").onchange = () => { $("spools-list").value = (state.spools[$("spools-brand").value] || []).join(" "); spoolsPreview(); };
+$("spools-list").oninput = spoolsPreview;
+$("spools-save").onclick = () => {
+  const b = $("spools-brand").value;
+  state.spools[b] = spools(b, $("spools-list").value); store.set("spools", state.spools);
+  state.brand = b; store.set("brand", b); $("spools").close(); brandUI(); relabel();
+  if (state.mode === "picture" && state.pic.mine) makePicture();
+};
+$("pic-mine").onchange = (e) => { state.pic.mine = e.target.checked; store.set("pic.mine", state.pic.mine); state.pic.skip = []; makePicture(); };
+// the owned spools' colours, for "Use only threads I own"
+function ownedPalette() {
+  const own = state.brand && state.spools[state.brand];
+  return state.pic.mine && own?.length ? own.map((n) => nearestSpool(state.brand, "#000000", [n]).hex) : null;
+}
 
 // ---------- machine & hoop ----------
 function fillMachines() {
@@ -415,7 +466,7 @@ worker.onerror = (e) => { busy(false); showError("Something went wrong while sti
 function paletteUI() {
   const cols = state.pic.colorsInfo.filter((c) => !c.background && c.area > 0);
   $("pic-palette").innerHTML = cols.map((c) => `<button type="button" data-id="${c.id}" aria-pressed="${!state.pic.skip.includes(c.id)}">
-    <i style="background:${c.hex}"></i><span>Brother ${state.pic.machineName?.get(c.hex) || c.thread.name}<small>${c.hex}</small></span></button>`).join("");
+    <i style="background:${c.hex}"></i><span>Brother ${state.pic.machineName?.get(c.hex) || c.thread.name}<small>${spool(c.hex) || c.hex}</small></span></button>`).join("");
 }
 $("pic-palette").onclick = (e) => {
   const b = e.target.closest("button"); if (!b) return;
@@ -511,7 +562,7 @@ function makePicture() {
   ctx.drawImage(p.bitmap, box.sx, box.sy, box.sw, box.sh, 0, 0, sz.w, sz.h);
   const img = ctx.getImageData(0, 0, sz.w, sz.h);
   p.req++; busy(true, "Stitching your picture…");
-  worker.postMessage({ id: p.req, img, opts: { colors: p.colors, removeBackground: p.bg, fillAngle: p.angle, density: DENSITY[p.density] || DENSITY.solid, skip: p.skip, hoop: h, turn: turned(), imageKey: p.key } });
+  worker.postMessage({ id: p.req, img, opts: { colors: p.colors, removeBackground: p.bg, fillAngle: p.angle, density: DENSITY[p.density] || DENSITY.solid, skip: p.skip, hoop: h, turn: turned(), imageKey: p.key, palette: ownedPalette() } });
 }
 $("pic-file").onchange = (e) => loadPicture(e.target.files[0]);
 
@@ -584,6 +635,7 @@ document.addEventListener("paste", (e) => {
 
 // ---------- start ----------
 fillMachines();
+brandUI();
 bookmarkUI();
 // ---------- design your own ----------
 // Design tab: show the design as it stands after one step (null = all of it)
@@ -592,7 +644,7 @@ function showStep(i) {
   state.step = i; document.dispatchEvent(new CustomEvent("nw:step", { detail: i })); paint();
 }
 const studio = initStudio({
-  hoop, store, showError, busy, safeName, escapeHtml, showStep, step: () => state.step, setMode,
+  hoop, store, showError, busy, safeName, escapeHtml, showStep, step: () => state.step, setMode, spool,
   setView(pattern, filename, look = {}) {
     const v = { pattern, verifyAgainst: pattern, bytes: writePES(pattern), filename, fabric: "linen", ...look };
     state.views.design = v;

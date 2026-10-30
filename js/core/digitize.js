@@ -4,7 +4,7 @@ import { Design } from "./design.js";
 import { run } from "./geom.js";
 import { MARGIN } from "./machines.js";
 import { distanceTransform, label, order, skeletonEdges } from "./raster.js";
-import { nearestBrotherThread, rgbToHex } from "./threads.js";
+import { hexToRgb, nearestBrotherThread, rgbToHex } from "./threads.js";
 
 export const DEFAULTS = {
   colors: 4,          // thread colours (not counting background)
@@ -354,6 +354,24 @@ function routeFill(groups, comp, mask, res) {
 // ---------- build ----------
 // Fill edges and satin outlines reach a little past the picture, so a picture sized to the hoop's edge can land
 // just over it; shrink to fit (more pixels per mm) rather than refuse.
+// "Use only my threads": every colour becomes the nearest of `palette` (hex, by Lab), and colours that land on the
+// same thread merge into one (fewer thread changes). The background stays as it is.
+export function toPalette(analysis, palette) {
+  const labs = palette.map((h) => srgbToLab(...hexToRgb(h)));
+  const pick = (hex) => { const [L, A, B] = srgbToLab(...hexToRgb(hex)); let bj = 0, bd = Infinity;
+    labs.forEach((q, j) => { const d = (q[0] - L) ** 2 + (q[1] - A) ** 2 + (q[2] - B) ** 2; if (d < bd) { bd = d; bj = j; } }); return bj; };
+  const groups = new Map();
+  for (const c of analysis.colors) if (!c.background && c.area > 0) { const j = pick(c.hex); groups.set(j, [...(groups.get(j) || []), c]); }
+  const to = new Map(), colors = analysis.colors.map((c) => ({ ...c }));
+  for (const [j, cs] of groups) {
+    const rep = cs.reduce((a, b) => (b.area > a.area ? b : a)), hex = palette[j];
+    for (const c of cs) { to.set(c.id, rep.id); if (c !== rep) colors[c.id].area = 0; }
+    Object.assign(colors[rep.id], { hex, thread: nearestBrotherThread(hex), lightness: labs[j][0], area: cs.reduce((a, c) => a + c.area, 0) });
+  }
+  const labels = analysis.labels.map((l) => (to.has(l) ? to.get(l) : l));
+  return { ...analysis, labels, colors };
+}
+
 export function digitize(img, analysis, opts = {}) {
   let res = opts.res || DEFAULTS.res;
   for (let tries = 0; ; tries++) {

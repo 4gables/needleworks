@@ -27,6 +27,8 @@
     <select id="machine"></select>
     <label for="hoop" class="sr">Hoop</label>
     <select id="hoop"></select>
+    <label for="brand" class="sr">Thread brand</label>
+    <select id="brand" title="Show the spool numbers of the thread you use"></select>
   </div>
 </header>
 
@@ -104,6 +106,7 @@
         <fieldset class="field">
           <legend>Threads <span class="hint inline">(tap one to leave it out)</span></legend>
           <div id="pic-palette" class="palette"></div>
+          <label class="check small" id="pic-mine-row" hidden><input type="checkbox" id="pic-mine"> Use only threads I own</label>
         </fieldset>
       </div>
     </div>
@@ -227,6 +230,16 @@
     <textarea id="names-list" rows="6" placeholder="Emma&#10;Liam&#10;Olivia" spellcheck="false"></textarea>
     <p class="hint" id="names-note">One name per line, up to 40. You get one file for each, in a single .zip.</p>
     <div class="row"><button type="submit" class="ghost" value="cancel">Cancel</button><button type="button" class="primary" id="names-make">Make the files</button></div>
+  </form>
+</dialog>
+<dialog id="spools" class="names" aria-labelledby="spools-title">
+  <form method="dialog">
+    <h2 id="spools-title">Threads I own</h2>
+    <label class="field"><span>Brand</span><select id="spools-brand"></select></label>
+    <textarea id="spools-list" rows="4" placeholder="The numbers on your spools, e.g. 0020 1902 3541" spellcheck="false"></textarea>
+    <p class="hint" id="spools-note"></p>
+    <div id="spools-chips" class="spool-chips"></div>
+    <div class="row"><button type="submit" class="ghost" value="cancel">Cancel</button><button type="button" class="primary" id="spools-save">Save</button></div>
   </form>
 </dialog>
 <div id="sheet" class="sheet" aria-hidden="true"></div>
