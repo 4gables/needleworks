@@ -60,6 +60,25 @@ function srgbToLab(r, g, b) {
   return [116 * h(Y) - 16, 500 * (h(X) - h(Y)), 200 * (h(Y) - h(Z))];
 }
 
+// CIEDE2000 colour difference of two Lab colours (Sharma, Wu & Dalal 2005). Plain Lab distance overweights chroma:
+// it sent an olive green to Russet Brown and a teal to Pewter.
+function deltaE2000([L1, a1, b1], [L2, a2, b2]) {
+  const rad = Math.PI / 180, C1 = Math.hypot(a1, b1), C2 = Math.hypot(a2, b2), Cm = (C1 + C2) / 2;
+  const G = 0.5 * (1 - Math.sqrt(Cm ** 7 / (Cm ** 7 + 25 ** 7)));
+  const p1 = (1 + G) * a1, p2 = (1 + G) * a2, c1 = Math.hypot(p1, b1), c2 = Math.hypot(p2, b2);
+  const h = (b, a) => { if (!a && !b) return 0; const t = Math.atan2(b, a) / rad; return t < 0 ? t + 360 : t; };
+  const h1 = h(b1, p1), h2 = h(b2, p2), dL = L2 - L1, dC = c2 - c1;
+  let dh = 0;
+  if (c1 * c2) { dh = h2 - h1; if (dh > 180) dh -= 360; else if (dh < -180) dh += 360; }
+  const dH = 2 * Math.sqrt(c1 * c2) * Math.sin((dh / 2) * rad), Lm = (L1 + L2) / 2, cm = (c1 + c2) / 2;
+  let hm = h1 + h2;
+  if (c1 * c2) { if (Math.abs(h1 - h2) > 180) hm += hm < 360 ? 360 : -360; hm /= 2; }
+  const T = 1 - 0.17 * Math.cos((hm - 30) * rad) + 0.24 * Math.cos(2 * hm * rad) + 0.32 * Math.cos((3 * hm + 6) * rad) - 0.2 * Math.cos((4 * hm - 63) * rad);
+  const SL = 1 + (0.015 * (Lm - 50) ** 2) / Math.sqrt(20 + (Lm - 50) ** 2), SC = 1 + 0.045 * cm, SH = 1 + 0.015 * cm * T;
+  const RT = -2 * Math.sqrt(cm ** 7 / (cm ** 7 + 25 ** 7)) * Math.sin(60 * Math.exp(-(((hm - 275) / 25) ** 2)) * rad);
+  return Math.sqrt((dL / SL) ** 2 + (dC / SC) ** 2 + (dH / SH) ** 2 + RT * (dC / SC) * (dH / SH));
+}
+
 // k-means (k-means++ seeding) on Lab colours of opaque pixels
 function kmeans(lab, idxs, k, seed = 7) {
   let s = seed;
@@ -202,11 +221,11 @@ function background(img, o, q, frame) {
 function snapToThreads(colors) {
   const pec = PEC_MATCH.map((t) => (t ? srgbToLab(t[1], t[2], t[3]) : null)), taken = new Set();
   for (const c of colors.filter((k) => !k.background && k.area > 0).sort((a, b) => b.area - a.area)) {
-    const [L, A, B] = srgbToLab(...hexToRgb(c.hex));
+    const lab = srgbToLab(...hexToRgb(c.hex));
     let best = -1, bd = Infinity;
     pec.forEach((q, i) => {
       if (!q || taken.has(i)) return;
-      const v = (q[0] - L) ** 2 + (q[1] - A) ** 2 + (q[2] - B) ** 2;
+      const v = deltaE2000(lab, q);
       if (v < bd) { bd = v; best = i; }
     });
     if (best < 0) continue;
