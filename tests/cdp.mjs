@@ -37,7 +37,7 @@ if (cmd === "start") {
     // (headless pages count as hidden: without these a 300 ms timer took ~57 s and debounced UI looked hung)
     "--disable-background-timer-throttling", "--disable-renderer-backgrounding", "--disable-features=IntensiveWakeUpThrottling", "about:blank"],
     // (Chrome's temp files go beside the profile: a full system disk stopped it starting)
-    { detached: true, stdio: "ignore", env: { ...process.env, TMPDIR: path.join(dir, "tmp") } }).unref();
+    { detached: true, stdio: "ignore", env: { ...process.env, TMPDIR: path.join(dir, "tmp"), MAC_CHROMIUM_TMPDIR: path.join(dir, "tmp") } }).unref();
   for (let i = 0; i < 50; i++) { try { await fetch(`${base}/json/version`); break; } catch { await sleep(200); } }
   spawn(process.execPath, [process.argv[1], port, "serve", dir], { detached: true, stdio: "ignore" }).unref();
   for (let i = 0; i < 50; i++) { try { await fetch(ctl); break; } catch { await sleep(200); } }
