@@ -73,6 +73,7 @@
       <details class="steps">
         <summary>How to stitch it <span class="hint inline" id="bm-steps-count">· 5 steps, 4 pauses</span></summary>
         <p class="hint" id="bm-steps-lede">Keep the same thread in the whole time. The machine pauses 4 times. Each pause is a fabric step.</p>
+        <p class="hint"><b>Have ready:</b> tear-away stabilizer, cotton for the front and felt for the back (each about 3 × 8 in), tape, Fray Check and a ribbon.</p>
         <ol id="bm-steps"></ol>
         <p class="hint">Finish: tear away the stabilizer and snip any fuzz. Dab Fray Check inside the ribbon ring, let it dry, then cut out the hole and loop a ribbon through.</p>
       </details>
@@ -176,6 +177,7 @@
         <div class="add">
           <button type="button" class="ghost" id="st-fit" title="Make the whole design as big as the hoop allows">Fit to hoop</button>
           <button type="button" class="ghost" id="st-undo" disabled title="Undo (⌘Z)">↶ Undo</button>
+          <button type="button" class="ghost" id="st-redo" disabled title="Redo (⇧⌘Z)">↷ Redo</button>
           <button type="button" class="ghost" id="st-save" title="Keep this design to change it later (not for the machine: use Download PES for that)">Save design</button>
           <label class="ghost st-load" for="st-load" title="Open a design saved from here">Open saved</label>
           <input type="file" id="st-load" accept=".json,application/json" class="sr-file">
@@ -268,9 +270,9 @@
     <p class="good" id="done-checked"></p>
     <p class="warn" id="done-zip" hidden>It's a .zip: open it first (double-click it) and copy the .pes files inside, not the .zip. The machine can't read a .zip.</p>
     <ol class="done-steps">
-      <li>Copy the file to a USB stick.</li>
+      <li>Copy the file to a USB stick.<span id="done-phone" hidden> On a phone: plug a USB-C (or Lightning) stick into it, then in the Files app move the file from Downloads to the stick. Or email the file to yourself and copy it on a computer.</span></li>
       <li>Plug the stick into the machine's USB port and touch the USB key on its screen.</li>
-      <li>Pick the design, then follow “How to stitch it” (or Sew along) at every pause.</li>
+      <li id="done-sew">Pick the design, then follow “How to stitch it” (or Sew along) at every pause.</li>
     </ol>
     <label class="check small"><input type="checkbox" id="done-never"> Don't show this again</label>
     <div class="row"><button type="button" class="primary" id="done-close">Got it</button></div>

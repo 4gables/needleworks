@@ -1,4 +1,4 @@
-import { buildBookmark, hiddenBlocks, RED, stepsFor } from "./core/bookmark.js";
+import { buildBookmark, hiddenBlocks, READY, RED, stepsFor } from "./core/bookmark.js";
 import { turnPattern } from "./core/design.js";
 import { FONTS, fontOf } from "./core/fonts.js";
 import { COLOR_CHANGE, JUMP, STITCH, designStats, machineThreads, readEmbroidery, validatePES, writePES } from "./core/formats.js";
@@ -48,6 +48,11 @@ const hoop = () => getHoop(state.machine, state.hoopId);
 const turned = () => !!state.turn[state.mode];
 // the hoop as it looks on screen
 const shownHoop = () => { const h = hoop(); return turned() ? { ...h, w: h.h, h: h.w } : h; };
+// the Design tab lays pieces out in the hoop as it's shown (turned: the long side across), and its files are turned
+// clockwise into the machine's orientation, as a turned picture is
+const designHoop = () => { const h = hoop(); return state.turn.design ? { ...h, w: h.h, h: h.w } : h; };
+const toMachine = (p) => (state.turn.design ? turnPattern(p) : p);
+const turnCut = (loops) => loops.map((l) => l.map(([x, y]) => [-y, x]));
 
 // ---------- preview ----------
 const canvas = $("view");
@@ -83,7 +88,7 @@ function setView(v) {
   state.view = v; state.views[state.mode] = v; state.upto = null; $("progress").value = 1000;
   if (state.step != null && !(v?.steps > state.step)) showStep(null);   // the design changed under a step view
   $("turn").setAttribute("aria-pressed", turned());
-  if (!v) { $("facts").innerHTML = ""; $("threads").innerHTML = ""; $("download").disabled = true; $("download").textContent = "Download PES"; $("share").disabled = true; $("sheet-print").disabled = $("along-open").disabled = true; $("cut-file").hidden = true; paint(); return; }
+  if (!v) { $("facts").innerHTML = ""; $("threads").innerHTML = ""; $("download").disabled = true; $("download").textContent = "Download PES"; $("share").disabled = true; $("sheet-print").disabled = $("along-open").disabled = true; $("cut-file").hidden = true; $("names-open").hidden = true; paint(); return; }
   // the preview is the file: decode the PES bytes and draw those, not the design they were made from
   if (!v.file) {
     try { v.file = v.source ? v.pattern : readEmbroidery(v.bytes, v.filename); }
@@ -137,7 +142,11 @@ function machineThreadList(v) {
   const p = v.file;
   return p.pec ? p.pec.map(pecThread) : machineThreads(p.threads);
 }
-function showError(msg) { const e = $("error"); e.textContent = msg; e.hidden = !msg; }
+// an error in plain words, with a one-tap fix when there is one ({ label, run })
+function showError(msg, fix) {
+  const e = $("error"); e.textContent = msg; e.hidden = !msg;
+  if (msg && fix) { const b = document.createElement("button"); b.type = "button"; b.className = "link"; b.textContent = fix.label; b.onclick = fix.run; e.append(" ", b); }
+}
 function busy(on, text = "Stitching…") { $("busy").hidden = !on; $("busy-text").textContent = text; }
 
 // zoom & pan
@@ -160,7 +169,7 @@ function toMm(e) {
   const tf = state.tf, r = canvas.getBoundingClientRect();
   if (!tf) return null;
   const sx = (e.clientX - r.left - tf.ox) / tf.scale / 10, sy = (e.clientY - r.top - tf.oy) / tf.scale / 10;
-  return turned() ? [-sy, sx] : [sx, sy];
+  return turned() && state.mode !== "design" ? [-sy, sx] : [sx, sy];
 }
 let dragging = false;
 canvas.addEventListener("pointerdown", (e) => {
@@ -218,7 +227,7 @@ $("show-hoop").onchange = (e) => { state.showHoop = e.target.checked; store.set(
 $("turn").onclick = () => {
   state.turn[state.mode] = !turned(); store.set("turn", state.turn);
   state.zoom = 1; state.pan = [0, 0];
-  if (state.mode === "picture") makePicture(); else setView(state.view);
+  if (state.mode === "picture") makePicture(); else if (state.mode === "design") studio.make(); else setView(state.view);
 };
 
 // USB file names the machine can show: plain ASCII (José -> Jose), nothing else, never empty
@@ -273,9 +282,15 @@ $("download").onclick = () => {
 // what was checked and the next steps at the machine, until "Don't show this again"
 function downloaded(v, zipped) {
   if (store.get("doneSeen", false)) return;
-  const h = hoop(), s = v.file && designStats(v.file);
+  // (the size as the preview shows it: a turned bookmark is 169 × 54, not 54 × 169)
+  const h = hoop(), s = v.shown && designStats(v.shown);
   $("done-checked").textContent = `Checked: it opens on a ${h.machineName} in the ${h.name}${s ? `, ${s.widthMm.toFixed(0)} × ${s.heightMm.toFixed(0)} mm, ${s.colorChanges ? `${s.colorChanges} ${s.colorChanges === 1 ? "pause" : "pauses"}` : "no pauses"}` : ""}.`;
   $("done-zip").hidden = !zipped;
+  $("done-phone").hidden = !matchMedia("(pointer: coarse)").matches;
+  // (only the Design tab and the bookmark have “How to stitch it”)
+  $("done-sew").textContent = state.mode === "design" || state.mode === "bookmark"
+    ? "Pick the design, then follow “How to stitch it” (or Sew along) at every pause."
+    : "Pick the design and press Start. At each pause, thread the next colour listed beside the preview (Sew along shows each one).";
   $("done").showModal();
 }
 $("done-close").onclick = () => { if ($("done-never").checked) store.set("doneSeen", true); $("done").close(); };
@@ -350,7 +365,9 @@ $("item-done").onclick = () => {
 const along = { i: 0, lock: null };
 function alongSteps(v) {
   const blocks = v.cache.blocks;
-  const steps = v.sheet?.steps?.length ? v.sheet.steps : blocks.map((b, i) => ({ you: i ? "Change to the next thread and press Start." : null, sews: "" }));
+  const steps = [...(v.sheet?.steps?.length ? v.sheet.steps : blocks.map((b, i) => ({ you: i ? "Change to the next thread and press Start." : null, sews: "" })))];
+  // (the first screen says what to have by the machine)
+  if (v.sheet?.ready?.length && steps.length) steps[0] = { ...steps[0], you: `Have ready: ${v.sheet.ready.join(" ")} ${steps[0].you || ""}`.trim() };
   return steps.map((s, i) => {
     const b = blocks.find((x) => x.index === i), n = b ? b.segs.reduce((a, sg) => a + sg.length, 0) : 0;
     return { ...s, block: b, minutes: Math.max(1, Math.round(n / 550)) };
@@ -393,7 +410,10 @@ new ResizeObserver(() => { if ($("along").open) alongShow(); }).observe($("along
 
 // one file per name, in a zip: the Design tab swaps its lettering, the bookmark its name
 function namesFor() {
-  if (state.mode === "design") { try { return studio.forNames(); } catch { return null; } }   // (studio is set up further down)
+  if (state.mode === "design") {   // (studio is set up further down)
+    try { const n = studio.forNames(); return n && { ...n, build: (...a) => { const m = n.build(...a); return { ...m, pattern: toMachine(m.pattern), shown: m.pattern }; } }; }
+    catch { return null; }
+  }
   if (state.mode !== "bookmark" || state.bm.blank) return null;
   return { what: state.bm.name, bookmark: true, build: (name) => ({ name, pattern: buildBookmark({ name, family: state.bm.font, color: state.bm.color, hoop: hoop(),
     lead: state.bm.lead, tail: state.bm.tail, print: !!fontOf(state.bm.font).print }).pattern() }) };
@@ -417,18 +437,18 @@ $("names-make").onclick = async () => {
   for (const name of list) {
     await new Promise((r) => setTimeout(r, 0));
     try {
-      const { pattern, smaller } = n.build(name, $("names-shrink").checked), bytes = writePES(pattern), check = validatePES(bytes, pattern, hoop());
+      const { pattern, shown, smaller } = n.build(name, $("names-shrink").checked), bytes = writePES(pattern), check = validatePES(bytes, pattern, hoop());
       if (!check.ok) throw new Error(check.error);
       let base = safeName(name, "name") + (n.bookmark ? "_bookmark" : ""), f = base, k = 2;
       while (used.has(f)) f = `${base}_${k++}`;
-      used.add(f); files.push({ name: f + ".pes", bytes }); made.push({ name, pattern, smaller });
+      used.add(f); files.push({ name: f + ".pes", bytes }); made.push({ name, pattern, shown, smaller });
     } catch (err) { bad.push(`${name} (${/hoop fits|too big/i.test(err.message) ? "too long for the hoop" : err.message})`); }
   }
   $("names-make").disabled = false;
   // every name as it'll sew, to look over (is one crowded?)
   $("names-thumbs").innerHTML = made.map((m, i) => `<figure><canvas data-i="${i}"></canvas><figcaption>${escapeHtml(m.name)}${m.smaller ? " (smaller)" : ""}</figcaption></figure>`).join("");
   for (const c of $("names-thumbs").querySelectorAll("canvas")) {
-    const m = made[+c.dataset.i]; draw(c, n.bookmark ? turnPattern(m.pattern, false) : m.pattern, { pad: 3, fabric: "white" });
+    const m = made[+c.dataset.i]; draw(c, m.shown || (n.bookmark ? turnPattern(m.pattern, false) : m.pattern), { pad: 3, fabric: "white" });
   }
   if (files.length) {
     saveFile(new Blob([zip(files)], { type: "application/zip" }), `${safeName(n.what, "names")}_names.zip`);
@@ -443,7 +463,8 @@ $("names-make").onclick = async () => {
 function spool(hex) {
   if (!state.brand) return "";
   const own = state.spools[state.brand], s = nearestSpool(state.brand, hex, own);
-  return s ? (own?.length ? `your ${s.label}` : `≈ ${s.label}`) : "";
+  // (an owned spool far from the colour isn't a match: white showed as "your Isacord 5513", a green)
+  return !s ? "" : !own?.length ? `≈ ${s.label}` : s.dE > 25 ? `none of yours is close (nearest: ${s.label})` : `your ${s.label}`;
 }
 function brandUI() {
   $("brand").innerHTML = `<option value="">Brother thread</option>` + Object.entries(BRANDS).map(([k, n]) => `<option value="${k}">${n}</option>`).join("")
@@ -516,7 +537,7 @@ function setMode(mode, push = true) {
   for (const m of TABS) $("tab-" + m).setAttribute("aria-selected", m === mode || (m === "design" && mode === "bookmark"));
   if (push) history.replaceState(null, "", "#" + mode);
   showError(""); busy(false);   // (a picture still stitching from the last tab)
-  $("empty").textContent = mode === "picture" ? "Choose a picture to see it as stitches." : mode === "open" ? "Open a PES, PEC or DST file to see it here." : "";
+  $("empty").textContent = mode === "picture" ? "Choose a picture to see it as stitches." : mode === "open" ? "Open a PES, PEC or DST file to see it here." : mode === "design" ? "Nothing to stitch yet: type some words, or pick a starting idea." : "";
   state.zoom = 1; state.pan = [0, 0];
   if (mode === "picture" && !state.pic.bitmap) loadSample();
   else if (mode === "picture" && !state.views.picture) makePicture();
@@ -605,7 +626,7 @@ async function makeBookmark() {
     if (seq !== bmSeq || state.mode !== "bookmark") { state.views.bookmark = null; return; }
     setView({ pattern, verifyAgainst: pattern, bytes: writePES(pattern), filename: blank ? "blank_bookmark.pes" : `${safeName(state.bm.name, "name")}_bookmark.pes`,
       fabricShapeBlock: 0, hide: hiddenBlocks(blank), fabric: state.bm.fabric,
-      sheet: { steps: stepsFor(blank).map((s) => ({ title: s.title, you: s.you, sews: s.machine })), cut: d.cut }, threadLabel: () => `Brother ${nearestBrotherThread(state.bm.color).name} · whole bookmark` });
+      sheet: { steps: stepsFor(blank).map((s) => ({ title: s.title, you: s.you, sews: s.machine })), cut: d.cut, ready: [READY], notes: ["Have ready: " + READY] }, threadLabel: () => `Brother ${nearestBrotherThread(state.bm.color).name} · whole bookmark` });
   } catch (err) { console.error(err); setView(null); $("empty").textContent = ""; showError(err.message); }
   finally { if (seq === bmSeq) busy(false); }
 }
@@ -774,6 +795,7 @@ async function openDesign(file) {
   try {
     const bytes = new Uint8Array(await file.arrayBuffer());
     const d = readEmbroidery(bytes, file.name);
+    if (!d.stitches.some((s) => s[2] === STITCH)) throw Object.assign(new Error(`${file.name} has no stitches in it. It may be damaged or not an embroidery file: try downloading it again.`), { plain: true });
     const repair = d.format === "pes" && d.misplaced;
     const isPes = d.format === "pes" && !repair;
     const out = isPes ? bytes : writePES(d);
@@ -788,7 +810,12 @@ async function openDesign(file) {
         : isPes ? "" : `<span>You can download it as a PES file for your machine.</span>`}`;
     state.opened = { d, bytes, out, isPes, repair, base, opts: { scale: 1, tiny: false, thin: false, sort: false }, sorted: sortedChanges(d) };
     $("doctor-fix").innerHTML = ""; setMode("open"); openView();
-  } catch (err) { console.error(err); setMode("open"); showError(err.message || "This file couldn't be read."); }
+  } catch (err) {
+    // (nothing from an earlier file stays on screen to be saved by mistake)
+    if (!err.plain) console.error(err); state.opened = null; state.views.open = null; setMode("open"); setView(null);
+    $("open-info").hidden = true; $("doctor").hidden = true;
+    showError(err.plain ? err.message : `${file.name} couldn't be read as an embroidery file (PES, PEC or DST). It may be damaged: try downloading it again.`);
+  }
 }
 // the opened file as it stands after the checkup's fixes (none: its own bytes, as they came)
 function openView() {
@@ -797,7 +824,7 @@ function openView() {
   const v = { pattern: p, verifyAgainst: changed || !o.isPes ? p : null, bytes: changed ? writePES(p) : o.out,
     filename: `${o.base}${scale !== 1 ? `_${Math.round(scale * 100)}pct` : ""}.pes`, fabric: "linen", source: changed || !o.isPes ? null : o.bytes,
     // (a file she already has: say what the button gives her)
-    action: changed || o.repair ? "Save fixed copy" : o.isPes ? "Save a copy" : "Save as PES",
+    action: o.repair || tiny || thin || sort ? "Save fixed copy" : changed ? "Save resized copy" : o.isPes ? "Save a copy" : "Save as PES",
     threadLabel: (b, t) => (/[a-z]{2}/i.test(b.name || "") ? escapeHtml(b.name) : `Brother ${t.name}${b.name ? " · " + escapeHtml(b.name) : ""}`) };
   state.views.open = v; setView(v); doctorUI(p);
 }
@@ -876,9 +903,12 @@ function showStep(i) {
   state.step = i; document.dispatchEvent(new CustomEvent("nw:step", { detail: i })); paint();
 }
 const studio = initStudio({
-  hoop, store, showError, busy, safeName, escapeHtml, saveFile, keepFocus, showStep, step: () => state.step, setMode, spool,
+  hoop: designHoop, store, showError, busy, safeName, escapeHtml, saveFile, keepFocus, showStep, step: () => state.step, setMode, spool,
   setView(pattern, filename, look = {}) {
     if (!pattern) { state.views.design = null; if (state.mode === "design") setView(null); return; }
+    pattern = toMachine(pattern);
+    if (look.split) look = { ...look, split: look.split.map((p) => ({ ...p, pattern: toMachine(p.pattern) })) };
+    if (state.turn.design && look.sheet?.cut) look = { ...look, sheet: { ...look.sheet, cut: look.sheet.cut.map((c) => turnCut(c)) } };
     const v = { pattern, verifyAgainst: pattern, bytes: writePES(pattern), filename, fabric: "linen", ...look };
     state.views.design = v;
     if (state.mode === "design") { const keep = [state.zoom, state.pan]; setView(v); [state.zoom, state.pan] = keep; paint(); }

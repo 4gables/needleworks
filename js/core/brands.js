@@ -37,5 +37,5 @@ export function nearestSpool(brand, hex, owned = null) {
   const [L, A, B] = lab(hexToRgb(hex));
   let best = null, bd = Infinity;
   for (const s of c) { const d = (s.lab[0] - L) ** 2 + (s.lab[1] - A) ** 2 + (s.lab[2] - B) ** 2; if (d < bd) { bd = d; best = s; } }
-  return best && { ...best, brand: BRANDS[brand], label: `${BRANDS[brand]} ${best.num}${best.name ? ` ${best.name}` : ""}` };
+  return best && { ...best, dE: Math.sqrt(bd), brand: BRANDS[brand], label: `${BRANDS[brand]} ${best.num}${best.name ? ` ${best.name}` : ""}` };
 }

@@ -97,7 +97,8 @@ export function archRoom(p) {
   const a = Math.max(p.radius, 8), b = Math.max(p.ry ?? p.radius, 8), per = Math.PI * (3 * (a + b) - Math.sqrt((3 * a + b) * (a + 3 * b)));
   if (span <= per * 0.55) return null;
   const k = span / (per * 0.45);
-  return { radius: Math.round(a * k), ry: Math.round(b * k) };
+  // (`full`: more than the whole way round, so the ends overlap; not a curve setting)
+  return Object.defineProperty({ radius: Math.round(a * k), ry: Math.round(b * k) }, "full", { value: span > per * 0.95 });
 }
 // The first other piece whose stitches come within 1 mm of p's (lettering run into a heart, say), or null. Patches
 // are left out: lettering on a filled patch is meant to sit on it.
@@ -171,6 +172,14 @@ export function minSize(p) {
   const l = bulk(p);
   if (!l || !l.parts.length || l.xh >= 4) return 0;
   return Math.ceil((p.size * 4) / l.xh);
+}
+
+// On a towel the satin is at least 2.5 mm wide (a fine line sinks into the loops), so a small x-height fills its loops
+// and counters in ("Harper" at 17.5 mm in Great Vibes sewed as "Harpa"): the height giving an 8 mm x-height, or 0.
+export function towelMin(p) {
+  const l = bulk(p);
+  if (!l || !l.parts.length || l.xh >= 8) return 0;
+  return Math.ceil((p.size * 8) / l.xh);
 }
 
 // Lettering under ~6 mm (x-height, or caps) stitches cleanest with thinner thread and needle (Ink/Stitch's small
@@ -598,8 +607,9 @@ export function followFrame(p, pieces) {
 // what the design is sewn on: changes the stitches (knit, towel) and the stabilizer advice
 export const FABRICS = {
   cotton: { name: "Cotton", tip: "On woven cotton, hoop it with tear-away stabilizer underneath." },
-  knit: { name: "Knit", tip: "Knits stretch: hoop them with cut-away stabilizer (fusible no-show mesh is easiest) and use a 75/11 ballpoint needle. Don't stretch the fabric while hooping." },
-  towel: { name: "Towel", tip: "Lay a water-soluble topper on the towel and hoop tear-away (or cut-away) stabilizer under it. The light base sewn under the letters flattens the loops; tear the topper off afterwards." },
+  knit: { name: "Knit", ready: "Cut-away stabilizer (fusible no-show mesh is easiest) and a 75/11 ballpoint needle.", tip: "Knits stretch: hoop them with cut-away stabilizer (fusible no-show mesh is easiest) and use a 75/11 ballpoint needle. Don't stretch the fabric while hooping." },
+  towel: { name: "Towel", tip: "Lay a water-soluble topper on the towel and hoop tear-away (or cut-away) stabilizer under it. The light base sewn under the letters flattens the loops; tear the topper off afterwards.",
+    ready: "A water-soluble topper (like Solvy) and tear-away or cut-away stabilizer.", after: "Tear the topper away (a damp cloth melts the bits left in the letters) and tear or cut away the stabilizer." },
   felt: { name: "Felt", tip: "Felt is firm: tear-away stabilizer is enough. Use a sharp 75/11 needle." },
   denim: { name: "Denim", tip: "On denim use a 75/11 sharp or 80/12 needle (90/14 only for heavy denim and canvas) and cut-away or heavy tear-away stabilizer." },
 };
@@ -799,7 +809,7 @@ function build(pieces, hoop, opts) {
     if (cur.under && !st.under && !st.fabric) cur.under = false;
     for (const q of st.paths) d.path(q);
   }
-  if (!steps.length) throw new Error("Add some lettering or a frame to start.");
+  if (!steps.length) throw Object.assign(new Error("Nothing to stitch yet: type some words, or pick a starting idea."), { empty: true });
   if (opts.baste) after.push("Unpick the basting box (snip every few stitches on the back, then pull it out from the front).");
   d.finish();
   return { design: d, steps, after, before, tip: FABRICS[fab].tip };

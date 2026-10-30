@@ -11,11 +11,14 @@ const W = 50, MAX_L = 165, LETTERS = 0.72, CHAMFER = 9, BORDER = 3.6, TEXT_SATIN
 
 export const STEPS = [
   { title: "Placement line", you: "Hoop a piece of tear-away stabilizer on its own, tight like a drum. Put the hoop on and press Start.", machine: "Sews the bookmark outline on the bare stabilizer." },
-  { title: "Front fabric", you: "Tape the front fabric on, right side up, covering the outline by ½ in. Press Start. Then take the hoop off (leave everything hooped), trim about 1/16 in (1.5 mm) outside the line, and put it back." },
+  { title: "Front fabric", you: "Tape the front fabric on, right side up, covering the outline by ½ in. Press Start. Then take the hoop off the machine (leave the fabric in the hoop), trim about 1/16 in (1.5 mm) outside the line, and put it back." },
   { title: "The name", machine: "Sews the name." },
-  { title: "Back fabric", you: "Tape felt to the back of the hoop covering the outline. Press Start. Then take the hoop off, trim the felt about 1/16 in (1.5 mm) outside the line, and put it back." },
+  { title: "Back fabric", you: "Tape felt to the back of the hoop covering the outline. Press Start. Then take the hoop off the machine, trim the felt about 1/16 in (1.5 mm) outside the line, and put it back." },
   { title: "Border and ribbon hole", machine: "Sews the ribbon ring and the satin border through every layer." },
 ];
+
+// what to have by the machine before starting (on the steps, the sew sheet and the first Sew along screen)
+export const READY = "Tear-away stabilizer, cotton for the front and felt for the back (each about 3 × 8 in), tape, Fray Check and a ribbon.";
 
 export const stepsFor = (blank) => STEPS.filter((s) => !(blank && s.title === "The name"));
 // blocks the preview leaves unstitched-looking (placement and tack-downs sit under the fabric/border)

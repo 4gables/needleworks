@@ -9,7 +9,7 @@ import { FILL_PATTERNS } from "../core/digitize.js";
 import { draw } from "../render.js";
 import { QUILTS } from "./quilt.js";
 import { MOTIFS } from "./motifs.js";
-import { BORDERS, FABRICS, THREADS, SHAPES, TEXT_SHAPES, splitPieces, archRoom, archTight, touching, compose, fileBlocks, fittedSizes, followFrame, label, minSize, pieceBounds, previewLook, smallText } from "./pieces.js";
+import { BORDERS, FABRICS, THREADS, SHAPES, TEXT_SHAPES, splitPieces, archRoom, archTight, touching, towelMin, compose, fileBlocks, fittedSizes, followFrame, label, minSize, pieceBounds, previewLook, smallText } from "./pieces.js";
 
 const SCRIPT = "NW Great Vibes", PRINT = "NW Josefin Sans";
 // exact Brother PEC thread colours, so the name on screen is the one the machine shows
@@ -101,18 +101,31 @@ export function initStudio(api) {
 
   const save = () => api.store.set("studio", { pieces, sel, fabric, baste, thread });
   // undo: a snapshot before each change (a burst of slider moves counts as one)
-  const history = [];
+  // (a snapshot equal to the last one is skipped: picking a piece or a no-op starter made undo look dead for a press)
+  const history = [], future = [];
   let quiet = 0;
+  const snap = () => JSON.stringify({ pieces, sel, fabric, baste, thread });
+  const sameDesign = (a, b) => { const x = JSON.parse(a), y = JSON.parse(b); delete x.sel; delete y.sel; return JSON.stringify(x) === JSON.stringify(y); };
   function remember(burst = false) {
     if (burst && Date.now() - quiet < 800) { quiet = Date.now(); return; }
     quiet = burst ? Date.now() : 0;
-    history.push(JSON.stringify({ pieces, sel, fabric, baste, thread })); if (history.length > 60) history.shift();
-    $("st-undo").disabled = false;
+    const now = snap();
+    if (history.length && sameDesign(history[history.length - 1], now)) return;
+    history.push(now); if (history.length > 60) history.shift();
+    future.length = 0; buttons();
   }
+  const buttons = () => { $("st-undo").disabled = !history.length; $("st-redo").disabled = !future.length; };
+  function restore(h) { ({ pieces, sel, fabric, baste, thread = "auto" } = JSON.parse(h)); quiet = 0; buttons(); save(); ui(); make(); }
   function undo() {
-    const h = history.pop(); if (!h) return;
-    ({ pieces, sel, fabric, baste, thread = "auto" } = JSON.parse(h)); quiet = 0;
-    $("st-undo").disabled = !history.length; save(); ui(); make();
+    const now = snap();
+    // (skip anything that looks the same as now: the last change may not have changed the design)
+    while (history.length && sameDesign(history[history.length - 1], now)) history.pop();
+    const h = history.pop(); if (!h) { buttons(); return; }
+    future.push(now); restore(h);
+  }
+  function redo() {
+    const h = future.pop(); if (!h) return;
+    history.push(snap()); restore(h);
   }
   const current = () => pieces.find((p) => p.id === sel);
 
@@ -180,6 +193,20 @@ export function initStudio(api) {
     for (const [k, v] of Object.entries(kern)) { const i = +k; if (i + 1 < a) out[i] = v; else if (i >= old.length - b) out[i + now.length - old.length] = v; }
     return Object.keys(out).length ? out : undefined;
   }
+  // characters the font doesn't have (the browser would draw them in a stand-in font). The fonts are Latin only, so
+  // anything past Latin Extended (emoji, CJK, Hebrew…) other than punctuation and currency is missing; a Latin letter
+  // is missing when the font doesn't change its width against either fallback. (Measuring alone misses CJK: the
+  // system's fallback chain changes with the font in front of it.)
+  const probe = document.createElement("canvas").getContext("2d");
+  const width = (font, ch) => { probe.font = font; return probe.measureText(ch).width; };
+  function missing(text, family) {
+    if (!family) return [];
+    return [...new Set(text.replace(/\s/g, ""))].filter((ch) => {
+      const cp = ch.codePointAt(0);
+      if (cp > 0x24f) return !(cp >= 0x2000 && cp <= 0x20cf) && cp !== 0x2122;
+      return width(`40px "${family}", monospace`, ch) === width("40px monospace", ch) && width(`40px "${family}", serif`, ch) === width("40px serif", ch);
+    });
+  }
   const seg = (k, opts, v) => `<div class="seg" data-seg="${k}">${Object.entries(opts).map(([key, name]) => `<button type="button" data-v="${key}" aria-pressed="${key === v}">${name}</button>`).join("")}</div>`;
 
   // satin and fine line, said plainly: bold columns or a thin outline of the letter
@@ -193,7 +220,7 @@ export function initStudio(api) {
     let h = "";
     if (p.kind === "text") {
       const lines = p.text.split("\n").length, arc = p.shape === "up" || p.shape === "down";
-      h += `<label class="field"><span>Words</span><textarea data-k="text" rows="${Math.min(3, lines)}" maxlength="60" autocomplete="off" spellcheck="false">${api.escapeHtml(p.text)}</textarea></label>`;
+      h += `<label class="field"><span>Words</span><textarea data-k="text" rows="${Math.min(3, lines)}" maxlength="60" style="font-family:'${p.font}', sans-serif" autocomplete="off" spellcheck="false">${api.escapeHtml(p.text)}</textarea></label>`;
       h += `<label class="field"><span>Font</span>${fontSelect(p)}</label>`;
       h += range("size", "Height", 5, 60, p.size);
       h += seg("shape", TEXT_SHAPES, p.shape);
@@ -213,7 +240,7 @@ export function initStudio(api) {
         + (p.shape === "straight" && lines > 1 ? seg("align", { left: "Left", center: "Centre", right: "Right" }, p.align || "center") + range("leading", "Line spacing", 80, 200, p.leading ?? 130, "%", 5) : "");
       h += `<details class="more" ${moreOpen ? "open" : ""}><summary>More</summary>${more}</details>`;
     } else if (p.kind === "monogram") {
-      h += `<label class="field"><span>Initials</span><input type="text" data-k="letters" value="${api.escapeHtml(p.letters)}" maxlength="3" autocomplete="off" spellcheck="false"></label>`;
+      h += `<label class="field"><span>Initials</span><input type="text" data-k="letters" style="font-family:'${p.font}', sans-serif" value="${api.escapeHtml(p.letters)}" maxlength="3" autocomplete="off" spellcheck="false"></label>`;
       h += `<p class="hint">Traditional order: first, LAST, middle. The middle letter is stitched biggest.</p>`;
       h += `<label class="field"><span>Font</span>${fontSelect(p)}</label>`;
       h += range("size", "Height", 15, 90, p.size);
@@ -225,7 +252,7 @@ export function initStudio(api) {
       if ((p.style || "fill") === "fill" && p.size < 25) h += `<p class="hint warn">Filled this small, the detail closes up. Make it 25 mm or more, or choose Outline.</p>`;
       if (p.style === "applique") h += `<p class="hint">Sews an outline, pauses for you to lay fabric on and trim it, then satins the edges. 50 mm or bigger cuts most easily.</p>`;
     } else if (p.kind === "letters") {
-      h += `<label class="field"><span>Letters</span><input type="text" data-k="text" value="${api.escapeHtml(p.text)}" maxlength="12" autocomplete="off" spellcheck="false"></label>`;
+      h += `<label class="field"><span>Letters</span><input type="text" data-k="text" style="font-family:'${p.font}', sans-serif" value="${api.escapeHtml(p.text)}" maxlength="12" autocomplete="off" spellcheck="false"></label>`;
       h += `<label class="field"><span>Font</span><select data-k="font">${APPLIQUE_FONTS.map((f) => `<option value="${f.family}" ${f.family === p.font ? "selected" : ""}>${f.name} (${f.note})</option>`).join("")}</select></label>`;
       h += range("size", "Height", 20, 120, p.size);
       h += `<p class="hint">Cut from fabric: the machine sews an outline, pauses for you to lay fabric on and trim it, then satins the edges. Letters 30 mm or taller cut and sew most easily.</p>`;
@@ -266,7 +293,7 @@ export function initStudio(api) {
     $("st-thread").innerHTML = `<span class="chips-label">Thread</span>` + ["auto", "30", "40", "60"].map((k) => `<button type="button" data-thread="${k}" aria-pressed="${k === thread}">${THREADS[k].name}</button>`).join("");
     $("st-thread-tip").textContent = THREADS[thread].tip; $("st-thread-name").textContent = thread === "auto" ? "" : `, ${THREADS[thread].name} thread`;
   }
-  $("st-fabric").onclick = (e) => { const b = e.target.closest("[data-fab]"); if (!b || b.dataset.fab === fabric) return; remember(); fabric = b.dataset.fab; save(); sewnOn(); make(); };
+  $("st-fabric").onclick = (e) => { const b = e.target.closest("[data-fab]"); if (!b || b.dataset.fab === fabric) return; remember(); fabric = b.dataset.fab; save(); sewnOn(); make(); warn(); };
   $("st-thread").onclick = (e) => { const b = e.target.closest("[data-thread]"); if (!b || b.dataset.thread === thread) return; remember(); thread = b.dataset.thread; save(); sewnOn(); make(); };
   $("st-baste").onchange = (e) => { remember(); baste = e.target.checked; save(); sewnOn(); make(); };
   // too-small lettering, said plainly (updated in place so typing keeps focus)
@@ -275,12 +302,17 @@ export function initStudio(api) {
     if (p.font) await document.fonts.load(`40px "${p.font}"`);
     const fit = $("st-edit").querySelector("[data-fit]"), fs = fittedSizes(pieces).get(p.id);
     if (fit) { fit.hidden = !fs; fit.textContent = fs ? `Shrunk to ${fs} mm so it fits inside the frame.` : ""; }
-    const m = minSize(fs ? { ...p, size: fs } : p), room = archRoom(p), near = touching(fs ? { ...p, size: fs } : p, pieces);
+    const q = fs ? { ...p, size: fs } : p, m = minSize(q), room = archRoom(p), near = touching(q, pieces);
+    const towel = fabric === "towel" && !m && (p.kind === "text" || p.kind === "monogram") ? towelMin(q) : 0, gone = missing(p.text ?? p.letters ?? "", p.font);
     // (said plainly, with a one-tap fix where there is one)
-    w.innerHTML = m ? `These letters are too small to stitch cleanly. Make the height ${m} mm or more.`
-      : room ? `The words wrap most of the way round the curve. <button type="button" class="link" data-room>Widen the curve</button>`
-      : archTight(p) ? "The curve is too tight for letters this tall: they'd bunch up. Make the curve bigger or the letters smaller."
-      : near ? `This runs into ${api.escapeHtml(label(near))}. Drag it apart or make it smaller.` : "";
+    w.innerHTML = [
+      gone.length ? `This font has no ${gone.map((c) => `“${api.escapeHtml(c)}”`).join(" ")}: ${gone.length === 1 ? "it" : "they"} would be stitched in a stand-in letter. Take ${gone.length === 1 ? "it" : "them"} out or try another font.` : "",
+      m ? `These letters are too small to stitch cleanly. Make the height ${m} mm or more.` : "",
+      towel ? `On a towel these letters close up (the loops need a wide satin). Make the height ${towel} mm or more. <button type="button" class="link" data-size="${towel}">Make it ${towel} mm</button>` : "",
+      room ? `The words wrap most of the way round the curve${room.full ? " and run into themselves" : ""}. <button type="button" class="link" data-room>Widen the curve</button>` : "",
+      archTight(p) ? "The curve is too tight for letters this tall: they'd bunch up. Make the curve bigger or the letters smaller." : "",
+      near ? `This runs into ${api.escapeHtml(label(near))}. Drag it apart or make it smaller.` : "",
+    ].filter(Boolean).map((t) => `<span>${t}</span>`).join("<br>");
     w.hidden = !w.innerHTML;
   }
 
@@ -305,13 +337,20 @@ export function initStudio(api) {
       const { design, steps, after, before, tip } = composed;
       if (s !== seq) return;
       const fit = fittedSizes(pieces), small = thread !== "60" && pieces.some((p) => smallText(fit.has(p.id) ? { ...p, size: fit.get(p.id) } : p));
-      stepsUI(steps, after, small, before);
+      // (what the fabric needs goes first: a towel's topper was only in the folded "Sewing on")
+      const ready = [FABRICS[fabric].ready, ...before].filter(Boolean), done = [...after, FABRICS[fabric].after].filter(Boolean);
+      stepsUI(steps, done, small, ready);
       const look = previewLook(steps);
       api.setView(design.pattern(), `${api.safeName(firstWords(), "design")}.pes`, {
         ...look, fabric: look.fabricShapeBlock != null ? "pink" : "linen", steps: steps.length,
-        sheet: { steps: steps.map((st) => ({ you: st.you, sews: st.sews.join(" ") })), after, cut: steps.filter((st) => st.cut).map((st) => st.cut),
-          notes: [...before.map((b) => "Have ready: " + b), $("st-tip").hidden ? "" : $("st-tip").textContent, tip, thread === "auto" ? "" : THREADS[thread].tip, small ? SMALL_TIP : ""] } });
-    } catch (err) { if (s === seq) { console.error(err); api.setView(null); api.showError(err.message); } }
+        sheet: { steps: steps.map((st) => ({ you: st.you, sews: st.sews.join(" ") })), after: done, ready, cut: steps.filter((st) => st.cut).map((st) => st.cut),
+          notes: [...ready.map((b) => "Have ready: " + b), $("st-tip").hidden ? "" : $("st-tip").textContent, tip, thread === "auto" ? "" : THREADS[thread].tip, small ? SMALL_TIP : ""] } });
+    } catch (err) {
+      if (s !== seq) return;
+      api.setView(null);
+      // (an empty design isn't a mistake: the preview says what to do, in its own words, not in red)
+      if (err.empty) stepsUI([]); else { console.error(err); api.showError(err.message); }
+    }
   }
   // too big for the hoop: two hoopings if whole pieces can be shared out, else say how much to shrink
   function split(err) {
@@ -319,9 +358,17 @@ export function initStudio(api) {
     // can't be shared out: show it whole (a big pretend hoop) so it can be seen and dragged back; setView turns
     // Download into "Too big for this hoop"
     if (!parts) {
-      try { api.setView(compose(pieces, { ...hoop, w: 2000, h: 2000 }, { fabric, baste, thread }).design.pattern(), `${api.safeName(firstWords(), "design")}.pes`, { fabric: "linen", steps: 0 }); }
-      catch { api.setView(null); }
-      api.showError(err.message + " Use Fit to hoop, or make the biggest piece smaller."); return;
+      // (the size said is the one the preview shows: the whole design, not the first try that failed)
+      let msg = err.message, turn = false;
+      try {
+        const big = compose(pieces, { ...hoop, w: 2000, h: 2000 }, { fabric, baste, thread }).design, [x0, y0, x1, y1] = big.bounds();
+        msg = `This design is ${(x1 - x0).toFixed(0)} × ${(y1 - y0).toFixed(0)} mm, but the ${hoop.name} fits ${hoop.w - 4} × ${hoop.h - 4} mm.`;
+        turn = x1 - x0 <= hoop.h - 4 && y1 - y0 <= hoop.w - 4;   // fits with the long side across
+        api.setView(big.pattern(), `${api.safeName(firstWords(), "design")}.pes`, { fabric: "linen", steps: 0 });
+      } catch { api.setView(null); }
+      if (turn) api.showError(msg + " It fits with the hoop turned:", { label: "Turn the hoop", run: () => $("turn").click() });
+      else api.showError(msg + " Make the biggest piece smaller, or", { label: "Fit to hoop", run: () => $("st-fit").click() });
+      return;
     }
     const opts = { fabric, baste, thread }, base = api.safeName(firstWords(), "design");
     const built = parts.map((pt, i) => ({ ...compose(pt.pieces, hoop, { ...opts, marks: { pts: pt.marks, end: pt.end } }), filename: `${base}_hooping_${i + 1}_of_2.pes` }));
@@ -345,7 +392,7 @@ export function initStudio(api) {
   function stepsUI(steps, after = [], small = false, before = []) {
     applGuide(steps);
     const pauses = steps.length - 1;
-    $("st-steps-count").textContent = `· ${steps.length} ${steps.length === 1 ? "step" : "steps"}, ${pauses} ${pauses === 1 ? "pause" : "pauses"}`;
+    $("st-steps-count").textContent = !steps.length ? "" : `· ${steps.length} ${steps.length === 1 ? "step" : "steps"}, ${pauses} ${pauses === 1 ? "pause" : "pauses"}`;
     // each step is a button: the preview shows the design as it is after that step, what's still to come faint
     $("st-steps").innerHTML = (before.length ? `<li class="after"><b>Have ready</b><span>${api.escapeHtml(before.join(" "))}</span></li>` : "") + steps.map((st, i) => `<li><button type="button" data-step="${i}" aria-pressed="${api.step() === i}">
       <b><span class="n">${i + 1}</span><i style="background:${st.color}"></i>Brother ${nearestBrotherThread(st.color).name}${api.spool(st.color) ? ` <small>${api.escapeHtml(api.spool(st.color))}</small>` : ""}</b>
@@ -414,6 +461,9 @@ export function initStudio(api) {
       return;
     }
     if (!k) return;
+    if (k === "text" && t.tagName === "TEXTAREA" && t.value.split("\n").length > 3) {
+      const at = t.selectionStart; t.value = t.value.split("\n").slice(0, 3).join("\n"); t.setSelectionRange(Math.min(at, t.value.length), Math.min(at, t.value.length));
+    }
     if (t.type === "range") t.nextElementSibling.textContent = `${t.value} ${t.dataset.unit}`;
     change((p) => {
       if (k === "text") { if (p.kern) p.kern = rekern(p.kern, p.text, t.value); pairAt = +Object.keys(rekern({ [pairAt]: 1 }, p.text, t.value) || { [-1]: 1 })[0]; }
@@ -436,6 +486,8 @@ export function initStudio(api) {
     const bl = e.target.closest("button[data-blend]");
     if (bl) { change((p) => (p.blend = bl.dataset.blend), true); editor(); return; }
     if (e.target.closest("[data-kern-reset]")) { change((p) => delete p.kern, true); editor(); return; }
+    const sz = e.target.closest("[data-size]");
+    if (sz) { change((p) => (p.size = Math.min(+sz.dataset.size, p.kind === "monogram" ? 90 : 60)), true); editor(); return; }
     if (e.target.closest("[data-room]")) { change((p) => Object.assign(p, archRoom(p) || {}), true); editor(); return; }
     if (e.target.closest("[data-follow]")) { change((p) => Object.assign(p, followFrame(p, pieces)), true); editor(); return; }
     const s = e.target.closest("[data-seg] button");
@@ -444,12 +496,16 @@ export function initStudio(api) {
 
   // drag a piece on the preview (mm in the hoop; the machine centres the whole design)
   let drag = null;
+  // the smallest piece under the pointer, so letters inside a frame can be picked (the frame's box holds them all)
   const hit = ([x, y]) => {
-    for (const id of [sel, ...pieces.map((p) => p.id).reverse()]) {
-      const p = pieces.find((q) => q.id === id), b = p && pieceBounds(p);
-      if (b && x >= b[0] - 2 && x <= b[2] + 2 && y >= b[1] - 2 && y <= b[3] + 2) return p;
+    let best = null, area = Infinity;
+    for (const p of pieces) {
+      const b = pieceBounds(p);
+      if (!b || x < b[0] - 2 || x > b[2] + 2 || y < b[1] - 2 || y > b[3] + 2) continue;
+      const a = (b[2] - b[0] + 4) * (b[3] - b[1] + 4);
+      if (a < area) { best = p; area = a; }
     }
-    return null;
+    return best;
   };
   function start(mm) {
     const p = hit(mm); if (!p) return false;
@@ -485,6 +541,7 @@ export function initStudio(api) {
   };
 
   $("st-undo").onclick = undo;
+  $("st-redo").onclick = redo;
   // a design file to keep and change later (the pieces, not the stitches)
   $("st-save").onclick = () => {
     api.saveFile(new Blob([JSON.stringify({ needleworks: 1, pieces, fabric, baste, thread }, null, 1)], { type: "application/json" }),
@@ -504,8 +561,14 @@ export function initStudio(api) {
     } catch (err) { api.showError("That design couldn't be opened: " + err.message); }
   };
   document.addEventListener("keydown", (e) => {
-    if (document.body.dataset.mode !== "design" || e.defaultPrevented || e.target.matches("input[type=text], textarea, [role=tab]")) return;
-    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "z") { e.preventDefault(); undo(); }
+    if (document.body.dataset.mode !== "design" || e.defaultPrevented || e.target.matches?.("input[type=text], textarea, [role=tab]")) return;
+    const k = e.key.toLowerCase();
+    if ((e.metaKey || e.ctrlKey) && (k === "y" || (k === "z" && e.shiftKey))) { e.preventDefault(); redo(); return; }
+    if ((e.metaKey || e.ctrlKey) && k === "z") { e.preventDefault(); undo(); return; }
+    // Delete / Backspace removes the selected piece (from the page or the preview, never while typing)
+    if ((e.key === "Delete" || e.key === "Backspace") && (e.target === document.body || e.target.id === "view") && current()) {
+      e.preventDefault(); $("st-pieces").querySelector(`[data-op="del"][data-id="${sel}"]`)?.click(); return;
+    }
     const arrows = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] }[e.key];
     if (arrows && (e.target === document.body || e.target.id === "view")) { e.preventDefault(); nudge(arrows[0] * (e.shiftKey ? 5 : 1), arrows[1] * (e.shiftKey ? 5 : 1)); }
   });

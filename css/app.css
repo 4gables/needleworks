@@ -269,7 +269,8 @@ canvas#view:active { cursor: grabbing; }
 .cards button:hover { border-color: var(--accent); }
 .cards b { font-size: 14px; line-height: 1.2; }
 .cards small { display: none; }
-.pieces { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+/* (minmax(0, …): a long piece name shrinks to an ellipsis instead of widening the column past the screen) */
+.pieces { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px; }
 .pieces li { display: flex; align-items: center; gap: 6px; background: var(--panel); border: 1.5px solid var(--line); border-radius: var(--radius); padding: 4px 6px; }
 .pieces li[aria-selected="true"] { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
 .pieces .pick { flex: 1; min-width: 0; text-align: left; justify-content: flex-start; background: none; border: 0; color: var(--ink); font: inherit; padding: 6px 4px; cursor: pointer;
@@ -313,7 +314,7 @@ body[data-mode="design"] #view { cursor: grab; }
 .guide.appl { padding-left: 14px; margin-top: 8px; }
 .guide.appl ul { margin: 4px 0 0; padding-left: 18px; display: grid; gap: 3px; }
 .link.back { display: block; margin: 0 0 6px; font-size: 14px; }
-.field label.ghost { display: inline-flex; align-items: center; font-weight: 400; }   /* "Open saved" looks like the buttons beside it */
+.field label.ghost { display: inline-flex; align-items: center; font-weight: 400; padding: 8px 14px; }   /* "Open saved" looks like the buttons beside it */
 .extras { flex-basis: 100%; display: flex; justify-content: flex-end; gap: 18px; margin: -4px 2px 0; }
 .extras .link:disabled { opacity: .45; cursor: default; }
 @media (max-width: 860px) { .extras { justify-content: center; } }
@@ -450,3 +451,5 @@ label:has(> .sr-file:focus-visible), label:has(+ .sr-file:focus-visible) { outli
   .swatches button, .chips i, .palette i, .threads i, .pieces .pick i, .st-steps i, #view, .cards canvas, .along canvas { forced-color-adjust: none; }
   [aria-pressed="true"], [aria-selected="true"], [aria-current="true"], .primary { outline: 2px solid Highlight; outline-offset: 1px; }
 }
+/* "Watch it sew" and "Pause" take the same room, so the buttons beside it don't move under a finger */
+#play { min-width: 9.5em; }

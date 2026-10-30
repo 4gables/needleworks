@@ -282,6 +282,20 @@ Embroidery-file tools for home machines. Two implementations of the same engine:
     tip. Knit adds 0.04 to the lettering satin. `wt` is a module variable set for the length of `compose`; stitch
     caches key on it.
   - Not done from the gap review: photo stitch, free-standing lace, 3D puff.
+- Persona user tests (2026-10-30, plan in ~/.claude/plans/needleworks-user-testing.md): newcomer (phone), hobbyist
+  (laptop), expert (desktop, keyboard, bad files) as parallel agents, each on its own headless Chrome driven by
+  `tests/cdp.mjs` (`start DIR`, `viewport W H [mobile]`, `goto`, `shot`, `els`, `click`/`tap`, `type`, `key`, `upload`,
+  `eval`, `console`, `nocache`). Subagents can't write report files: they hand the report back. Round 1 fixes: Turn hoop
+  in the Design tab lays pieces out in the turned field (long side across) and turns the file clockwise into machine
+  orientation (`designHoop`/`toMachine` in app.js, names ZIP and cut outlines too); it used to turn the preview only, so a
+  long word could never use the 7 in side. Redo (⇧⌘Z / Ctrl+Y, was a second undo), undo skips snapshots equal to now,
+  Delete removes the selected piece, the preview picks the smallest piece under the pointer (letters inside a frame).
+  Warnings list every problem: characters the font lacks (`missing` in ui.js: past Latin Extended by code point, Latin
+  by width; width alone misses CJK because the fallback chain changes), towel lettering under an 8 mm x-height
+  (`towelMin`, with a one-tap size), arcs past the whole way round. Words are capped at 3 lines as typed. Open tab: a
+  file with no stitches says so and clears the old one (it showed -Infinity mm, "Fits"). Have ready (fabric `ready`,
+  bookmark `READY`) on the steps, sew sheet and first Sew along screen. Too big: one size everywhere, with a Turn the
+  hoop / Fit to hoop button. Byte compares need a fresh no-cache baseline (`out/base` had gone stale by 3 commits).
 - The preview is the file: `setView` decodes `v.bytes` with `readEmbroidery` and draws/counts/fit-checks that, and
   thread labels come from the file's own PEC palette.
 
