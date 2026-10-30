@@ -16,6 +16,8 @@ const SCRIPT = "NW Great Vibes", PRINT = "NW Josefin Sans", ROUND = "NW Quicksan
 const RED = "#ed171f", NAVY = "#0e1f7c", BLACK = "#000000";
 const PINK = "#f993bc";
 export const TURNED = "The hoop is turned: the machine shows this design on its side. Hoop the fabric a quarter turn round, with the top of the design toward the right of the hoop (as the sew sheet shows).";
+// fabric buttons in the words people use (a T-shirt is a knit; fleece and minky sew like towel)
+const FABRIC_NAMES = { knit: "Knit / T-shirt", towel: "Towel / fleece" };
 const SMALL_TIP = "Small letters come out crisper with 60 wt thread and a 65/9 or 70/10 needle, and with the machine slowed down.";
 const COLORS = [RED, NAVY, "#00673e", "#770176", "#e8a900", "#f993bc", BLACK, "#f0f0f0"];
 
@@ -241,6 +243,7 @@ export function initStudio(api) {
       h += `<p class="hint">About 10 mm for a pocket or cuff, 20-30 mm for a pillow or blanket corner, 30-50 mm for a towel.</p>`;
       h += seg("shape", TEXT_SHAPES, p.shape);
       h += seg("style", STITCHES, p.style || "auto");
+      h += `<label class="field"><span>Motif either side</span><select data-k="deco"><option value="">None</option>${Object.entries(MOTIFS).map(([k, m]) => `<option value="${k}" ${k === p.deco ? "selected" : ""}>${m.name}</option>`).join("")}</select></label>`;   // (a heart or star either side was hidden under More)
       if (arc) {
         h += range("radius", "Curve width", 15, 80, p.radius);
         h += range("ry", "Curve height", 15, 80, p.ry ?? p.radius);
@@ -250,7 +253,7 @@ export function initStudio(api) {
       if (p.shape === "bridge") h += range("bulge", "Bulge", 10, 80, p.bulge ?? 30, "%", 5);
       // the rarer settings, folded away
       const print = FONTS.find((f) => f.family === p.font)?.print;
-      const more = `<label class="field"><span>Motif either side</span><select data-k="deco"><option value="">None</option>${Object.entries(MOTIFS).map(([k, m]) => `<option value="${k}" ${k === p.deco ? "selected" : ""}>${m.name}</option>`).join("")}</select></label>`
+      const more = ''
         + (print ? range("spacing", "Letter spacing", -10, 40, p.spacing || 0, "%") + `<div data-pairs>${pairUI(p)}</div>` : "")
         + (p.shape === "straight" ? `<p class="hint">Press Enter in Words for a new line (up to 3).</p>` : "")
         + (p.shape === "straight" && lines > 1 ? seg("align", { left: "Left", center: "Centre", right: "Right" }, p.align || "center") + range("leading", "Line spacing", 80, 200, p.leading ?? 130, "%", 5) : "");
@@ -303,7 +306,7 @@ export function initStudio(api) {
   }
   function ui() { api.keepFocus($("panel-design"), () => { list(); editor(); sewnOn(); }); }
   function sewnOn() {
-    $("st-fabric").innerHTML = Object.entries(FABRICS).map(([k, f]) => `<button type="button" data-fab="${k}" aria-pressed="${k === fabric}">${f.name}</button>`).join("");
+    $("st-fabric").innerHTML = Object.entries(FABRICS).map(([k, f]) => `<button type="button" data-fab="${k}" aria-pressed="${k === fabric}">${FABRIC_NAMES[k] || f.name}</button>`).join("");
     $("st-baste").checked = baste; $("st-fabric-tip").textContent = FABRICS[fabric].tip; $("st-fabric-name").textContent = FABRICS[fabric].name + (baste ? ", basted" : "");
     // (numeric keys come first in an object, so the order is spelled out)
     $("st-thread").innerHTML = `<span class="chips-label">Thread</span>` + ["auto", "30", "40", "60"].map((k) => `<button type="button" data-thread="${k}" aria-pressed="${k === thread}">${THREADS[k].name}</button>`).join("");
@@ -355,7 +358,10 @@ export function initStudio(api) {
       if (s !== seq) return;
       const fit = fittedSizes(pieces), small = thread !== "60" && pieces.some((p) => smallText(fit.has(p.id) ? { ...p, size: fit.get(p.id) } : p));
       // (what the fabric needs goes first: a towel's topper was only in the folded "Sewing on")
-      const ready = [FABRICS[fabric].ready, ...before].filter(Boolean), done = [...after, FABRICS[fabric].after].filter(Boolean);
+      const names = [...new Set(steps.map((st) => nearestBrotherThread(st.color).name))];
+      const ready = [FABRICS[fabric].ready || "Tear-away stabilizer (cut-away for anything stretchy).", ...before,
+        steps.some((st) => st.fabric && st.cut) ? "A piece of fabric for each appliqué shape, 1 in bigger than its outline, and small curved scissors (iron-on fusible web on the back stops cotton fraying)." : "",
+        `Thread: ${names.map((n) => "Brother " + n).join(", ")}.`].filter(Boolean), done = [...after, FABRICS[fabric].after].filter(Boolean);
       stepsUI(steps, done, small, ready);
       const look = previewLook(steps);
       // pieces sewn into each other (checked when the design settles, not on every drag frame)
@@ -440,6 +446,7 @@ export function initStudio(api) {
     const phone = matchMedia("(max-width: 600px)").matches;
     if (s.mode) { api.setMode(s.mode); if (phone) $("view").scrollIntoView({ block: "center", behavior: "smooth" }); return; }
     api.fit();   // (a new design opens whole, not at the last one's zoom)
+    api.unturn();   // (and upright: the last starter's turned hoop made a bib hoop sideways; too big offers the turn)
     remember(); pieces = s.make(); sel = pieces[pieces.length - 1].id;
     fabric = s.fabric || "cotton";   // (a towel left on made every later starter towel-heavy, +40-75 % stitches)
     baste = !!s.baste;
@@ -606,7 +613,7 @@ export function initStudio(api) {
     if ((e.metaKey || e.ctrlKey) && k === "z") { e.preventDefault(); undo(); return; }
     // Delete / Backspace removes the selected piece (from the page or the preview, never while typing)
     if ((e.key === "Delete" || e.key === "Backspace") && (e.target === document.body || e.target.id === "view") && current()) {
-      e.preventDefault(); $("st-pieces").querySelector(`[data-op="del"][data-id="${sel}"]`)?.click(); return;
+      e.preventDefault(); $("st-pieces").querySelector(`[data-op="del"][data-id="${sel}"]`)?.click(); sel = null; ui(); return;
     }
     const arrows = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] }[e.key];
     if (arrows && (e.target === document.body || e.target.id === "view")) { e.preventDefault(); nudge(arrows[0] * (e.shiftKey ? 5 : 1), arrows[1] * (e.shiftKey ? 5 : 1)); }
@@ -668,5 +675,5 @@ export function initStudio(api) {
   }
 
   cards(); ui();
-  return { make, start, move, end, nudge, forNames };
+  return { make, start, move, end, nudge, forNames, recentre: () => { remember(); recentre(); save(); ui(); make(); } };
 }

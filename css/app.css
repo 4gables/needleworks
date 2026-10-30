@@ -479,3 +479,9 @@ label:has(> .sr-file:focus-visible), label:has(+ .sr-file:focus-visible) { outli
 select, input[type="text"], .edit textarea, .cards button, .names textarea { border-color: var(--field-line); }
 .dl-warn { margin: 6px 0 0; text-align: right; }
 @media (max-width: 600px) { .dl-warn { text-align: left; } }
+/* starter thumbnails on a light card in dark mode (navy lettering vanished on the dark card) */
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .cards canvas { background: #ece5da; border-radius: 8px; } }
+:root[data-theme="dark"] .cards canvas { background: #ece5da; border-radius: 8px; }
+/* many threads (a bought design combined with lettering) scroll instead of squeezing the preview */
+.threads { max-height: 92px; overflow-y: auto; }
+.facts .note { background: var(--panel); }

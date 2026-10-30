@@ -150,7 +150,7 @@
           <button type="button" class="link" id="st-guide-close" aria-label="Hide these tips">Got it</button></li>
       </ol>
       <fieldset class="field">
-        <legend>Start from <span class="hint inline" id="st-cards-count"></span></legend>
+        <legend role="heading" aria-level="2">Start from <span class="hint inline" id="st-cards-count"></span></legend>
         <div id="st-cards" class="cards"></div>
         <p class="hint" id="st-tip" hidden></p>
       </fieldset>
@@ -167,7 +167,7 @@
         <button type="button" class="link" id="st-appl-close">Got it</button>
       </div>
       <fieldset class="field">
-        <legend>Pieces <span class="hint inline">(sewn top to bottom)</span></legend>
+        <legend role="heading" aria-level="2">Pieces <span class="hint inline">(sewn top to bottom)</span></legend>
         <ul id="st-pieces" class="pieces"></ul>
         <div id="st-add" class="add">
           <button type="button" class="ghost" data-add="text">+ Lettering</button>
@@ -188,7 +188,7 @@
         </div>
       </fieldset>
       <fieldset class="field">
-        <legend>Selected piece <button type="button" id="st-center" class="link">Centre it</button></legend>
+        <legend role="heading" aria-level="2">Selected piece <button type="button" id="st-center" class="link">Centre it</button></legend>
         <div id="st-edit" class="edit"></div>
         <p class="hint">Drag on the preview to move it<span class="keys">, or use the arrow keys (Shift for bigger steps)</span>.</p>
       </fieldset>
@@ -227,7 +227,7 @@
   <section class="stage" aria-label="Preview">
     <div class="canvas-wrap">
       <canvas id="view" tabindex="0" aria-label="Stitch preview. In Design your own, the arrow keys move the selected piece."></canvas>
-      <div class="facts" id="facts" aria-live="polite"></div>
+      <div class="facts" id="facts"></div>
       <div class="zoom">
         <button type="button" id="zoom-out" aria-label="Zoom out">−</button>
         <button type="button" id="zoom-fit">Fit</button>

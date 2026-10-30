@@ -110,6 +110,7 @@ function setView(v) {
     st.colorChanges ? (state.mode === "picture" || state.mode === "open" ? `<span title="The machine stops for each one: thread the next colour and press Start.">${st.colorChanges} thread ${st.colorChanges === 1 ? "change" : "changes"}</span>` : `<span>${st.colorChanges} ${st.colorChanges === 1 ? "pause" : "pauses"}</span>`) : "",
     `<span>≈ ${minutes} min</span>`,
     v.split ? `<span>${v.split.length} hoopings</span>` : fits ? "" : `<span class="bad">Too big for the ${h.name}</span>`,
+    offCentre(v, fits) ? `<span class="note">Off centre here: the machine centres it <button type="button" class="link" id="recentre">Centre it</button></span>` : "",
     snips ? `<span title="The machine only trims jumps longer than its 'jump stitch not to trim' setting (5 mm at the lowest). The thread is locked at both ends, so these are safe to snip after stitching.">${snips} loose ${snips === 1 ? "thread" : "threads"} to snip after</span>` : "",
   ].join("");
   const seen = new Set(), mt = machineThreadList(v);
@@ -137,6 +138,14 @@ function picSteps(v, st) {
     + blocks.map((b, i) => { const t = mt[b.index] || nearestBrotherThread(b.color);
       return `<li><b><span class="n">${i + 1}</span><i style="background:${b.color}"></i>Brother ${escapeHtml(t.name)}${spool(b.color) ? ` <small>${escapeHtml(spool(b.color))}</small>` : ""}</b><span class="you">${i ? "The machine stops: thread this colour and press Start." : "Hoop the fabric with the stabilizer, thread this colour and press Start."}</span></li>`; }).join("")
     + `<li class="after"><b>When it's done</b><span>Take the hoop off, snip any loose threads between parts, and tear or cut away the stabilizer.</span></li>`;
+}
+// a Design-tab layout that fits the hoop but sits past its edge on screen (pieces dragged off to one side): the
+// machine centres the whole design, so it sews fine, but it looked like it would hit the hoop
+function offCentre(v, fits) {
+  if (state.mode !== "design" || !fits || v.split) return false;
+  const h = shownHoop(), lx = (h.w / 2 - MARGIN) * 10, ly = (h.h / 2 - MARGIN) * 10;
+  for (const [x, y, c] of v.shown.stitches) if (c === STITCH && (Math.abs(x) > lx || Math.abs(y) > ly)) return true;
+  return false;
 }
 // thread names exactly as the machine will show them: the file's own PEC palette
 function machineThreadList(v) {
@@ -224,6 +233,7 @@ $("progress").oninput = (e) => {
 };
 $("show-heat").onchange = (e) => { state.heat = e.target.checked; paint(); };
 $("show-real").checked = state.real = store.get("real", false);
+$("facts").addEventListener("click", (e) => { if (e.target.id === "recentre") studio.recentre(); });
 $("show-real").onchange = (e) => { state.real = e.target.checked; store.set("real", state.real); if (state.real && state.zoom < 3) { state.zoom = 3; } paint(); };
 $("show-hoop").checked = state.showHoop;
 $("show-hoop").onchange = (e) => { state.showHoop = e.target.checked; store.set("showHoop", state.showHoop); paint(); };
@@ -287,7 +297,7 @@ function downloaded(v, zipped) {
   if (store.get("doneSeen", false)) return;
   // (the size as the preview shows it: a turned bookmark is 169 × 54, not 54 × 169)
   const h = hoop(), s = v.shown && designStats(v.shown);
-  $("done-checked").textContent = `Checked: it opens on a ${h.machineName} in the ${h.name}${s ? `, ${s.widthMm.toFixed(0)} × ${s.heightMm.toFixed(0)} mm, ${s.colorChanges ? `${s.colorChanges} ${s.colorChanges === 1 ? "pause" : "pauses"}` : "no pauses"}` : ""}.`;
+  $("done-checked").textContent = `Checked: it opens on a ${h.machineName} in the ${h.name}${s ? `, ${s.widthMm.toFixed(0)} × ${s.heightMm.toFixed(0)} mm, ${s.colorChanges ? (state.mode === "picture" || state.mode === "open" ? `${s.colorChanges} thread ${s.colorChanges === 1 ? "change" : "changes"}` : `${s.colorChanges} ${s.colorChanges === 1 ? "pause" : "pauses"}`) : "no pauses"}` : ""}.`;
   $("done-zip").hidden = !zipped;
   $("done-phone").hidden = !matchMedia("(pointer: coarse)").matches;
   $("done-turn").hidden = !(state.mode === "design" && state.turn.design);
@@ -375,6 +385,7 @@ function alongSteps(v) {
   const steps = [...(v.sheet?.steps?.length ? v.sheet.steps : blocks.map((b, i) => ({ you: i ? "Change to the next thread and press Start." : null, sews: "" })))];
   // (the first screen says what to have by the machine)
   if (v.sheet?.ready?.length && steps.length) steps[0] = { ...steps[0], you: `Have ready: ${v.sheet.ready.join(" ")} ${steps[0].you || ""}`.trim() };
+  if (state.mode === "design" && state.turn.design && steps.length) steps[0] = { ...steps[0], you: `${$("done-turn").textContent} ${steps[0].you || ""}`.trim() };
   return steps.map((s, i) => {
     const b = blocks.find((x) => x.index === i), n = b ? b.segs.reduce((a, sg) => a + sg.length, 0) : 0;
     return { ...s, block: b, minutes: Math.max(1, Math.round(n / 550)) };
@@ -458,7 +469,7 @@ $("names-make").onclick = async () => {
     const m = made[+c.dataset.i]; draw(c, m.shown || (n.bookmark ? turnPattern(m.pattern, false) : m.pattern), { pad: 3, fabric: "white" });
   }
   if (files.length) {
-    saveFile(new Blob([zip(files)], { type: "application/zip" }), `${safeName(n.what, "names")}_names.zip`);
+    saveFile(new Blob([zip(files)], { type: "application/zip" }), `${n.bookmark ? "bookmarks" : "names"}_${files.length}.zip`);
     $("names-cancel").textContent = "Done";
   }
   $("names-note").classList.toggle("warn", bad.length > 0);
@@ -476,6 +487,8 @@ function spool(hex) {
 function brandUI() {
   $("brand").innerHTML = `<option value="">Brother thread</option>` + Object.entries(BRANDS).map(([k, n]) => `<option value="${k}">${n}</option>`).join("")
     + `<option value="@mine">Threads I own…</option>`;
+  // (with spools listed, the brand reads "Isacord (threads I own)")
+  for (const o of $("brand").options) if (o.value && state.spools[o.value]?.length) o.textContent += " (threads I own)";
   $("brand").value = state.brand;
   const mine = state.brand && state.spools[state.brand]?.length;
   $("pic-mine-row").hidden = !mine; $("pic-mine").checked = !!mine && state.pic.mine;
@@ -636,17 +649,38 @@ async function makeBookmark() {
     setView({ pattern, verifyAgainst: pattern, bytes: writePES(pattern), filename: blank ? "blank_bookmark.pes" : `${safeName(state.bm.name, "name")}_bookmark.pes`,
       fabricShapeBlock: 0, hide: hiddenBlocks(blank), fabric: state.bm.fabric,
       sheet: { steps: stepsFor(blank).map((s) => ({ title: s.title, you: s.you, sews: s.machine })), cut: d.cut, ready: [READY], notes: ["Have ready: " + READY] }, threadLabel: () => `Brother ${nearestBrotherThread(state.bm.color).name} · whole bookmark` });
-  } catch (err) { console.error(err); setView(null); $("empty").textContent = ""; showError(err.message); }
+  } catch (err) {
+    setView(null); $("empty").hidden = true;
+    const big = Object.keys(MACHINES[state.machine].hoops).find((k) => { const h = getHoop(state.machine, k); return h.w >= 130 && h.h >= 180; });
+    if (/needs the 5/.test(err.message) && big) showError(err.message.replace(/ Pick it at the top\.?$/, ""), { label: "Use the 5\" × 7\" hoop", run: () => { $("hoop").value = big; $("hoop").dispatchEvent(new Event("change")); } });
+    else { console.error(err); showError(err.message); }
+  }
   finally { if (seq === bmSeq) busy(false); }
 }
 
 // ---------- picture ----------
-const worker = new Worker(new URL("./worker.js", import.meta.url), { type: "module" });
-// one job at a time, and only the newest waiting: three quick slider moves on a slow picture computed all three
-let picRunning = false, picNext = null;
-function digitizeJob(msg) { if (picRunning) picNext = msg; else { picRunning = true; worker.postMessage(msg); } }
-function jobDone() { picRunning = false; if (picNext) { const m = picNext; picNext = null; digitizeJob(m); } }
-worker.onmessage = (e) => {
+let worker = null;
+// one job at a time, and only the newest waiting: three quick slider moves on a slow picture computed all three.
+// A job that runs past a minute is stopped (a photo once routed for over 5 minutes and every later change queued
+// behind it): the worker is replaced and the picture tab says what to try.
+let picRunning = false, picNext = null, picWatch = 0;
+function startWorker() {
+  worker = new Worker(new URL("./worker.js", import.meta.url), { type: "module" });
+  worker.onmessage = onPicture;
+  worker.onerror = (e) => { jobDone(); busy(false); if (state.mode === "picture") showError("Something went wrong while stitching this picture. " + (e.message || "")); };
+}
+function digitizeJob(msg) {
+  if (picRunning) { picNext = msg; return; }
+  picRunning = true; worker.postMessage(msg);
+  clearTimeout(picWatch);
+  picWatch = setTimeout(() => {
+    worker.terminate(); startWorker(); picRunning = false; picNext = null; busy(false);
+    state.views.picture = null;
+    if (state.mode === "picture") { setView(null); showError("This picture is taking too long to stitch. Try fewer colours, a smaller size, or Line drawing."); }
+  }, 60000);
+}
+function jobDone() { clearTimeout(picWatch); picRunning = false; if (picNext) { const m = picNext; picNext = null; digitizeJob(m); } }
+function onPicture(e) {
   const r = e.data;
   jobDone();
   if (r.id !== state.pic.req) return;
@@ -664,8 +698,8 @@ worker.onmessage = (e) => {
   };
   state.views.picture = v;
   if (state.mode === "picture") setView(v);
-};
-worker.onerror = (e) => { jobDone(); busy(false); if (state.mode === "picture") showError("Something went wrong while stitching this picture. " + (e.message || "")); };
+}
+startWorker();
 
 function paletteUI() {
   const cols = state.pic.colorsInfo.filter((c) => !c.background && c.area > 0);
@@ -774,6 +808,8 @@ function makePicture() {
   ctx.imageSmoothingQuality = "high";
   ctx.drawImage(p.bitmap, box.sx, box.sy, box.sw, box.sh, 0, 0, sz.w, sz.h);
   const img = ctx.getImageData(0, 0, sz.w, sz.h);
+  // (nothing from another tab stays on screen, with its Download, while this picture stitches)
+  if (state.mode === "picture" && state.view && state.view !== state.views.picture) setView(null);
   p.req++; busy(true, "Stitching your picture…");
   digitizeJob({ id: p.req, img, opts: { colors: p.colors, removeBackground: p.bg, fillAngle: p.angle, density: DENSITY[p.density] || DENSITY.standard, skip: p.skip, hoop: h, turn: turned(), imageKey: p.key, palette: ownedPalette(), style: p.style, cross: p.cross } });
 }
@@ -921,7 +957,7 @@ function showStep(i) {
   state.step = i; document.dispatchEvent(new CustomEvent("nw:step", { detail: i })); paint();
 }
 const studio = initStudio({
-  hoop: designHoop, turned: () => !!state.turn.design, fit: () => { state.zoom = 1; state.pan = [0, 0]; }, store, showError, busy, safeName, escapeHtml, saveFile, keepFocus, showStep, step: () => state.step, setMode, spool,
+  hoop: designHoop, turned: () => !!state.turn.design, unturn: () => { if (state.turn.design) { state.turn.design = false; store.set("turn", state.turn); $("turn").setAttribute("aria-pressed", false); } }, fit: () => { state.zoom = 1; state.pan = [0, 0]; }, store, showError, busy, safeName, escapeHtml, saveFile, keepFocus, showStep, step: () => state.step, setMode, spool,
   setView(pattern, filename, look = {}) {
     if (!pattern) { state.views.design = null; if (state.mode === "design") setView(null); return; }
     pattern = toMachine(pattern);
