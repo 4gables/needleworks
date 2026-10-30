@@ -1,5 +1,5 @@
 import { buildBookmark, hiddenBlocks, READY, RED, stepsFor } from "./core/bookmark.js";
-import { turnPattern } from "./core/design.js";
+import { turnForMachine, turnPattern } from "./core/design.js";
 import { FONTS, fontOf } from "./core/fonts.js";
 import { COLOR_CHANGE, JUMP, STITCH, designStats, machineThreads, readEmbroidery, validatePES, writePES } from "./core/formats.js";
 import { DEFAULT_MACHINE, MACHINES, MARGIN, hoop as getHoop } from "./core/machines.js";
@@ -51,7 +51,7 @@ const shownHoop = () => { const h = hoop(); return turned() ? { ...h, w: h.h, h:
 // the Design tab lays pieces out in the hoop as it's shown (turned: the long side across), and its files are turned
 // clockwise into the machine's orientation, as a turned picture is
 const designHoop = () => { const h = hoop(); return state.turn.design ? { ...h, w: h.h, h: h.w } : h; };
-const toMachine = (p) => (state.turn.design ? turnPattern(p) : p);
+const toMachine = (p) => (state.turn.design ? turnForMachine(p) : p);
 const turnCut = (loops) => loops.map((l) => l.map(([x, y]) => [-y, x]));
 
 // ---------- preview ----------
@@ -104,7 +104,8 @@ function setView(v) {
   $("facts").innerHTML = [
     `<span>${shown.widthMm.toFixed(0)} × ${shown.heightMm.toFixed(0)} mm · ${inch(shown.widthMm)} × ${inch(shown.heightMm)} in</span>`,
     `<span>${st.stitches.toLocaleString()} stitches</span>`,
-    st.colorChanges ? `<span>${st.colorChanges} ${st.colorChanges === 1 ? "pause" : "pauses"}</span>` : "",
+    // (on the Picture and Open tabs every pause is a change of thread: say so; the Design tab's can be fabric steps)
+    st.colorChanges ? (state.mode === "picture" || state.mode === "open" ? `<span title="The machine stops for each one: thread the next colour and press Start.">${st.colorChanges} thread ${st.colorChanges === 1 ? "change" : "changes"}</span>` : `<span>${st.colorChanges} ${st.colorChanges === 1 ? "pause" : "pauses"}</span>`) : "",
     `<span>≈ ${minutes} min</span>`,
     v.split ? `<span>${v.split.length} hoopings</span>` : fits ? "" : `<span class="bad">Too big for the ${h.name}</span>`,
     snips ? `<span title="The machine only trims jumps longer than its 'jump stitch not to trim' setting (5 mm at the lowest). The thread is locked at both ends, so these are safe to snip after stitching.">${snips} loose ${snips === 1 ? "thread" : "threads"} to snip after</span>` : "",
@@ -468,7 +469,7 @@ function spool(hex) {
   if (!state.brand) return "";
   const own = state.spools[state.brand], s = nearestSpool(state.brand, hex, own);
   // (an owned spool far from the colour isn't a match: white showed as "your Isacord 5513", a green)
-  return !s ? "" : !own?.length ? `≈ ${s.label}` : s.dE > 25 ? `none of yours is close (nearest: ${s.label})` : `your ${s.label}`;
+  return !s ? "" : !own?.length ? `≈ ${s.label}` : s.dE > 25 ? `nearest of yours, ${s.label}, is quite different` : `your ${s.label}`;
 }
 function brandUI() {
   $("brand").innerHTML = `<option value="">Brother thread</option>` + Object.entries(BRANDS).map(([k, n]) => `<option value="${k}">${n}</option>`).join("")
@@ -556,8 +557,8 @@ $("bm-back").onclick = () => setMode("design");
 document.querySelector(".tabs").addEventListener("keydown", (e) => {
   // (in the order they're shown: MODES' order sent → from Design back to Picture)
   const tabs = [...document.querySelectorAll(".tabs [role=tab]")], i = tabs.findIndex((t) => t.getAttribute("aria-selected") === "true");
-  if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
-    const n = tabs[(i + (e.key === "ArrowRight" ? 1 : tabs.length - 1)) % tabs.length];
+  if (["ArrowRight", "ArrowLeft", "Home", "End"].includes(e.key)) {
+    const n = e.key === "Home" ? tabs[0] : e.key === "End" ? tabs[tabs.length - 1] : tabs[(i + (e.key === "ArrowRight" ? 1 : tabs.length - 1)) % tabs.length];
     e.preventDefault(); n.click(); n.focus();
   }
 });
@@ -657,7 +658,7 @@ worker.onmessage = (e) => {
   paletteUI();
   fineUI(r.fine);
   const base = safeName((state.pic.file?.name || "picture").replace(/\.[^.]+$/, ""), "picture");
-  const v = { pattern: r.pattern, verifyAgainst: r.pattern, bytes: r.bytes, filename: `${base}.pes`, fabric: "linen",
+  const v = { pattern: r.pattern, verifyAgainst: r.pattern, bytes: r.bytes, filename: `${base}${state.pic.style === "line" ? "_line" : state.pic.style === "cross" ? "_cross" : ""}.pes`, fabric: "linen",
   };
   state.views.picture = v;
   if (state.mode === "picture") setView(v);
@@ -831,7 +832,8 @@ function openView() {
     filename: `${o.base}${scale !== 1 ? `_${Math.round(scale * 100)}pct` : ""}.pes`, fabric: "linen", source: changed || !o.isPes ? null : o.bytes,
     // (a file she already has: say what the button gives her)
     action: o.repair || tiny || thin || sort ? "Save fixed copy" : changed ? "Save resized copy" : o.isPes ? "Save a copy" : "Save as PES",
-    threadLabel: (b, t) => (/[a-z]{2}/i.test(b.name || "") ? escapeHtml(b.name) : `Brother ${t.name}${b.name ? " · " + escapeHtml(b.name) : ""}`) };
+    // (the machine's name first: a design made here names its threads after its pieces, "peace", "“Sunny”")
+    threadLabel: (b, t) => `Brother ${t.name}${b.name && b.name !== t.name ? " · " + escapeHtml(b.name) : ""}` };
   state.views.open = v; setView(v); doctorUI(p);
 }
 // what might go wrong at the machine, in plain words, with the fixes that are safe on a finished design
@@ -909,7 +911,7 @@ function showStep(i) {
   state.step = i; document.dispatchEvent(new CustomEvent("nw:step", { detail: i })); paint();
 }
 const studio = initStudio({
-  hoop: designHoop, turned: () => !!state.turn.design, store, showError, busy, safeName, escapeHtml, saveFile, keepFocus, showStep, step: () => state.step, setMode, spool,
+  hoop: designHoop, turned: () => !!state.turn.design, fit: () => { state.zoom = 1; state.pan = [0, 0]; }, store, showError, busy, safeName, escapeHtml, saveFile, keepFocus, showStep, step: () => state.step, setMode, spool,
   setView(pattern, filename, look = {}) {
     if (!pattern) { state.views.design = null; if (state.mode === "design") setView(null); return; }
     pattern = toMachine(pattern);

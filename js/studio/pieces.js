@@ -40,11 +40,12 @@ function letters(text, family, size, style = "auto", spacing = 0, kern = null) {
   if (!all.length) return { parts: [], satinW: 0 };
   const [x0, y0, x1, y1] = bounds(all), s = size / Math.max(y1 - y0, 1e-9), cx = (x0 + x1) / 2;
   const parts = comps.flatMap((c) => c.map(([p, mode]) => [p.map(([x, y]) => [(x - cx) * s, (y - info.baseline) * s]), mode]));
-  // A satin column no wider than the font's own stroke, and never more than a fifth of the x-height (a sixth for
-  // thin monoline fonts, which get a satin sized to the letters like the bookmark). Under 1 mm a satin can't be sewn
-  // cleanly and fills small loops, so those letters get a fine line instead.
+  // A satin column as wide as the font's own stroke but at least 12% of the x-height (thin scripts and monoline
+  // fonts get a satin sized to the letters), never more than a fifth of it or 3.5 mm. Under 1 mm a satin can't be
+  // sewn cleanly and fills small loops, so those letters get a fine line instead. (Until 2026-10-30 two rules met at
+  // a 0.95 mm stroke, so Allura's column went 2.0 mm at 24 mm high to 1.2 mm at 28 mm.)
   const stroke = info.stroke * s, xh = info.mid * s;
-  const w = stroke >= 0.95 ? Math.min(3.2, stroke, xh * 0.2) : Math.min(2.0, xh * 0.17);
+  const w = Math.min(3.5, xh * 0.2, Math.max(stroke, xh * 0.12));
   const satinW = style === "line" ? 0 : style === "satin" ? Math.max(1.0, w) : w >= 1.0 ? Math.max(1.2, w) : 0;
   return { parts, satinW, xh, top: (y0 - info.baseline) * s, bottom: (y1 - info.baseline) * s };
 }
@@ -135,8 +136,21 @@ function stitchLetters(parts, satinW, fab = "cotton", small = false) {
   const zz = fab === "knit" ? 1.5 : 2.5, pull = fab === "knit" ? 0.3 : 0;
   const density = wt === "auto" ? (fab === "knit" ? 0.42 : small ? 0.34 : 0.38) : THREADS[wt].satin + (fab === "knit" ? 0.04 : 0);
   return parts.map(([p, mode]) => {
-    // thin lettering: a stroke under ~0.6 mm is a speck of the skeleton; skip it (the next stroke picks up there)
-    if (!satinW && length(p) < 0.6) return [];
+    // thin lettering: a stroke under ~0.6 mm is a speck of the skeleton; skip it (the next stroke picks up there),
+    // unless it stands alone: that's a dot (a full stop, an i's dot) and sews as a 0.7 mm stroke out and back
+    // (small print lettering lost its full stops: "Sam R." sewed as "Sam R")
+    // (up to 0.9 mm: a stroke that short sews as one point in a fine line, so a full stop of 0.6-0.9 mm vanished too)
+    if (!satinW && length(p) < 0.9) {
+      const c = p[p.length >> 1];
+      // (a lone stroke comes twice, out and back: the other short copy isn't a neighbour, and the dot sews once)
+      if (parts.some(([q]) => q !== p && length(q) >= 0.9 && q.some(([x, y]) => Math.hypot(x - c[0], y - c[1]) < 0.5))) { if (length(p) < 0.6) return []; }
+      else if (mode === "run") return [];
+      else {
+      const a = p[0], b = p[p.length - 1], L = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1, u = L > 0.01 ? [(b[0] - a[0]) / L, (b[1] - a[1]) / L] : [1, 0];
+      const e1 = [c[0] - u[0] * 0.35, c[1] - u[1] * 0.35], e2 = [c[0] + u[0] * 0.35, c[1] + u[1] * 0.35];
+      return [e1, e2, e1, e2];
+      }
+    }
     // the way out under a satin: a centre run, or a zigzag under wide columns (Ink/Stitch fonts' usual underlay), 0.4 mm
     // inside each edge so it never shows past the satin (it ends back on the centre line: ending on an edge left the
     // satin's start 2.4 mm away, a jump and trim)

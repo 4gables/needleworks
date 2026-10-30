@@ -467,3 +467,10 @@ label:has(> .sr-file:focus-visible), label:has(+ .sr-file:focus-visible) { outli
 .error .link { display: inline; white-space: nowrap; font-weight: 700; }
 /* dark colour dots (navy, black threads) need an edge on the dark page */
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .pieces .pick i, :root:not([data-theme="light"]) .threads i, :root:not([data-theme="light"]) .st-steps i { border-color: rgba(255,255,255,.45); } }
+/* phones: a disabled Download bar is still a solid bar (see-through, the buttons under it showed through), and the
+   size chips keep clear of the zoom buttons */
+@media (max-width: 600px) {
+  #download:disabled { opacity: 1; background: var(--panel); color: var(--muted); border: 1.5px solid var(--line); }
+  .facts { max-width: calc(100% - 175px); }   /* (44 px zoom buttons on touch) */
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .fine-warn, :root:not([data-theme="light"]) .facts .bad { background: #3a2a1a; color: #f3c79a; } }

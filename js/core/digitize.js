@@ -450,19 +450,26 @@ function build(img, analysis, opts) {
     for (let i = 0; i < w * h; i++) mask.data[i] = labels[i] === col.id ? 1 : 0;
     fine.narrowMm2 += narrowGaps(mask, res, (i) => !stitched.has(labels[i]));
     const own = distanceTransform(mask);   // the colour's own shapes, for their widths
-    const minPx = 1.5 * res * res;   // ignore specks under 1.5 mm²
+    // ignore specks: under 1.5 mm², or under 4 mm² and under 2.5 mm across (a dot, not a stem: each speck left was a
+    // trim, two locks and often a loose thread; 4 mm² for all erased the thin stems of a line-art bouquet)
+    const minPx = 1.5 * res * res, dotPx = 4 * res * res, dotW = 2.5 * res;
     // Each shape grows under the colours sewn later (they cover the join), never into the background or an
     // earlier colour. Specks go first, and shapes grow apart: merged, scattered specks would fill the colour above
     // them, and a bridge between two shapes funnels every fill travel through it.
     const later = new Set(used.slice(k + 1).map((c) => c.id));
     const { labels: cl, count } = label(mask);
     if (later.size) {
-      const size = new Int32Array(count + 1);
-      for (let i = 0; i < w * h; i++) size[cl[i]]++;
+      const size = new Int32Array(count + 1), bx0 = new Int32Array(count + 1).fill(w), bx1 = new Int32Array(count + 1).fill(-1), by0 = new Int32Array(count + 1).fill(h), by1 = new Int32Array(count + 1).fill(-1);
+      for (let i = 0; i < w * h; i++) {
+        const c = cl[i]; size[c]++; if (!c) continue;
+        const x = i % w, y = (i - x) / w;
+        if (x < bx0[c]) bx0[c] = x; if (x > bx1[c]) bx1[c] = x; if (y < by0[c]) by0[c] = y; if (y > by1[c]) by1[c] = y;
+      }
+      const speck = (c) => size[c] < minPx || (size[c] < dotPx && bx1[c] - bx0[c] < dotW && by1[c] - by0[c] < dotW);
       const src = new Int32Array(w * h).fill(-1), R = OVERLAP * res;
       let front = [];
       for (let i = 0; i < w * h; i++) {
-        if (cl[i] && size[cl[i]] < minPx) { cl[i] = 0; mask.data[i] = 0; }
+        if (cl[i] && speck(cl[i])) { cl[i] = 0; mask.data[i] = 0; }
         else if (cl[i]) { src[i] = i; front.push(i); }
       }
       const near = (j) => { const x = j % w; return [x > 0 ? j - 1 : -1, x < w - 1 ? j + 1 : -1, j - w, j + w].filter((q) => q >= 0 && q < w * h); };
@@ -487,6 +494,11 @@ function build(img, analysis, opts) {
     for (const comp of comps) {
       const mine = comp.pixels.filter((i) => labels[i] === col.id);
       if (mine.length < minPx) continue;
+      if (mine.length < dotPx) {   // (a dot, as above: the last colour's specks weren't dropped)
+        let x0 = w, x1 = -1, y0 = h, y1 = -1;
+        for (const i of mine) { const x = i % w, y = (i - x) / w; x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y); }
+        if (x1 - x0 < dotW && y1 - y0 < dotW) continue;
+      }
       let maxDt = 0, sx = 0, sy = 0;
       for (const i of mine) { maxDt = Math.max(maxDt, own[i]); sx += i % w; sy += Math.floor(i / w); }
       const widthMm = (2 * maxDt) / res, centre = [sx / mine.length, sy / mine.length];
@@ -534,9 +546,11 @@ function build(img, analysis, opts) {
       }
       return false;
     };
-    // inside a fill, a move of more than 1 mm between sections would lie on top of finished stitches: jump it (trimmed)
+    // inside a fill, a move of more than 2 mm between sections would lie on top of finished stitches: jump it
+    // (trimmed). Up to 2 mm it's sewn straight across: a jump that short is never trimmed by the machine, so it was
+    // a loose thread plus two locks (1 mm until 2026-10-30)
     for (const b of ordered) for (const p of b.paths) if (p.length) {
-      const far = !!d.cur && b.kind === "fill" && Math.hypot(p[0][0] - d.cur[0], p[0][1] - d.cur[1]) > 1.0;
+      const far = !!d.cur && b.kind === "fill" && Math.hypot(p[0][0] - d.cur[0], p[0][1] - d.cur[1]) > 2.0;
       d.path(p, true, !!d.cur && (far || crosses(d.cur, p[0])));
     }
     summary.push({ ...col, shapes: ordered.length, kinds: [...new Set(ordered.map((b) => b.kind))] });

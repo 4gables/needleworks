@@ -11,7 +11,7 @@ import { QUILTS } from "./quilt.js";
 import { MOTIFS } from "./motifs.js";
 import { BORDERS, FABRICS, THREADS, SHAPES, TEXT_SHAPES, splitPieces, archRoom, archTight, touching, towelMin, fineLine, compose, fileBlocks, fittedSizes, followFrame, label, minSize, pieceBounds, previewLook, smallText } from "./pieces.js";
 
-const SCRIPT = "NW Great Vibes", PRINT = "NW Josefin Sans";
+const SCRIPT = "NW Great Vibes", PRINT = "NW Josefin Sans", ROUND = "NW Quicksand";
 // exact Brother PEC thread colours, so the name on screen is the one the machine shows
 const RED = "#ed171f", NAVY = "#0e1f7c", BLACK = "#000000";
 const PINK = "#f993bc";
@@ -45,9 +45,11 @@ export const STARTERS = [
   { id: "framed", name: "Name in a frame", note: "a name inside a border", make: () => [frame({ shape: "oval", w: 110, h: 64, border: "satin" }), text({ size: 22 })] },
   { id: "quilt", name: "Quilt label", note: "who it's for, who made it", make: () => [
     frame({ shape: "square", w: 110, h: 70, border: "line", color: BLACK }),
-    text({ text: "Made for", font: PRINT, size: 8, y: -20, color: BLACK }),
+    // (Quicksand at 9 mm: Josefin's single-storey a sewed as an o at label sizes, its stem merged with the bowl, and
+    // 8 mm warned "too small" out of the box)
+    text({ text: "Made for", font: ROUND, size: 9, y: -20, color: BLACK }),
     text({ text: "Emma", size: 20, y: -3, color: RED }),
-    text({ text: "by Ashley in 2026", font: PRINT, size: 8, y: 17, color: BLACK })],
+    text({ text: "by Ashley in 2026", font: ROUND, size: 9, y: 17, color: BLACK })],
     tip: "Stitch it on cotton backed with tear-away stabilizer, then turn the edges under and hand-sew it to the back of the quilt." },
   { id: "bib", name: "Baby bib", note: "a name over a little heart", make: () => [
     frame({ shape: "heart", w: 46, h: 42, border: "applique", y: 14, color: PINK }),
@@ -171,7 +173,7 @@ export function initStudio(api) {
   const swatches = (p, k = "color") => COLORS.map((c) => `<button type="button" data-${k}="${c}" style="background:${c}" aria-pressed="${c === p[k]}" title="Brother ${nearestBrotherThread(c).name}"></button>`).join("")
     + `<span class="custom"><input type="color" data-${k}-any value="${p[k]}" aria-label="Any colour"></span>`;
   const fontSelect = (p) => `<select data-k="font">${FONTS.map((f) => `<option value="${f.family}" ${f.family === p.font ? "selected" : ""}>${f.name}${f.print ? " (print)" : ""}</option>`).join("")}</select>`;
-  const range = (k, lab, min, max, v, unit = "mm", step = 1) => `<label class="range"><span>${lab}</span><input type="range" data-k="${k}" data-unit="${unit}" min="${min}" max="${max}" step="${step}" value="${v}"><output>${v} ${unit}</output></label>`;
+  const range = (k, lab, min, max, v, unit = "mm", step = 1) => `<label class="range"><span>${lab}</span><input type="range" data-k="${k}" data-unit="${unit}" min="${min}" max="${max}" step="${step}" value="${v}"><output>${shown(v, unit)}</output></label>`;
   // one letter pair closer or further apart (print fonts): `kern` = { index of the pair's first letter in the words: % of
   // the height }, on top of the font's own kerning
   let pairAt = -1, pairOf = null;
@@ -208,6 +210,8 @@ export function initStudio(api) {
       return width(`40px "${family}", monospace`, ch) === width("40px monospace", ch) && width(`40px "${family}", serif`, ch) === width("40px serif", ch);
     });
   }
+  // mm with inches beside them (US sewists think in inches)
+  const shown = (v, unit) => (unit === "mm" ? `${v} mm · ${(v / 25.4).toFixed(2)} in` : `${v} ${unit}`);
   const seg = (k, opts, v) => `<div class="seg" data-seg="${k}">${Object.entries(opts).map(([key, name]) => `<button type="button" data-v="${key}" aria-pressed="${key === v}">${name}</button>`).join("")}</div>`;
 
   // satin and fine line, said plainly: bold columns or a thin outline of the letter
@@ -217,6 +221,7 @@ export function initStudio(api) {
   const editor = () => api.keepFocus($("st-edit"), drawEditor);
   function drawEditor() {
     const p = current();
+    $("st-center").hidden = !p;
     if (!p) { $("st-edit").innerHTML = `<p class="hint">Pick a piece above, or add one.</p>`; return; }
     let h = "";
     if (p.kind === "text") {
@@ -224,6 +229,7 @@ export function initStudio(api) {
       h += `<label class="field"><span>Words</span><textarea data-k="text" rows="${Math.min(3, lines)}" maxlength="60" style="font-family:'${p.font}', sans-serif" autocomplete="off" spellcheck="false">${api.escapeHtml(p.text)}</textarea></label>`;
       h += `<label class="field"><span>Font</span>${fontSelect(p)}</label>`;
       h += range("size", "Height", 5, 60, p.size);
+      h += `<p class="hint">About 10 mm for a pocket or cuff, 20-30 mm for a pillow or blanket corner, 30-50 mm for a towel.</p>`;
       h += seg("shape", TEXT_SHAPES, p.shape);
       h += seg("style", STITCHES, p.style || "auto");
       if (arc) {
@@ -280,7 +286,7 @@ export function initStudio(api) {
       h += `<p class="hint">${api.escapeHtml(p.name)}: its stitches are used exactly as they are, so it can be moved and turned but not resized.</p>`;
     }
     if (p.kind === "text" || p.kind === "monogram") h += `<p class="hint" data-fit hidden></p>`;
-    if (p.kind !== "frame") h += `<p class="hint warn" data-warn hidden></p>`;
+    if (p.kind !== "frame") h += `<p class="hint warn" data-warn aria-live="polite" hidden></p>`;
     h += range("rot", "Turn", -180, 180, p.rot || 0, "°", 5);
     if (p.kind !== "file") h += `<div class="field"><span>Thread</span><div class="swatches">${swatches(p)}</div><p class="hint">Brother ${nearestBrotherThread(p.color).name}${api.spool(p.color) ? ` · ${api.escapeHtml(api.spool(p.color))}` : ""}</p></div>`;
     $("st-edit").innerHTML = h;
@@ -308,7 +314,7 @@ export function initStudio(api) {
     // (said plainly, with a one-tap fix where there is one)
     w.innerHTML = [
       gone.length ? `This font has no ${gone.map((c) => `“${api.escapeHtml(c)}”`).join(" ")}: ${gone.length === 1 ? "it" : "they"} would be stitched in a stand-in letter. Take ${gone.length === 1 ? "it" : "them"} out or try another font.` : "",
-      m ? `These letters are too small to stitch cleanly. Make the height ${m} mm or more.` : "",
+      m ? `These letters are too small to stitch cleanly. <button type="button" class="link" data-size="${m}">Make it ${m} mm</button>` : "",
       towel ? `On a towel these letters close up (the loops need a wide satin). Make the height ${towel} mm or more. <button type="button" class="link" data-size="${towel}">Make it ${towel} mm</button>` : "",
       room ? `The words wrap most of the way round the curve${room.full ? " and run into themselves" : ""}. <button type="button" class="link" data-room>Widen the curve</button>` : "",
       archTight(p) ? "The curve is too tight for letters this tall: they'd bunch up. Make the curve bigger or the letters smaller." : "",
@@ -402,7 +408,7 @@ export function initStudio(api) {
       <b><span class="n">${i + 1}</span><i style="background:${st.color}"></i>Brother ${nearestBrotherThread(st.color).name}${api.spool(st.color) ? ` <small>${api.escapeHtml(api.spool(st.color))}</small>` : ""}</b>
       ${st.you ? `<span class="you">${api.escapeHtml(st.you)}</span>` : ""}<span>${api.escapeHtml(st.sews.join(" "))}</span>
       ${st.early ? `<small>Sewn early, with the other ${api.escapeHtml(nearestBrotherThread(st.color).name)} parts, to save a thread change.</small>` : ""}</button></li>`).join("")
-      + (small ? `<li class="after"><b>Thread and needle</b><span>${SMALL_TIP}</span></li>` : "")
+      + (small ? `<li class="after"><b>Thread and needle</b><span>${SMALL_TIP}</span></li>` : thread !== "auto" ? `<li class="after"><b>Thread and needle</b><span>${api.escapeHtml(THREADS[thread].tip)}</span></li>` : "")
       + (after.length ? `<li class="after"><b>When it's done</b><span>${api.escapeHtml(after.join(" "))}</span></li>` : "");
   }
   $("st-steps").onclick = (e) => { const b = e.target.closest("[data-step]"); if (b) api.showStep(api.step() === +b.dataset.step ? null : +b.dataset.step); };
@@ -413,20 +419,23 @@ export function initStudio(api) {
   $("st-steps-all").onclick = () => api.showStep(null);
   // closing the steps shows the whole design again
   $("st-steps").closest("details").addEventListener("toggle", (e) => { if (!e.target.open) api.showStep(null); });
-  const firstWords = () => (pieces.find((p) => p.kind === "text" || p.kind === "letters")?.text || pieces.find((p) => p.kind === "monogram")?.letters || "design");
+  // the file's name: the biggest lettering (the name, not the quilt label's "Made for")
+  const firstWords = () => (pieces.filter((p) => p.kind === "text" || p.kind === "letters").reduce((a, p) => (!a || p.size > a.size ? p : a), null)?.text || pieces.find((p) => p.kind === "monogram")?.letters || "design");
 
   // ---------- events ----------
   $("st-cards").onclick = (e) => {
     const b = e.target.closest("[data-start]"); if (!b) return;
     const s = STARTERS.find((x) => x.id === b.dataset.start);
-    if (s.mode) { api.setMode(s.mode); return; }
+    const phone = matchMedia("(max-width: 600px)").matches;
+    if (s.mode) { api.setMode(s.mode); if (phone) $("view").scrollIntoView({ block: "center", behavior: "smooth" }); return; }
+    api.fit();   // (a new design opens whole, not at the last one's zoom)
     remember(); pieces = s.make(); sel = pieces[pieces.length - 1].id;
     fabric = s.fabric || "cotton";   // (a towel left on made every later starter towel-heavy, +40-75 % stitches)
     baste = !!s.baste;
     $("st-tip").hidden = !s.tip; $("st-tip").textContent = s.tip || "";
     save(); ui(); make();
     // phones: the preview is above the cards, so the change happened off-screen
-    if (matchMedia("(max-width: 600px)").matches) $("view").scrollIntoView({ block: "center", behavior: "smooth" });
+    if (phone) $("view").scrollIntoView({ block: "center", behavior: "smooth" });
   };
   $("st-add").onclick = (e) => {
     const b = e.target.closest("[data-add]"); if (!b) return;
@@ -470,7 +479,7 @@ export function initStudio(api) {
     if (k === "text" && t.tagName === "TEXTAREA" && t.value.split("\n").length > 3) {
       const at = t.selectionStart; t.value = t.value.split("\n").slice(0, 3).join("\n"); t.setSelectionRange(Math.min(at, t.value.length), Math.min(at, t.value.length));
     }
-    if (t.type === "range") t.nextElementSibling.textContent = `${t.value} ${t.dataset.unit}`;
+    if (t.type === "range") t.nextElementSibling.textContent = shown(t.value, t.dataset.unit);
     change((p) => {
       if (k === "text") { if (p.kern) p.kern = rekern(p.kern, p.text, t.value); pairAt = +Object.keys(rekern({ [pairAt]: 1 }, p.text, t.value) || { [-1]: 1 })[0]; }
       p[k] = t.type === "range" ? +t.value : t.value;

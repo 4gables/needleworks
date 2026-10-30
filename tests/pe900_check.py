@@ -230,17 +230,38 @@ def check(path):
         errs.append(f"{tiny} stitches under {TINY} mm ({100 * tiny / len(pts):.1f}%)")
 
     # 5. needle pile-up: penetrations per 1 mm cell, per colour block
-    blk, cells = 0, Counter()
+    #    The machine's grid can sit at any 0.1 mm offset from ours, so every offset is checked (offset 0 alone passed
+    #    towel files that reach 27 a few tenths over; found 2026-10-30): a window at any offset lies in a 2 x 2 group
+    #    of offset-0 cells (its corner cell may itself be empty), so only groups holding more than the limit are scanned.
+    blk, cells, pts_in = 0, Counter(), {}
     for x, y, c in sts:
         # (pyembroidery reads a pause between two blocks of the same thread as a STOP: still a new fabric step)
         if c in (pe.COLOR_CHANGE, pe.STOP):
             blk += 1
         elif c == pe.STITCH:
-            cells[(blk, math.floor(x), math.floor(y))] += 1
-    info["max_per_mm2"] = max(cells.values())
-    if info["max_per_mm2"] > MAX_PER_MM2:
-        hot = [k for k, v in cells.items() if v > MAX_PER_MM2]
-        errs.append(f"{len(hot)} spots with more than {MAX_PER_MM2} needle hits per mm² (max {info['max_per_mm2']})")
+            X, Y = round(x * 10), round(y * 10)
+            k = (blk, X // 10, Y // 10)
+            cells[k] += 1
+            pts_in.setdefault(k, []).append((X, Y))
+    worst, hot = max(cells.values()), set()
+    # (a window's corner cell can be empty while the three cells it reaches into are full: every occupied cell's
+    # left/upper neighbours are corners too)
+    corners = {(b, cx - i, cy - j) for (b, cx, cy) in cells for i in (0, 1) for j in (0, 1)}
+    for (b, cx, cy) in corners:
+        group = [(b, cx + i, cy + j) for i in (0, 1) for j in (0, 1)]
+        if sum(cells.get(g, 0) for g in group) <= MAX_PER_MM2:
+            continue
+        pts = [q for g in group for q in pts_in.get(g, [])]
+        for ox in range(10):
+            for oy in range(10):
+                x0, y0 = cx * 10 + ox, cy * 10 + oy
+                m = sum(1 for X, Y in pts if x0 <= X < x0 + 10 and y0 <= Y < y0 + 10)
+                worst = max(worst, m)
+                if m > MAX_PER_MM2:
+                    hot.add((b, cx, cy))
+    info["max_per_mm2"] = worst
+    if worst > MAX_PER_MM2:
+        errs.append(f"{len(hot)} spots with more than {MAX_PER_MM2} needle hits per mm² at some grid offset (max {worst})")
 
     # 6. satin coverage: in a zigzag across a column, the gap between hits on the same edge. Sold designs measure
     #    0.30-0.42 mm; ours were 0.8 until 2026-10-29 (fabric showed through). Only judged with enough columns.

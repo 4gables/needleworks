@@ -312,6 +312,19 @@ Embroidery-file tools for home machines. Two implementations of the same engine:
   changed); monograms inside a frame shrink to fit it both ways (`fittedSizes`, 0.92 of the frame less half the gap,
   so the starters' monograms are unchanged; a script R on the key fob overran it); "+ Design file" goes above the
   pieces (below if only that fits), sews first after frames, and the layout is recentred. Not done: picture specks/trims.
+  Round 3 (stitches changed; VM: FITS 17/17, PE-DESIGN opened bookmark, towel, turned picture, monogram):
+  `relieve()` also tries windows whose corner cell is empty (towel names reached 27 hits/mm² at some offsets) and never
+  merges A,B,A' into a same-hole stitch; `dedupe`/`relieve` round half-to-even like the writer; `pe900_check.py`
+  checks density at every 0.1 mm offset (its own scan had the same empty-corner gap). Turned designs (pictures and
+  the Design tab) are thinned after the turn (`turnForMachine`). Lettering satin width is continuous:
+  min(3.5, 0.2 xh, max(stroke, 0.12 xh)) (two rules met at a 0.95 mm stroke: Allura 2.0 mm at 24 mm, 1.2 at 28;
+  script monograms that fell back to a fine line are satin now). Lock side hits go toward the stitches they lock
+  (`inward`; they poked 0.5 mm out of script strokes). Fine-line dots (full stops, i dots) are kept: a lone stroke
+  under 0.9 mm sews as 0.7 mm out and back (it comes twice from the walk: sewn once). Pictures drop compact specks
+  (under 4 mm² and 2.5 mm across; 4 mm² for everything erased a bouquet's stems) and sew moves inside a fill up to
+  2 mm straight (trims -5%, loose threads -12% on the batch). Quilt label starter uses Quicksand 9 mm (Josefin's
+  single-storey a merges its stem into the bowl and reads as o; still true for Josefin and small Quicksand: open).
+  Tried and reverted: split satin 7-14 mm in the doctor's re-stitch (tapered ends piled 39-49 hits/mm²).
 - The preview is the file: `setView` decodes `v.bytes` with `readEmbroidery` and draws/counts/fit-checks that, and
   thread labels come from the file's own PEC palette.
 

@@ -13,7 +13,7 @@ import { DENSITY, analyze, digitize, workingSize } from "../../js/core/digitize.
 
 const hoop = getHoop(), log = (s) => (document.getElementById("log").textContent += s + "\n");
 import { FONTS } from "../../js/core/fonts.js";
-import { turnPattern } from "../../js/core/design.js";
+import { turnForMachine } from "../../js/core/design.js";
 const names = ["Mia", "Katherine", "Zoë"];   // short, long with a capital, accented
 let n = 0, bad = 0;
 async function save(name, pattern) {
@@ -42,7 +42,7 @@ for (const src of pics) {
     ctx.imageSmoothingQuality = "high"; ctx.drawImage(bmp, 0, 0, sz.w, sz.h);
     const img = ctx.getImageData(0, 0, sz.w, sz.h), opts = { colors, removeBackground: true, fillAngle: 45, density: DENSITY[fill], skip: [], hoop: field };
     const tag = `pic_${src.split("/").pop().split(".")[0]}_c${colors}_s${size}_${fill}${turn ? "_turned" : ""}`;
-    try { const p = digitize(img, analyze(img, opts), opts).design.pattern(); await save(tag, turn ? turnPattern(p) : p); }
+    try { const p = digitize(img, analyze(img, opts), opts).design.pattern(); await save(tag, turn ? turnForMachine(p) : p); }
     catch (e) { bad++; log(`ERROR ${tag}: ${e.message}`); }
   }
   // the other picture styles: line drawing (redwork) and cross-stitch

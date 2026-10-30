@@ -1,6 +1,15 @@
 // Build a stitch pattern block by block (mm in, 0.1 mm out).
 import { COLOR_CHANGE, END, JUMP, STITCH, TRIM, writePES } from "./formats.js";
 import { MARGIN } from "./machines.js";
+import { pyRound } from "./threads.js";
+
+// Which side of the line from p along d the points mostly lie on: 1 for the left (-d.y, d.x), -1 for the right
+// (left when they're on the line: the side every lock used before).
+function inward(p, d, pts) {
+  let s = 0;
+  for (const q of pts) s += d[0] * (q[1] - p[1]) - d[1] * (q[0] - p[0]);
+  return s < 0 ? -1 : 1;
+}
 
 export class Design {
   constructor(hoop) { this.hoop = hoop; this.stitches = []; this.threads = []; this.cur = null; this.started = false; }
@@ -28,13 +37,14 @@ export class Design {
         let d = ahead ? [ahead[0] - pts[0][0], ahead[1] - pts[0][1]] : [1, 0];
         // 0.7 mm tie-in, mid-range of sold designs (0.5-0.8); shorter ones can pull out before the bobbin thread catches
         const L = Math.max(Math.hypot(...d), 1e-9); d = [(d[0] / L) * 0.7, (d[1] / L) * 0.7];
-        // one hit 0.35 mm to the side, so the needle doesn't go through the same hole three times
-        const p = pts[0], q = [p[0] + d[0], p[1] + d[1]], e = [p[0] - d[1] / 2, p[1] + d[0] / 2];
+        // one hit 0.35 mm to the side, so the needle doesn't go through the same hole three times: on the side the
+        // stitches go (it poked 0.5 mm out of script strokes on the other side)
+        const p = pts[0], q = [p[0] + d[0], p[1] + d[1]], k = inward(p, d, pts.slice(1, 7)), e = [p[0] - (k * d[1]) / 2, p[1] + (k * d[0]) / 2];
         for (const r of [p, q, e, q, p]) this.st(STITCH, r);
       }
     } else if (Math.hypot(pts[0][0] - this.cur[0], pts[0][1] - this.cur[1]) >= 0.3) this.st(STITCH, pts[0]);   // (a run that starts where the needle is needs no extra stitch)
     for (let i = 1; i < pts.length; i++) this.st(STITCH, pts[i]);
-    this.cur = pts[pts.length - 1]; this.started = true;
+    this.cur = pts[pts.length - 1]; this.started = true; this.recent = pts.slice(-7, -1);
     // where a tie-off can step back to: along the line just sewn, so it hides in those stitches
     this.back = pts.slice().reverse().find((q) => Math.hypot(q[0] - this.cur[0], q[1] - this.cur[1]) > 0.3) || null;
   }
@@ -46,7 +56,8 @@ export class Design {
     const c = this.cur;
     let d = this.back ? [this.back[0] - c[0], this.back[1] - c[1]] : [1, 0];
     const L = Math.max(Math.hypot(...d), 1e-9); d = [(d[0] / L) * 0.7, (d[1] / L) * 0.7];
-    const q = [c[0] + d[0], c[1] + d[1]], e = [q[0] - d[1] / 2, q[1] + d[0] / 2];   // (the second hit 0.35 mm aside)
+    // (the second hit 0.35 mm aside, toward the stitches just sewn so it hides in them)
+    const k = inward(c, d, this.recent || []), q = [c[0] + d[0], c[1] + d[1]], e = [q[0] - (k * d[1]) / 2, q[1] + (k * d[0]) / 2];
     for (const r of [q, c, e, c]) this.st(STITCH, r);
     this.cur = null;
   }
@@ -84,8 +95,15 @@ export class Design {
 // A stitch onto the point the needle is already in (as the file rounds it, 0.1 mm) is a second hit in the same hole
 // and nothing else: line drawings had a quarter of their stitches doubled, lettering 12-47 at satin/run junctions.
 // (A stitch after a jump is the jump's anchor and stays.)
+// (rounded as the writer rounds: half to even)
 export function dedupe(st) {
-  return st.filter(([x, y, c], i) => !(c === STITCH && i && st[i - 1][2] === STITCH && Math.round(x) === Math.round(st[i - 1][0]) && Math.round(y) === Math.round(st[i - 1][1])));
+  const out = [];
+  for (const s of st) {
+    const q = out[out.length - 1];
+    if (s[2] === STITCH && q && q[2] === STITCH && pyRound(s[0]) === pyRound(q[0]) && pyRound(s[1]) === pyRound(q[1])) continue;
+    out.push(s);
+  }
+  return out;
 }
 
 // No 1 x 1 mm square may take more than `limit` needle hits within one colour block (nest / broken needle risk;
@@ -95,7 +113,7 @@ export function dedupe(st) {
 export function relieve(st, limit = 24) {
   const n = st.length, keep = new Uint8Array(n).fill(1), blk = new Int32Array(n);
   for (let i = 0, b = 0; i < n; i++) { if (st[i][2] === COLOR_CHANGE) b++; blk[i] = b; }
-  const X = (i) => Math.round(st[i][0]), Y = (i) => Math.round(st[i][1]);
+  const X = (i) => pyRound(st[i][0]), Y = (i) => pyRound(st[i][1]);
   const removable = (i) => { for (let j = i - 5; j <= i + 5; j++) if (j < 0 || j >= n || st[j][2] !== STITCH) return false; return true; };
   const near = (i, d) => { let j = i + d; while (j >= 0 && j < n && !keep[j]) j += d; return j; };
   const cells = new Map(), key = (b, cx, cy) => `${b},${cx},${cy}`;
@@ -103,10 +121,14 @@ export function relieve(st, limit = 24) {
     const k = key(blk[i], Math.floor(X(i) / 10), Math.floor(Y(i) / 10));
     if (!cells.has(k)) cells.set(k, []); cells.get(k).push(i);
   }
-  for (const [k, own] of cells) {
+  // every 1 mm window whose corner lies in a cell is inside that cell and its right/lower neighbours; the corner
+  // cell itself can be empty (missed until 2026-10-30: towel names reached 27), so occupied cells' left/upper
+  // neighbours are corners too
+  const corners = new Set();
+  for (const k of cells.keys()) { const [b, cx, cy] = k.split(",").map(Number); for (const i of [0, 1]) for (const j of [0, 1]) corners.add(key(b, cx - i, cy - j)); }
+  for (const k of corners) {
     const [b, cx, cy] = k.split(",").map(Number);
-    // every 1 mm window whose corner lies in this cell is inside this cell and its right/lower neighbours
-    const pts = [own, cells.get(key(b, cx + 1, cy)), cells.get(key(b, cx, cy + 1)), cells.get(key(b, cx + 1, cy + 1))].flatMap((c) => c || []);
+    const pts = [cells.get(k), cells.get(key(b, cx + 1, cy)), cells.get(key(b, cx, cy + 1)), cells.get(key(b, cx + 1, cy + 1))].flatMap((c) => c || []);
     if (pts.length <= limit) continue;
     for (let ox = 0; ox < 10; ox++) for (let oy = 0; oy < 10; oy++) {
       const x0 = cx * 10 + ox, y0 = cy * 10 + oy;
@@ -120,6 +142,7 @@ export function relieve(st, limit = 24) {
           const a = near(i, -1), c = near(i, 1);
           if (a < 0 || c >= n || st[a][2] !== STITCH || st[c][2] !== STITCH) continue;
           const d = Math.hypot(X(c) - X(a), Y(c) - Y(a));
+          if (d === 0) continue;   // (A, B, A: dropping B would put the needle into A's hole again)
           if (d < bestD) { bestD = d; best = i; }
         }
         if (best < 0) break;
@@ -128,6 +151,13 @@ export function relieve(st, limit = 24) {
     }
   }
   return st.filter((_, i) => keep[i]);
+}
+
+// A design laid out in the turned hoop, turned clockwise into the machine's: thinned again after the turn, since a
+// quarter turn moves the 1 mm windows' edges (a turned picture thinned before it reached 26 hits/mm²)
+export function turnForMachine(p) {
+  const t = turnPattern(p);
+  return { ...t, stitches: relieve(t.stitches) };
 }
 
 // A quarter turn of a pattern (y down): clockwise turns a sideways design into the machine's hoop, and back.
