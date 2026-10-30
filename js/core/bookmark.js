@@ -59,7 +59,7 @@ function textPaths(name, family, boxLen, boxH, lead, tail, print) {
     : { leadIn: lead ? 1.8 : 0, tail: tail ? 2.6 : 0 };
   const { edges, info } = letterStrokes(name, family, deco);
   const comps = order(edges);
-  const all = edges.flatMap((e) => e[2]);
+  const all = info.sized;
   const mn = [Math.min(...all.map((p) => p[0])), Math.min(...all.map((p) => p[1]))];
   const mx = [Math.max(...all.map((p) => p[0])), Math.max(...all.map((p) => p[1]))];
   // lengthwise: centre the whole word. Across: centre the bulk of the letters (the x-height band), so loops
@@ -92,10 +92,11 @@ export function buildBookmark({ name, family, color = RED, hoop, lead = true, ta
   d.color(color, "Step 2 - Tack down front");
   d.path(run(edge, 2.0, true)); d.path(run(edge.slice().reverse(), 2.0, true));
   if (!blank) d.color(color, "Step 3 - Name");
-  for (const comp of comps) for (const [p0, mode] of comp) {
+  // (print letters are separate pieces: the needle jumps between them, never a stitch across)
+  comps.forEach((comp, k) => comp.forEach(([p0, mode], j) => {
     const p = p0.map(([x, y]) => [x, y + shift]);
-    d.path(mode === "run" ? run(p, 1.2) : satin(p, TEXT_SATIN, 0.38, 0.3));
-  }
+    d.path(mode === "run" ? run(p, 1.2) : satin(p, TEXT_SATIN, 0.38, 0.3), true, print && k > 0 && j === 0);
+  }));
   d.color(color, `Step ${blank ? 3 : 4} - Tack down back`);
   d.path(run(edge, 2.0, true));
   d.color(color, `Step ${blank ? 4 : 5} - Border + eyelet`);
