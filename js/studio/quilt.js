@@ -3,7 +3,7 @@
 import { resample, run, smooth } from "../core/geom.js";
 import { distanceTransform } from "../core/raster.js";
 
-const RES = 4;
+const RES = 4, STRAIGHT = 0.15;
 
 // free space: inside `edge` (closed polygon) by `inset` mm, at least `clear` mm from every point of `obstacles`
 function freeMask(edge, obstacles, inset, clear) {
@@ -54,12 +54,16 @@ export function stipple(edge, obstacles, { cell = 7, inset = 4, clear = 2.5 } = 
   const nb = (k) => { const i = k % gw, j = (k - i) / gw; return [i > 0 ? k - 1 : -1, i < gw - 1 ? k + 1 : -1, j > 0 ? k - gw : -1, j < gh - 1 ? k + gw : -1].filter((q) => q >= 0 && ok[q]); };
   for (let s = 0; s < gw * gh; s++) {
     if (!ok[s] || seen[s]) continue;
-    // random depth-first tree over this patch of free cells
-    const stack = [s], cells = [s]; seen[s] = 1;
+    // random depth-first tree over this patch of free cells that would rather turn than go straight on (STRAIGHT is
+    // the odds against carrying on): long straight corridors sewed as a maze, not a meander
+    const stack = [s], cells = [s], from = new Map(); seen[s] = 1;
     while (stack.length) {
       const k = stack[stack.length - 1], next = nb(k).filter((q) => !seen[q]);
       if (!next.length) { stack.pop(); continue; }
-      const q = next[Math.floor(rand() * next.length)];
+      const back = from.get(k), wt = next.map((q) => (back != null && q - k === k - back ? STRAIGHT : 1));
+      let r = rand() * wt.reduce((a, b) => a + b, 0), qi = 0;
+      while (qi < next.length - 1 && (r -= wt[qi]) > 0) qi++;
+      const q = next[qi]; from.set(q, k);
       seen[q] = 1; tree.add(Math.min(k, q) + "," + Math.max(k, q)); stack.push(q); cells.push(q);
     }
     if (cells.length < 2) continue;
@@ -76,26 +80,40 @@ export function stipple(edge, obstacles, { cell = 7, inset = 4, clear = 2.5 } = 
     const start = id(2 * (s % gw), 2 * Math.floor(s / gw)), loop = [start];
     let prev = -1, cur = start;
     for (;;) { const nx = link.get(cur).find((q) => q !== prev); if (nx === start || nx == null) break; loop.push(nx); prev = cur; cur = nx; }
-    // sub-cell centres nudged a little at random, then 1 mm points averaged over ~7 mm: the grid's straight runs and
-    // square turns become a meander (lines stay half a cell apart, so it still never crosses itself)
-    const j = c / 2 * 0.22, pts = loop.map((q) => toMm([((q % (2 * gw)) + 0.5) * (c / 2) + (rand() - 0.5) * j, (Math.floor(q / (2 * gw)) + 0.5) * (c / 2) + (rand() - 0.5) * j]));
-    out.push(run(smooth(resample(pts, 1, true), 7, true), 2.5, true));
+    // sub-cell centres nudged a little at random, then 1 mm points averaged over ~9 mm: the grid's square turns become
+    // round lobes (lines stay about half a cell apart, so it still never crosses itself)
+    const j = c / 2 * 0.35, pts = loop.map((q) => toMm([((q % (2 * gw)) + 0.5) * (c / 2) + (rand() - 0.5) * j, (Math.floor(q / (2 * gw)) + 0.5) * (c / 2) + (rand() - 0.5) * j]));
+    out.push(run(smooth(resample(pts, 1, true), 9, true), 2.5, true));
   }
   return out.map((p) => [...p, p[0]]);
 }
 
-// Echo: lines `gap` mm apart following the free space's edges (round the lettering and inside the frame), each a
-// closed loop; marching squares on the distance field
+// Echo: lines `gap` mm apart following the free space's edges (round the lettering and inside the frame); marching
+// squares on the distance field. The rings are chained into one line: each starts at its point nearest where the
+// last ended and a short stitched step joins them (rings 4 mm apart are under the machine's 5 mm trim setting, so
+// each was a loose jump and two locks on the quilt); a ring further than 1.6 gaps away starts a new line.
 export function echo(edge, obstacles, { gap = 4, inset = 4, clear = 2.5 } = {}) {
-  const { m, toMm } = freeMask(edge, obstacles, inset, clear), dt = distanceTransform(m), out = [];
+  const { m, toMm } = freeMask(edge, obstacles, inset, clear), dt = distanceTransform(m), rings = [];
   for (let d = gap / 2; ; d += gap) {
     const t = { w: m.w, h: m.h, data: new Uint8Array(m.w * m.h) };
     let any = false;
     for (let i = 0; i < t.data.length; i++) if (dt[i] > d * RES) { t.data[i] = 1; any = true; }
     if (!any) break;
-    for (const loop of contours(t)) if (loop.length > 12) out.push(run(smooth(loop.map(toMm), 2, true), 2.5, true));
+    for (const loop of contours(t)) if (loop.length > 12) rings.push(run(smooth(loop.map(toMm), 2, true), 2.5, true));
   }
-  return out.map((p) => [...p, p[0]]);
+  const out = [];
+  let cur = null;
+  while (rings.length) {
+    let bi = 0, bk = 0, bd = Infinity;
+    if (cur) {
+      const e = cur[cur.length - 1];
+      rings.forEach((r, i) => r.forEach((q, k) => { const d = Math.hypot(q[0] - e[0], q[1] - e[1]); if (d < bd) { bd = d; bi = i; bk = k; } }));
+    }
+    const r = rings.splice(bi, 1)[0], ring = [...r.slice(bk), ...r.slice(0, bk), r[bk]];
+    if (cur && bd <= gap * 1.6) cur.push(...run([cur[cur.length - 1], ring[0]], 2.5).slice(1, -1), ...ring);
+    else out.push((cur = ring));
+  }
+  return out;
 }
 
 // outlines of a 0/1 mask (pixel corners), linked into closed loops

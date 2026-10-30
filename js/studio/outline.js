@@ -1,6 +1,6 @@
 // Letter outlines for appliqué: render the word, trace every edge (outsides and the holes in A, B, O...) with
-// marching squares, then round the corners (~1 mm) so a satin can turn them cleanly. mm, y down.
-import { resample, smooth } from "../core/geom.js";
+// marching squares, then round the corners (1.6 mm) so a satin can turn them cleanly. mm, y down.
+import { filletPolygon, resample, smooth } from "../core/geom.js";
 
 const PX = 300;
 const traced = new Map();
@@ -50,6 +50,29 @@ function traceDrawn(w, h, draw) {
   return loops;
 }
 
+// Corners rounded to `r` mm: the traced outline simplified to its straight runs and corners (Douglas-Peucker, 0.1 mm),
+// each corner filleted (a short run between two corners takes what it can), then resampled. A satin's inside edge
+// fanned out at sharp corners (an M's notches, a V's point): 1.5 mm past the edge with only ~1 mm smoothing.
+function rounded(l, r) {
+  const v = simplify(l, 0.1);
+  return v.length < 4 ? l : resample(filletPolygon(v, r, 6), 0.3, true);
+}
+// closed loop: split at the point farthest from the first, then Douglas-Peucker each half
+function simplify(loop, tol) {
+  const l = [...loop, loop[0]], keep = new Uint8Array(l.length);
+  let far = 1, fd = -1;
+  for (let i = 1; i < loop.length; i++) { const d = Math.hypot(l[i][0] - l[0][0], l[i][1] - l[0][1]); if (d > fd) { fd = d; far = i; } }
+  keep[0] = keep[far] = keep[l.length - 1] = 1;
+  const st = [[0, far], [far, l.length - 1]];
+  while (st.length) {
+    const [a, b] = st.pop(); let bi = -1, bd = tol;
+    const [ax, ay] = l[a], [bx, by] = l[b], L = Math.hypot(bx - ax, by - ay) || 1e-9;
+    for (let i = a + 1; i < b; i++) { const d = Math.abs((bx - ax) * (ay - l[i][1]) - (ax - l[i][0]) * (by - ay)) / L; if (d > bd) { bd = d; bi = i; } }
+    if (bi >= 0) { keep[bi] = 1; st.push([a, bi], [bi, b]); }
+  }
+  return l.filter((_, i) => keep[i]).slice(0, -1);   // (closed: the last point is the first again)
+}
+
 // a motif (an SVG path in a 256 box, js/studio/motifs.js) as outlines, `size` mm across its longer side, centred
 const motifs = new Map();
 export function motifOutlines(d, size) {
@@ -60,7 +83,7 @@ export function motifOutlines(d, size) {
   const loops = motifs.get(d), all = loops.flat();
   const x0 = Math.min(...all.map((p) => p[0])), x1 = Math.max(...all.map((p) => p[0])), y0 = Math.min(...all.map((p) => p[1])), y1 = Math.max(...all.map((p) => p[1]));
   const s = size / Math.max(x1 - x0, y1 - y0, 1), cx = (x0 + x1) / 2, cy = (y0 + y1) / 2;
-  return loops.map((l) => smooth(resample(l.map(([x, y]) => [(x - cx) * s, (y - cy) * s]), 0.3, true), 5, true)).filter((l) => l.length > 6);
+  return loops.map((l) => rounded(smooth(resample(l.map(([x, y]) => [(x - cx) * s, (y - cy) * s]), 0.3, true), 5, true), 1.6)).filter((l) => l.length > 6);
 }
 
 // outlines of `text` at `size` mm tall (the ink), centred on (0, 0)
@@ -73,7 +96,8 @@ export function letterOutlines(text, family, size) {
   if (!traced.has(k) && document.fonts.check(`40px "${family}"`)) { traced.set(k, t); if (traced.size > 30) traced.delete(traced.keys().next().value); }
   const { loops, inkH, w, h } = t, s = size / Math.max(inkH, 1);
   return loops
-    // corners rounded ~1 mm: a 2.8 mm satin around a square inside corner folds on itself and piles up needle hits
-    .map((l) => smooth(resample(l.map(([x, y]) => [(x - w / 2) * s, (y - h / 2) * s]), 0.3, true), 7, true))
+    // corners rounded 1.6 mm (half the 2.8 mm satin and a little): tighter, a satin round an inside corner folds on
+    // itself and piles up needle hits
+    .map((l) => rounded(smooth(resample(l.map(([x, y]) => [(x - w / 2) * s, (y - h / 2) * s]), 0.3, true), 7, true), 1.6))
     .filter((l) => l.length > 6);
 }

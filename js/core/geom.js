@@ -132,7 +132,8 @@ export function satin(p, width, density = 0.4, pullComp = 0.2, closed = false) {
       const thisSide = sgn > 0 ? A : B, other = sgn > 0 ? B : A, k = idx[j - 1];
       const gThis = Math.hypot(thisSide[i][0] - thisSide[k][0], thisSide[i][1] - thisSide[k][1]);
       const gOther = Math.hypot(other[i][0] - other[k][0], other[i][1] - other[k][1]);
-      if (gThis < station * 0.45 && gOther > gThis * 1.8 && (j % 4 === 2 || j % 4 === 3)) r = half * 0.55;
+      // (inner edge hit at under half the outer's rate: a 1.5 mm satin round a 3 mm radius hit it every 0.21 mm)
+      if (gThis < gOther * 0.5 && (j % 4 === 2 || j % 4 === 3)) r = half * 0.6;
     }
     out.push([c[i][0] + n[i][0] * r * sgn, c[i][1] + n[i][1] * r * sgn]);
   });

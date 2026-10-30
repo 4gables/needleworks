@@ -6,7 +6,7 @@ import { Design } from "../core/design.js";
 import { DENSITY, fillPolygon } from "../core/digitize.js";
 import { fontOf } from "../core/fonts.js";
 import { MARGIN } from "../core/machines.js";
-import { bounds, edgeWalk, filletPolygon, followRun, run, satin, zigzag } from "../core/geom.js";
+import { bounds, edgeWalk, filletPolygon, followRun, normals, run, satin, zigzag } from "../core/geom.js";
 import { order } from "../core/raster.js";
 import { strokes } from "../core/text.js";
 import { MOTIFS } from "./motifs.js";
@@ -96,21 +96,24 @@ function densify(p, step) {
   return out;
 }
 
-// fabric (`FABRICS`): knit gets a zigzag underlay under thinner columns too (the fabric moves under a centre run)
-// and a little more pull comp; towel lettering has its knockdown underneath instead (a zigzag on top of it took the
-// towel name to 24 hits/mm²); cotton, felt and denim sew as they always have
-function stitchLetters(parts, satinW, fab = "cotton") {
-  const zz = fab === "knit" ? 1.5 : 2.5, pull = fab === "knit" ? 0.1 : 0;
+// fabric (`FABRICS`): knit gets a zigzag underlay under thinner columns too (the fabric moves under a centre run),
+// 0.3 mm more pull comp a side and a slightly open satin (0.42: piqué and jersey pull in and pucker under a dense
+// one); towel lettering has its knockdown underneath instead (a zigzag on top of it took the towel name to 24
+// hits/mm²); cotton, felt and denim sew as they always have. `small` lettering (under a 6 mm x-height, where the steps
+// suggest 60 wt thread) gets a 0.34 mm satin: the thinner thread needs it closer to cover.
+function stitchLetters(parts, satinW, fab = "cotton", small = false) {
+  const zz = fab === "knit" ? 1.5 : 2.5, pull = fab === "knit" ? 0.3 : 0, density = fab === "knit" ? 0.42 : small ? 0.34 : 0.38;
   return parts.map(([p, mode]) => {
     // thin lettering: a stroke under ~0.6 mm is a speck of the skeleton; skip it (the next stroke picks up there)
     if (!satinW && length(p) < 0.6) return [];
-    // the way out under a satin: a centre run, or a zigzag under wide columns (Ink/Stitch fonts' usual underlay)
-    // (the zigzag ends back on the centre line: ending on an edge left the satin's start 2.4 mm away, a jump and trim)
-    if (mode === "run") return satinW >= zz ? [p[0], ...zigzag(p, satinW - 0.4, 2.5), p[p.length - 1]] : satinW ? run(p, 1.2) : spaced(followRun(p, 1.6, 0.1, 0.8));
+    // the way out under a satin: a centre run, or a zigzag under wide columns (Ink/Stitch fonts' usual underlay), 0.4 mm
+    // inside each edge so it never shows past the satin (it ends back on the centre line: ending on an edge left the
+    // satin's start 2.4 mm away, a jump and trim)
+    if (mode === "run") return satinW >= zz ? [p[0], ...zigzag(p, Math.max(satinW - 0.8, satinW * 0.5), 2.5), p[p.length - 1]] : satinW ? run(p, 1.2) : spaced(followRun(p, 1.6, 0.1, 0.8));
     // pull comp 0.15 mm a side; 0.05 on thin columns (more widens them enough to close small counters). It starts
     // from the centre: two satins back to back at a junction ended and began on opposite edges, a column's width
     // apart (2.4 mm on a 24 mm name), which was a jump and a trim: 11 needless trims on "Ashley" in Yellowtail.
-    if (satinW) return [p[0], ...satin(p, satinW, 0.38, (satinW >= 1.5 ? 0.3 : 0.1) + pull)];
+    if (satinW) return [p[0], ...satin(p, satinW, density, (satinW >= 1.5 ? 0.3 : 0.1) + pull)];
     const r = spaced(followRun(p, 1.6, 0.1, 0.8)), back = r.slice().reverse();   // the walk's way back: back, forth and back again
     return r.length > 1 ? [...r, ...back.slice(1), ...r.slice(1)] : r;
   });
@@ -164,7 +167,12 @@ function heart(w, h, n = 180) {
     const t = (i / n) * Math.PI * 2;
     return [16 * Math.sin(t) ** 3, -(13 * Math.cos(t) - 5 * Math.cos(2 * t) - 2 * Math.cos(3 * t) - Math.cos(4 * t))];
   });
-  return fitBox(raw, w, h);
+  // the dip at the top is a sharp inside corner: a satin border can't turn it (the underlay poked out 1.75 mm and both
+  // sides piled up), so it's filled in with a 3 mm round, the circle that just fits the notch
+  const pts = fitBox(raw, w, h), r = Math.min(3, w * 0.06), near = pts.filter(([x, y]) => y < 0 && Math.abs(x) < r);
+  if (!near.length) return pts;
+  const yc = Math.min(...near.map(([x, y]) => y - Math.sqrt(r * r - x * x)));
+  return pts.map(([x, y]) => (y < 0 && Math.abs(x) < r ? [x, Math.min(y, yc + Math.sqrt(r * r - x * x))] : [x, y]));
 }
 // soft waves, not cusps: a satin border can't turn a sharp inside corner cleanly
 function scallop(rx, ry, n = 360) {
@@ -227,13 +235,13 @@ function textRows(p, fab = "cotton") {
   if (!lines.length) return [];
   if (p.shape === "up" || p.shape === "down") {
     const l = letters(lines.join(" "), p.font, p.size, style, sp);
-    return l.parts.length ? [{ parts: bend(l.parts, p.shape, Math.max(p.radius, 8), Math.max(p.ry ?? p.radius, 8)), satinW: l.satinW }] : [];
+    return l.parts.length ? [{ parts: bend(l.parts, p.shape, Math.max(p.radius, 8), Math.max(p.ry ?? p.radius, 8)), satinW: l.satinW, xh: l.xh }] : [];
   }
   if (p.shape === "wave" || p.shape === "bridge") {
     const l = letters(lines.join(" "), p.font, p.size, style, sp);
     if (!l.parts.length) return [];
     const mid = (l.top + l.bottom) / 2;   // (letters come with the baseline at y = 0)
-    return [{ parts: p.shape === "wave" ? wave(l.parts.map(([q, m]) => [q.map(([x, y]) => [x, y - mid]), m]), p) : bridge(l.parts, p), satinW: l.satinW }];
+    return [{ parts: p.shape === "wave" ? wave(l.parts.map(([q, m]) => [q.map(([x, y]) => [x, y - mid]), m]), p) : bridge(l.parts, p), satinW: l.satinW, xh: l.xh }];
   }
   // straight: one size for every line (scaled to the first line's x-height), baselines `leading` x size apart
   let ls = lines.map((t) => letters(t, p.font, p.size, style, sp));
@@ -245,7 +253,7 @@ function textRows(p, fab = "cotton") {
   const top = Math.min(...ls.map((l, i) => l.top + i * pitch)), bottom = Math.max(...ls.map((l, i) => l.bottom + i * pitch));
   return ls.map((l, i) => {
     const [a, b] = spans[i], dx = p.align === "left" ? -W / 2 - a : p.align === "right" ? W / 2 - b : -(a + b) / 2, dy = i * pitch - (top + bottom) / 2;
-    return { parts: l.parts.map(([q, m]) => [q.map(([x, y]) => [x + dx, y + dy]), m]), satinW: l.satinW };
+    return { parts: l.parts.map(([q, m]) => [q.map(([x, y]) => [x + dx, y + dy]), m]), satinW: l.satinW, xh: l.xh };
   });
 }
 // along y = amp·sin(waves·2πx/W), letters spaced by arc length and turned with the curve
@@ -277,20 +285,22 @@ function bridge(parts, p) {
 
 // a towel's loops swallow a fine line, so lettering there is always satin
 const styleOn = (p, fab) => (fab === "towel" && (p.style || "auto") === "auto" ? "satin" : p.style);
-// Towel lettering sits on a knockdown in its own thread: a lattice 0.3 mm wider than the satin each side (a zigzag
-// out along each stroke and one back, ≥ 3 mm apart), walked like the letters. Each connected word sews its lattice and
+// Towel lettering is at least 2.5 mm wide (terry swallows a narrower column; less on small letters, up to 0.3 of the
+// x-height) and sits on a knockdown in its own thread: a lattice 0.3 mm wider than the satin each side (a zigzag
+// out along each stroke and one back, 2 mm apart: at 3 mm it was too open to hold the loops down), walked like the letters. Each connected word sews its lattice and
 // then its letters; the walk ends where it began, so it adds no jumps. (A tatami fill of the grown word, Ink/Stitch's
 // knockdown, broke into sections on thin script: +17 trims on a name; one dense zigzag read as a sparse satin;
 // 1 mm wider stuck out of the satin like a fringe.)
-function lettersOn(laid, satinW, fab) {
-  const sewn = stitchLetters(laid, satinW, fab);
+function lettersOn(laid, satinW, fab, xh = Infinity) {
+  if (fab === "towel" && satinW) satinW = Math.max(satinW, Math.min(2.5, xh * 0.3));
+  const sewn = stitchLetters(laid, satinW, fab, xh < 6);
   if (fab !== "towel") return sewn;
   const w = satinW + 0.6, out = [];
   let from = 0;
   for (let i = 1; i <= laid.length; i++) {
     const a = laid[i - 1][0], b = laid[i]?.[0];
     if (b && Math.hypot(b[0][0] - a[a.length - 1][0], b[0][1] - a[a.length - 1][1]) < 0.5) continue;
-    for (const [p] of laid.slice(from, i)) out.push(spaced([p[0], ...zigzag(p, w, Math.max(3, w * 0.6)), p[p.length - 1]]));
+    for (const [p] of laid.slice(from, i)) out.push(spaced([p[0], ...zigzag(p, w, 2), p[p.length - 1]]));
     out.push(...sewn.slice(from, i)); from = i;
   }
   return out;
@@ -306,7 +316,7 @@ function localStages(p, fab = "cotton") {
   let stages = [];
   if (p.kind === "text") {
     const rows = textRows(p, fab);
-    let paths = rows.flatMap(({ parts, satinW }) => lettersOn(parts, satinW, fab));
+    let paths = rows.flatMap(({ parts, satinW, xh }) => lettersOn(parts, satinW, fab, xh));
     // a small filled motif either side (`deco`), sized to the letters and centred on them
     if (paths.length && MOTIFS[p.deco]) {
       const [x0, y0, x1, y1] = bounds(paths.flat()), s = Math.max(6, Math.min(p.size * 0.75, 30)), gap = s * 0.35;
@@ -337,8 +347,8 @@ function localStages(p, fab = "cotton") {
       stages = [
         { color: p.color, paths: [line(yz)], sews: "Sews the zipper line on the stabilizer.", under: true,
           // (folded in half, each front piece has to reach from the zipper past the outline: twice that, plus spare)
-          before: `Fabric: two front pieces, ${cut(p.w, 2 * (a + 15), 25)} for the top and ${cut(p.w, 2 * (b + 15), 25)} for the bottom (each folded in half along its length, wrong sides together), and the back, ${cut(p.w, p.h)}. A zipper at least ${Math.ceil((p.w + 50) / 10)} cm (${((p.w + 50) / 25.4).toFixed(0)} in) long, and tape.` },
-        { color: p.color, pause: true, paths: [line(yz - 3.5), line(yz + 3.5).reverse()], under: true,
+          before: `Fabric: two front pieces, ${cut(p.w, 2 * (a + 15), 25)} for the top and ${cut(p.w, 2 * (b + 15), 25)} for the bottom (each folded in half along its length, wrong sides together), and the back, ${cut(p.w, p.h)}. A #3 nylon coil zipper (it can be sewn and cut through) at least ${Math.ceil((p.w + 50) / 10)} cm (${((p.w + 50) / 25.4).toFixed(0)} in) long, and tape.` },
+        { color: p.color, pause: true, paths: [line(yz - 5), line(yz + 5).reverse()], under: true,   // (±3.5 left 0.5 mm beside a coil's teeth)
           you: "Lay the zipper face up with its teeth on the line and the ends past both sides (pull the zipper tab past the side too). Tape the ends down. Press Start.",
           sews: "Tacks the zipper down along both sides of the teeth." },
         { color: p.color, pause: true, fabric: true, nocut: true, paths: [loop(run(edge, 2.5, true))],
@@ -398,9 +408,24 @@ function motifStitches(loops, style) {
 
 // a satin edge round a closed outline: as wide as `max`, narrower round a small hole (a 2.8 mm satin in the top of an
 // A overlaps itself), over an edge walk and a zigzag
-function edgeSatin(l, max) {
-  const [x0, y0, x1, y1] = bounds(l), w = Math.max(1.2, Math.min(max, Math.min(x1 - x0, y1 - y0) / 3.5));
+function edgeSatin(l, max, min = 1.2) {
+  const [x0, y0, x1, y1] = bounds(l), w = Math.max(min, Math.min(max, Math.min(x1 - x0, y1 - y0) / 3.5));
   return [edgeWalk(l, w, true, Math.min(0.4, w / 4)), loop(zigzag(l, w * 0.7, 2.0, true)), loop(satin(l, w, 0.4, w > 2 ? 0.3 : 0.2, true))];
+}
+
+// every loop moved d mm away from the inside of the shape (even-odd over all the loops, so holes move into the hole)
+function outward(loops, d) {
+  const inside = ([x, y]) => {
+    let k = false;
+    for (const l of loops) for (let i = 0, j = l.length - 1; i < l.length; j = i++)
+      if ((l[i][1] > y) !== (l[j][1] > y) && x < ((l[j][0] - l[i][0]) * (y - l[i][1])) / (l[j][1] - l[i][1]) + l[i][0]) k = !k;
+    return k;
+  };
+  return loops.map((l) => {
+    const n = normals(l, true), probe = [0, 1, 2, 3, 4, 5, 6, 7].map((k) => Math.floor((l.length * k) / 8));
+    const s = probe.filter((i) => inside([l[i][0] + n[i][0] * 0.5, l[i][1] + n[i][1] * 0.5])).length > 4 ? -d : d;
+    return l.map((q, i) => [q[0] + n[i][0] * s, q[1] + n[i][1] * s]);
+  });
 }
 
 // appliqué from outlines (letters, a motif): one piece of fabric for all of it; placement, tack-down, satin, each stage
@@ -413,7 +438,9 @@ function appliqued(loops, color, what, cover, trim, them = "it") {
     { color, pause: true, paths: loops.map((l) => turn(l, 1 / 3)).flatMap(tack),
       you: `Lay the appliqué fabric over ${cover}, right side up, covering ${them} by ½ in. Press Start. Then take the hoop off (leave everything hooped), trim the fabric close to the stitching ${trim}, and put the hoop back.`,
       sews: "Tacks the appliqué fabric down.", under: true },
-    { color, pause: true, paths: loops.map((l) => turn(l, 2 / 3)).flatMap((l) => edgeSatin(l, 2.8)), you: "Press Start.", sews: "Covers the raw edges with satin." },
+    // the satin sits 0.4 mm out from the placement line, so it reaches 1.8 mm past it and covers a trim of about 1 mm
+    // (centred, it reached 1.4 and holes' narrow satins 0.7); 2 mm at least in a hole, or the cut edge shows
+    { color, pause: true, paths: outward(loops, 0.4).map((l) => turn(l, 2 / 3)).flatMap((l) => edgeSatin(l, 2.8, 2.0)), you: "Press Start.", sews: "Covers the raw edges with satin." },
   ];
 }
 
@@ -450,7 +477,7 @@ function monogram(p, fab = "cotton") {
   const out = [];
   ls.forEach((l, i) => {
     const mid = (l.top + l.bottom) / 2, cx = x + widths[i] / 2;
-    out.push(...lettersOn(l.parts.map(([q, m]) => [q.map(([a, b]) => [a + cx, b - mid]), m]), l.satinW, fab));
+    out.push(...lettersOn(l.parts.map(([q, m]) => [q.map(([a, b]) => [a + cx, b - mid]), m]), l.satinW, fab, l.xh));
     x += widths[i] + gap;
   });
   return out;

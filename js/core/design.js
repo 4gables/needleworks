@@ -28,8 +28,9 @@ export class Design {
         let d = ahead ? [ahead[0] - pts[0][0], ahead[1] - pts[0][1]] : [1, 0];
         // 0.7 mm tie-in, mid-range of sold designs (0.5-0.8); shorter ones can pull out before the bobbin thread catches
         const L = Math.max(Math.hypot(...d), 1e-9); d = [(d[0] / L) * 0.7, (d[1] / L) * 0.7];
-        const p = pts[0], q = [p[0] + d[0], p[1] + d[1]];
-        for (const r of [p, q, p, q, p]) this.st(STITCH, r);
+        // one hit 0.35 mm to the side, so the needle doesn't go through the same hole three times
+        const p = pts[0], q = [p[0] + d[0], p[1] + d[1]], e = [p[0] - d[1] / 2, p[1] + d[0] / 2];
+        for (const r of [p, q, e, q, p]) this.st(STITCH, r);
       }
     } else if (Math.hypot(pts[0][0] - this.cur[0], pts[0][1] - this.cur[1]) >= 0.3) this.st(STITCH, pts[0]);   // (a run that starts where the needle is needs no extra stitch)
     for (let i = 1; i < pts.length; i++) this.st(STITCH, pts[i]);
@@ -39,14 +40,14 @@ export class Design {
   }
 
   // Lock the thread before it's cut (trim, colour change, end): two 0.7 mm stitches back and forth along the
-  // last line. Without it a trimmed thread can work loose (PEmbroider #105; Ink/Stitch locks every trim).
+  // last line, the second beside the first. Without it a trimmed thread can work loose (PEmbroider #105; Ink/Stitch locks every trim).
   tieOff() {
     if (!this.cur) return;
     const c = this.cur;
     let d = this.back ? [this.back[0] - c[0], this.back[1] - c[1]] : [1, 0];
     const L = Math.max(Math.hypot(...d), 1e-9); d = [(d[0] / L) * 0.7, (d[1] / L) * 0.7];
-    const q = [c[0] + d[0], c[1] + d[1]];
-    for (const r of [q, c, q, c]) this.st(STITCH, r);
+    const q = [c[0] + d[0], c[1] + d[1]], e = [q[0] - d[1] / 2, q[1] + d[0] / 2];   // (the second hit 0.35 mm aside)
+    for (const r of [q, c, e, c]) this.st(STITCH, r);
     this.cur = null;
   }
 

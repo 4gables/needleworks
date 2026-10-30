@@ -17,7 +17,8 @@ Embroidery-file tools for home machines. Two implementations of the same engine:
   letter's own stroke end along its tangent, dipping into a shallow cup under the baseline and flicking up at the far
   end. Letters with no low entry end (E, O) are joined tangentially at their lowest left point. Never let it run flat
   along the baseline; that reads as a ruled line.
-- `satin()`: stations spaced by the outer edge so curves don't gap; short stitches on a crowded inner edge.
+- `satin()`: stations spaced by the outer edge so curves don't gap; short stitches (every other one at 60%) where the
+  inner edge is hit at under half the outer's rate (until 2026-10-29 only under 0.09 mm, which rarely triggered).
 - `Design.finish()` runs `relieve()`: no 1 mm square (at any 0.1 mm grid offset, since the checker's grid is the
   file's) gets more than 24 needle hits per colour block; interior points at satin junctions are dropped, tie-ins kept.
   Added when a turned 172 mm picture hit 26.
@@ -52,9 +53,11 @@ Embroidery-file tools for home machines. Two implementations of the same engine:
   the loops. Each text/monogram has Stitch: automatic / Satin / Fine line; the editor warns under a 4 mm x-height.
   Starter cards draw their own stitched thumbnails (`draw(..., { pad })`). Appliqué letters (`kind: "letters"`,
   `js/studio/outline.js`): the word is rendered in a bold OFL display font (Graduate, Lilita One, Alfa Slab One in
-  `APPLIQUE_FONTS`), every edge traced with marching squares (holes too), corners rounded ~1 mm; placement, tack-down,
-  satin per outline, each stage starting a third further round so seams don't stack; a hole too small for a 2.8 mm
-  satin gets a narrower one (min dimension / 3.5). The preview fills every placement outline with fabric (even-odd). Patches: `fillPolygon()` (digitize.js)
+  `APPLIQUE_FONTS`), every edge traced with marching squares (holes too), corners filleted 1.6 mm (Douglas-Peucker 0.1 mm, then
+  `filletPolygon`; ~1 mm smoothing left satin fans 1.5 mm past an M's notches; very acute V's still star a little);
+  placement, tack-down, satin per outline, each stage starting a third further round so seams don't stack; the satin
+  sits 0.4 mm outside the placement line (`outward`, holes included) so it covers a ~1 mm trim; a hole too small for a
+  2.8 mm satin gets a narrower one (min dimension / 3.5, at least 2 mm). The preview fills every placement outline with fabric (even-odd). Patches: `fillPolygon()` (digitize.js)
   rasterises a frame (inset 1 mm) and returns the picture tool's underlay + tatami, then a satin edge covers the
   row ends. `compose` moves a stage up to join an earlier block in the same thread (one pause fewer) only if it
   overlaps nothing it would jump ahead of (bbox + 1 mm) and isn't an appliqué stage. Save design / Open saved write
@@ -80,7 +83,7 @@ Embroidery-file tools for home machines. Two implementations of the same engine:
   - PEC palette 62-64 are applique codes on Brother machines ("Applique Material/Position"), not Orange/Cream Yellow
     as pyembroidery named them: `PEC_MATCH` excludes them (inkstitch/pyembroidery#140, SE700-verified).
   - Every cut is locked: `Design.tieOff()` sews 0.7 mm back-and-forth along the last line before each trim, colour
-    change and the end (a trimmed thread can work loose otherwise: PEmbroider#105). `relieve()` keeps 5 points
+    change and the end (one hit of each lock 0.35 mm to the side, so no hole takes three hits) (a trimmed thread can work loose otherwise: PEmbroider#105). `relieve()` keeps 5 points
     around commands so locks survive thinning.
   - The PE900 never trims a jump at or under its "jump stitch not to trim" setting (5 mm lowest, manual p.38), so
     1-5 mm jumps stay as loose thread. Stitching them as connectors would draw lines between print letters, so
@@ -91,10 +94,11 @@ Embroidery-file tools for home machines. Two implementations of the same engine:
   bookmark Ashley was sent has it). Satin samples the line every 0.02 mm (0.05 rounded every setting up to 0.4).
   `zigzag(p, w, spacing)` is unchanged (same-edge gap = spacing). Lettering pull comp 0.15 mm a side on satins
   >= 1.5 mm, 0.05 below (Ink/Stitch small fonts: 0.02-0.05; more closes counters). Lettering satins >= 2.5 mm get a
-  zigzag underlay (width - 0.4, 2.5 mm) as the walk's way out instead of the centre run (every forward run in `order()`
+  zigzag underlay (width - 0.8, i.e. 0.4 mm inside each edge, 2.5 mm) as the walk's way out instead of the centre run (every forward run in `order()`
   is satined back exactly once, so it's always covered). Fine-line lettering uses `followRun` (geom.js): stitches up to
   1.6 mm but within 0.1 mm of the line and a hole on every turn over 30° (uniform 1.6 mm cut a 1 mm loop by 0.3 mm).
-  Lettering under a 6 mm x-height adds a "Small letters" tip (60 wt thread, 65/9-70/10 needle) to the steps. Measure with the same-edge statistic, not by eye on a PNG. Satin borders 2.5-4 mm (frames, patch and
+  Lettering under a 6 mm x-height adds a "Small letters" tip (60 wt thread, 65/9-70/10 needle) to the steps and sews
+  its satins at 0.34 mm (60 wt is ~70% of 40 wt's width). Measure with the same-edge statistic, not by eye on a PNG. Satin borders 2.5-4 mm (frames, patch and
   appliqué edges, the bookmark border) sew `edgeWalk` first: a run 0.4 mm inside each edge, then the zigzag, then
   the satin (Ink/Stitch contour underlay), for a firm edge on felt.
 - `edgeWalk` ends on the side where zigzag/satin start (ending on the other side left a 2 mm gap: a jump, trim and
@@ -109,9 +113,10 @@ Embroidery-file tools for home machines. Two implementations of the same engine:
   (the hoop clips on one way). A turned picture is digitized in the sideways field and `turnPattern()`ed clockwise
   before `writePES`; the preview turns the file back.
 - "Sewing on" (`FABRICS` in pieces.js, Design tab; `compose(pieces, hoop, { fabric, baste })`, saved in the JSON):
-  cotton/felt/denim sew as before (tips only); knit gets the zigzag underlay from 1.5 mm satins, +0.05 mm pull comp a
-  side and the Lighter fill on patches; towel makes lettering satin (a fine line sinks) on a knockdown: a lattice 0.3
-  mm wider than the satin (zigzag out and back along each stroke, ≥ 3 mm apart, `spaced`), sewn per connected word
+  cotton/felt/denim sew as before (tips only); knit gets the zigzag underlay from 1.5 mm satins, +0.15 mm pull comp a
+  side, a 0.42 mm satin and the Lighter fill on patches; towel makes lettering satin (a fine line sinks), at least
+  2.5 mm wide (up to 0.3 of the x-height), on a knockdown: a lattice 0.3 mm wider than the satin (zigzag out and back
+  along each stroke, 2 mm apart since 2026-10-29: 3 mm was too open to hold the loops; `spaced`), sewn per connected word
   just before its letters, so it adds no jumps (the walk ends where it began). Tried and dropped: a tatami fill of the
   grown word (+17 trims on a name), one 1.5 mm zigzag (the checker's median read it as a sparse satin), 1 mm wider
   (a fringe), zigzag underlay as well (24 hits/mm²). "Baste first": a 4 mm run box 9 mm round everything (clamped to
@@ -154,8 +159,11 @@ Embroidery-file tools for home machines. Two implementations of the same engine:
 - Quilting (`js/studio/quilt.js`, frame `quilt`: stipple | echo): the free space is the frame inset 3-4.5 mm minus a
   2.5 mm disc round every other piece's stitches, on a 4 px/mm mask. Stipple: 7 mm cells wholly free, a random (fixed
   seed) spanning tree, the closed walk round it through the 2 x 2 sub-cells (each once, never crossing), points nudged
-  and averaged over ~7 mm (the plain walk looked like a maze). Echo: marching-squares contours of the free space's
-  distance field every 4 mm. `compose` adds the quilt stage right after the frame (before an in-the-hoop frame's
+  (0.35 of a sub-cell) and averaged over ~9 mm. The tree is depth-first but turns rather than goes straight on (odds
+  0.15 against): a plain depth-first tree made long corridors that sewed as a maze; a Prim's tree made sharp teeth.
+  Echo: marching-squares contours of the free space's distance field every 4 mm, chained into one line (each ring from
+  its point nearest the last one's end, joined by a stitched step; a ring over 6.4 mm away starts a new line): 4 mm
+  apart, every ring was a jump under the machine's 5 mm trim setting plus two locks. `compose` adds the quilt stage right after the frame (before an in-the-hoop frame's
   `last` stage) in the frame's thread. A visible stage that joins a tack-down block un-hides that block in the
   preview (the quilting, or same-thread lettering on an ITH frame, was hidden with the tack line). Starters: Mug rug,
   Coaster, Quilt block.
@@ -168,7 +176,8 @@ Embroidery-file tools for home machines. Two implementations of the same engine:
 - In-the-hoop projects: frame `border: "zip"` (Zipper pouch, square/oval/circle only in the editor): zipper line
   (under), pause: tape the zipper, tack both sides of the teeth (under), pause: two folded front pieces, tack round the
   outline (`fabric`, `nocut`: the cut file would be the wrong shape), topstitch beside the zipper, the pieces after it,
-  then a `last` stage: open the zipper halfway, back face down, three times round. The zipper line overhangs 5 mm a
+  then a `last` stage: open the zipper halfway, back face down, three times round. The tack lines run 5 mm either side of
+  the teeth (3.5 left 0.5 mm beside a coil) and Have ready asks for a #3 nylon coil zipper. The zipper line overhangs 5 mm a
   side (6 took the 120 mm starter past 126 mm). Stages may carry `before` ("Have ready": fabric sizes from the frame's
   size, +2.5 cm; folded front pieces twice what they cover); `compose` returns it, the steps list it first and the sew
   sheet prints it. ITH frames list their front/back pieces too. Starters: Zipper pouch, Key fob. The preview's fabric
@@ -206,6 +215,8 @@ Embroidery-file tools for home machines. Two implementations of the same engine:
   grown 3 mm, the ⅛ in it's trimmed to), never stitches (tie-ins would show as spikes in a cutter). "Cut file" downloads
   them as one SVG at actual size, one group per fabric. Verified with headless Chrome `Page.printToPDF`: field 130 x 180
   mm, bar 50 mm. Never test with the real print dialog through the Chrome extension (it blocks the page).
+- Heart frames: the dip at the top is filled with a 3 mm round (the circle that just fits the notch): a satin border
+  couldn't turn the sharp inside corner (underlay poked out 1.75 mm, both sides piled up).
 - Zero-based review fixes (2026-10-29, no stitch changed: both batches byte-identical to the commit before):
   a design that won't build or is too big to split clears the old preview and Download (it handed out the previous
   file); too big is drawn whole in a pretend 2 m hoop with Download reading "Too big for this hoop". A hoop change
