@@ -23,8 +23,37 @@ export function heat(pattern) {
   return out;
 }
 
+// The densest 1 mm window in one colour block at any 0.1 mm grid offset (the machine's grid isn't ours: offset 0
+// alone said 17 for peace.pes where pe900_check finds 25), and how many offset-0 cells sit under a window over the
+// limit. A window lies in a 2 x 2 group of offset-0 cells, its corner cell possibly empty; only groups over the
+// limit are scanned.
+function peak(pattern) {
+  const cells = new Map();
+  let blk = 0;
+  for (const [x, y, c] of pattern.stitches) {
+    if (c === COLOR_CHANGE) { blk++; continue; }
+    if (c !== STITCH) continue;
+    const X = Math.round(x), Y = Math.round(y), k = `${blk},${Math.floor(X / 10)},${Math.floor(Y / 10)}`;
+    if (!cells.has(k)) cells.set(k, []); cells.get(k).push([X, Y]);
+  }
+  let max = 0; const hot = new Set(), corners = new Set();
+  for (const [k, v] of cells) { max = Math.max(max, v.length); const [b, cx, cy] = k.split(",").map(Number); for (const i of [0, 1]) for (const j of [0, 1]) corners.add(`${b},${cx - i},${cy - j}`); }
+  for (const k of corners) {
+    const [b, cx, cy] = k.split(",").map(Number), group = [[0, 0], [1, 0], [0, 1], [1, 1]].map(([i, j]) => `${b},${cx + i},${cy + j}`);
+    const pts = group.flatMap((g) => cells.get(g) || []);
+    if (pts.length <= LIMIT && pts.length <= max) continue;
+    for (let ox = 0; ox < 10; ox++) for (let oy = 0; oy < 10; oy++) {
+      const x0 = cx * 10 + ox, y0 = cy * 10 + oy;
+      let n = 0; for (const [X, Y] of pts) if (X >= x0 && X < x0 + 10 && Y >= y0 && Y < y0 + 10) n++;
+      if (n > max) max = n;
+      if (n > LIMIT) for (const g of group) if (cells.has(g)) hot.add(g);
+    }
+  }
+  return { max, hot: hot.size };
+}
+
 export function checkup(pattern) {
-  const st = pattern.stitches, h = heat(pattern);
+  const st = pattern.stitches;
   let tiny = 0, long = 0, over = 0, longest = 0, last = null, x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity, n = 0;
   for (const [x, y, c] of st) {
     if (c === STITCH) {
@@ -34,7 +63,7 @@ export function checkup(pattern) {
     } else if (c === JUMP) last = [x, y];
     else if (c === TRIM || c === COLOR_CHANGE) last = null;
   }
-  const max = Math.max(0, ...h.values()), hot = [...h.values()].filter((v) => v > LIMIT).length;
+  const { max, hot } = peak(pattern);
   const sqin = Math.max(((x1 - x0) / 254) * ((y1 - y0) / 254), 0.1);
   return { stitches: n, tiny, long, over, longest: longest / 10, max, hot, perSqIn: Math.round(n / sqin), satinGap: satinGap(st) };
 }
