@@ -6,6 +6,7 @@ import { DEFAULT_MACHINE, MACHINES, MARGIN, hoop as getHoop } from "./core/machi
 import { DENSITY, workingSize } from "./core/digitize.js";
 import { nearestBrotherThread, pecThread } from "./core/threads.js";
 import { FABRICS, colorBlocks, draw } from "./render.js";
+import { cutSVG, sewSheet } from "./sheet.js";
 import { initStudio } from "./studio/ui.js";
 
 const $ = (id) => document.getElementById(id);
@@ -66,7 +67,7 @@ function setView(v) {
   state.view = v; state.views[state.mode] = v; state.upto = null; $("progress").value = 1000;
   if (state.step != null && !(v?.steps > state.step)) showStep(null);   // the design changed under a step view
   $("turn").setAttribute("aria-pressed", turned());
-  if (!v) { $("facts").innerHTML = ""; $("threads").innerHTML = ""; $("download").disabled = true; $("share").disabled = true; paint(); return; }
+  if (!v) { $("facts").innerHTML = ""; $("threads").innerHTML = ""; $("download").disabled = true; $("share").disabled = true; $("sheet-print").disabled = true; $("cut-file").hidden = true; paint(); return; }
   // the preview is the file: decode the PES bytes and draw those, not the design they were made from
   if (!v.file) {
     try { v.file = v.source ? v.pattern : readEmbroidery(v.bytes, v.filename); }
@@ -93,7 +94,10 @@ function setView(v) {
       const k = b.color + label; if (seen.has(k)) return ""; seen.add(k);
       return `<li><i style="background:${b.color}"></i><span>${label}<br><small>${b.color}</small></span></li>`;
     }).join("");
+  v.facts = [`${st.widthMm.toFixed(0)} × ${st.heightMm.toFixed(0)} mm (${inch(st.widthMm)} × ${inch(st.heightMm)} in)`, `${st.stitches.toLocaleString()} stitches`,
+    `${st.colorChanges} ${st.colorChanges === 1 ? "pause" : "pauses"}`, `≈ ${minutes} min`, `${h.machineName} ${h.name}`];
   $("download").disabled = !fits; $("share").disabled = !fits;
+  $("sheet-print").disabled = !fits; $("cut-file").hidden = !v.sheet?.cut?.length;
   $("download").textContent = fits ? `Download ${v.filename}` : "Too big for this hoop";
   paint();
 }
@@ -225,6 +229,20 @@ $("download").onclick = () => {
   setTimeout(() => URL.revokeObjectURL(url), 2000);
 };
 
+// sew sheet: the design at 1:1 on the hoop field, the steps, appliqué shapes; printed from a hidden block
+$("sheet-print").onclick = () => {
+  const v = state.view; if (!v?.file) return;
+  $("sheet").innerHTML = sewSheet({ pattern: v.file, filename: v.filename, hoop: hoop(), facts: v.facts, threads: machineThreadList(v), hide: v.hide, sheet: v.sheet });
+  window.print();
+};
+addEventListener("afterprint", () => { $("sheet").innerHTML = ""; });
+$("cut-file").onclick = () => {
+  const v = state.view; if (!v?.sheet?.cut?.length) return;
+  const name = v.filename.replace(/\.pes$/i, ""), url = URL.createObjectURL(new Blob([cutSVG(v.sheet.cut, name)], { type: "image/svg+xml" }));
+  const a = document.createElement("a"); a.href = url; a.download = `${name}_cut.svg`; document.body.append(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 2000);
+};
+
 // ---------- machine & hoop ----------
 function fillMachines() {
   $("machine").innerHTML = Object.entries(MACHINES).map(([k, m]) => `<option value="${k}">${m.name}</option>`).join("");
@@ -323,7 +341,8 @@ async function makeBookmark() {
     const pattern = d.pattern();
     if (seq !== bmSeq || state.mode !== "bookmark") { state.views.bookmark = null; return; }
     setView({ pattern, verifyAgainst: pattern, bytes: writePES(pattern), filename: blank ? "blank_bookmark.pes" : `${safeName(state.bm.name, "name")}_bookmark.pes`,
-      fabricShapeBlock: 0, hide: hiddenBlocks(blank), fabric: state.bm.fabric, threadLabel: () => `Brother ${nearestBrotherThread(state.bm.color).name} · whole bookmark` });
+      fabricShapeBlock: 0, hide: hiddenBlocks(blank), fabric: state.bm.fabric,
+      sheet: { steps: stepsFor(blank).map((s) => ({ title: s.title, you: s.you, sews: s.machine })), cut: d.cut }, threadLabel: () => `Brother ${nearestBrotherThread(state.bm.color).name} · whole bookmark` });
   } catch (err) { console.error(err); setView(null); $("empty").textContent = ""; showError(err.message); }
   finally { if (seq === bmSeq) busy(false); }
 }

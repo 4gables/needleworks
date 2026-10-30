@@ -12,6 +12,7 @@ const SCRIPT = "NW Great Vibes", PRINT = "NW Josefin Sans";
 // exact Brother PEC thread colours, so the name on screen is the one the machine shows
 const RED = "#ed171f", NAVY = "#0e1f7c", BLACK = "#000000";
 const PINK = "#f993bc";
+const SMALL_TIP = "Small letters come out crisper with 60 wt thread and a 65/9 or 70/10 needle, and with the machine slowed down.";
 const COLORS = [RED, NAVY, "#00673e", "#770176", "#e8a900", "#f993bc", BLACK, "#f0f0f0"];
 
 let nextId = 1;
@@ -203,13 +204,15 @@ export function initStudio(api) {
       if (s !== seq) return;
       const { design, steps, after } = compose(pieces, api.hoop());
       if (s !== seq) return;
-      const fit = fittedSizes(pieces);
-      stepsUI(steps, after, pieces.some((p) => smallText(fit.has(p.id) ? { ...p, size: fit.get(p.id) } : p)));
+      const fit = fittedSizes(pieces), small = pieces.some((p) => smallText(fit.has(p.id) ? { ...p, size: fit.get(p.id) } : p));
+      stepsUI(steps, after, small);
       // preview: appliqué fabric under its satin, placement and tack-down lines hidden beneath it
       const fabricBlock = steps.findIndex((st) => st.fabric);
       api.setView(design.pattern(), `${api.safeName(firstWords(), "design")}.pes`, {
         fabricShapeBlock: fabricBlock >= 0 ? fabricBlock : undefined,
-        hide: new Set(steps.flatMap((st, i) => (st.under ? [i] : []))), fabric: fabricBlock >= 0 ? "pink" : "linen", steps: steps.length });
+        hide: new Set(steps.flatMap((st, i) => (st.under ? [i] : []))), fabric: fabricBlock >= 0 ? "pink" : "linen", steps: steps.length,
+        sheet: { steps: steps.map((st) => ({ you: st.you, sews: st.sews.join(" ") })), after, cut: steps.filter((st) => st.cut).map((st) => st.cut),
+          notes: [$("st-tip").hidden ? "" : $("st-tip").textContent, small ? SMALL_TIP : ""] } });
     } catch (err) { if (s === seq) { console.error(err); api.showError(err.message); } }
   }
   // appliqué tips: shown the first time a design has fabric to lay on, then on request
@@ -230,7 +233,7 @@ export function initStudio(api) {
       <b><span class="n">${i + 1}</span><i style="background:${st.color}"></i>Brother ${nearestBrotherThread(st.color).name}</b>
       ${st.you ? `<span class="you">${api.escapeHtml(st.you)}</span>` : ""}<span>${api.escapeHtml(st.sews.join(" "))}</span>
       ${st.early ? `<small>Sewn early, with the other ${api.escapeHtml(nearestBrotherThread(st.color).name)} parts, to save a thread change.</small>` : ""}</button></li>`).join("")
-      + (small ? `<li class="after"><b>Small letters</b><span>They come out crisper with 60 wt thread and a 65/9 or 70/10 needle, and with the machine slowed down.</span></li>` : "")
+      + (small ? `<li class="after"><b>Thread and needle</b><span>${SMALL_TIP}</span></li>` : "")
       + (after.length ? `<li class="after"><b>When it's done</b><span>${api.escapeHtml(after.join(" "))}</span></li>` : "");
   }
   $("st-steps").onclick = (e) => { const b = e.target.closest("[data-step]"); if (b) api.showStep(api.step() === +b.dataset.step ? null : +b.dataset.step); };

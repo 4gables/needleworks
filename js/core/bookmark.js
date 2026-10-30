@@ -1,6 +1,6 @@
 // In-the-hoop applique bookmark with a name (or blank).
 // Five colour blocks, one thread: each block change is a machine pause for a fabric step. Blank skips the name block.
-import { circle, edgeWalk, filletPolygon, run, satin, zigzag } from "./geom.js";
+import { circle, edgeWalk, filletPolygon, normals, resample, run, satin, zigzag } from "./geom.js";
 import { Design } from "./design.js";
 import { MARGIN } from "./machines.js";
 import { order } from "./raster.js";
@@ -20,6 +20,15 @@ export const STEPS = [
 export const stepsFor = (blank) => STEPS.filter((s) => !(blank && s.title === "The name"));
 // blocks the preview leaves unstitched-looking (placement and tack-downs sit under the fabric/border)
 export const hiddenBlocks = (blank) => new Set(blank ? [0, 1, 2] : [0, 1, 3]);
+
+// the closed outline pushed out by d mm (whichever normal side makes it bigger)
+function grow(p, d) {
+  const c = resample(p, 0.5, true), n = normals(c, true);
+  const side = (s) => c.map((q, i) => [q[0] + n[i][0] * d * s, q[1] + n[i][1] * d * s]);
+  const span = (q) => Math.max(...q.map((v) => v[0])) - Math.min(...q.map((v) => v[0]));
+  const a = side(1), b = side(-1);
+  return span(a) > span(b) ? a : b;
+}
 
 function outline(L) {
   const t = -L / 2, b = L / 2, h = W / 2;
@@ -80,5 +89,6 @@ export function buildBookmark({ name, family, color = RED, hoop, lead = true, ta
   d.path(edgeWalk(edge, BORDER, true));
   d.path(zigzag(edge, BORDER * 0.7, 2.0, true));
   d.path(satin(edge, BORDER, 0.4, 0.3, true));
+  d.cut = [[grow(edge, 3)]];   // the front fabric for the cut file: the outline plus the ⅛ in it's trimmed to
   return d.finish();
 }

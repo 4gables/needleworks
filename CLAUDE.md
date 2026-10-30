@@ -108,6 +108,14 @@ Embroidery-file tools for home machines. Two implementations of the same engine:
 - "Turn hoop" (per tab, bookmark defaults on) only turns the preview; the PES is always written in machine orientation
   (the hoop clips on one way). A turned picture is digitized in the sideways field and `turnPattern()`ed clockwise
   before `writePES`; the preview turns the file back.
+- Sew sheet + cut file (`js/sheet.js`, links under Download): "Print a sew sheet" fills a hidden `#sheet` and calls
+  `window.print()` (print CSS hides the app). Page 1 is the hoop field at 1:1 (SVG sized in mm) with the design centred
+  as the machine centres it, a crosshair and a 5 cm check bar; page 2 the steps with the machine's thread names
+  (`machineThreadList`, step i = colour block i); page 3 the appliqué shapes. A view carries `sheet: { steps, after,
+  notes, cut }`; `cut` is the placement outlines in mm (`compose` puts them on fabric steps; the bookmark's is its outline
+  grown 3 mm, the ⅛ in it's trimmed to), never stitches (tie-ins would show as spikes in a cutter). "Cut file" downloads
+  them as one SVG at actual size, one group per fabric. Verified with headless Chrome `Page.printToPDF`: field 130 x 180
+  mm, bar 50 mm. Never test with the real print dialog through the Chrome extension (it blocks the page).
 - The preview is the file: `setView` decodes `v.bytes` with `readEmbroidery` and draws/counts/fit-checks that, and
   thread labels come from the file's own PEC palette.
 

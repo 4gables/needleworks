@@ -408,7 +408,7 @@ export function compose(pieces, hoop) {
     if (st.color !== thread || st.pause || st.fabric) {
       d.color(st.color, st.label); thread = st.color;
       steps.push({ color: st.color, sews: [], you: st.you || (steps.length ? "Change to the next thread and press Start." : null),
-        fabric: !!st.fabric, under: !!st.under || !!st.fabric, early: false });
+        fabric: !!st.fabric, under: !!st.under || !!st.fabric, early: false, cut: st.fabric ? st.paths : null });
     }
     steps[steps.length - 1].sews.push(st.sews);
     if (st.early) steps[steps.length - 1].early = true;

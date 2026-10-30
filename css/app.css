@@ -311,3 +311,34 @@ body[data-mode="design"] #view { cursor: grab; }
 .guide.appl ul { margin: 4px 0 0; padding-left: 18px; display: grid; gap: 3px; }
 .link.back { display: block; margin: 0 0 6px; font-size: 14px; }
 .field label.ghost { display: inline-flex; align-items: center; font-weight: 400; }   /* "Open saved" looks like the buttons beside it */
+.extras { flex-basis: 100%; display: flex; justify-content: flex-end; gap: 18px; margin: -4px 2px 0; }
+.extras .link:disabled { opacity: .45; cursor: default; }
+@media (max-width: 860px) { .extras { justify-content: center; } }
+
+/* sew sheet: only printed, black on white, 1:1 */
+.sheet { display: none; }
+@media print {
+  @page { margin: 10mm; }
+  body > *:not(.sheet) { display: none !important; }
+  html, body { height: auto !important; overflow: visible !important; background: #fff !important; color: #000 !important; display: block !important; }
+  .sheet { display: block; font: 11pt/1.4 system-ui, sans-serif; color: #000; }
+  .sheet .pg { break-after: page; }
+  .sheet .pg:last-child { break-after: auto; }
+  .sheet h1 { font-size: 15pt; margin: 0; }
+  .sheet h2 { font-size: 13pt; margin: 0 0 3mm; }
+  .sheet h3 { font-size: 11pt; margin: 4mm 0 1mm; }
+  .sheet header p, .sheet .note { margin: 1mm 0 2mm; font-size: 9.5pt; color: #333; }
+  .sheet .bar { display: inline-block; width: 50mm; height: 0; border-top: 2mm solid #000; margin-left: 3mm; vertical-align: middle; }
+  .sheet svg { display: block; }
+  .sheet .list { padding-left: 6mm; margin: 0; }
+  .sheet .list li { margin: 0 0 3mm; break-inside: avoid; }
+  .sheet .list p { margin: 0.5mm 0 0; }
+  .sheet .list .you { font-weight: 600; }
+  .sheet .sw { display: inline-block; width: 4mm; height: 4mm; border: 0.2mm solid #666; border-radius: 1mm; margin-right: 2mm; vertical-align: -0.6mm; print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+  .sheet .tip { border-left: 1mm solid #bbb; padding-left: 3mm; margin: 3mm 0; }
+}
+@media (min-width: 861px) {
+  .actions { display: grid; grid-auto-flow: column; justify-content: end; row-gap: 6px; }
+  .actions > * { grid-row: 1; }
+  .actions > .extras { grid-row: 2; grid-column: 1 / span 2; margin: 0; }
+}
