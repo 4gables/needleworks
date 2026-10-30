@@ -201,7 +201,17 @@ export function initStudio(api) {
         hide: new Set(steps.flatMap((st, i) => (st.under ? [i] : []))), fabric: fabricBlock >= 0 ? "pink" : "linen", steps: steps.length });
     } catch (err) { if (s === seq) { console.error(err); api.showError(err.message); } }
   }
+  // appliqué tips: shown the first time a design has fabric to lay on, then on request
+  function applGuide(steps) {
+    const has = steps.some((st) => st.fabric);
+    $("st-appl-open").hidden = !has;
+    if (!has) $("st-appl").hidden = true;
+    else if (!api.store.get("studio.applSeen", false)) $("st-appl").hidden = false;
+  }
+  $("st-appl-close").onclick = () => { $("st-appl").hidden = true; api.store.set("studio.applSeen", true); };
+  $("st-appl-open").onclick = () => { $("st-appl").hidden = false; $("st-appl").scrollIntoView({ block: "nearest", behavior: "smooth" }); };
   function stepsUI(steps, after = []) {
+    applGuide(steps);
     const pauses = steps.length - 1;
     $("st-steps-count").textContent = `· ${steps.length} ${steps.length === 1 ? "step" : "steps"}, ${pauses} ${pauses === 1 ? "pause" : "pauses"}`;
     // each step is a button: the preview shows the design as it is after that step, what's still to come faint

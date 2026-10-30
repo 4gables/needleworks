@@ -41,7 +41,8 @@ Embroidery-file tools for home machines. Two implementations of the same engine:
   `draw(..., { ghost })`, placement lines shown until the fabric step covers them); steps a stage joined early say so. In-the-hoop frames (`border: "ith"`, the Ornament starter) are an appliqué front, the pieces after them, then
   a `last` stage (`compose` moves it after everything) that tacks taped-on backing and satins through every layer; a stage's
   `after` text becomes "When it's done". A stage never joins an earlier block that's `under` (it would be hidden in the
-  preview). Starters may carry a `tip` (stabilizer/topper advice) shown under the cards. Opened PES/DST files become pieces
+  preview). Designs with a fabric step show a plain-words appliqué guide (`#st-appl`) until "Got it"
+  (`studio.applSeen`), then an "Appliqué tips" link in the steps. Starters may carry a `tip` (stabilizer/topper advice) shown under the cards. Opened PES/DST files become pieces
   (stitches as is: move/turn, no resize). Lettering satin width = the font's stroke, capped at 1/5 of the x-height
   (1/6 for thin monoline fonts, which get a satin sized to the letters); under 1 mm it's a fine line instead
   (bean stitch: three runs, strokes under 0.6 mm skipped, points 0.4 mm apart), because satin on small script fills

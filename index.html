@@ -122,6 +122,18 @@
         <div id="st-cards" class="cards"></div>
         <p class="hint" id="st-tip" hidden></p>
       </fieldset>
+      <div class="guide appl" id="st-appl" hidden>
+        <b>First time with appliqué?</b>
+        <ul>
+          <li><b>Have ready:</b> stabilizer (tear-away; cut-away for stretchy fabric), a piece of cotton or felt 1 in bigger than the shape, and small curved scissors.</li>
+          <li><b>Hoop</b> the base fabric with the stabilizer under it, smooth and tight like a drum.</li>
+          <li><b>At each pause</b> the machine stops for you. Take the whole hoop off to trim, but never take the fabric out of the hoop.</li>
+          <li><b>Trim</b> about 1/16 in (1–2 mm) outside the stitching: closer and it frays out, further and it shows past the satin edge.</li>
+          <li><b>Cotton frays less</b> with iron-on fusible web on the back; felt doesn't fray at all.</li>
+          <li><b>Check the size</b> on the machine's screen before you press Start.</li>
+        </ul>
+        <button type="button" class="link" id="st-appl-close">Got it</button>
+      </div>
       <fieldset class="field">
         <legend>Pieces <span class="hint inline">(sewn top to bottom)</span></legend>
         <ul id="st-pieces" class="pieces"></ul>
@@ -148,7 +160,8 @@
       </fieldset>
       <details class="steps">
         <summary>How to stitch it <span class="hint inline" id="st-steps-count"></span></summary>
-        <p class="hint">Tap a step to see the design as it is after it. <button type="button" id="st-steps-all" class="link" hidden>Show it all</button></p>
+        <p class="hint">Tap a step to see the design as it is after it. <button type="button" id="st-steps-all" class="link" hidden>Show it all</button>
+          <button type="button" id="st-appl-open" class="link" hidden>Appliqué tips</button></p>
         <ol id="st-steps" class="st-steps"></ol>
       </details>
     </div>

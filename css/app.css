@@ -307,3 +307,5 @@ body[data-mode="design"] #view { cursor: grab; }
 .st-load { display: inline-flex; align-items: center; cursor: pointer; font-weight: 400; color: var(--ink); }
 .guide { margin: 0 0 4px; padding: 10px 14px 10px 32px; background: var(--accent-soft); border-radius: var(--radius); font-size: 15px; display: grid; gap: 2px; position: relative; }
 .guide .link { justify-self: end; margin-top: 2px; }
+.guide.appl { padding-left: 14px; margin-top: 8px; }
+.guide.appl ul { margin: 4px 0 0; padding-left: 18px; display: grid; gap: 3px; }
