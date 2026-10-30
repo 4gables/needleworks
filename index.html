@@ -19,7 +19,6 @@
   </div>
   <nav class="tabs" role="tablist" aria-label="What do you want to make?">
     <button role="tab" id="tab-picture" aria-controls="panel-picture" aria-selected="true">Picture to stitches</button>
-    <button role="tab" id="tab-bookmark" aria-controls="panel-bookmark" aria-selected="false">Name bookmark</button>
     <button role="tab" id="tab-design" aria-controls="panel-design" aria-selected="false">Design your own</button>
     <button role="tab" id="tab-open" aria-controls="panel-open" aria-selected="false">Open a design</button>
   </nav>
@@ -34,7 +33,9 @@
 <main class="work">
   <section class="controls">
     <!-- name bookmark -->
-    <div class="panel" id="panel-bookmark" role="tabpanel" aria-labelledby="tab-bookmark" hidden>
+    <!-- reached from the Name bookmark card in Design your own (and #bookmark) -->
+    <div class="panel" id="panel-bookmark" role="tabpanel" aria-labelledby="tab-design" hidden>
+      <button type="button" class="link back" id="bm-back">← All starting ideas</button>
       <h1>A bookmark with any name</h1>
       <p class="lede">An in-the-hoop fabric bookmark with a satin border, a ribbon hole, and the name in flowing script or print, or no name at all.</p>
       <div class="field">

@@ -28,7 +28,7 @@ async function save(name, pieces, hoopId = "5x7", expectTooBig = false) {
 }
 const P = (o) => ({ id: id++, x: 0, y: 0, rot: 0, color: "#0e1f7c", ...o });
 
-for (const s of STARTERS) for (const h of ["5x7", "4x4"]) await save(`st_${s.id}_${h}`, s.make(), h, h === "4x4");
+for (const s of STARTERS.filter((x) => x.make)) for (const h of ["5x7", "4x4"]) await save(`st_${s.id}_${h}`, s.make(), h, h === "4x4");
 for (const shape of Object.keys(SHAPES)) for (const border of Object.keys(BORDERS))
   await save(`st_frame_${shape}_${border}`, [P({ kind: "frame", shape, border, w: 90, h: 70, color: "#ed171f" }),
     P({ kind: "text", text: "Rosie", font: FONTS[0].family, size: 14, shape: "straight", radius: 30 })]);

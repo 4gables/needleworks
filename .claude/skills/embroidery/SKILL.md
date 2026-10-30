@@ -14,7 +14,7 @@ browser; nothing to install.
 ## Making a name bookmark (the common case)
 1. Look at any inspiration image she gives you: note the lettering style (script? print? thin? bold?),
    thread colour, and whether the name has long lead-in/tail lines.
-2. Open the site on **Name bookmark**. Tell her to type the name exactly as she wants it stitched and to
+2. Open https://4gables.com/needleworks/#bookmark (or **Design your own**, then the **Name bookmark** card). Tell her to type the name exactly as she wants it stitched and to
    pick the closest font. Sacramento matches thin monoline scripts; fonts marked "like …" resemble
    popular embroiderydesigns.com fonts. If the long line before or after the name looks wrong, untick
    **Swash before the name** or **Swash after the name** (either or both). Quicksand and Josefin Sans are print

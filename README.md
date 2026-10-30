@@ -2,7 +2,7 @@
 
 Make machine-embroidery files in the browser. **Live: https://4gables.com/needleworks/**
 
-- **Name bookmark** — type a name, pick a script font and thread, download an in-the-hoop applique
+- **Name bookmark** (first card in Design your own; https://4gables.com/needleworks/#bookmark) — type a name, pick a script font and thread, download an in-the-hoop applique
   bookmark (satin border, ribbon hole, flowing script with lead-in and tail swashes).
 - **Picture to stitches** — drop in a logo, clip art or drawing. It's reduced to a few thread colours
   and each shape is stitched by its width: running stitch for hairlines, satin for strokes, tatami fill

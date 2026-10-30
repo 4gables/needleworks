@@ -1,5 +1,8 @@
 // Design tab UI: start from a card, edit pieces in a short list, drag them on the preview.
+import { buildBookmark, hiddenBlocks } from "../core/bookmark.js";
+import { turnPattern } from "../core/design.js";
 import { APPLIQUE_FONTS, FONTS } from "../core/fonts.js";
+import { hoop as getHoop } from "../core/machines.js";
 import { nearestBrotherThread } from "../core/threads.js";
 import { readEmbroidery } from "../core/formats.js";
 import { draw } from "../render.js";
@@ -18,7 +21,9 @@ const mono = (o) => piece({ kind: "monogram", letters: "aMs", font: SCRIPT, size
 const appl = (o) => piece({ kind: "letters", text: "AB", font: APPLIQUE_FONTS[0].family, size: 60, color: NAVY, ...o });
 const frame = (o) => piece({ kind: "frame", shape: "circle", w: 80, h: 80, border: "satin", color: RED, ...o });
 
+// `mode` cards open another part of the page (the bookmark has its own engine and controls) instead of pieces
 export const STARTERS = [
+  { id: "bookmark", name: "Name bookmark", note: "in the hoop, with a ribbon hole", mode: "bookmark" },
   { id: "monogram", name: "Monogram", note: "3 initials in a frame", make: () => [frame({ shape: "circle", w: 90, h: 90, border: "satin" }), mono({ size: 23 })] },
   { id: "ring", name: "Name in a circle", note: "lettering around a ring", make: () => [
     frame({ shape: "circle", w: 92, h: 92, border: "bold" }),
@@ -62,7 +67,7 @@ export const STARTERS = [
 export function initStudio(api) {
   const $ = (id) => document.getElementById(id);
   const saved = api.store.get("studio", null);
-  let pieces = saved?.pieces?.length ? saved.pieces : STARTERS[0].make();
+  let pieces = saved?.pieces?.length ? saved.pieces : STARTERS.find((s) => s.make).make();
   nextId = Math.max(0, ...pieces.map((p) => p.id)) + 1;
   let sel = saved?.sel ?? pieces[pieces.length - 1]?.id, seq = 0, timer = 0;
 
@@ -91,11 +96,16 @@ export function initStudio(api) {
   async function thumbs() {
     if (thumbed || !$("st-cards").offsetWidth) return;
     thumbed = true;
-    const fonts = [...new Set(STARTERS.flatMap((s) => s.make()).filter((p) => p.font).map((p) => p.font))];
+    const fonts = [...new Set(STARTERS.flatMap((s) => (s.make ? s.make() : [])).filter((p) => p.font).map((p) => p.font).concat(SCRIPT))];
     await Promise.all(fonts.map((f) => document.fonts.load(`40px "${f}"`)));
     for (const s of STARTERS) {
       const c = $("st-cards").querySelector(`[data-start="${s.id}"] canvas`);
       try {
+        if (s.mode === "bookmark") {   // lying down, like the bookmark tab shows it
+          const d = buildBookmark({ name: "Ashley", family: SCRIPT, hoop: getHoop() });
+          draw(c, turnPattern(d.pattern(), false), { pad: 4, fabricShapeBlock: 0, fabric: "pink", hide: hiddenBlocks(false) });
+          continue;
+        }
         const { design, steps } = compose(s.make(), { w: 1000, h: 1000, name: "" });
         const fab = steps.findIndex((st) => st.fabric);
         draw(c, design.pattern(), { pad: 4, fabricShapeBlock: fab >= 0 ? fab : undefined, fabric: "pink", hide: new Set(steps.flatMap((st, i) => (st.under ? [i] : []))) });
@@ -235,6 +245,7 @@ export function initStudio(api) {
   $("st-cards").onclick = (e) => {
     const b = e.target.closest("[data-start]"); if (!b) return;
     const s = STARTERS.find((x) => x.id === b.dataset.start);
+    if (s.mode) { api.setMode(s.mode); return; }
     remember(); pieces = s.make(); sel = pieces[pieces.length - 1].id;
     $("st-tip").hidden = !s.tip; $("st-tip").textContent = s.tip || "";
     save(); ui(); make();

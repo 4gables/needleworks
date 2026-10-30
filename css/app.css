@@ -309,3 +309,5 @@ body[data-mode="design"] #view { cursor: grab; }
 .guide .link { justify-self: end; margin-top: 2px; }
 .guide.appl { padding-left: 14px; margin-top: 8px; }
 .guide.appl ul { margin: 4px 0 0; padding-left: 18px; display: grid; gap: 3px; }
+.link.back { display: block; margin: 0 0 6px; font-size: 14px; }
+.field label.ghost { display: inline-flex; align-items: center; font-weight: 400; }   /* "Open saved" looks like the buttons beside it */

@@ -245,7 +245,9 @@ function setMode(mode, push = true) {
   if (!MODES.includes(mode)) mode = "picture";
   state.mode = mode;
   document.body.dataset.mode = mode;
-  for (const m of MODES) { $("tab-" + m).setAttribute("aria-selected", m === mode); $("panel-" + m).hidden = m !== mode; }
+  for (const m of MODES) $("panel-" + m).hidden = m !== mode;
+  // the bookmark is a starting idea inside Design your own, not a tab of its own
+  for (const m of TABS) $("tab-" + m).setAttribute("aria-selected", m === mode || (m === "design" && mode === "bookmark"));
   if (push) history.replaceState(null, "", "#" + mode);
   showError("");
   $("empty").textContent = mode === "picture" ? "Choose a picture to see it as stitches." : mode === "open" ? "Open a PES, PEC or DST file to see it here." : "";
@@ -255,11 +257,13 @@ function setMode(mode, push = true) {
   else if (mode === "design" && !state.views.design) studio.make();
   else setView(state.views[mode] || null);
 }
-for (const m of MODES) $("tab-" + m).onclick = () => setMode(m);
+const TABS = MODES.filter((m) => m !== "bookmark");
+for (const m of TABS) $("tab-" + m).onclick = () => setMode(m);
+$("bm-back").onclick = () => setMode("design");
 document.querySelector(".tabs").addEventListener("keydown", (e) => {
-  const i = MODES.indexOf(state.mode);
+  const i = TABS.indexOf(state.mode === "bookmark" ? "design" : state.mode);
   if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
-    const n = MODES[(i + (e.key === "ArrowRight" ? 1 : MODES.length - 1)) % MODES.length];
+    const n = TABS[(i + (e.key === "ArrowRight" ? 1 : TABS.length - 1)) % TABS.length];
     setMode(n); $("tab-" + n).focus();
   }
 });
@@ -523,7 +527,7 @@ function showStep(i) {
   state.step = i; document.dispatchEvent(new CustomEvent("nw:step", { detail: i })); paint();
 }
 const studio = initStudio({
-  hoop, store, showError, busy, safeName, escapeHtml, showStep, step: () => state.step,
+  hoop, store, showError, busy, safeName, escapeHtml, showStep, step: () => state.step, setMode,
   setView(pattern, filename, look = {}) {
     const v = { pattern, verifyAgainst: pattern, bytes: writePES(pattern), filename, fabric: "linen", ...look };
     state.views.design = v;

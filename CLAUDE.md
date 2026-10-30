@@ -21,7 +21,8 @@ Embroidery-file tools for home machines. Two implementations of the same engine:
 - `Design.finish()` runs `relieve()`: no 1 mm square (at any 0.1 mm grid offset, since the checker's grid is the
   file's) gets more than 24 needle hits per colour block; interior points at satin junctions are dropped, tie-ins kept.
   Added when a turned 172 mm picture hit 26.
-- Bookmark: 5 colour blocks of one thread = 4 machine pauses for the in-the-hoop fabric steps (blank = no name block,
+- Bookmark (the first "Start from" card in Design your own, or `#bookmark`; its own panel and engine, mode
+  `bookmark` with the Design tab highlighted and a back link): 5 colour blocks of one thread = 4 machine pauses for the in-the-hoop fabric steps (blank = no name block,
   4 blocks / 3 pauses). Name is centred across on the middle of the x-height (cap height for all-caps), so the bulk of the letters is
   centred and loops may reach further one way; lengthwise it's centred with equal room below
   the eyelet and above the border. Letters are sized so their band fills `LETTERS` (72%) of the inner width, the same with
