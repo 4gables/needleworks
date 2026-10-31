@@ -116,6 +116,7 @@ input[type="range"] { width: 100%; accent-color: var(--accent); min-height: 32px
 .swatches button { width: 40px; height: 40px; border-radius: 50%; border: 3px solid var(--panel); cursor: pointer;
   box-shadow: 0 0 0 1.5px var(--line); }
 .swatches button[aria-pressed="true"] { box-shadow: 0 0 0 2.5px var(--ink); }
+.swatches button.auto { width: auto; min-width: 40px; padding: 0 10px; border-radius: 20px; background: var(--bg); color: var(--ink); font: inherit; font-size: 0.8rem; font-weight: 600; }
 .swatches .custom { width: 40px; height: 40px; border-radius: 50%; display: inline-block; position: relative; overflow: hidden; background: conic-gradient(#e33, #ec3, #3c6, #39e, #a3e, #e33); }
 .swatches .custom input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
 .swatch-name { font-size: 14px; color: var(--muted); width: 100%; }

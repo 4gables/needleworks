@@ -12,7 +12,7 @@ import { zip } from "./zip.js";
 import { blockThreads, checkup, fewerBlocks, fix, heat, landJumps, pauses, shortJumps, sortedChanges } from "./doctor.js";
 import { MAX_BLOCKS, denseWords, endsEarly, moves, stopWords, verdictOf } from "./quality.js";
 import { BRANDS, exampleSpools, lab, nearestSpool, spools } from "./core/brands.js";
-import { initStudio } from "./studio/ui.js";
+import { COLORS as LINE_THREADS, initStudio } from "./studio/ui.js";
 
 const $ = (id) => document.getElementById(id);
 const store = {
@@ -43,7 +43,7 @@ const state = {
   bm: { name: store.get("bm.name", "Emma"), font: store.get("bm.font", FONTS[0].family), color: (c => OLD_THREADS[c] || c)(store.get("bm.color", RED)), fabric: store.get("bm.fabric", "pink"), lead: store.get("bm.lead", true), tail: store.get("bm.tail", true), blank: store.get("bm.blank", false) },
   brand: BRANDS[store.get("brand", "")] ? store.get("brand", "") : "",   // thread brand for spool numbers ("" = Brother only)
   spools: store.get("spools", {}),   // { brand: [spool numbers owned] }
-  pic: { mine: store.get("pic.mine", false), style: "fill", cross: 2.5, file: null, bitmap: null, key: 0, skip: [], colors: 6, size: 100, angle: 45, bg: true, density: store.get("pic.density", "standard"), req: 0, colorsInfo: [] },
+  pic: { mine: store.get("pic.mine", false), style: "fill", cross: 2.5, file: null, bitmap: null, key: 0, skip: [], colors: 6, size: 100, angle: 45, bg: true, density: store.get("pic.density", "standard"), req: 0, colorsInfo: [], line: "" },
 };
 if (!MACHINES[state.machine]) state.machine = DEFAULT_MACHINE;
 const hoop = () => getHoop(state.machine, state.hoopId);
@@ -926,7 +926,9 @@ function onPicture(e) {
   showError("");
   // (in the order they're sewn, then any left out)
   const byId = new Map(r.colors.map((c) => [c.id, c]));
-  p.colorsInfo = [...r.summary.map((c) => byId.get(c.id)), ...p.skip.map((id) => byId.get(id))].filter(Boolean);
+  // (a line drawing's thread may be one picked for it, not the colour's own)
+  p.colorsInfo = [...r.summary.map((c) => byId.has(c.id) && { ...byId.get(c.id), hex: c.hex, thread: c.thread }), ...p.skip.map((id) => byId.get(id))].filter(Boolean);
+  if (p.style === "line" && !p.line) { p.autoLine = r.summary[0]?.hex || ""; lineUI(); }
   // (asked for 4, got 3: say why, instead of a slider that looks ignored)
   state.pic.merged = r.merged || 0;
   state.pic.owned = r.owned || null;
@@ -1016,7 +1018,29 @@ function styleUI() {
   document.querySelectorAll("#pic-style button").forEach((b) => b.setAttribute("aria-pressed", b.dataset.s === s));
   $("pic-angle-row").hidden = $("pic-density-row").hidden = s !== "fill"; $("pic-cross-row").hidden = s !== "cross";
   $("pic-colors-label").textContent = s === "line" ? "Colours to trace" : "Thread colours";
+  $("pic-line-row").hidden = s !== "line";
+  lineUI();
 }
+// Line drawing sews one thread: the picture's darkest colour (Auto), or one of the Design tab's Brother threads, or any
+// colour (sewn in its nearest Brother thread)
+$("pic-line").innerHTML = `<button type="button" data-line="" class="auto">Auto</button>`
+  + LINE_THREADS.map((c) => `<button type="button" data-line="${c}" style="background:${c}" title="Brother ${nearestBrotherThread(c).name}" aria-label="Brother ${nearestBrotherThread(c).name}"></button>`).join("")
+  + `<span class="custom" title="Any colour"><input type="color" id="pic-line-any" value="#000000" aria-label="Any colour"></span>`;
+function lineUI() {
+  const p = state.pic, auto = p.autoLine || "";
+  for (const b of $("pic-line").querySelectorAll("button")) b.setAttribute("aria-pressed", b.dataset.line === p.line);
+  const a = $("pic-line").querySelector(".auto");
+  a.style.background = auto; a.style.color = auto && lightOf(auto) < 0.55 ? "#fff" : "";
+  a.title = auto ? `Auto: Brother ${nearestBrotherThread(auto).name}, the picture's darkest colour` : "Auto: the picture's darkest colour";
+  a.setAttribute("aria-label", a.title);
+  $("pic-line-name").textContent = p.line ? `Brother ${nearestBrotherThread(p.line).name}.` : `${auto ? `Brother ${nearestBrotherThread(auto).name}: ` : ""}the picture's darkest colour.`;
+}
+const lightOf = (hex) => { const [r, g, b] = [1, 3, 5].map((k) => parseInt(hex.slice(k, k + 2), 16) / 255); return 0.2126 * r + 0.7152 * g + 0.0722 * b; };
+$("pic-line").onclick = (e) => {
+  const b = e.target.closest("button"); if (!b || b.dataset.line === state.pic.line) return;
+  state.pic.line = b.dataset.line; lineUI(); makePicture();
+};
+$("pic-line-any").onchange = (e) => { state.pic.line = nearestBrotherThread(e.target.value).hex; lineUI(); makePicture(); };
 $("pic-style").onclick = (e) => { const b = e.target.closest("button"); if (!b || b.dataset.s === state.pic.style) return; state.pic.style = b.dataset.s; styleUI(); makePicture(); };
 styleUI();
 $("pic-bg").onchange = (e) => { state.pic.bg = e.target.checked; state.pic.skip = []; makePicture(); };
@@ -1035,7 +1059,7 @@ async function loadPicture(file, sample = false) {
   if (!file || !file.type.startsWith("image/")) { showError("That doesn't look like a picture. Try a PNG or JPG."); return; }
   try {
     const bitmap = await createImageBitmap(file);
-    Object.assign(state.pic, { file, bitmap, box: null, key: state.pic.key + 1, skip: [], model: null });
+    Object.assign(state.pic, { file, bitmap, box: null, key: state.pic.key + 1, skip: [], model: null, autoLine: "" });
     setThumb(file); $("pic-rotate").hidden = false;
     $("pic-drop").querySelector(".drop-text").innerHTML = sample ? "<b>Choose your own picture</b> or drop it here." : `<b>${escapeHtml(file.name)}</b> · choose another`;
     $("pic-sample-note").hidden = !sample;
@@ -1097,7 +1121,7 @@ function makePicture() {
   // (nothing from another tab stays on screen, with its Download, while this picture stitches)
   if (state.mode === "picture" && state.view && state.view !== state.views.picture) setView(null);
   p.req++; busy(true, "Stitching your picture…");
-  const h = shownHoop(), opts = { colors: p.colors, removeBackground: p.bg, fillAngle: p.angle, density: DENSITY[p.density] || DENSITY.standard, skip: p.skip, hoop: h, turn: turned(), palette: ownedPalette(), style: p.style, cross: p.cross };
+  const h = shownHoop(), opts = { colors: p.colors, removeBackground: p.bg, fillAngle: p.angle, density: DENSITY[p.density] || DENSITY.standard, skip: p.skip, hoop: h, turn: turned(), palette: ownedPalette(), style: p.style, cross: p.cross, line: p.line || undefined };
   // first the colours and where each lies (the reply comes back here)
   if (p.model?.key !== key) { digitizeJob({ id: p.req, key, learn, opts }); return; }
   const plan = picturePlan(box, p.model.boxes.filter((_, i) => !p.model.colors[i].background && !p.skip.includes(i)), p.size, h);

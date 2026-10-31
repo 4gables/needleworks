@@ -18,7 +18,7 @@ const RED = "#ed171f", NAVY = "#0e1f7c", BLACK = "#000000";
 const PINK = "#f993bc", WHITE = "#f0f0f0";
 export const TURNED = "The hoop is turned: the machine shows this design on its side. Hoop the fabric a quarter turn round, with the top of the design toward the right of the hoop (as the sew sheet shows).";
 const SMALL_TIP = "Small letters come out crisper with 60 wt thread and a 65/9 or 70/10 needle, and with the machine slowed down.";
-const COLORS = [RED, NAVY, "#00673e", "#770176", "#e8a900", "#f993bc", BLACK, "#f0f0f0"];
+export const COLORS = [RED, NAVY, "#00673e", "#770176", "#e8a900", "#f993bc", BLACK, "#f0f0f0"];
 
 let nextId = 1;
 const piece = (o) => ({ id: nextId++, x: 0, y: 0, color: NAVY, ...o });
