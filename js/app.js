@@ -921,6 +921,12 @@ function onPicture(e) {
   if (r.id !== p.req) return;
   // (the picture's colours and where each lies: now it can be cut and sized by what will be sewn)
   if (r.ok && r.measure) { p.model = { key: r.key, boxes: r.boxes, colors: r.colors }; makePicture(); return; }
+  // Size is the longer side of what's sewn: off by more than 0.4 mm (what's sewn is a little smaller than the colours'
+  // extent: blended edges and specks aren't sewn), it's drawn again that much bigger, at most twice
+  if (r.ok && p.asked) {
+    const st = designStats(r.pattern), got = Math.max(st.widthMm, st.heightMm), a = p.asked;
+    if (got > 0 && Math.abs(got - a.mm) > 0.4 && p.refits++ < 2) { p.fit = { key: a.key, f: (a.fit * a.mm) / got }; makePicture(true); return; }
+  }
   busy(false);
   if (!r.ok) { state.views.picture = null; if (state.mode === "picture") { setView(null); pictureError(r); } return; }
   showError("");
@@ -1000,9 +1006,10 @@ bindRange("pic-size", "size", sizeLabel);
 bindRange("pic-angle", "angle", (v) => `${v}°`);
 bindRange("pic-cross", "cross", (v) => `${v} mm`);
 // warn when parts of the picture are finer than thread can show (they'd close up or turn into a single line)
-// (lines under 1 mm aren't flagged: they're sewn as lines on purpose, and the warning fired on the sample flower)
+// (lines under 1 mm aren't flagged: they're sewn as lines on purpose, and the warning fired on the sample flower;
+// gaps only past 1.5% of what's sewn: some always close in a detailed picture, and at 0.8 mm² it showed on every one)
 function fineUI(fine) {
-  const p = state.pic, gaps = fine?.narrowMm2 >= 0.8;
+  const p = state.pic, gaps = fine?.narrowMm2 >= Math.max(2, 0.015 * (fine.inkMm2 || 0));
   $("pic-fine").hidden = !gaps;
   $("pic-fine").textContent = gaps ? `Some gaps (like inside or between small letters) are narrower than ½ mm and will close up. ${p.size < (p.max || 0) ? "A bigger Size keeps more of them open." : "This is as big as the hoop allows."}` : "";
 }
@@ -1113,8 +1120,9 @@ function sizeRange(max) {
   if (p.size > max) p.size = max;
   $("pic-size").value = p.size; $("pic-size-out").textContent = sizeLabel(p.size);
 }
-function makePicture() {
+function makePicture(refit = false) {
   const p = state.pic; if (!p.bitmap) return;
+  if (!refit) p.refits = 0;
   const box = p.bg ? (p.box ||= contentBox(p.bitmap)) : { sx: 0, sy: 0, sw: p.bitmap.width, sh: p.bitmap.height };
   const key = `${p.key}:${p.colors}:${p.bg}:${box.sx},${box.sy},${box.sw},${box.sh}`, k = LEARN / Math.max(box.sw, box.sh);
   const learn = drawn(p.bitmap, box, Math.max(1, Math.round(box.sw * k)), Math.max(1, Math.round(box.sh * k)));
@@ -1124,8 +1132,11 @@ function makePicture() {
   const h = shownHoop(), opts = { colors: p.colors, removeBackground: p.bg, fillAngle: p.angle, density: DENSITY[p.density] || DENSITY.standard, skip: p.skip, hoop: h, turn: turned(), palette: ownedPalette(), style: p.style, cross: p.cross, line: p.line || undefined };
   // first the colours and where each lies (the reply comes back here)
   if (p.model?.key !== key) { digitizeJob({ id: p.req, key, learn, opts }); return; }
-  const plan = picturePlan(box, p.model.boxes.filter((_, i) => !p.model.colors[i].background && !p.skip.includes(i)), p.size, h);
+  // (sized again by how big it came out last time for the same picture, colours and style)
+  const fk = `${key}:${p.style}:${p.cross}:${p.skip.join()}:${turned()}`, fit = p.fit?.key === fk ? p.fit.f : 1;
+  const plan = picturePlan(box, p.model.boxes.filter((_, i) => !p.model.colors[i].background && !p.skip.includes(i)), p.size, h, undefined, fit);
   sizeRange(plan.max);
+  p.asked = { key: fk, mm: plan.sizeMm, fit };
   digitizeJob({ id: p.req, key, learn, img: drawn(p.bitmap, plan.crop, plan.w, plan.h), crop: plan.frac, opts });
 }
 $("pic-file").onchange = (e) => loadPicture(e.target.files[0]);
