@@ -2,7 +2,7 @@
 # Picture corpus check (class: pictures unlike the 8 Etsy samples break the Picture tab). Draws a seeded corpus of our
 # own pictures in tests/browser/picture_corpus.html, sends each through the Picture tab's own path and worker in all
 # three styles, asserts what's sewn against what was drawn (see the page's header), then runs tests/pe900_check.py on
-# every file it wrote. Takes ~4 minutes.
+# every file it wrote. Takes ~2 minutes.
 # usage: tests/picture_corpus.sh CDP_PORT HTTP_PORT OUT [query]   (query e.g. "only=crayon,rules&render": render
 # writes a PNG per case beside the PES files: the drawn regions faint, the stitches over them)
 # Both ports must be free; the script starts and stops its own server and headless Chrome. Exit 1 on any problem.
