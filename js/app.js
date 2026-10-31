@@ -3,7 +3,7 @@ import { turnForMachine, turnPattern } from "./core/design.js";
 import { FONTS, fontOf } from "./core/fonts.js";
 import { STITCH, designStats, machineThreads, readEmbroidery, validatePES, writePES } from "./core/formats.js";
 import { DEFAULT_MACHINE, MACHINES, MARGIN, hoop as getHoop } from "./core/machines.js";
-import { DENSITY, workingSize } from "./core/digitize.js";
+import { DENSITY, picturePlan } from "./core/digitize.js";
 import { nearestBrotherThread, pecThread } from "./core/threads.js";
 import { CLOTHS, colorBlocks, draw } from "./render.js";
 import { cutSVG, sewSheet } from "./sheet.js";
@@ -41,7 +41,7 @@ const state = {
   bm: { name: store.get("bm.name", "Emma"), font: store.get("bm.font", FONTS[0].family), color: (c => OLD_THREADS[c] || c)(store.get("bm.color", RED)), fabric: store.get("bm.fabric", "pink"), lead: store.get("bm.lead", true), tail: store.get("bm.tail", true), blank: store.get("bm.blank", false) },
   brand: BRANDS[store.get("brand", "")] ? store.get("brand", "") : "",   // thread brand for spool numbers ("" = Brother only)
   spools: store.get("spools", {}),   // { brand: [spool numbers owned] }
-  pic: { mine: store.get("pic.mine", false), style: "fill", cross: 2.5, file: null, bitmap: null, key: 0, skip: [], colors: 4, size: 100, angle: 45, bg: true, density: store.get("pic.density", "standard"), req: 0, colorsInfo: [] },
+  pic: { mine: store.get("pic.mine", false), style: "fill", cross: 2.5, file: null, bitmap: null, key: 0, skip: [], colors: 6, size: 100, angle: 45, bg: true, density: store.get("pic.density", "standard"), req: 0, colorsInfo: [] },
 };
 if (!MACHINES[state.machine]) state.machine = DEFAULT_MACHINE;
 const hoop = () => getHoop(state.machine, state.hoopId);
@@ -52,6 +52,8 @@ const shownHoop = () => { const h = hoop(); return turned() ? { ...h, w: h.h, h:
 // clockwise into the machine's orientation, as a turned picture is
 const designHoop = () => { const h = hoop(); return state.turn.design ? { ...h, w: h.h, h: h.w } : h; };
 const toMachine = (p) => (state.turn.design ? turnForMachine(p) : p);
+// the file is turned into the machine's orientation, so the machine shows it on its side (Design and Picture tabs)
+const turnedFile = () => (state.mode === "design" || state.mode === "picture") && !!state.turn[state.mode];
 const turnCut = (loops) => loops.map((l) => l.map(([x, y]) => [-y, x]));
 
 // ---------- preview ----------
@@ -134,7 +136,8 @@ function setView(v) {
 function picSteps(v, st) {
   const mt = machineThreadList(v), blocks = v.cache.blocks;
   $("pic-steps-count").textContent = `· ${blocks.length} ${blocks.length === 1 ? "thread" : "threads"}`;
-  $("pic-steps").innerHTML = `<li class="after"><b>Have ready</b><span>${st.stitches > 8000 ? "Cut-away stabilizer (or two layers of tear-away): this is a lot of stitching." : "Tear-away stabilizer under woven fabric, cut-away under knits."} The threads below, in this order.</span></li>`
+  $("pic-steps").innerHTML = (turned() ? `<li class="after"><b>Hooping</b><span>${escapeHtml($("done-turn").textContent)}</span></li>` : "")
+    + `<li class="after"><b>Have ready</b><span>${st.stitches > 8000 ? "Cut-away stabilizer (or two layers of tear-away on woven fabric): this is a lot of stitching." : "Tear-away stabilizer under woven fabric; cut-away under knits (T-shirts, sweatshirts), which stretch."} The threads below, in this order.</span></li>`
     + blocks.map((b, i) => { const t = mt[b.index] || nearestBrotherThread(b.color);
       return `<li><b><span class="n">${i + 1}</span><i style="background:${b.color}"></i>Brother ${escapeHtml(t.name)}${spool(b.color) ? ` <small>${escapeHtml(spool(b.color))}</small>` : ""}</b><span class="you">${i ? "The machine stops: thread this colour and press Start." : "Hoop the fabric with the stabilizer, thread this colour and press Start."}</span></li>`; }).join("")
     + `<li class="after"><b>When it's done</b><span>Take the hoop off, snip any loose threads between parts, and tear or cut away the stabilizer.</span></li>`;
@@ -300,7 +303,7 @@ function downloaded(v, zipped) {
   $("done-checked").textContent = `Checked: it opens on a ${h.machineName} in the ${h.name}${s ? `, ${s.widthMm.toFixed(0)} × ${s.heightMm.toFixed(0)} mm, ${s.colorChanges ? (state.mode === "picture" || state.mode === "open" ? `${s.colorChanges} thread ${s.colorChanges === 1 ? "change" : "changes"}` : `${s.colorChanges} ${s.colorChanges === 1 ? "pause" : "pauses"}`) : "no pauses"}` : ""}.`;
   $("done-zip").hidden = !zipped;
   $("done-phone").hidden = !matchMedia("(pointer: coarse)").matches;
-  $("done-turn").hidden = !(state.mode === "design" && state.turn.design);
+  $("done-turn").hidden = !turnedFile();
   // (Design-tab warnings still showing: "Checked" shouldn't read as "all good")
   const warns = state.mode === "design" ? [...document.querySelectorAll("#st-edit [data-warn]:not([hidden])")].map((w) => w.textContent.trim()) : [];
   $("done-warn").hidden = !warns.length; $("done-warn").textContent = warns.length ? "Still to look at: " + warns.join(" ") : "";
@@ -385,7 +388,7 @@ function alongSteps(v) {
   const steps = [...(v.sheet?.steps?.length ? v.sheet.steps : blocks.map((b, i) => ({ you: i ? "Change to the next thread and press Start." : null, sews: "" })))];
   // (the first screen says what to have by the machine)
   if (v.sheet?.ready?.length && steps.length) steps[0] = { ...steps[0], you: `Have ready: ${v.sheet.ready.join(" ")} ${steps[0].you || ""}`.trim() };
-  if (state.mode === "design" && state.turn.design && steps.length) steps[0] = { ...steps[0], you: `${$("done-turn").textContent} ${steps[0].you || ""}`.trim() };
+  if (turnedFile() && steps.length) steps[0] = { ...steps[0], you: `${$("done-turn").textContent} ${steps[0].you || ""}`.trim() };
   return steps.map((s, i) => {
     const b = blocks.find((x) => x.index === i), n = b ? b.segs.reduce((a, sg) => a + sg.length, 0) : 0;
     return { ...s, block: b, minutes: Math.max(1, Math.round(n / 550)) };
@@ -681,14 +684,17 @@ function digitizeJob(msg) {
 }
 function jobDone() { clearTimeout(picWatch); picRunning = false; if (picNext) { const m = picNext; picNext = null; digitizeJob(m); } }
 function onPicture(e) {
-  const r = e.data;
+  const r = e.data, p = state.pic;
   jobDone();
-  if (r.id !== state.pic.req) return;
+  if (r.id !== p.req) return;
+  // (the picture's colours and where each lies: now it can be cut and sized by what will be sewn)
+  if (r.ok && r.measure) { p.model = { key: r.key, boxes: r.boxes, colors: r.colors }; makePicture(); return; }
   busy(false);
-  if (!r.ok) { state.views.picture = null; if (state.mode === "picture") { setView(null); showError(r.error); } return; }
+  if (!r.ok) { state.views.picture = null; if (state.mode === "picture") { setView(null); pictureError(r); } return; }
   showError("");
-  const stitched = new Set(r.summary.map((c) => c.id));
-  state.pic.colorsInfo = r.colors.filter((c) => stitched.has(c.id) || state.pic.skip.includes(c.id));
+  // (in the order they're sewn, then any left out)
+  const byId = new Map(r.colors.map((c) => [c.id, c]));
+  p.colorsInfo = [...r.summary.map((c) => byId.get(c.id)), ...p.skip.map((id) => byId.get(id))].filter(Boolean);
   // (asked for 4, got 3: say why, instead of a slider that looks ignored)
   state.pic.merged = r.merged || 0;
   const mt = machineThreads(r.pattern.threads);
@@ -697,11 +703,22 @@ function onPicture(e) {
   fineUI(r.fine);
   const base = safeName((state.pic.file?.name || "picture").replace(/\.[^.]+$/, ""), "picture");
   const v = { pattern: r.pattern, verifyAgainst: r.pattern, bytes: r.bytes, filename: `${base}${state.pic.style === "line" ? "_line" : state.pic.style === "cross" ? "_cross" : ""}.pes`, fabric: "linen",
+    sheet: turned() ? { notes: [$("done-turn").textContent] } : undefined,
   };
   state.views.picture = v;
   if (state.mode === "picture") setView(v);
 }
 startWorker();
+// Nothing to stitch: say why, and offer only what can still be done (it said "make it bigger" at the largest size and
+// "turn off background removal" with it already off)
+function pictureError(r) {
+  const p = state.pic, bigger = p.size < (p.max || 0), msg = [r.error];
+  $("empty").textContent = "";   // (not "Choose a picture" beside the error)
+  if (r.code === "cross") msg.push(p.cross > 1.5 ? (bigger ? "Try smaller crosses or a bigger Size." : "Try smaller crosses.") : bigger ? "Try a bigger Size." : "");
+  else if (r.code === "small" && !bigger) msg.push("It's as big as this hoop allows.");
+  showError(msg.filter(Boolean).join(" "), r.code === "small" && bigger ? { label: "Make it as big as fits", run: () => setSize(p.max) } : r.code === "skipped" ? { label: "Sew every thread", run: () => { p.skip = []; makePicture(); } } : undefined);
+}
+function setSize(mm) { state.pic.size = mm; $("pic-size").value = mm; $("pic-size-out").textContent = sizeLabel(mm); makePicture(); }
 
 function paletteUI() {
   const cols = state.pic.colorsInfo.filter((c) => !c.background && c.area > 0);
@@ -730,13 +747,11 @@ bindRange("pic-size", "size", sizeLabel);
 bindRange("pic-angle", "angle", (v) => `${v}°`);
 bindRange("pic-cross", "cross", (v) => `${v} mm`);
 // warn when parts of the picture are finer than thread can show (they'd close up or turn into a single line)
+// (lines under 1 mm aren't flagged: they're sewn as lines on purpose, and the warning fired on the sample flower)
 function fineUI(fine) {
-  const issues = [];
-  if (fine?.narrowMm2 >= 0.8) issues.push("some gaps (like inside or between small letters) are narrower than ½ mm and will close up");
-  if (fine?.hairlines >= 5) issues.push("some lines are thinner than 1 mm and will be a single thread, not solid");
-  $("pic-fine").hidden = !issues.length;
-  $("pic-fine").textContent = issues.length
-    ? `Some details are too small to stitch cleanly: ${issues.join(", and ")}. Make it bigger with Size, or try fewer thread colours.` : "";
+  const p = state.pic, gaps = fine?.narrowMm2 >= 0.8;
+  $("pic-fine").hidden = !gaps;
+  $("pic-fine").textContent = gaps ? `Some gaps (like inside or between small letters) are narrower than ½ mm and will close up. ${p.size < (p.max || 0) ? "A bigger Size keeps more of them open." : "This is as big as the hoop allows."}` : "";
 }
 const densityUI = () => document.querySelectorAll("#pic-density button").forEach((b) => b.setAttribute("aria-pressed", b.dataset.d === state.pic.density));
 densityUI();
@@ -749,6 +764,7 @@ function styleUI() {
   const s = state.pic.style;
   document.querySelectorAll("#pic-style button").forEach((b) => b.setAttribute("aria-pressed", b.dataset.s === s));
   $("pic-angle-row").hidden = $("pic-density-row").hidden = s !== "fill"; $("pic-cross-row").hidden = s !== "cross";
+  $("pic-colors-label").textContent = s === "line" ? "Colours to trace" : "Thread colours";
 }
 $("pic-style").onclick = (e) => { const b = e.target.closest("button"); if (!b || b.dataset.s === state.pic.style) return; state.pic.style = b.dataset.s; styleUI(); makePicture(); };
 styleUI();
@@ -764,10 +780,11 @@ async function loadSample() {
 }
 
 async function loadPicture(file, sample = false) {
+  if (file && /\.(pes|pec|dst)$/i.test(file.name)) { openDesign(file); return; }   // (an embroidery file: open it as one)
   if (!file || !file.type.startsWith("image/")) { showError("That doesn't look like a picture. Try a PNG or JPG."); return; }
   try {
     const bitmap = await createImageBitmap(file);
-    Object.assign(state.pic, { file, bitmap, box: null, key: state.pic.key + 1, skip: [] });
+    Object.assign(state.pic, { file, bitmap, box: null, key: state.pic.key + 1, skip: [], model: null });
     setThumb(file); $("pic-rotate").hidden = false;
     $("pic-drop").querySelector(".drop-text").innerHTML = sample ? "<b>Choose your own picture</b> or drop it here." : `<b>${escapeHtml(file.name)}</b> · choose another`;
     $("pic-sample-note").hidden = !sample;
@@ -804,18 +821,37 @@ function contentBox(bitmap) {
   return { sx: x0 / k, sy: y0 / k, sw: (x1 - x0 + 1) / k, sh: (y1 - y0 + 1) / k };
 }
 
+// the picture's colours are learned from a copy this size (px, longer side) whatever the Size or hoop, so changing
+// either never changes the threads
+const LEARN = 800;
+function drawn(bitmap, box, w, h) {
+  const c = makeCanvas(w, h), ctx = c.getContext("2d", { willReadFrequently: true });
+  ctx.imageSmoothingQuality = "high";
+  ctx.drawImage(bitmap, box.sx, box.sy, box.sw, box.sh, 0, 0, w, h);
+  return ctx.getImageData(0, 0, w, h);
+}
+// Size is the longer side of what's sewn, up to the largest that fits this hoop (it measured the whole picture: a
+// framed photo at "174 mm" sewed 84 x 58)
+function sizeRange(max) {
+  const p = state.pic; p.max = max;
+  $("pic-size").max = max;
+  if (p.size > max) p.size = max;
+  $("pic-size").value = p.size; $("pic-size-out").textContent = sizeLabel(p.size);
+}
 function makePicture() {
   const p = state.pic; if (!p.bitmap) return;
   const box = p.bg ? (p.box ||= contentBox(p.bitmap)) : { sx: 0, sy: 0, sw: p.bitmap.width, sh: p.bitmap.height };
-  const h = shownHoop(), sz = workingSize(box.sw, box.sh, p.size, h);
-  const c = makeCanvas(sz.w, sz.h), ctx = c.getContext("2d", { willReadFrequently: true });
-  ctx.imageSmoothingQuality = "high";
-  ctx.drawImage(p.bitmap, box.sx, box.sy, box.sw, box.sh, 0, 0, sz.w, sz.h);
-  const img = ctx.getImageData(0, 0, sz.w, sz.h);
+  const key = `${p.key}:${p.colors}:${p.bg}:${box.sx},${box.sy},${box.sw},${box.sh}`, k = LEARN / Math.max(box.sw, box.sh);
+  const learn = drawn(p.bitmap, box, Math.max(1, Math.round(box.sw * k)), Math.max(1, Math.round(box.sh * k)));
   // (nothing from another tab stays on screen, with its Download, while this picture stitches)
   if (state.mode === "picture" && state.view && state.view !== state.views.picture) setView(null);
   p.req++; busy(true, "Stitching your picture…");
-  digitizeJob({ id: p.req, img, opts: { colors: p.colors, removeBackground: p.bg, fillAngle: p.angle, density: DENSITY[p.density] || DENSITY.standard, skip: p.skip, hoop: h, turn: turned(), imageKey: p.key, palette: ownedPalette(), style: p.style, cross: p.cross } });
+  const h = shownHoop(), opts = { colors: p.colors, removeBackground: p.bg, fillAngle: p.angle, density: DENSITY[p.density] || DENSITY.standard, skip: p.skip, hoop: h, turn: turned(), palette: ownedPalette(), style: p.style, cross: p.cross };
+  // first the colours and where each lies (the reply comes back here)
+  if (p.model?.key !== key) { digitizeJob({ id: p.req, key, learn, opts }); return; }
+  const plan = picturePlan(box, p.model.boxes.filter((_, i) => !p.model.colors[i].background && !p.skip.includes(i)), p.size, h);
+  sizeRange(plan.max);
+  digitizeJob({ id: p.req, key, learn, img: drawn(p.bitmap, plan.crop, plan.w, plan.h), crop: plan.frac, opts });
 }
 $("pic-file").onchange = (e) => loadPicture(e.target.files[0]);
 

@@ -357,8 +357,8 @@ Embroidery-file tools for home machines. Two implementations of the same engine:
   - Picture colours are snapped to Brother threads by CIEDE2000 (`snapToThreads`, unique, never 62-64; plain Lab sent
     olive to Russet Brown): `hex` is the thread colour, `picture` the picture's own; the writer's red-mean match then
     picks the same thread, so swatch, name and machine agree (a green was "Pewter").
-  - Open: etsy_7 thin doodles near-white at 4 colours; etsy_6 green panel (63% of the picture) still sewn; app.js's
-    content crop sizes a framed picture by the whole frame.
+  - Open: etsy_6 green panel (63% of the picture) still sewn. (etsy_7's doodles and the framed-picture size: fixed in
+    the re-run fixes below.)
   - Lettering satin (round 4 fixes): min(3.5, 0.2 xh, max(stroke, 0.12 xh, min(0.15 xh, 1.2))); auto satin from 0.8 mm,
     under that a fine line (it was 1.0, bumped to 1.2: 20 mm script names sewed as a thin line). Counters:
     `counterPockets` (raster.js) measures each gap between the centre lines; `counterCaps` narrows only the strokes
@@ -459,6 +459,58 @@ Embroidery-file tools for home machines. Two implementations of the same engine:
     spiral (each ring glides over its last 3 gaps onto the next; a ring reached by glide stops halfway round);
     straight steps only under 2.5 gaps crossing nothing. Batch quilting: trims 105 -> 84, stitches -0.3%, density
     unchanged. Open: narrow heart/diamond tips stay empty; quilt label with stipple sews as 3 lines.
+  Re-run fixes (2026-10-30): Picture tab (stream 3)
+  - Colours are learned once per picture (`learnColours`, digitize.js) from an 800 px copy of the content box (app.js
+    `LEARN`), never from the working image, then any working image is labelled with them (`labelWith`, nearest of the
+    fine clusters): Size and Turn hoop no longer change threads (turned etsy_1 swapped olive greens for Warm Gray and
+    Lavender). `analyze(img)` = both on one image (the batch). The worker keeps the model per picture/colours/background.
+  - Palette: 24 k-means clusters on flat pixels; background shades set aside (ΔE76 < 8 of the border colour, < 15 and
+    10% of the border, or < 20 and 3%: a shadowed backdrop); the rest merged two at a time, cheapest first, down to the
+    count asked. Cost = CIEDE2000 with kH 0.6 (hue counts more) on colours whose a/b fade out below L 30 (darks read as
+    black), times sqrt(solid area / 0.5% of the ink) capped at 1, where solid = pixels whose 4 neighbours are in the
+    same group (computed per group from bit-masked neighbour sets: a textured white splits into shades none solid on
+    its own). Merges also continue below the count while the cheapest is under `SAME` 7. Each count's palette is the
+    next one's with one colour split, so more colours never loses one. Merging into the background only under SAME.
+    A group whose thread was taken by a bigger one and whose next thread is > max(15, own + 10) off joins the group
+    that took it. The swatch colour is the group's solid pixels' mean (blends turned a yellow "Light Brown").
+    Tried: kL 2 (dark green stems merged into pale leaves), 16 clusters (etsy_2's tansy yellow got none), 2% area
+    weight (a pink flower merged first), hue-weighted thread snapping (Cream Brown for sage, Khaki for yellow).
+    etsy_5: default 4 lost pink and merged yellow into olive grass; now 4 = white/black/grass/yellow, 5+ adds pink, no
+    second black at any count. Default colours 6 (`state.pic.colors`, `DEFAULTS`): the SAME stop keeps simple pictures
+    at what they have (sample flower: 5). The per-group "fold slivers into a neighbour" step is gone (it sent etsy_7's
+    pastel doodles into the background; with merged groups it changed nothing else).
+  - Size = the sewn design's longer side (`picturePlan`): the model returns each colour's extent (pieces over 0.02% of
+    the copy), the page crops to the sewn colours' union (+2% and 3 px), scales it to Size and caps it to the field
+    (the slider's max is the largest that fits this picture in this hoop, turned or not: etsy_5 124 mm, 174 turned).
+    Two messages on a new picture/colour count: measure (the model, `measure: true`), then stitch. etsy_5 at 100 mm
+    was 67 x 47, max 84 x 58; now 100 x 70, 170 x 118 turned; cross-stitch of it is recognisable at that size.
+  - Line drawing: dark colours' (L <= max(35, darkest + 15)) parts no 3 mm disc reaches (`BAND`) are bands sewn once
+    along their centre (own skeleton, spur-pruned at their 90th-percentile width), unless the whole piece is under 6 mm
+    (an eye stays an outline); outlines aren't drawn against a band, nor between colours within ΔE00 15 (a lawn in two
+    greens); thin pieces that are a shade of their main neighbour (into the fabric only specks) or a blend between two
+    colours (to the ink side if one is fabric: grey-edged lettering stays) take the neighbour's colour, decided all at
+    once (chained moves erased etsy_1's pale sprigs); fabric slivers (< 0.6 mm across by closing) between two
+    different colours and enclosed fabric specks < 0.5 mm² join the ink (`closeSlivers`: the white/black halo round
+    Snoopy was outlined as a second line). Runs follow the curve (`followRun` 2 mm, 0.1 mm), points under 0.4 mm apart
+    merged (tiny stitches failed 6 batch files first). Snoopy's outline: two parallel lines -> one.
+  - Filled: thin-line walks under 1.5 mm (dots, each sewn 4x with two locks and a trim) are dropped even beside a
+    bigger piece. Not done: narrow outlines (1-2 mm) as satin instead of tatami (needs a variable-width satin through
+    junctions; the density risk is more than this round should take).
+  - Messages: blank/see-through and one-colour pictures say there's nothing to stitch (`learnColours().empty`); errors
+    carry `code` (small, cross, skipped, empty) and the page adds only advice that can still be followed (a "Make it as
+    big as fits" button below max, smaller crosses above 1.5 mm, "Sew every thread"); the centre's "Choose a picture"
+    is cleared beside an error. The small-details note dropped the hairline count (thin lines are sewn as lines on
+    purpose; it fired on the sample flower) and "fewer colours"; it says a bigger Size helps only below the max.
+  - Turned pictures get the hooping note (steps, done dialog, Sew along, sew sheet notes) like the Design tab
+    (`turnedFile`). Threads list in sewing order, skipped last. Line drawing labels the slider "Colours to trace". A
+    .pes/.pec/.dst chosen as a picture opens in Open a design. Have ready names T-shirts as knits (no fabric selector:
+    the Design tab's fabric changes satin underlay/pull/lettering; a picture's only fabric knob is fill density,
+    already Standard/Dense).
+  - pe900 batch: 125/125 ok, 27 picture files changed, nothing else; studio batch byte-identical. Picture totals:
+    trims 2067 -> 1899, stitches 172k -> 205k (line drawings follow curves: +45-120% stitches each; etsy_4/etsy_8 now
+    sew the white and pink flowers they lost), peak density 24 -> 24. Harness sweep, 6 colours at 120 mm: trims down
+    on 8 of 9 pictures (etsy_8 379 -> 259, etsy_3 365 -> 303, etsy_2 174 -> 117; etsy_5 41 -> 84 because it's now
+    sewn 120 mm wide, not 81). The batch page still sizes by the whole image (`workingSize`), not `picturePlan`.
 - The preview is the file: `setView` decodes `v.bytes` with `readEmbroidery` and draws/counts/fit-checks that, and
   thread labels come from the file's own PEC palette.
 
