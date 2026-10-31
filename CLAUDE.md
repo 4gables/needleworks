@@ -141,6 +141,16 @@ Embroidery-file tools for home machines. Two implementations of the same engine:
   only: files always carry Brother PEC colours. Picture tab "Use only threads I own" sends `palette` to the worker;
   `toPalette()` maps each colour cluster to the nearest owned spool and merges clusters that land on the same one
   (the sample flower: 3 thread changes -> 2).
+  Naming decision (2026-10-30), following how the trade works: a spool is bought and stored by brand + number. The
+  number is printed on the spool and used by shops, conversion charts and design colour sheets. Names vary even
+  between a maker's own resellers (Isacord 0015 is "White" or "Bright White", 0010 "White" or "Silky White"), and the
+  same name means different colours in different brands. So:
+  - every thread shows the swatch, the machine's own name (what its screen says at the colour change) and
+    "≈ Brand number";
+  - the maker's name is added only where the maker publishes one;
+  - no name translation or naming toggle.
+  CIEDE2000 matching was tried: it picks the same whites and blacks (pure white is still Isacord 0003), so CIELAB
+  stays. Open: whether pure white should say Isacord 0015 rather than 0003 (Amann's card draws whites bluish).
 - Design doctor (`js/doctor.js`, Open tab "Checkup"): needle hits per mm² per block (> 24 flagged), stitches under
   0.3 mm, satin same-edge gap (median, as pe900_check.py; > 0.6 flagged), stitches over 10 mm, a stabilizer hint from
   stitches per square inch. Fixes: Size 80-120 % about the centre (coordinates rounded to whole 0.1 mm and zero-length
