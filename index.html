@@ -196,7 +196,7 @@
       <ol class="guide" id="st-guide">
         <li><b>Pick a starting idea</b> below.</li>
         <li><b>Tap a piece</b> to change its words, size or thread. Drag it on the preview to move it.</li>
-        <li><b>Download</b> and copy the file to a USB stick. “How to stitch it” lists every pause.
+        <li><b>Download</b> and copy the file to a USB stick. “How to stitch it” says what to do at the machine, step by step.
           <button type="button" class="link" id="st-guide-close" aria-label="Hide these tips">Got it</button></li>
       </ol>
       <fieldset class="field">
@@ -287,7 +287,7 @@
   <form method="dialog">
     <h2 id="done-title">Saved to your downloads</h2>
     <p class="good" id="done-checked"></p>
-    <p class="warn" id="done-turn" hidden>The hoop is turned: the machine shows this design on its side. Hoop the fabric a quarter turn round, with the top of the design toward the right of the hoop (as the sew sheet shows).</p>
+    <p class="warn" id="done-turn" hidden>The hoop is turned, so the machine sews this design on its side. Hoop the fabric a quarter turn round: the top of the design goes to the right-hand side of the hoop as you face the machine (the sew sheet shows it that way).</p>
     <p class="warn" id="done-warn" hidden></p>
     <p class="warn" id="done-zip" hidden>It's a .zip: open it first (double-click it) and copy the .pes files inside, not the .zip. The machine can't read a .zip.</p>
     <ol class="done-steps">
@@ -330,6 +330,8 @@
     <div id="along-you"></div>
     <p id="along-sews"></p>
     <p id="along-time" class="hint"></p>
+    <details id="along-wrong" class="along-wrong" hidden><summary>Sewed with the wrong thread?</summary>
+      <ol class="sub"><li>Press the machine's start/stop button to stop it.</li><li>Unpick what it sewed: snip the stitches on the back every few stitches and pull them out from the front.</li><li>On the machine's screen, go back to where this thread started with the stitch back key (the needle with −).</li><li>Put on the right thread and press Start.</li></ol></details>
   </div>
   <nav><button type="button" id="along-back" class="ghost">Back</button><button type="button" id="along-next" class="primary">Next step</button></nav>
 </dialog>

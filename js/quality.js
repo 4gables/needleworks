@@ -94,7 +94,7 @@ export function verdict(pattern) {
   if (m.same > SAME_SHARE * m.stitches) out.push({ key: "same", text: `${m.same} ${m.same === 1 ? "stitch goes" : "stitches go"} back into the hole the needle is already in.` });
   // (the PEC header's thread list, one per block, is what the machine steps through: pe900_check fails any other count)
   if (pattern.pec && pattern.pec.length !== blocks) out.push({ key: "colours", text: `The file lists ${pattern.pec.length} ${pattern.pec.length === 1 ? "thread" : "threads"} for ${blocks} ${blocks === 1 ? "colour" : "colours"}: the machine may ask for the wrong threads.` });
-  if (blocks > MAX_BLOCKS) out.push({ key: "blocks", text: `${stopWords(blocks - 1 - stops, stops)}: the machine stops ${MAX_BLOCKS - 1} times at most in one design.` });
+  if (blocks > MAX_BLOCKS) out.push({ key: "blocks", text: `${stopWords(blocks - 1 - stops, stops)}: the machine can take ${MAX_BLOCKS - 1} at most in one design.` });
   if (gap != null && gap > SPARSE) out.push({ key: "sparse", text: `The satin stitches are far apart (${gap.toFixed(2)} mm on each edge; well-made designs 0.3–0.4 mm), so fabric may show through.` });
   return out;
 }

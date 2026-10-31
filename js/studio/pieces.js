@@ -863,18 +863,18 @@ function localStages(p, fab = "cotton") {
     const words = (p.text || "").replace(/\s*\n\s*/g, " / ").trim();
     // (a motif either side is said: "Sews “Leo”." sewed two bunnies as well)
     const both = paths.length && MOTIFS[p.deco] ? ` with ${/^[aeiou]/i.test(MOTIFS[p.deco].name) ? "an" : "a"} ${MOTIFS[p.deco].name.toLowerCase()} either side` : "";
-    if (paths.length) stages = [{ color: p.color, paths, sews: fab === "towel" ? `Sews a light base to flatten the pile, then “${words}”${both} on it.` : `Sews “${words}”${both}.` }];
+    if (paths.length) stages = [{ color: p.color, paths, sews: fab === "towel" ? `Sews a light base to flatten the loops, then “${words}”${both} on it.` : `Sews “${words}”${both}.` }];
   } else if (p.kind === "monogram") {
     const paths = monogram(p, fab);
-    if (paths.length) stages = [{ color: p.color, paths, sews: fab === "towel" ? `Sews a light base to flatten the pile, then the monogram ${p.letters}.` : `Sews the monogram ${p.letters}.` }];
+    if (paths.length) stages = [{ color: p.color, paths, sews: fab === "towel" ? `Sews a light base to flatten the loops, then the monogram ${p.letters}.` : `Sews the monogram ${p.letters}.` }];
   } else if (p.kind === "frame") {
     const edge = shapeOf(p).path(p.w, p.h), name = shapeOf(p).name.toLowerCase();
     if (p.border === "applique") {
       stages = [
         { color: p.color, paths: [loop(run(edge, 2.5, true))], sews: `Sews the ${name} outline on the base fabric.`, fabric: true, solid: [edge] },
         { color: p.color, pause: true, paths: tack(edge),
-          you: `Lay the appliqué fabric over the ${name} outline, right side up, covering it by ½ in. Press Start. Then take the hoop off the machine (leave the fabric in the hoop), trim the appliqué fabric close to the stitching, and put the hoop back.`,
-          sews: "Tacks the appliqué fabric down.", under: true },
+          you: `Lay the appliqué fabric over the ${name} outline, right side up, covering it by ½ in. Press Start: the machine tacks it down. Then take the hoop off the machine (leave the fabric in the hoop), trim the appliqué fabric close to the stitching, and put the hoop back.`,
+          sews: "", under: true },
         { color: p.color, pause: true, paths: satinBorder(edge), you: "Press Start.", sews: "Covers the raw edge with a satin border." },
       ];
     } else if (p.border === "zip") {
@@ -1018,8 +1018,8 @@ function appliqued(loops, color, what, cover, trim, them = "it") {
   return [
     { color, paths: R.placement, cut: loops, solid: loops, sews: `Sews the outline of ${what} on the base fabric.`, fabric: true },
     { color, pause: true, paths: R.tack,
-      you: `Lay the appliqué fabric over ${cover}, right side up, covering ${them} by ½ in. Press Start. Then take the hoop off the machine (leave the fabric in the hoop), trim the fabric close to the stitching ${trim}, and put the hoop back.`,
-      sews: "Tacks the appliqué fabric down.", under: true },
+      you: `Lay the appliqué fabric over ${cover}, right side up, covering ${them} by ½ in. Press Start: the machine tacks it down. Then take the hoop off the machine (leave the fabric in the hoop), trim the fabric close to the stitching ${trim}, and put the hoop back.`,
+      sews: "", under: true },
     { color, pause: true, paths: R.satin, you: "Press Start.", sews: "Covers the raw edges with satin." },
   ];
 }
@@ -1531,8 +1531,8 @@ export const FABRICS = {
     hoop: "Hoop the fabric with tear-away stabilizer under it", after: "Take the hoop off, snip any loose threads and tear the stabilizer away gently, holding the stitches down with your thumb." },
   knit: { name: "Knit / T-shirt", ready: "Cut-away stabilizer (fusible no-show mesh is easiest) and a 75/11 ballpoint needle.", tip: "Knits stretch: hoop them with cut-away stabilizer (fusible no-show mesh is easiest) and use a 75/11 ballpoint needle. Don't stretch the fabric while hooping.",
     hoop: "Hoop the knit with the cut-away stabilizer under it, without stretching it", after: "Take the hoop off and snip any loose threads. Trim the cut-away stabilizer on the back about ¼ in from the stitching, rounding the corners. Don't tear it: it stops the design stretching out of shape in the wash." },
-  towel: { name: "Towel / fleece", tip: "Lay a water-soluble topper on the towel or fleece and hoop tear-away (or cut-away) stabilizer under it. The light base sewn under the letters flattens the pile; tear the topper off afterwards.",
-    ready: "A water-soluble topper (like Solvy) and tear-away or cut-away stabilizer.", hoop: "Hoop the towel with the stabilizer under it and lay the water-soluble topper on top",
+  towel: { name: "Towel / fleece", tip: "Lay a water-soluble topper on the towel or fleece and hoop tear-away (or cut-away) stabilizer under it. The light base sewn under the letters flattens the loops; tear the topper off afterwards.",
+    ready: "A water-soluble topper (like Solvy) and tear-away or cut-away stabilizer.", hoop: "Hoop the towel or fleece with the stabilizer under it. Lay the water-soluble topper on top",
     after: "Take the hoop off and snip any loose threads. Tear the topper away (a damp cloth melts the bits left in the letters), then tear the stabilizer off the back (cut-away: trim it ¼ in from the stitching)." },
   felt: { name: "Felt", ready: "Tear-away stabilizer and a sharp 75/11 needle.", tip: "Felt is firm: tear-away stabilizer is enough. Use a sharp 75/11 needle.",
     hoop: "Hoop the felt with tear-away stabilizer under it", after: "Take the hoop off, snip any loose threads and tear the stabilizer away gently." },
@@ -1796,7 +1796,7 @@ function build(pieces, hoop, opts) {
       steps.push({ color: st.color, sews: [], you: st.you ? (change ? `Change to the next thread. ${st.you}` : st.you) : steps.length ? (change ? "Change to the next thread and press Start." : "Keep the same thread on and press Start.") : null,
         fabric: !!st.fabric, under: !!st.under || !!st.fabric, early: false, cut: st.fabric && !st.nocut ? st.cut || st.paths : null });
     }
-    steps[steps.length - 1].sews.push(st.sews);
+    if (st.sews) steps[steps.length - 1].sews.push(st.sews);
     if (st.early) steps[steps.length - 1].early = true;
     // something you'd see joining a tack-down (quilting, lettering in the same thread) shows the block in the preview;
     // the tack line sits at the edge, under the satin that comes later

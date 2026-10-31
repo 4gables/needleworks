@@ -417,6 +417,13 @@ body[data-mode="design"] #view { cursor: grab; }
 .along-ready h3 { margin: 0 0 2px; font-size: 15px; color: var(--muted); }
 .along-ready ul { margin: 0; padding-left: 20px; display: grid; gap: 2px; }
 .along-body p.along-turn { font-size: 17px; }
+.along-wrong { font-size: 16px; margin: 4px 0 8px; }
+.along-wrong summary { cursor: pointer; color: var(--muted); min-height: 32px; display: list-item; }
+.along-wrong ol { margin: 4px 0 0; padding-left: 22px; display: grid; gap: 4px; }
+/* the turned hoop drawn beside its note */
+.turn-pic { float: left; margin: 2px 10px 4px 0; color: var(--ink, currentColor); }
+.turned { display: block; }
+#done-turn::after, .along-turn::after, .turned::after { content: ""; display: block; clear: both; }
 @media (max-height: 700px) { .along-ready { font-size: 15px; } .along-body p, .along-body ol.sub { font-size: 18px; } }
 .along-body .hint { font-size: 15px; }
 .along nav { display: flex; gap: 12px; padding: 12px max(18px, env(safe-area-inset-left)) max(18px, env(safe-area-inset-bottom)); max-width: 760px; width: 100%; margin: 0 auto; box-sizing: border-box; }
@@ -578,6 +585,8 @@ input[type="text"], .edit textarea { font: 400 20px/1.3 var(--body); }
   #play { min-width: 0; flex: 1; }
   .sew .ghost { padding: 6px 10px; }
   .stage { grid-template-rows: minmax(300px, calc(100svh - 370px)) auto auto; }
+  /* and room for a warning beside Download, so it shows above the bar too (a fleece name that closes up wasn't seen) */
+  .stage:has(.dl-warn:not([hidden])) { grid-template-rows: minmax(260px, calc(100svh - 440px)) auto auto; }
   #download { bottom: calc(12px + env(safe-area-inset-bottom)); }
   /* a solid strip behind the bar: the slider's red showed through at its rounded corners */
   body::after { content: ""; position: fixed; left: 0; right: 0; bottom: 0; height: calc(76px + env(safe-area-inset-bottom)); z-index: 5;
