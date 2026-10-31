@@ -3,6 +3,7 @@
 import { readFileSync, readdirSync, existsSync } from "fs";
 import { readEmbroidery, validatePES, writePES } from "../js/core/formats.js";
 import { checkup, fix, sortColors } from "../js/doctor.js";
+import { moves, verdictOf } from "../js/quality.js";
 
 const dirs = ["tests/fixtures/golden", "tests/external/pes"].filter(existsSync);
 let n = 0, bad = 0, sorted = 0;
@@ -34,6 +35,28 @@ for (const dir of dirs) for (const f of readdirSync(dir).filter((x) => /\.(pes|d
     } catch (err) { bad++; console.error(`FAIL ${f} restitch ${scale} sort ${sort}: ${err.message}`); }
   }
   const s = sortColors(d); if (s) sorted++;
+  // the download dialog's fixed copy (app.js fixedCopy) passes the app's own verdict, which is pe900_check's
+  const bytes = writePES(d), v = verdictOf(bytes);
+  if (v.length) {
+    n++;
+    const k = new Set(v.map((q) => q.key)), p = fix(readEmbroidery(bytes, "x.pes"), { thin: k.has("dense"), tiny: k.has("tiny") || k.has("same"), satin: k.has("sparse") });
+    const after = verdictOf(writePES(p));
+    if (after.length) { bad++; console.error(`FAIL ${f} fixed copy still: ${after.map((q) => q.key)}`); }
+  }
+  // Remove tiny stitches leaves next to none the checker counts, shrunk or re-stitched (a run ending in two short
+  // stitches can keep one: needleworks_rl at 90 %)
+  for (const scale of [0.7, 0.9]) {
+    n++;
+    const m = moves(readEmbroidery(writePES(fix(d, { scale, tiny: true })), "x.pes").stitches);
+    if (m.tiny > 2) { bad++; console.error(`FAIL ${f} ${scale} with tiny removed: ${m.tiny} tiny`); }
+  }
+}
+// two blocks in a row in one thread are a pause (an in-the-hoop fabric step): colour sort leaves the file alone
+{
+  n++;
+  const sq = (x0) => [[x0, 0, 0], [x0 + 20, 0, 0], [x0 + 20, 20, 0], [x0, 20, 0]];
+  const red = { color: "#ed171f", name: "Red" }, p = { stitches: [...sq(0), [0, 20, 5], ...sq(100), [100, 20, 5], ...sq(200), [200, 20, 4]], threads: [red, red, red] };
+  if (sortColors(p)) { bad++; console.error("FAIL colour sort merged a same-thread pause"); }
 }
 console.log(`doctor: ${n} fixes, ${bad} bad (colour sort helped ${sorted} files)`);
 if (bad || !n) process.exit(1);

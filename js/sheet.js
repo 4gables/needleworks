@@ -45,7 +45,7 @@ ${groups.map((g, i) => `  <g id="fabric-${i + 1}"><path d="${path(g)}" fill="non
 `;
 }
 
-// sheet: { steps: [{ title?, you?, sews? }], after: [], notes: [], cut: [[loop...]...] }, thread names as the machine shows them
+// sheet: { steps: [{ title?, you?, sews? }], ready: [] (one "Have ready" list), after: [], notes: [], cut: [[loop...]...] }, thread names as the machine shows them
 export function sewSheet({ pattern, filename, hoop, facts, threads, hide, sheet = {}, spool = () => "" }) {
   const { blocks } = colorBlocks(pattern);
   const steps = sheet.steps?.length ? sheet.steps : blocks.map(() => ({}));
@@ -69,7 +69,9 @@ export function sewSheet({ pattern, filename, hoop, facts, threads, hide, sheet 
     ${template(pattern, hoop, hide)}
     <p class="note">The machine stitches the design centred in the hoop, where the dashed lines cross. Pin this sheet on the fabric where you want the design and line the crosshair up with the hoop's grid sheet.</p>
   </section>
-  <section class="pg"><h2>How to stitch it</h2><ol class="list">${rows}</ol>
+  <section class="pg"><h2>How to stitch it</h2>
+    ${(sheet.ready || []).length ? `<h3>Have ready</h3><ul class="ready">${sheet.ready.map((r) => `<li>${esc(r)}</li>`).join("")}</ul>` : ""}
+    <ol class="list">${rows}</ol>
     ${(sheet.after || []).length ? `<h3>When it's done</h3><p>${esc(sheet.after.join(" "))}</p>` : ""}
     ${(sheet.notes || []).filter(Boolean).map((n) => `<p class="tip">${esc(n)}</p>`).join("")}
     <p class="tip">Check the size on the machine's screen before you stitch.</p>

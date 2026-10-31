@@ -7,8 +7,10 @@ import { fillPolygon } from "./core/digitize.js";
 import { distanceTransform } from "./core/raster.js";
 import { contours } from "./studio/quilt.js";
 import { pyRound } from "./core/threads.js";
+import { LIMIT, moves, peak, satinGap, verdict } from "./quality.js";
 
-const LIMIT = 24;   // needle hits per mm² per colour block: the densest spot in sold designs (pe900_check.py)
+// (LIMIT: 24 needle hits per mm² per colour block, the densest spot in sold designs; the counts are pe900_check.py's,
+// from quality.js, so the checkup and the download's verdict agree)
 
 // hits per 1 mm cell, the most in any one colour block: Map "cx,cy" -> count
 export function heat(pattern) {
@@ -24,49 +26,22 @@ export function heat(pattern) {
   return out;
 }
 
-// The densest 1 mm window in one colour block at any 0.1 mm grid offset (the machine's grid isn't ours: offset 0
-// alone said 17 for peace.pes where pe900_check finds 25), and how many offset-0 cells sit under a window over the
-// limit. A window lies in a 2 x 2 group of offset-0 cells, its corner cell possibly empty; only groups over the
-// limit are scanned.
-function peak(pattern) {
-  const cells = new Map();
-  let blk = 0;
-  for (const [x, y, c] of pattern.stitches) {
-    if (c === COLOR_CHANGE) { blk++; continue; }
-    if (c !== STITCH) continue;
-    const X = Math.round(x), Y = Math.round(y), k = `${blk},${Math.floor(X / 10)},${Math.floor(Y / 10)}`;
-    if (!cells.has(k)) cells.set(k, []); cells.get(k).push([X, Y]);
-  }
-  let max = 0; const hot = new Set(), corners = new Set();
-  for (const [k, v] of cells) { max = Math.max(max, v.length); const [b, cx, cy] = k.split(",").map(Number); for (const i of [0, 1]) for (const j of [0, 1]) corners.add(`${b},${cx - i},${cy - j}`); }
-  for (const k of corners) {
-    const [b, cx, cy] = k.split(",").map(Number), group = [[0, 0], [1, 0], [0, 1], [1, 1]].map(([i, j]) => `${b},${cx + i},${cy + j}`);
-    const pts = group.flatMap((g) => cells.get(g) || []);
-    if (pts.length <= LIMIT && pts.length <= max) continue;
-    for (let ox = 0; ox < 10; ox++) for (let oy = 0; oy < 10; oy++) {
-      const x0 = cx * 10 + ox, y0 = cy * 10 + oy;
-      let n = 0; for (const [X, Y] of pts) if (X >= x0 && X < x0 + 10 && Y >= y0 && Y < y0 + 10) n++;
-      if (n > max) max = n;
-      if (n > LIMIT) for (const g of group) if (cells.has(g)) hot.add(g);
-    }
-  }
-  return { max, hot: hot.size };
-}
-
+// what the checkup says about a pattern: give it the file as it will be saved (decoded from its bytes), so the
+// numbers are the saved file's (they described the design before the writer split its long stitches: "up to 26"
+// beside a file that measured 24)
 export function checkup(pattern) {
-  const st = pattern.stitches;
-  let tiny = 0, long = 0, over = 0, longest = 0, last = null, x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity, n = 0;
+  const st = pattern.stitches, m = moves(st);
+  let long = 0, last = null, x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
   for (const [x, y, c] of st) {
     if (c === STITCH) {
-      n++; x0 = Math.min(x0, x); y0 = Math.min(y0, y); x1 = Math.max(x1, x); y1 = Math.max(y1, y);
-      if (last) { const d = Math.hypot(x - last[0], y - last[1]); if (d > 0 && d < 3) tiny++; if (d > 100) long++; if (d > 121) over++; if (d > longest) longest = d; }
+      x0 = Math.min(x0, x); y0 = Math.min(y0, y); x1 = Math.max(x1, x); y1 = Math.max(y1, y);
+      if (last && Math.hypot(x - last[0], y - last[1]) > 100) long++;
       last = [x, y];
     } else if (c === JUMP) last = [x, y];
-    else if (c === TRIM || c === COLOR_CHANGE) last = null;
   }
   const { max, hot } = peak(pattern);
   const sqin = Math.max(((x1 - x0) / 254) * ((y1 - y0) / 254), 0.1);
-  return { stitches: n, tiny, long, over, longest: longest / 10, max, hot, perSqIn: Math.round(n / sqin), satinGap: satinGap(st) };
+  return { stitches: m.stitches, tiny: m.tiny, long, over: m.over, longest: m.longest, max, hot, perSqIn: Math.round(m.stitches / sqin), satinGap: satinGap(st), verdict: verdict(pattern) };
 }
 
 // moves between 1 and 5 mm, from the last stitch to the next: too short for the PE900 to trim (its lowest setting is
@@ -83,23 +58,6 @@ export function shortJumps(p) {
     if (c === COLOR_CHANGE) { from = null; last = null; }
   }
   return (p.shortJumps = n);
-}
-
-// satin coverage, as pe900_check.py measures it: in long zigzags, the gap between hits on the same edge (mm, median);
-// sold designs 0.30-0.42. null when there's too little satin to judge.
-function satinGap(st) {
-  const pts = st.filter((s) => s[2] === STITCH), same = [];
-  let run = [];
-  for (let k = 2; k < pts.length; k++) {
-    const [a, b, c] = [pts[k - 2], pts[k - 1], pts[k]], v1 = [b[0] - a[0], b[1] - a[1]], v2 = [c[0] - b[0], c[1] - b[1]];
-    const l1 = Math.hypot(...v1), l2 = Math.hypot(...v2);
-    if (l1 >= 12 && l1 <= 60 && l2 >= 12 && l2 <= 60 && (v1[0] * v2[0] + v1[1] * v2[1]) / (l1 * l2) < -0.85) run.push(Math.hypot(c[0] - a[0], c[1] - a[1]) / 10);
-    else { if (run.length >= 6) same.push(...run); run = []; }
-  }
-  if (run.length >= 6) same.push(...run);
-  if (same.length < 200) return null;
-  same.sort((a, b) => a - b);
-  return Math.round(same[same.length >> 1] * 100) / 100;
 }
 
 // colour blocks: [{ stitches (no colour changes or END), thread }]
@@ -129,6 +87,9 @@ export function sortColors(pattern) {
   const blocks = blocksOf(pattern);
   // (a DST has no thread colours: every block would look like the same thread)
   if (blocks.length < 2 || pattern.threads.length < blocks.length || blocks.some((b) => !b.thread?.color)) return null;
+  // (two blocks in a row in one thread are a pause, not a thread change: an in-the-hoop bookmark's or appliqué's
+  // fabric steps. Merged, the bookmark lost all four and its copy piled 25 hits/mm²)
+  if (pauses(pattern)) return null;
   const cells = (b) => {
     const c = new Set();
     for (const [x, y, k] of b.stitches) if (k === STITCH) { const X = Math.floor(x / 10), Y = Math.floor(y / 10); for (let dx = -1; dx <= 1; dx++) for (let dy = -1; dy <= 1; dy++) c.add(X + dx + "," + (Y + dy)); }
@@ -151,6 +112,17 @@ export function sortColors(pattern) {
     t.stitches.push(...b.stitches); for (const k of mine) t.cells.add(k); moved++;
   }
   return moved ? joinBlocks(out) : null;
+}
+// thread changes that are machine pauses: the next block is in the same thread (same PEC thread, or same colour)
+export function pauses(pattern) {
+  const pec = pattern.pec, t = pattern.threads;
+  let n = 0, k = 0;
+  for (const s of pattern.stitches) if (s[2] === STOP) n++; else if (s[2] === COLOR_CHANGE) {
+    k++;
+    const same = pec && pec.length > k ? pec[k] === pec[k - 1] : !!t[k]?.color && t[k].color.toLowerCase() === t[k - 1]?.color?.toLowerCase();
+    if (same) n++;
+  }
+  return n;
 }
 // how many thread changes colour sort would leave (null: it can't help)
 export const sortedChanges = (pattern) => { const s = sortColors(pattern); return s && s.threads.length - 1; };
@@ -610,7 +582,8 @@ export function respace(st, scale = 1) {
 export function fix(pattern, { scale = 1, tiny = false, thin = false, sort = false, satin = false } = {}) {
   pattern = landJumps(pattern);
   if (sort) pattern = sortColors(pattern) || pattern;
-  if (scale < 0.8 - 1e-9 || scale > 1.2 + 1e-9) pattern = restitch(pattern, scale), scale = 1, satin = false;
+  // (re-stitched, every stitch is new: tiny ones it made go whatever the box says; gnome at 150 %: 2 -> 43)
+  if (scale < 0.8 - 1e-9 || scale > 1.2 + 1e-9) pattern = restitch(pattern, scale), scale = 1, satin = false, tiny = true;
   else if (scale !== 1) satin = true;
   let st = pattern.stitches;
   if (scale !== 1) {
@@ -642,5 +615,34 @@ export function fix(pattern, { scale = 1, tiny = false, thin = false, sort = fal
     out.push([x, y, c]);
     if (c === STITCH || c === JUMP) last = [x, y]; else if (c === TRIM || c === COLOR_CHANGE) last = null;
   }
-  return { stitches: slide(thin ? relieve(out, LIMIT) : out), threads: pattern.threads };
+  const done = slide(thin ? relieve(out, LIMIT) : out);
+  return { stitches: tiny ? dropTiny(done) : done, threads: pattern.threads };
+}
+// The last word on tiny stitches, on the coordinates the writer will use (whole 0.1 mm, half to even) and by the
+// checker's rule (under 0.3 mm, bar the first 6 after a jump, trim or thread change): measured before thinning and on
+// unrounded points, "Remove tiny stitches" left 23 on gnome at 70 % (star_badge's 48 at 80 % were exact 0.3 mm steps
+// of a square-wave satin that the checker read as 0.29999 mm in float; it counts in 0.1 mm units now). A stitch goes when
+// the next is a stitch too and dropping it doesn't put the needle back into the hole it just left; the last stitch
+// of a run (before a trim or thread change) stays and the one before it goes instead.
+function dropTiny(st) {
+  const out = [];
+  let last = null, after = 0;
+  for (let i = 0; i < st.length; i++) {
+    const c = st[i][2], s = c === STITCH || c === JUMP ? [pyRound(st[i][0]), pyRound(st[i][1]), c] : st[i];
+    if (c === STITCH && last) {
+      const d = Math.hypot(s[0] - last[0], s[1] - last[1]), nx = st[i + 1];
+      if (after > 6 && d < 3) {
+        if (nx?.[2] === STITCH && (pyRound(nx[0]) !== last[0] || pyRound(nx[1]) !== last[1])) continue;
+        const pp = out[out.length - 2];
+        if (nx?.[2] !== STITCH && after > 7 && out[out.length - 1][2] === STITCH && pp?.[2] === STITCH && Math.hypot(s[0] - pp[0], s[1] - pp[1]) >= 3) {
+          out.pop(); after--;
+        }
+      }
+      after++;
+    }
+    if (c === JUMP || c === TRIM || c === COLOR_CHANGE) after = 0;
+    if (c === STITCH || c === JUMP) last = s;
+    out.push(s);
+  }
+  return out;
 }

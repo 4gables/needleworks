@@ -25,3 +25,30 @@ export const APPLIQUE_FONTS = [
   { family: "NW Lilita One", name: "Lilita One", note: "rounded" },
   { family: "NW Alfa Slab One", name: "Alfa Slab One", note: "slab" },
 ];
+
+// Load a lettering font before drawing with it. One that failed (a network blip) stays failed in the page's
+// @font-face until a reload, and document.fonts.load() keeps rejecting with "A network error occurred.", so it's
+// fetched again from the same file as a second copy, which is what's drawn from then on. Still failing: a plain error
+// (`font: true`) to show, and the next use tries again.
+const again = new Map();   // family -> the FontFace added after a failure
+export async function loadFont(family) {
+  if (typeof document === "undefined" || again.get(family)?.status === "loaded") return;
+  try { await document.fonts.load(`40px "${family}"`); return; }
+  catch {
+    const src = fontSrc(family);
+    if (src) try { const f = new FontFace(family, src); await f.load(); document.fonts.add(f); again.set(family, f); return; } catch {}
+    const name = [...FONTS, ...APPLIQUE_FONTS].find((f) => f.family === family)?.name || family.replace(/^NW /, "");
+    throw Object.assign(new Error(`The ${name} letters didn't load: the internet connection may have dropped. Check it and try again.`), { font: true });
+  }
+}
+// the font's file, as the stylesheet names it (absolute, so it loads from here)
+function fontSrc(family) {
+  for (const sheet of document.styleSheets) {
+    let rules; try { rules = sheet.cssRules; } catch { continue; }
+    for (const r of rules) {
+      if (!(r instanceof CSSFontFaceRule) || r.style.getPropertyValue("font-family").replace(/["']/g, "").trim() !== family) continue;
+      return r.style.getPropertyValue("src").replace(/url\((["']?)([^"')]+)\1\)/g, (m, q, u) => `url("${new URL(u, sheet.href || location.href).href}")`);
+    }
+  }
+  return null;
+}

@@ -3,13 +3,15 @@
 // with the page frozen. Gets { id, d (the opened pattern), opts }, sends back the fixed pattern, its PES bytes and its
 // checkup.
 import { checkup, fix } from "./doctor.js";
-import { writePES } from "./core/formats.js";
+import { readEmbroidery, writePES } from "./core/formats.js";
 
 self.onmessage = (e) => {
   const { id, d, opts } = e.data;
   try {
-    const pattern = fix(d, opts), bytes = writePES(pattern);
-    self.postMessage({ id, ok: true, pattern, bytes, check: checkup(pattern) }, [bytes.buffer]);
+    // (the checkup reads the bytes back: it describes the file that will be saved, after the writer's splits and
+    // rounding, not the pattern handed to it)
+    const pattern = fix(d, opts), bytes = writePES(pattern), check = checkup(readEmbroidery(bytes, "fixed.pes"));
+    self.postMessage({ id, ok: true, pattern, bytes, check }, [bytes.buffer]);
   } catch (err) {
     self.postMessage({ id, ok: false, error: err.message || String(err) });
   }
