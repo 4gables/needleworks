@@ -6,24 +6,31 @@ import { distanceTransform } from "../core/raster.js";
 
 const RES = 4;
 
-// free space: inside `edge` (closed polygon) by `inset` mm, at least `clear` mm from every point of `obstacles`.
+// free space: inside `edge` (closed polygon) by `inset` mm, at least `clear` mm from every point of `obstacles` and
+// from every filled shape in `solids` (each a list of closed loops, even-odd: an appliqué's fabric, a patch, a filled
+// motif; quilting sewn first ran under the appliqué fabric, and the preview drew it on top).
 // Also returns each pixel's distance (px) from the frame's edge (`dtA`) and from the nearest obstacle (`dtB`).
-function freeMask(edge, obstacles, inset, clear) {
+function freeMask(edge, obstacles, inset, clear, solids = []) {
   const xs = edge.map((p) => p[0]), ys = edge.map((p) => p[1]);
   const x0 = Math.min(...xs) - 1, y0 = Math.min(...ys) - 1;
   const w = Math.ceil((Math.max(...xs) - x0 + 1) * RES), h = Math.ceil((Math.max(...ys) - y0 + 1) * RES);
   const m = { w, h, data: new Uint8Array(w * h) };
-  for (let y = 0; y < h; y++) {
-    const Y = y0 + (y + 0.5) / RES, cut = [];
-    for (let i = 0; i < edge.length; i++) {
-      const [ax, ay] = edge[i], [bx, by] = edge[(i + 1) % edge.length];
-      if ((ay <= Y) !== (by <= Y)) cut.push(ax + ((Y - ay) * (bx - ax)) / (by - ay));
+  // every pixel whose centre is inside the loops (even-odd) set to v
+  const scan = (loops, t, v) => {
+    for (let y = 0; y < h; y++) {
+      const Y = y0 + (y + 0.5) / RES, cut = [];
+      for (const l of loops) for (let i = 0; i < l.length; i++) {
+        const [ax, ay] = l[i], [bx, by] = l[(i + 1) % l.length];
+        if ((ay <= Y) !== (by <= Y)) cut.push(ax + ((Y - ay) * (bx - ax)) / (by - ay));
+      }
+      cut.sort((a, b) => a - b);
+      for (let k = 0; k + 1 < cut.length; k += 2)
+        for (let x = Math.max(0, Math.ceil((cut[k] - x0) * RES - 0.5)); x < Math.min(w, Math.floor((cut[k + 1] - x0) * RES - 0.5) + 1); x++) t.data[y * w + x] = v;
     }
-    cut.sort((a, b) => a - b);
-    for (let k = 0; k + 1 < cut.length; k += 2)
-      for (let x = Math.max(0, Math.ceil((cut[k] - x0) * RES - 0.5)); x < Math.min(w, Math.floor((cut[k + 1] - x0) * RES - 0.5) + 1); x++) m.data[y * w + x] = 1;
-  }
+  };
+  scan([edge], m, 1);
   const dtA = distanceTransform(m), ob = { w, h, data: new Uint8Array(w * h).fill(1) };
+  for (const s of solids) scan(s, ob, 0);
   const stamp = (x, y) => {
     const X = Math.round((x - x0) * RES - 0.5), Y = Math.round((y - y0) * RES - 0.5);
     if (X >= 0 && Y >= 0 && X < w && Y < h) ob.data[Y * w + X] = 0;
@@ -58,8 +65,8 @@ function rng(seed = 7) { return () => { seed |= 0; seed = (seed + 0x6d2b79f5) | 
 // over a grid of squares: its corridors all ran along two directions, and relaxing them to an even spacing everywhere
 // sewed as a maze of parallel corridors; before that its points were only averaged, which left sharp V points.)
 const NODE = 1.5, NECK = 0.32, LOBE = [0.4, 0.8], BULB = 1.4, REACH = 1.7, KNOT = 0.2, PASS = 0.13;
-export function stipple(edge, obstacles, { space = 5, inset = 4, clear = 2.5 } = {}) {
-  const F = freeMask(edge, obstacles, inset, clear), { m, toMm } = F, rand = rng();
+export function stipple(edge, obstacles, { space = 5, inset = 4, clear = 2.5, solids } = {}) {
+  const F = freeMask(edge, obstacles, inset, clear, solids), { m, toMm } = F, rand = rng();
   const room = sampler(F, distanceTransform(m).map((d) => d / RES)), M = space / 2, D = NODE * space;
   // knots: random darts, each kept if it's D from every knot so far and has room for a lobe
   const W = m.w / RES, H = m.h / RES, cell = D / Math.SQRT2, gw = Math.ceil(W / cell) + 1, gh = Math.ceil(H / cell) + 1;
@@ -201,8 +208,8 @@ function relax(loops, F, space, rounds = 600) {
 // turned into the lettering's round ones, and left little islands in the corners.) Where the space is too narrow for
 // every ring (lettering near the frame) the rings would bunch up, so they stop short of it: there they're arcs.
 // With nothing on the frame the rings follow the frame inward, `gap` mm apart. Sewn as spirals (`chain`).
-export function echo(edge, obstacles, { gap = 4, inset = 4, clear = 2.5 } = {}) {
-  const F = freeMask(edge, obstacles, inset, clear), { m, dtA, dtB, toMm, x0, y0 } = F, N = m.w * m.h;
+export function echo(edge, obstacles, { gap = 4, inset = 4, clear = 2.5, solids } = {}) {
+  const F = freeMask(edge, obstacles, inset, clear, solids), { m, dtA, dtB, toMm, x0, y0 } = F, N = m.w * m.h;
   const A = new Float32Array(N), B = new Float32Array(N), widths = [];
   let deep = 0;
   for (let i = 0; i < N; i++) {
