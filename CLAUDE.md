@@ -12,10 +12,13 @@ measurements behind each number are in the code's comments.
 - `index.html`, `css/app.css`, `sw.js`, `manifest.webmanifest`; `js/app.js` (tabs, state, `setView`, downloads).
 - `js/core/`: `formats.js` (PES writer, readers, `validatePES`), `threads.js` (PEC palette), `design.js` (`Design`,
   locks, `finish`), `geom.js`, `raster.js` (skeleton, stroke graph), `text.js` (`renderWord`), `fonts.js`, `glyphs.js`,
-  `digitize.js` (pictures, `fillPolygon`), `bookmark.js`, `brands.js`/`brandcharts.js`, `machines.js`.
+  `digitize.js` (pictures, `fillPolygon`, `contentBox`/`pictureImage`/`LEARN`), `bookmark.js`, `brands.js`/`brandcharts.js`,
+  `machines.js`, `typed.js` (all typed text: `tidy`, `lacks`, `safeName`, `uniqueName`, `initials`).
 - `js/studio/`: `pieces.js` (pieces, `compose`, fitting, `FABRICS`), `ui.js` (editor, starters, warnings, one-tap
   fixes), `outline.js`, `quilt.js`, `motifs.js`. `js/doctor.js` + `doctor-worker.js` (Open tab fixes), `quality.js`
-  (the checker's rules), `sheet.js` (step text, sew sheet, cut file), `render.js` (`draw`), `worker.js`, `zip.js`.
+  (the checker's rules), `words.js` (problems list per view, stop/thread vocabulary), `gate.js` (the only exit for
+  files: `handOut`), `sheet.js` (step text, sew sheet, cut file), `render.js` (`draw`), `worker.js`, `quilt-worker.js`,
+  `zip.js`.
 
 ## Hard rules
 - **Proprietary.** `LICENSE`: all rights reserved to 4Gables (a trade name; no personal name anywhere on the site or
@@ -90,6 +93,7 @@ measurements behind each number are in the code's comments.
   interior points, keeps 5 points round every command, never makes a stitch of 0.3 mm or less (drops B and C together
   instead) or an A,B,A' same-hole, merged stitches under 4 mm then a second pass to 7 mm, checks windows whose corner
   cell is empty. Rounding half-to-even like the writer.
+- `finish` also moves a design over 200 mm from the centre onto it (a PES box holds 204.8 mm).
 - `turnPattern` (clockwise: sideways design into the machine's hoop); `turnForMachine` thins again after the turn.
 - `satin(p, width, density = 0.4, pullComp, closed, fold, wAt, shape)`: `density` = gap between hits on the SAME
   edge (Ink/Stitch default; Brother files 0.30-0.42). Stations `density`/2 apart by whichever of outer edge, inner
@@ -98,6 +102,11 @@ measurements behind each number are in the code's comments.
   widths and a slant (ends cut on the font's angle). Measure satin by the same-edge statistic, not by eye.
 - `zigzag(p, w, spacing)` = satin with same-edge gap `spacing`, no pull. `followRun(p, length, tol, min)`: stitches up
   to `length` within `tol` of the line, a hole at every turn over 30°.
+- Continuity helpers (geom.js, shared by the Design tab and bookmark): closed outlines are always `loop`ed (`run`/
+  `zigzag`/`satin` with `closed` stop one step short); a second pass round the same outline goes `back(e)` from the
+  same start; `enter(q, at)` starts a closed path at its point nearest the needle; `rings(loops, make, from)` sews
+  outlines cheapest-move first; `moveCost(d)`: up to 2 mm free, 2-5 mm 1.5 (a loose thread is worse than a trim), over
+  5 mm 1.
 - `fold`/`unfold`: an edge offset round an inside corner tighter than the half-width folds over (a star); cut where it
   crosses itself. Appliqué/outline edges (`edgeSatin`) use it.
 - Satin borders 2.5-4 mm (frames, patch/appliqué edges, bookmark border): `edgeWalk` (run 0.4 mm inside each edge,
@@ -107,7 +116,14 @@ measurements behind each number are in the code's comments.
 - `renderWord` draws on a canvas (`fontKerning = "normal"`), adds swashes, bridges letters the font leaves unjoined
   (Sacramento A→s), skeletonizes; `skeletonEdges` builds the stroke graph and prunes spurs; `order()` walks it: each
   stroke a centre run out and a satin back, every forward run satined exactly once, no jumps inside a connected word.
-  Each walk ends where it began, so moves between print letters are trims whatever the order. Lettering drawn before
+  Each walk ends where it began, so moves between print letters are trims whatever the order. Script pieces are
+  chained by `order(edges, near, loose)`: a walk may start at any node or mid-stroke, a DP picks the starts with the
+  fewest costed moves (bookmark too); print letters and pictures keep the leftmost start; bent text keeps the chaining
+  only if it costs no more once bent (`unbent`). Satin columns carry `reach` (half width + 0.1 mm) so `Design.path`
+  stitches to a start under the column instead of jumping (knit's 2.05 mm half-width: 8 trims round one junction).
+  Strokes count as at least half the x-height when sizing (a whole x-height for marks alone: "." was sized
+  5.9e12 mm). Punctuation drawn into a letter is moved clear (`apart` in text.js: up/sideways above the letters,
+  sideways among them, else shaved if most survives); swashes never leave from a mark. Lettering drawn before
   its font loaded is never cached (it's the fallback font).
 - Swashes (lead-in, tail): one calligraphic stroke from the letter's stroke end along its tangent, a shallow cup
   under the baseline, a flick up. E, O (no low entry) join at their lowest left point. Never flat along the baseline
@@ -150,7 +166,8 @@ measurements behind each number are in the code's comments.
   initial (`eachInitial`). Initials take 12 characters; a name there gets "Sew it as lettering" (`asText`).
 - Fonts: `@font-face` families `NW <Font>` (WOFF2 in `fonts/`), `document.fonts.load()` before drawing; a failed
   font stays failed until reload, so `loadFont` adds a second FontFace (Try again). `glyphs.js` = each font's
-  characters for `missing` (regenerate with `tests/make_glyphs.py`). Per-font `min` x-height feeds `minSize` (default
+  characters (regenerate with `tests/make_glyphs.py`); `typed.js` `lacks` is the only glyph check, by grapheme, NFC
+  and NFD alike, used by the editor, Download note, names batches and bookmark. Per-font `min` x-height feeds `minSize` (default
   4 mm). Fonts after Meow Script are free lookalikes of embroiderydesigns.com samples (`note`). Try a font in
   `tests/browser/fonts.html?name=<word>`; reject unjoined or spurred ones (Petit Formal, Comforter, Damion).
 
@@ -164,10 +181,14 @@ measurements behind each number are in the code's comments.
   pause fewer) only if it overlaps nothing it would jump ahead of (bbox + 1 mm), isn't appliqué, and the block isn't
   `under` (hidden in the preview). `last` stages go after everything; a patch's `edge` after everything on it (covers
   the lettering's pull). A visible stage joining a hidden block un-hides it.
-- Opts `fabric`, `thread`, `baste`, `marks`, `dragging` (quilting and carving reused until the drop). `wt` is set for
+- `build()` enters every closed ring where the needle is (`enter`), or where the next part leaves when `moveCost`
+  says so (never at the start of an appliqué's own stages: seam placement unchanged).
+- Opts `fabric`, `thread`, `baste`, `marks`, `dragging` (quilting and carving reused until the drop), `later` (quilting
+  jobs for `quilt-worker.js`; `quiltDone` fills the cache, Download reads "Quilting…" meanwhile; byte-identical). `wt` is set for
   the length of `compose`; stitch caches key on it.
-- Save / Open saved / copy-paste: `{ needleworks: 1, pieces }` JSON plus `hoop`, `turned`, fabric, thread. `cleanPiece`
-  checks and clamps every field (sizes to 180) on open, paste and the saved state (crafted files threw TypeErrors).
+- Save / Open saved / copy-paste: `{ needleworks: 1, pieces }` JSON plus `hoop`, `turned`, fabric, thread, `two`.
+  `cleanPiece` checks and clamps every field (sizes 0.5-180, so fitted designs reopen as saved), tidies text
+  (`tidy`) and drops `font` on non-lettering, on open, paste and the saved state (crafted files threw).
 - Starters (`ui.js`) reset fabric (cotton unless they say), thread weight and Turn hoop, are fitted to the hoop
   (`fitHoop(false)`), may carry a `tip`, draw stitched thumbnails (`draw(..., { pad })`) in one scrolling row.
 ### Fabric (`FABRICS`) and thread weight (`THREADS`)
@@ -232,20 +253,33 @@ measurements behind each number are in the code's comments.
 - `style`: fill (`fillPolygon(loops, { inset: 0.6 })` + 1.4 mm satin edge), outline (`edgeSatin`), applique. Traced
   like letters (`motifOutlines`). Warn under 25 mm filled, 30 mm otherwise. Lettering `deco` puts one either side.
 ### Placement, fitting, warnings
+- One placement path, `place()`, for add, duplicate, single paste and file add: frame first, where it is if clear,
+  `freeRoom`, else a toast; multi-paste uses `spotFor` or "Paste anyway". A piece shrunk to fit must stay `readable`.
 - `spotIn`: the biggest unturned frame's front, middle first, then round what's in it, shrinking to `least(p)`; never
   outside an ITH frame. No room: `freeRoom` (nearest free spot, still one hooping, re-checked after rounding), else a
-  toast; "Add it anyway" is the only add that makes two hoopings.
+  toast; "Add it anyway" / "Paste anyway" are the only ways past the hoop.
+- Two hoopings only when chosen: the `two` flag ("Sew it in two hoopings"; saved, in snapshots, cleared once it fits).
+  Otherwise too big is a note offering two hoopings / Fit / Turn (a pasted copy or a smaller hoop used to split
+  silently).
 - `touching`/`touchingAll`/`collisions`: needle points every 0.5 mm along stitch lines (`cloud`/`near`) at fitted
   sizes, under `CLEAR` 1.5 mm (~1 mm of fabric); patches excepted.
 - `fittedSizes`: lettering centred in an earlier frame fits across it, then shrinks 0.5 mm at a time (to 60 %) to
   clear it by CLEAR (`clearOf`). Fit to hoop shrinks until what's sewn fits (outlines omit satin and swashes) and stays
-  fitted (`fitted`); too-big sizes never round down to look as if they fit.
-- One-tap fixes are checked first (`landing`: fits, or fits turned -> "... and turn the hoop", else not offered; nor if
-  it hits something new or leaves its frame): one size for too small/towel (`minSize`, `towelMin`), `lineChoice`,
+  fitted (`fitted`); too-big sizes never round down to look as if they fit, and shrinking rounds down. Fit to hoop is
+  offered only when `scaledFit` (current stitches scaled, no re-stitch) leaves nothing newly too small or touching.
+- Every one-tap fix is checked before it's offered (`landing`: fits, or fits turned -> "... and turn the hoop", else
+  the text says what would go wrong; nor if it hits anything new (`touchingAll`) or leaves its frame); a fix that
+  turns the hoop is one undo step: one size for too small/towel (`minSize`, `towelMin`), `lineChoice`,
   `clearSize`, `moveAway`, `frameFor`, `archShrink`, run up a tall frame (rot -90), "Sew it as Cotton",
   `twoHoopings` (turn, or split lettering at a middle word gap). Never a size the frame fit would shrink back.
-- Lettering that won't read sewn (too small, closes up, loops fill) or lacks letters is listed beside Download
-  (`v.warn`) and in the done dialog.
+- Problems: one list per view (`words.js`): `problems: [{ id, level, text, piece? }]`, levels `block` (no file), `look`
+  (said everywhere), `tip` (with the steps); `problemsOf(v)` adds the file verdict as `file:<key>` (beside Download,
+  the dialog, the checkup only); `SHOWS` maps levels to surfaces. Producers: `pieceProblems` (Design; the editor
+  renders the same list with its fixes via `said`, `data-problem`), `fineUI`/`ownedNote` (Picture), `showOpened` +
+  `checkupWarns` (Open). Renderers `problemsInline`/`problemsItems`/`problemsHtml`. A new warning must go through the
+  list (editor, Download note, dialog, steps, sew sheet, share text, Sew along all show it; R8 fleece "closes up" was
+  in the editor only while the dialog said Checked).
+- `clearSize` is a binary search (4.7 s -> 0.29 s on a 113 mm heart).
 ### Two hoopings (`splitPieces`)
 - On `overBy`, whole pieces (never a cut stitch) split along the long side at the most even cut where both fit.
   Basting crosses (`crossSpots`: 1.5 mm clear, near 1/4 and 3/4, 20 mm apart if possible) end the first file and
@@ -274,7 +308,9 @@ measurements behind each number are in the code's comments.
   steps (blank: 3). Needs 5x7. Name centred on the middle of the x-height (cap height all-caps), lengthwise between
   eyelet and border; letters fill `LETTERS` 72 % of the inner width with or without decorations; only too-long words
   shrink. Cut file: outline grown 3 mm. Texts `READY`/`DONE`/`STEPS`; `bookmarks_N.zip`. Keeps the original lettering
-  engine (no `tongues`, `knots`, `untiny`, print corners) so script bookmarks stay byte-identical.
+  skeleton (no `tongues`, `knots`, `untiny`, print corners) but the shared continuity helpers (`loop`, `back`, satins
+  from the stroke centre, chained script pieces: trims -49 %, loose threads 660 -> 19 on the batch). Missing letters are
+  said beside Download and refuse a name in its names batch.
 
 ## Pictures (`digitize.js` in `worker.js`)
 - One job at a time, newest kept; restarted after 60 s. Styles: Filled (`build`), Line drawing (`lineArt`),
@@ -290,11 +326,19 @@ measurements behind each number are in the code's comments.
   olive to Russet Brown); greys and other hue families (`FAMILY`, where Brother's names change) cost more for hued
   colours; the background's thread is skipped unless within SAME. Swatch = solid pixels' mean. The writer's red-mean
   then picks the same thread. Owned threads only: `toPalette()` merges colours landing on one spool.
+- Colours from thin lines: `cluster(..., lines)` also learns from pixels flat along a line and not a blend (a 1-2 px
+  line is never flat every way); those clusters take only pixels within ΔE 12 or not a blend of two others. Pale
+  fringes (JPEG halos: 80 % within 3 px of a stronger colour over 1.5 SAME away) and soft shades (drop shadows: 70 % of
+  the edge with the fabric soft over 5 px) are fabric unless the whole picture is soft. Colours under SAME apart
+  merge whatever their size. Worse: half-soft colours to fabric when threads run short, scattered pale specks as
+  fabric (both erased etsy_1's pale flowers).
 - Size = the sewn design's longer side (`picturePlan`, capped to the field), rebuilt when over 0.4 mm off; over the
   field it shrinks, not errors. 8 px/mm (5 lost notches).
 - Filled: shapes 1 mm or wider get tatami following the outline (skeleton satin broke corners); parts under 2 x
   `THIN_PART` and lines under 1 mm sew a triple run, never dropped. Specks: under 4 mm² and 2.5 mm across, groups
-  under 6 mm of line, walks under 1.5 mm (`lostLines` reports dropped fine lines). Thin shapes (< 2 mm) 0.05 mm
+  under 6 mm of line, walks under 1.5 mm (`lostLines` reports dropped fine lines). Kept: text dots on the fabric (>= 0.8 mm across, 0.6
+  mm², within 5 mm of their colour or another such dot) and marks >= 2 mm long, 1.5x longer than wide, within 2 mm of a
+  bigger piece of their colour (apostrophes). Thin shapes (< 2 mm) 0.05 mm
   pull, else 0.15. `OVERLAP` 0.35 mm under later colours, shape by shape (growing the raw mask merged specks);
   neighbours alternate angle (+90°). `DENSITY` Standard 0.4 (the app's default; `DEFAULTS.density` is Dense) / Dense
   0.35; 0.3 fails the check (row links under 0.3 mm). Row steps split to 3 mm, row-end stitches over 4 mm halved.
@@ -304,7 +348,9 @@ measurements behind each number are in the code's comments.
   2 mm are sewn; else a jump over 5 mm (trimmed) beats 2-5 mm (loose). Budgets in cells (`routeBudget`), not time, so
   browser and Node match.
 - Line drawing (`opts.line`, Auto = darkest): outlines once where colours meet, none between colours within ΔE00 15;
-  dark bands (`BAND`) and whole even strokes sewn once along their centre (both edges drew double lines);
+  dark bands (`BAND`) and whole even strokes sewn once along their centre (both edges drew double lines), decided once
+  per colour (centre lines if 80 % of its long pieces are strokes; fat letters outlined; marker lines up to 6 mm;
+  spurs pruned at 0.6 width; narrow elongated parts of any colour centre-lined); text dots a short out-and-back line;
   `closeSlivers`; `lineEnds` reach the ink's edge; pieces under 2 mm dropped (`spur: 1`: pruning cut letters apart);
   ends within 2 mm of another drawing joined (3 mm drew bars).
 - Cross-stitch (`cross` mm cells): a row is two diagonal zigzags out and back plus one straight stitch (climbing every
@@ -314,12 +360,16 @@ measurements behind each number are in the code's comments.
   be kept by thread. Errors carry `code` (small, cross, skipped, empty); only followable advice is offered.
 
 ## Open tab (`formats.js`, `doctor.js`, `quality.js`)
+- Open logic is `doctor.js` `openedFile` (shared by app.js and the fuzz): designs start with a jump to their 1st
+  stitch, lose jumps to nowhere (each became a stitch where it ended) and thread changes before the 1st stitch
+  (`firstMove`), and move onto the centre when over 200 mm out (`centred`).
 - `readEmbroidery`: PES, PEC, DST (three jumps = trim). Cut-short (`endsEarly`) and `misplaced` files are saved
   rewritten. `designBlockAgrees` flags a v6 design block that isn't its PEC block. `HARD` failures (thread count,
   palette 62-64 unless named appliqué/placement/tack-down, disagreeing block, over 99 blocks) are never saved as they
   came: rewritten, or shown but not saved. Passing untouched files download as their own bytes.
 - `checkup(readEmbroidery(bytes))` reads the file as it will be saved, counts from quality.js: `peak` at every
-  offset, tiny past max(50, 1 %), satin gap (under 0.25: "Even out"), stitches over 10 mm (note) and 12.1 mm ("Split
+  offset, tiny past max(50, 1 %), satin gap measured along the edge, across the stitch (60 % short stitches on curves
+  aren't gaps; same in pe900_check) (under 0.25: "Even out"), stitches over 10 mm (note) and 12.1 mm ("Split
   long stitches"), jumps shrinking brought under 5 mm, a stabilizer hint.
 - `fix(pattern, { scale, tiny, thin, sort, join, satin })` in `doctor-worker.js`. Shrinking ticks Remove tiny and Thin.
   - `landJumps` (also on open): a jump lands on its first stitch (the writer puts the needle down where a jump ends:
@@ -351,22 +401,31 @@ measurements behind each number are in the code's comments.
 - Side by side needs 700 px wide AND 560 tall (200 % zoom on 1080p is 960x540); then 100dvh, only `.controls`
   scrolls (`position: relative`). Tiers: max-height 900 hides ledes (not `.sewn-on` tips); 700-1365 x 560-760 slimmer;
   header tabs wrap to 1259 px, no MACHINE label to 1365, no tagline to 1480. Stacked layouts scroll, preview first in
-  the HTML (Tab order). Phones (<= 600): fixed Download bar, preview `calc(100svh - 370px)`, too-big message under the
-  hoop and in the piece controls (`#st-big`). Check 1413x717, 1024x600, 960x540, 820x1180, 800x600, 390x844.
+  the HTML (Tab order). Every stacked layout (`(max-width:699px),(max-height:559px)`) has the fixed Download bar (in
+  Picture/Open it holds the chooser too) and `scroll-padding-bottom` so focus stops above it; the Download warning
+  sits under the preview; phones: preview `calc(100svh - 370px)`, too-big message under the hoop and in the piece
+  controls (`#st-big`). Body `overflow-wrap: break-word`, settings grids `minmax(0,1fr)` (long words never widen the
+  page). Chrome doesn't scroll a sideways chip row to a Tab-focused chip: app.js does. Check 1413x717, 1024x600, 960x540, 820x1180, 800x600, 390x844.
 - `draw` opts: `center`, `upto`/`ghost` (step view), `pad`, `padBottom`, `corner`, `boxes`, `real`, `base` (a drag
   holds the fit via `state.hold`, or the piece outran the pointer). Dark mode fills the field light (`fieldColor`).
   Thickness overlay (`heat`): 12+ yellow, 18+ orange, 24+ red.
-- Focus: file inputs `.sr-file` (hidden but focusable). Redraws go through `keepFocus`; a keypress that removes its
-  control moves focus to the nearest one (capture click listener, `detail` 0 only: a programmatic `.click()` has
-  detail 0 too, so call handlers directly). Arrow nudges only from the page or `#view`; the piece list is one Tab stop
+- Focus: file inputs `.sr-file` (hidden but focusable). One MutationObserver in app.js (`refocus`, `held`): a redraw
+  that removes the focused control focuses the same control in the new markup (id/data- attributes, caret kept), else
+  a keyboard user's focus goes to the nearest live control; keyboard-or-not comes from the last real keydown/
+  pointerdown (`keyboard`/`keyAt`), never a click's `detail`; for 2 s after a key the focused control is kept in view.
+  `keepFocus` = render + `refocus`. No per-feature focus fixes. Arrow nudges only from the page or `#view`; the piece list is one Tab stop
   (`rove`). Undo skips equal snapshots; Redo ⇧⌘Z / Ctrl+Y. 44 px coarse targets; `forced-colors` keeps thread
   colours; `--danger/--warn/--good/--ink` tokens (red only for warnings).
-- Verdict: `setView` runs quality.js 250 ms after a view settles (not per drag frame). Every download and ZIP is
-  judged; the done dialog says "Checked" only when it passes, else offers "Save a fixed copy", even after "Don't show
-  this again" (`doneSeen`).
+- Exit gate: every file leaves through `gate.js` `handOut(files, { hoop, zip, share })` (`judge`: PES = `validatePES`
+  against its design + no `HARD` rule, the rest of the verdict said in words; cut SVG = mm size, closed shapes; saved
+  JSON parses with a piece). Nothing is handed over when one file is refused; a HARD fail says "Not saved" and offers a
+  fixed copy; a names ZIP lists refused names under "Couldn't make". `setView` runs quality.js 250 ms after a view
+  settles; the done dialog says "Checked" only when it passes, even after "Don't show this again" (`doneSeen`).
 - Steps (sheet.js): step 1 = how to hoop, which thread, Start; steps name the thread (`threadNames`/`nextThread`); a
   same-thread pause says "Keep the same thread on"; one sentence per action, three or more numbered (`youHtml`).
-  "Thread changes" and "pauses in the same thread" (`stopWords`), never "stops".
+  Words (`words.js`): "pause"/"thread change" (`stopWords`/`stopsAt` only), never "stop"; "satin stitch(es)"/
+  "satin-stitched"/"Satin border", never bare "satin"; "move between parts"/"loose thread", never "jump" (except
+  the machine's "jump stitch not to trim").
 - Sew sheet (`sewSheet`: `#sheet` + `window.print()`, also on `beforeprint`): field at 1:1 in mm, centred as the
   machine centres, 5 cm bar; steps with machine names (`machineThreadList`); appliqué shapes. `cutSVG`: one SVG at
   actual size. Verify with headless `Page.printToPDF`, never the real print dialog via the Chrome extension (it blocks).
@@ -389,7 +448,8 @@ measurements behind each number are in the code's comments.
   (fonts x names x decorations, pictures x styles) and `tests/browser/studio_batch.html` (starters x hoops, shapes x
   borders, fonts, arcs, files). Title `DONE <files> <problems>`. After any engine change run both plus the checker and
   look at a contact sheet (the checker can't see mush). Byte compares need a fresh no-cache baseline. Load with a
-  fresh `?v=N` and hard-reload; the server sometimes drops a module request (status 0): reload. The batch sizes
+  fresh `?v=N` and hard-reload. `batch_server.py` (backlog 256; accepts .pes/.json/.png posts) used to drop module
+  requests under load (status 0): if a page still doesn't start, navigate again. The batch sizes
   pictures by `workingSize`, not `picturePlan`.
 - Headless without the extension: Chrome with `--remote-debugging-port`; import the module script over CDP as a blob
   with absolute URLs (the inline module doesn't start).
@@ -416,6 +476,30 @@ Automated checks that each guard a bug class (add a line with every new guard):
 - App verdict = checker: `quality.js` agrees with `pe900_check.py` on every batch and sample file.
 - Doctor fixes give valid, passing files at every size (`doctor.test.mjs`).
 - Offline completeness: every module, font, icon in `FILES` (`sw.test.mjs`).
+- Each check below would have caught the past bugs of its class; run the browser ones after touching their area.
+  Browser checks need `batch_server.py` and `node tests/cdp.mjs PORT start DIR`.
+  - Known problems shown on every surface, one vocabulary, jargon lint: `node tests/surfaces.mjs CDP http://127.0.0.1:HP
+    [filter]` (browser, ~21 min, 76 cases; hook `globalThis.nwTest`).
+  - Design-tab invariants (fits as sewn, no unasked split, placed inside, collisions warned, every offered fix lands,
+    nothing stale, undo round trips, time budget): `node tests/monkey.mjs CDP HP --seeds 1-5 --steps 120 --start
+    default,fifteen,random [--budget 1000] [--shrink]` (~1-2.5 s a step; replay `monkey.html?seed=N&steps=K` or
+    `&replay=`; fixture `tests/fixtures/fifteen.needleworks.json`). `cdp.mjs profile JS` prints CPU per function.
+  - Layout and keyboard at 13 window sizes x 25 states, light/dark/forced: `node tests/ui_sweep.mjs [--url --port --out
+    --quick --vp --only --no-keys --keys-only]` (~8 min, quick ~2; report.json + contact sheet; a new state is one
+    `STATES` entry; it uses a browser context per tab to keep localStorage apart).
+  - Every exit through the gate: `node tests/gate.test.mjs` (CI) fails on download/share/object-URL/zip code outside
+    gate.js and on an exit missing from its list.
+  - Damaged files through Open: `node tests/open_fuzz.test.mjs [n] [seed]` (CI, ~15 s; `DUMP=dir`).
+  - Every engine over its parameter space: `tests/browser/engine_fuzz.html?seed=S&n=N[&engine=E][&only=K]`, then
+    `pe900_check.py OUT/fz_*.pes` (`fz_S_log.json` holds the specs; `window.fuzzAt` set once running).
+  - Wasted motion inside an object: `node tests/flow_lint.mjs [--blocks] [--json] DIR|FILES` (report: trims, loose,
+    near/hidden/loop/reverse = `avoid`, uncovered ends, lockOut, zeroTie; ~20 s a batch; Brother files score 1-3 avoid)
+    and `tests/flow_lint.test.mjs` (CI: past instances stay caught). Compare `avoid` with the baseline after any stage
+    builder change.
+  - Typed text: `node tests/text.test.mjs` (CI, 617 strings x 19 fonts) and `node tests/text_fuzz.mjs CDP HP [--quick]
+    [--only ...]` (browser, ~20 min, quick ~5; corpus `tests/text_corpus.mjs`).
+  - Pictures unlike the samples: `tests/picture_corpus.sh CDP HP OUT [query]` (~1.5 min; 26 seeded drawings x styles x
+    sizes; open cases in its `KNOWN` list with a reason; `?ext=etsy_N` renders the external samples).
 
 ## Hosting
 - 4gables.com is the `4gables/website` repo's custom domain (a project site). Other repos appear under
@@ -434,16 +518,19 @@ Automated checks that each guard a bug class (add a line with every new guard):
   "Sewed with the wrong thread?" wording is unchecked on a PE900.
 - Threads: pure white as Isacord 0015 rather than 0003 (Amann's card draws whites bluish)? Dusty pinks (chroma ~6)
   still Warm Gray.
-- Lettering: Alex Brush's b loop is lost ("Abbie" reads "Avvie"); O'Neil's apostrophe bridges into the O (`text.js`:
-  don't bridge to punctuation); Quicksand's rounded V/M bottoms stop short; dense columns where 3 strokes meet the
+- Lettering: Alex Brush's b loop is lost ("Abbie" reads "Avvie"); Quicksand's rounded V/M bottoms stop short; dense columns where 3 strokes meet the
   towel lattice (within 24); dots by READ's stars (the satin round the stars' points).
 - Appliqué: combine same-thread stages (6 pauses could be 3); tack-down ends 1.4 mm from the edge walk's start (2
   short jumps across a pause); only the first fabric block gets a fabric shape in the preview.
 - Quilting: narrow heart/diamond tips stay empty; quilt label with stipple sews as 3 lines.
 - Pictures: "make it stitchable" (thicken/drop too-fine detail); 1-2 mm outlines as satin (needs variable-width satin
   through junctions); etsy_6's green panel still sewn; etsy_7's pastel lines; etsy_4's greyish-lavender title;
-  etsy_5 at 4 colours merges grass and yellow.
+  etsy_5 at 4 colours merges grass and yellow; slab-serif centre lines lose serifs; a soft shadow's core joins its
+  colour at 2 threads; 0.6 mm strokes in a compressed JPEG partly sewn.
 - Open tab: Thickness overlay counts at grid offset 0 only (`heat`); trims rise after re-stitching at 70 %.
 - `pe900_check.py`'s max density reads lower than a full offset scan below the limit (pass/fail unaffected).
-- Design tab: Patch starter + Lettering lands below JD; "Add words" once left focus on the page (not reproduced).
+- Design tab: Patch starter + Lettering lands below JD. Speed: a big carved patch refills on every change
+  (1.5-4.7 s; wants a carve worker like quilting); thread/fabric change on 15-26 pieces 1.1-2 s.
+- Flow: fill-internal hidden moves in `fillPolygon`, repeated tie-in holes in `Design.path`, ~47 script moves on arcs.
+- Text: CJK/Arabic names save as design.pes (the fonts lack them anyway).
 - Not built: photo stitch, free-standing lace, 3D puff.
