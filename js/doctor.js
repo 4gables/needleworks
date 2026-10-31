@@ -7,7 +7,7 @@ import { fillPolygon } from "./core/digitize.js";
 import { distanceTransform } from "./core/raster.js";
 import { contours } from "./studio/quilt.js";
 import { pyRound } from "./core/threads.js";
-import { LIMIT, moves, peak, satinGap, verdict } from "./quality.js";
+import { LIMIT, MAX_BLOCKS, moves, peak, satinGap, verdict } from "./quality.js";
 
 // (LIMIT: 24 needle hits per mm² per colour block, the densest spot in sold designs; the counts are pe900_check.py's,
 // from quality.js, so the checkup and the download's verdict agree)
@@ -113,6 +113,29 @@ export function sortColors(pattern) {
   }
   return moved ? joinBlocks(out) : null;
 }
+// Few enough colour blocks for the machine (99, MAX_BLOCKS; the PES writer refuses over 127): consecutive blocks in
+// one colour joined (a trim where the machine would have stopped), then colour sort. The pattern, or null when that
+// still leaves too many.
+export function fewerBlocks(pattern) {
+  const j = joinSame(pattern), p = sortColors(j) || j;
+  return p.threads.length <= MAX_BLOCKS ? p : null;
+}
+// Consecutive blocks in one colour joined, a trim where the machine would have stopped (the same pattern when there
+// are none). Only for files whose colours were picked here (DST) or that hold too many: in a PES two blocks in a
+// row in one thread are a fabric step.
+export function joinSame(pattern) {
+  const out = [];
+  let joined = 0;
+  for (const b of blocksOf(pattern)) {
+    const t = out[out.length - 1];
+    if (!t || (t.thread?.color || "").toLowerCase() !== (b.thread?.color || "").toLowerCase()) { out.push({ ...b, stitches: b.stitches.slice() }); continue; }
+    const last = t.stitches[t.stitches.length - 1], first = b.stitches.find((s) => s[2] === STITCH || s[2] === JUMP);
+    t.stitches.push([last[0], last[1], TRIM]);
+    if (first[2] === STITCH) t.stitches.push([first[0], first[1], JUMP]);
+    t.stitches.push(...b.stitches); joined++;
+  }
+  return joined ? joinBlocks(out) : pattern;
+}
 // thread changes that are machine pauses: the next block is in the same thread (same PEC thread, or same colour)
 export function pauses(pattern) {
   const pec = pattern.pec, t = pattern.threads;
@@ -125,7 +148,11 @@ export function pauses(pattern) {
   return n;
 }
 // how many thread changes colour sort would leave (null: it can't help)
-export const sortedChanges = (pattern) => { const s = sortColors(pattern); return s && s.threads.length - 1; };
+// (`join`: consecutive blocks in one colour count as one, for colours picked here)
+export const sortedChanges = (pattern, join = false) => {
+  const j = join ? joinSame(pattern) : pattern, s = sortColors(j) || (j !== pattern ? j : null);
+  return s && s.threads.length - 1;
+};
 
 // Resizing past 80-120 % by re-stitching (Embrilliance's stitch processor): each colour block's runs are scaled and
 // then rebuilt at the source's own density (where it's sane) for the new size. A zigzag run (satin) keeps its two
@@ -579,9 +606,9 @@ export function respace(st, scale = 1) {
 
 // a new pattern: scaled about its centre, tiny stitches merged into the next, long ones split, dense spots thinned;
 // `sort` merges same-thread blocks first; past 80-120 % it's re-stitched (`restitch`)
-export function fix(pattern, { scale = 1, tiny = false, thin = false, sort = false, satin = false } = {}) {
+export function fix(pattern, { scale = 1, tiny = false, thin = false, sort = false, join = false, satin = false } = {}) {
   pattern = landJumps(pattern);
-  if (sort) pattern = sortColors(pattern) || pattern;
+  if (sort) { const j = join ? joinSame(pattern) : pattern; pattern = sortColors(j) || j; }
   // (re-stitched, every stitch is new: tiny ones it made go whatever the box says; gnome at 150 %: 2 -> 43)
   if (scale < 0.8 - 1e-9 || scale > 1.2 + 1e-9) pattern = restitch(pattern, scale), scale = 1, satin = false, tiny = true;
   else if (scale !== 1) satin = true;
@@ -605,7 +632,8 @@ export function fix(pattern, { scale = 1, tiny = false, thin = false, sort = fal
       const d = Math.hypot(x - last[0], y - last[1]);
       // (not the stitch a jump lands on: it's the run's first hole, which the writer would add anyway, out of sight of
       // relieve and slide: peace.pes at 80 % thinned read back 25 hits/mm²)
-      if (scale !== 1 && d === 0 && st[i - 1][2] !== JUMP) continue;
+      // (at any size: a file's own same-hole stitch showed only once its long stitches were split, long15.pes)
+      if (d === 0 && st[i - 1][2] !== JUMP) continue;
       // (keep the stitch before a command: it's the end of a run or a lock)
       if (tiny && d < 3 && st[i + 1]?.[2] === STITCH && st[i - 1][2] !== JUMP) continue;
       // (split here as split satin, not by the writer, which halves anything over 7 mm where relieve and slide can't

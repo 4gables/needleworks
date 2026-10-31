@@ -302,38 +302,50 @@ function readPES(bytes) {
   r.u24(); r.skip(3);
   const w = r.u16(), h = r.u16();
   r.skip(4);
-  const bx = s12(r.be16()), by = s12(r.be16());
-  const st = [], toggles = [];
-  let x = 0, y = 0;
-  for (;;) {
-    const v1 = r.byte();
-    let v2 = r.byte();
-    if (v2 == null || (v1 === 0xff && v2 === 0)) break;
-    if (v1 === 0xfe && v2 === 0xb0) { toggles.push(r.byte()); st.push([x, y, COLOR_CHANGE]); continue; }
-    let jump = false, trim = false, dx, dy;
-    if (v1 & 0x80) {
-      trim = !!(v1 & 0x20); jump = !!(v1 & 0x10);
-      dx = s12((v1 << 8) | v2);
-      v2 = r.byte();
-      if (v2 == null) break;
-    } else dx = s7(v1);
-    if (v2 & 0x80) {
-      trim ||= !!(v2 & 0x20); jump ||= !!(v2 & 0x10);
-      const v3 = r.byte();
-      if (v3 == null) break;
-      dy = s12((v2 << 8) | v3);
-    } else dy = s7(v2);
-    if (!jump && trim) st.push([x, y, TRIM]);
-    x += dx; y += dy;
-    st.push([x, y, jump || trim ? JUMP : STITCH]);
-  }
-  st.push([x, y, END]);
+  const boxAt = r.p, bx = s12(r.be16()), by = s12(r.be16());
+  const stitchesFrom = (at) => {
+    r.p = at;
+    const st = [], toggles = [];
+    let x = 0, y = 0;
+    for (;;) {
+      const v1 = r.byte();
+      let v2 = r.byte();
+      if (v2 == null || (v1 === 0xff && v2 === 0)) break;
+      if (v1 === 0xfe && v2 === 0xb0) { toggles.push(r.byte()); st.push([x, y, COLOR_CHANGE]); continue; }
+      let jump = false, trim = false, dx, dy;
+      if (v1 & 0x80) {
+        trim = !!(v1 & 0x20); jump = !!(v1 & 0x10);
+        dx = s12((v1 << 8) | v2);
+        v2 = r.byte();
+        if (v2 == null) break;
+      } else dx = s7(v1);
+      if (v2 & 0x80) {
+        trim ||= !!(v2 & 0x20); jump ||= !!(v2 & 0x10);
+        const v3 = r.byte();
+        if (v3 == null) break;
+        dy = s12((v2 << 8) | v3);
+      } else dy = s7(v2);
+      if (!jump && trim) st.push([x, y, TRIM]);
+      x += dx; y += dy;
+      st.push([x, y, jump || trim ? JUMP : STITCH]);
+    }
+    st.push([x, y, END]);
+    return { st, toggles };
+  };
+  let { st, toggles } = stitchesFrom(boxAt + 4);
 
-  // A file whose stitches leave its box was written pyembroidery's way: the "box" is really an opening jump.
+  // A file whose stitches leave its box was written pyembroidery's way: the "box" is really an opening jump, or, when
+  // its first stitch is at the origin (no opening jump at all), the first stitches themselves (`00 00 01 80` read as
+  // a box drew dense.pes 276 x 253 mm of garbage). Either way the stitches are read from where the box would be.
   const x0 = -bx, y0 = -by;
   const misplaced = st.some(([sx, sy, sc]) => (sc === STITCH || sc === JUMP) &&
     (sx < x0 - 1 || sx > x0 + w + 1 || sy < y0 - 1 || sy > y0 + h + 1));
-  const stitches = misplaced ? [[bx, by, JUMP], ...st.map(([sx, sy, sc]) => [sx + bx, sy + by, sc])] : st;
+  let stitches = st;
+  if (misplaced) {
+    // (two long-form values: an opening jump, as it always was read; anything else is the first stitches)
+    if (bytes[boxAt] & 0x80 && bytes[boxAt + 2] & 0x80) stitches = [[bx, by, JUMP], ...st.map(([sx, sy, sc]) => [sx + bx, sy + by, sc])];
+    else ({ st: stitches, toggles } = stitchesFrom(boxAt));
+  }
   return { stitches, threads, format: "pes", version, toggles, pec, misplaced };
 }
 

@@ -2,6 +2,7 @@
 import { readFileSync, readdirSync, existsSync } from "node:fs";
 import { machineThreads, readEmbroidery, validatePES, writePES, STITCH, JUMP, TRIM, COLOR_CHANGE, END } from "../js/core/formats.js";
 import { mkdirSync, writeFileSync } from "node:fs";
+import { endsEarly } from "../js/quality.js";
 
 let fail = 0;
 const ok = (c, m) => { if (!c) { fail++; console.log("FAIL", m); } };
@@ -143,6 +144,18 @@ ok(!validatePES(new TextEncoder().encode("#PES0060" + "x".repeat(5000))).ok, "ju
   const again = writePES(d);
   ok(validatePES(again, d).ok && !readEmbroidery(again, "fixed.pes").misplaced, "old PES not repaired by rewriting");
   console.log("old PES:", v.ok ? "ACCEPTED" : "refused, rewrite fixes it");
+}
+
+// 7b. pyembroidery's PEC for a design whose first stitch is at the origin has no opening jump: the four bytes where
+//     the box goes are the first stitches (dense.pes: 00 00 01 80). Read as a box, it came out 276 x 253 mm of garbage.
+{
+  const stitches = [[0, 0, STITCH], [1, 66, STITCH], [-40, 66, STITCH], [-40, 0, STITCH], [150, 0, STITCH], [150, 30, STITCH], [0, 0, END]];
+  const ours = writePES({ stitches, threads: [{ color: "#112233" }] }), py = stripBoxPrefix(ours);
+  const pts = (d) => d.stitches.filter((s) => s[2] === STITCH).map((s) => s.slice(0, 2) + "");
+  const d = readEmbroidery(py, "py.pes"), got = pts(d), want = pts(readEmbroidery(ours, "ours.pes"));
+  ok(d.misplaced && got.join(" ") === want.join(" "), `origin-start pyembroidery PES misread: ${got.join(" ")}`);
+  ok(!endsEarly(py, "py.pes"), "origin-start pyembroidery PES said to end early");
+  console.log("origin-start pyembroidery PES:", got.join(" ") === want.join(" ") ? "read as meant" : "MISREAD");
 }
 
 // 8. PEC 62-64 are applique codes on Brother machines, never threads: colours that used to land there must not
