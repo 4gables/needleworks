@@ -133,10 +133,10 @@ Embroidery-file tools for home machines. Two implementations of the same engine:
 - One for each name (link under Download, Design tab and bookmark): the biggest lettering (the name, nearly always;
   starters select their last piece, which was "2026") or the bookmark name is swapped for each line, every file goes
   through `validatePES`, and they download as one stored ZIP (`js/zip.js`). Names that don't fit are listed.
-- Thread brands (`js/core/brands.js`, data `brandcharts.js`: Isacord, Sulky Rayon, Robison-Anton Rayon, Hemingworth
-  from Embroidermodder's old `thread-color.c`, zlib licence; current libembroidery only has TODO stubs; Sigma's names
-  were misaligned (a red called "Silver") and Isafil is rare, so both were left out; no Madeira chart under a usable
-  licence). The top-bar select labels threads "≈ Isacord 1306", or the nearest spool listed in "Threads I own" ("your
+- Thread brands (`js/core/brands.js`, data `brandcharts.js`: Isacord, Sulky Rayon, Robison-Anton Rayon, Hemingworth,
+  collected 2026-10-30 from each maker's own published colours, sources in the file's header (Amann's digital card
+  has numbers only, so Isacord spools have no names, and it draws whites bluish: pure white is nearest 0003; Robison-
+  Anton is its 2005 web chart with A&E's 2023 Top 100 colours over it). Sigma and Madeira aren't there.) The top-bar select labels threads "≈ Isacord 1306", or the nearest spool listed in "Threads I own" ("your
   …"). Matching is CIELAB: the red-mean distance called black "Ivy" in Robison-Anton's approximate darks. Labels
   only: files always carry Brother PEC colours. Picture tab "Use only threads I own" sends `palette` to the worker;
   `toPalette()` maps each colour cluster to the nearest owned spool and merges clusters that land on the same one
