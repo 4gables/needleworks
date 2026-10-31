@@ -1,3 +1,4 @@
+/*! Needleworks (c) 2026 4Gables. All rights reserved. Proprietary, see LICENSE. https://4gables.com/needleworks/ */
 // Design tab: pieces (lettering, monogram, frame, appliqué letters, motif, opened file) -> stitches, laid out around
 // the hoop centre (mm, y down).
 // Uses the shared lettering and stitch engines and returns a Design; the PES file is written by the locked

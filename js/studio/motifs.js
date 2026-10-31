@@ -1,3 +1,4 @@
+/*! Needleworks (c) 2026 4Gables. All rights reserved. Proprietary, see LICENSE. https://4gables.com/needleworks/ Icon paths from Phosphor Icons (MIT), see THIRD_PARTY_NOTICES.md. */
 // Motifs: filled icons from Phosphor Icons (MIT licence, (c) 2023 Phosphor Icons, github.com/phosphor-icons/core),
 // SVG paths in a 256 x 256 box. js/studio/outline.js traces them into outlines like appliqué letters.
 export const MOTIFS = {

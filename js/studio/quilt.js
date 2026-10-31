@@ -1,3 +1,4 @@
+/*! Needleworks (c) 2026 4Gables. All rights reserved. Proprietary, see LICENSE. https://4gables.com/needleworks/ */
 // Quilting inside a frame, around everything else on it: stipple (a meander that never crosses itself) or echo
 // (rings round the pieces that turn into the frame's shape). mm, y down; built on a 4 px/mm mask of the free space.
 import { followRun, resample, smooth } from "../core/geom.js";

@@ -1,3 +1,4 @@
+/*! Needleworks (c) 2026 4Gables. All rights reserved. Proprietary, see LICENSE. https://4gables.com/needleworks/ */
 // Letter outlines for appliqué: render the word, trace every edge (outsides and the holes in A, B, O...) with
 // marching squares, then round the corners (1.6 mm) so a satin can turn them cleanly. mm, y down.
 import { filletPolygon, resample, smooth } from "../core/geom.js";

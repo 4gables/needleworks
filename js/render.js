@@ -1,3 +1,4 @@
+/*! Needleworks (c) 2026 4Gables. All rights reserved. Proprietary, see LICENSE. https://4gables.com/needleworks/ */
 // Draw a stitch pattern ({ stitches: [[x, y, cmd]] in 0.1 mm, threads }) like real thread on fabric.
 import { COLOR_CHANGE, JUMP, STITCH, TRIM } from "./core/formats.js";
 

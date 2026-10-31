@@ -1,3 +1,4 @@
+/*! Needleworks (c) 2026 4Gables. All rights reserved. Proprietary, see LICENSE. https://4gables.com/needleworks/ */
 // In-the-hoop applique bookmark with a name (or blank).
 // Five colour blocks, one thread: each block change is a machine pause for a fabric step. Blank skips the name block.
 import { circle, edgeWalk, filletPolygon, normals, resample, run, satin, zigzag } from "./geom.js";

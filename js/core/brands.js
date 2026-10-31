@@ -1,3 +1,4 @@
+/*! Needleworks (c) 2026 4Gables. All rights reserved. Proprietary, see LICENSE. https://4gables.com/needleworks/ */
 // Spool numbers in the thread brand people actually own: the nearest spool to a colour, overall or among the ones
 // they've listed. Labels only; the PES file always carries Brother PEC colours.
 import { BRAND_CHARTS } from "./brandcharts.js";

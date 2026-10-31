@@ -1,3 +1,4 @@
+/*! Needleworks (c) 2026 4Gables. All rights reserved. Proprietary, see LICENSE. https://4gables.com/needleworks/ */
 // Polyline helpers and stitch generators (mm).
 // A path is an array of [x, y].
 

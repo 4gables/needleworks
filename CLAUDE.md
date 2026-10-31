@@ -463,6 +463,12 @@ Embroidery-file tools for home machines. Two implementations of the same engine:
   thread labels come from the file's own PEC palette.
 
 ## Gotchas
+- **Proprietary, not open source** (2026-10-30): `LICENSE` is all rights reserved to 4Gables (a trade name: no
+  personal name anywhere on the site or in the code). Every shipped file (js, css, sw.js) starts with a `/*! Needleworks (c)
+  2026 4Gables ... */` line (third-party ports name their licence there too); new files get it as well. The page has a
+  comment, `meta copyright`, `rel=license` and one footer line. Third-party parts stay under their own licences in
+  `THIRD_PARTY_NOTICES.md`. The repo stays public (GitHub Free can't serve Pages from a private repo, and the served JS
+  is readable anyway).
 - **PES writer is locked** (2026-10-29, after Ashley's PE900 failure). `writePES`/`writePEC`/`pecEncode` output is
   frozen by `tests/fixtures/golden/*.pes` (byte-for-byte, checked in CI along with `pe900_check.py`). Browser and
   Node produce identical bytes (verified in Chrome). New features (design tools, UI) build stitch patterns and hand

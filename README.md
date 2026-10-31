@@ -43,3 +43,9 @@ node tests/formats.test.mjs
 Run locally: `python3 -m http.server` in the repo, then open http://localhost:8000.
 
 Third-party code and fonts: see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+
+## Licence
+
+Copyright (c) 2026 4Gables. All rights reserved. This is **not open source**: the code is public to read,
+not to copy, rehost or republish. See [LICENSE](LICENSE); third-party parts are in
+[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).

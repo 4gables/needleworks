@@ -1,3 +1,4 @@
+/*! Needleworks (c) 2026 4Gables. All rights reserved. Proprietary, see LICENSE. https://4gables.com/needleworks/ */
 // Sew sheet (printed at 1:1 to take to the machine) and appliqué cut files (SVG for Cricut / ScanNCut).
 // Stitch units are 0.1 mm, cut outlines mm; the machine centres the design in the hoop, so the template does too.
 import { colorBlocks } from "./render.js";

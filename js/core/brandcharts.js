@@ -1,3 +1,4 @@
+/*! Needleworks (c) 2026 4Gables. All rights reserved. Proprietary, see LICENSE. https://4gables.com/needleworks/ Thread chart data from Embroidermodder (zlib), see THIRD_PARTY_NOTICES.md. */
 // Thread brand charts: approximate RGB per spool number, from Embroidermodder's thread-color.c (zlib licence,
 // (c) The Embroidermodder Team). Used only to name the nearest spool; the machine still gets Brother PEC colours.
 // Madeira isn't here: no chart under a licence we can use. Isacord 0010 and 0015 (the whites every shop owns) were

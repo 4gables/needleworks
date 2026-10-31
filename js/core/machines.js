@@ -1,3 +1,4 @@
+/*! Needleworks (c) 2026 4Gables. All rights reserved. Proprietary, see LICENSE. https://4gables.com/needleworks/ */
 // Embroidery machines and hoops. Add a machine here and the whole site picks it up.
 // Sizes are the sewable field in mm (w = left-right, h = front-back).
 export const MACHINES = {

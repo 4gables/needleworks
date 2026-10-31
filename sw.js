@@ -1,3 +1,4 @@
+/*! Needleworks (c) 2026 4Gables. All rights reserved. Proprietary, see LICENSE. https://4gables.com/needleworks/ */
 // Offline and installable: every file the page needs is cached on install; after that each request tries the
 // network first (so a new version shows up at once) and falls back to the cache. A picture or design shared to
 // the installed app arrives as a POST to ./?share and is handed to the page through a cache.

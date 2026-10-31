@@ -1,3 +1,4 @@
+/*! Needleworks (c) 2026 4Gables. All rights reserved. Proprietary, see LICENSE. https://4gables.com/needleworks/ */
 // Runs picture digitizing off the main thread.
 import { analyze, digitize, toPalette } from "./core/digitize.js";
 import { writePES } from "./core/formats.js";

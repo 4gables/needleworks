@@ -1,3 +1,4 @@
+/*! Needleworks (c) 2026 4Gables. All rights reserved. Proprietary, see LICENSE. https://4gables.com/needleworks/ */
 // Binary-image tools: thinning, distance transform, labelling, and skeleton -> stroke graph.
 // A mask is { w, h, data: Uint8Array } with 1 = ink.
 import { smooth } from "./geom.js";

@@ -1,3 +1,4 @@
+/*! Needleworks (c) 2026 4Gables. All rights reserved. Proprietary, see LICENSE. https://4gables.com/needleworks/ */
 // Bookmark lettering fonts: CSS @font-face families in css/app.css. Print fonts get dashes instead of swashes.
 export const FONTS = [
   { family: "NW Sacramento", name: "Sacramento", note: "flowing, joined" },

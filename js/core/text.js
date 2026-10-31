@@ -1,3 +1,4 @@
+/*! Needleworks (c) 2026 4Gables. All rights reserved. Proprietary, see LICENSE. https://4gables.com/needleworks/ */
 // Lettering (script and print fonts) -> centerline strokes.
 // The word is drawn on a canvas, swashes and bridges between unjoined letters are added tangent to
 // real stroke ends, then the ink is thinned to a graph of strokes.

@@ -1,3 +1,4 @@
+/*! Needleworks (c) 2026 4Gables. All rights reserved. Proprietary, see LICENSE. https://4gables.com/needleworks/ Portions ported from pyembroidery (MIT), see THIRD_PARTY_NOTICES.md. */
 // Brother PEC thread palette (index 1..64) and colour matching, ported from pyembroidery.
 // Index 0 is "unknown" and never matched.
 export const PEC_THREADS = [

@@ -1,0 +1,31 @@
+Needleworks
+Copyright (c) 2026 4Gables (https://4gables.com). All rights reserved.
+
+This software, including its source code, stitch-generation engine, user interface, text and
+graphics (the "Software"), is proprietary and protected by copyright law and international treaties.
+The source being publicly viewable on GitHub or in a web browser does NOT grant any licence to it.
+
+You may use the Software only as a web application at https://4gables.com/needleworks/ (including
+installing it from there as a web app), and you may freely use the embroidery files you make with it.
+
+Without prior written permission from 4Gables, you may not:
+  - copy, mirror, redistribute, sublicense, sell or rehost the Software or any part of it;
+  - publish it, or anything built from it, on another website, app store, extension store or package
+    registry;
+  - modify it, port it to another language, or create derivative works from it;
+  - remove or alter this notice or any copyright notice in the Software;
+  - use it, or any part of it, to train or fine-tune machine-learning models, or include it in datasets.
+
+Viewing the source to learn from it, and forking it on GitHub solely as GitHub's Terms of Service
+allow, are permitted; any other use of such a fork is not.
+
+Third-party components keep their own licences, listed in THIRD_PARTY_NOTICES.md (pyembroidery,
+Phosphor Icons, Embroidermodder thread charts, and the fonts in fonts/). Nothing in this licence
+restricts what those licences allow for those components.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED. IN NO EVENT SHALL
+4GABLES BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY ARISING FROM THE USE OF THE SOFTWARE OR OF
+FILES MADE WITH IT.
+
+Unauthorised copies will be reported under the DMCA and equivalent laws to the hosts and stores that
+carry them. For licensing or permission requests, contact 4Gables through https://4gables.com.

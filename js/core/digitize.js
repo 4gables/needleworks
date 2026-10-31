@@ -1,3 +1,4 @@
+/*! Needleworks (c) 2026 4Gables. All rights reserved. Proprietary, see LICENSE. https://4gables.com/needleworks/ */
 // Picture -> embroidery. Reduce to a few thread colours, then stitch each shape by its width:
 // hairlines get a double running stitch along their centre; every shape with width gets a solid tatami fill.
 // Other styles: line drawing (`lineArt`) and cross-stitch (`crossStitch`).

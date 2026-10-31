@@ -1,3 +1,4 @@
+/*! Needleworks (c) 2026 4Gables. All rights reserved. Proprietary, see LICENSE. https://4gables.com/needleworks/ */
 // Runs the design doctor's fixes off the main thread: re-stitching a big design at 250 % took 10 s (star_badge.pes)
 // with the page frozen. Gets { id, d (the opened pattern), opts }, sends back the fixed pattern, its PES bytes and its
 // checkup.

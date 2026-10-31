@@ -1,3 +1,4 @@
+/*! Needleworks (c) 2026 4Gables. All rights reserved. Proprietary, see LICENSE. https://4gables.com/needleworks/ */
 // Design doctor for opened files: what might go wrong at the machine, a thickness map, and gentle fixes (resize
 // 80-120 %, drop tiny stitches, thin the densest spots). Stitch units 0.1 mm; the PES writer stays untouched.
 import { COLOR_CHANGE, END, JUMP, STITCH, STOP, TRIM } from "./core/formats.js";

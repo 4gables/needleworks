@@ -1,3 +1,4 @@
+/*! Needleworks (c) 2026 4Gables. All rights reserved. Proprietary, see LICENSE. https://4gables.com/needleworks/ Portions ported from pyembroidery (MIT), see THIRD_PARTY_NOTICES.md. */
 // Embroidery file formats: write PES (v6: header + CEmbOne/CSewSeg blocks + PEC) and read PES / PEC / DST.
 // Ported from pyembroidery so files match what it writes, byte for byte.
 // Units are pyembroidery's: 0.1 mm, y down.
