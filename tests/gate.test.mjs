@@ -1,0 +1,96 @@
+// Class guarded: a file the app hands out that fails a machine or quality rule (category audit class 7). Every file
+// that leaves the page goes through js/gate.js `handOut` (validatePES + quality.js verdict + HARD rules); this test
+// fails when (1) any other file starts a download or a share (anchor download, navigator.share, object URLs, save
+// pickers...), (2) the list of exits changes without this file being updated (each exit is named below: a new one
+// is added here on purpose, after making sure it goes through handOut), or (3) the gate itself lets through a file
+// that doesn't read back, breaks a HARD rule, or a zip with one such member. Run: node tests/gate.test.mjs (< 1 s, CI).
+import { readFileSync, readdirSync } from "fs";
+import { COLOR_CHANGE, END, STITCH, readEmbroidery, writePES } from "../js/core/formats.js";
+import { handOut, judge } from "../js/gate.js";
+import { cutSVG } from "../js/sheet.js";
+
+let bad = 0, n = 0;
+const fail = (m) => { bad++; console.error("FAIL " + m); };
+const ok = (c, m) => { n++; if (!c) fail(m); };
+
+// ---- 1. nothing else hands a file over ----
+const files = ["index.html", "sw.js", ...["js", "js/core", "js/studio"].flatMap((d) => readdirSync(d).filter((f) => f.endsWith(".js")).map((f) => `${d}/${f}`))];
+const EXIT = [/navigator\.share\s*\(/, /\.download\s*=/, /<a\b[^>]*\sdownload\b/, /setAttribute\(\s*["']download/, /showSaveFilePicker/, /msSaveOrOpenBlob/, /saveAs\s*\(/,
+  /createObjectURL\s*\(/, /window\.open\s*\(/, /location(\.href)?\s*=\s*[^=]*(blob:|data:)/, /from\s+["'][./]*zip\.js["']/];
+// (what may match, and why: not a way out)
+const ALLOWED = [
+  ["js/app.js", "thumb.src = URL.createObjectURL(blob)", "the chosen picture's thumbnail, shown on the page"],
+];
+const code = (line) => line.replace(/^\s*\/\/.*$/, "").replace(/\s\/\/ .*$/, "");
+for (const f of files.filter((f) => f !== "js/gate.js")) {
+  readFileSync(f, "utf8").split("\n").forEach((line, i) => {
+    for (const re of EXIT) if (re.test(code(line)) && !ALLOWED.some(([af, s]) => af === f && line.includes(s))) fail(`${f}:${i + 1} hands a file over outside js/gate.js: ${line.trim().slice(0, 120)}`);
+  });
+  n++;
+}
+// ---- 2. the exits, by name: each one calls handOut ----
+const EXITS = {
+  "js/app.js": ["Share (the phone's share sheet)", "Download (one file, or a design in two hoopings as a zip)", "Save a fixed copy (one file)",
+    "Save fixed copies (the zip again)", "Cut file (appliqué shapes, SVG)", "One for each name (zip)"],
+  "js/studio/ui.js": ["Save design (.needleworks.json)"],
+};
+for (const [f, want] of Object.entries(EXITS)) {
+  const got = readFileSync(f, "utf8").split("\n").map(code).join("\n").match(/\bhandOut\s*\(/g)?.length || 0;
+  ok(got === want.length, `${f} calls handOut ${got} times, this test lists ${want.length} exits (${want.join("; ")}): name the new exit here`);
+}
+
+// ---- 3. the gate itself ----
+globalThis.document = { createElement: () => ({ click() { saved.push(this.download); }, remove() {} }), body: { append() {} } };
+let saved = [], shared = [];
+URL.createObjectURL = () => "blob:x"; URL.revokeObjectURL = () => {};
+Object.defineProperty(globalThis, "navigator", { value: { share: async (d) => { shared.push(d.files[0].name); } }, configurable: true });
+const hoop = { w: 130, h: 180, name: "5x7" };
+const square = (x0, n = 40) => Array.from({ length: n }, (_, i) => [x0 + (i % 2) * 20, i * 4, STITCH]);
+const design = (blocks, threads = blocks) => {
+  const st = [];
+  for (let b = 0; b < blocks; b++) { if (b) st.push([0, b * 4, COLOR_CHANGE]); st.push(...square(b % 3)); }
+  st.push([0, 0, END]);
+  return { stitches: st, threads: Array.from({ length: threads }, (_, i) => ({ color: ["#ed171f", "#0e1f7c", "#00673e"][i % 3] })) };
+};
+const good = design(2), goodBytes = writePES(good);
+const golden = readdirSync("tests/fixtures/golden").map((f) => ({ name: f, bytes: new Uint8Array(readFileSync(`tests/fixtures/golden/${f}`)) }));
+for (const g of golden) ok(judge(g).ok, `golden ${g.name} refused: ${judge(g).error}`);
+ok(judge({ name: "a.pes", bytes: goodBytes, against: good }, hoop).ok, "a good file refused");
+// doesn't read back as the design it was written from
+ok(!judge({ name: "a.pes", bytes: goodBytes, against: design(3) }, hoop).ok, "a file that isn't its design passed");
+ok(!judge({ name: "a.pes", bytes: goodBytes.slice(0, 600) }).ok, "a cut-short file passed");
+// HARD: a thread list that isn't one per colour (the writer lists every thread it's given)
+const twoForOne = design(1, 2), extra = judge({ name: "b.pes", bytes: writePES(twoForOne) });
+ok(!extra.ok && extra.hard.some((q) => q.key === "colours"), "two threads for one colour passed");
+// HARD: more thread changes than the machine takes
+const many = design(110), lots = judge({ name: "c.pes", bytes: writePES(many), against: many });
+ok(!lots.ok && lots.hard.some((q) => q.key === "blocks"), "110 colours passed");
+// HARD: appliqué codes (PEC 62-64) for threads: the palette byte flipped to 62
+{
+  const b = goodBytes.slice(), pec = b[8] | (b[9] << 8) | (b[10] << 16);
+  b[pec + 49] = 62;
+  const j = judge({ name: "d.pes", bytes: b });
+  ok(readEmbroidery(b, "d.pes").pec.includes(62) && !j.ok && j.hard.some((q) => q.key === "applique"), "appliqué codes for threads passed");
+}
+// nothing handed over when one file is refused; everything when all pass
+saved = [];
+let r = handOut([{ name: "a.pes", bytes: goodBytes, against: good }, { name: "c.pes", bytes: writePES(many), against: many }], { hoop, zip: "x.zip" });
+ok(!r.ok && !saved.length, "a zip with a refused member was saved");
+r = handOut([{ name: "a.pes", bytes: goodBytes, against: good }, { name: "e.pes", bytes: goodBytes, against: good }], { hoop, zip: "x.zip" });
+ok(r.ok && saved.length === 1 && saved[0] === "x.zip", "a good zip wasn't saved");
+r = handOut([{ name: "b.pes", bytes: writePES(twoForOne) }], { share: { title: "b", text: "" } });
+ok(!r.ok && !shared.length && !r.shared, "a refused file was shared");
+r = handOut([{ name: "a.pes", bytes: goodBytes, against: good }], { hoop, share: { title: "a", text: "" } });
+await r.shared;
+ok(r.ok && shared[0] === "a.pes", "a good file wasn't shared");
+// the cut file: closed shapes at a real size; a saved design: pieces
+const loop = [[0, 0], [30, 0], [30, 20], [0, 20]];
+ok(judge({ name: "x_cut.svg", bytes: cutSVG([[loop]], "x") }).ok, "a good cut file refused");
+ok(!judge({ name: "x_cut.svg", bytes: cutSVG([[loop.map(([x, y]) => [x, y * NaN])]], "x") }).ok, "a cut file with NaN passed");
+ok(!judge({ name: "x_cut.svg", bytes: cutSVG([[[[0, 0], [1, 1]]]], "x") }).ok, "a cut file with a 2-point shape passed");
+ok(judge({ name: "d.needleworks.json", bytes: JSON.stringify({ needleworks: 1, pieces: [{ kind: "text", text: "Emma" }] }) }).ok, "a saved design refused");
+ok(!judge({ name: "d.needleworks.json", bytes: "{" }).ok && !judge({ name: "d.needleworks.json", bytes: '{"needleworks":1,"pieces":[]}' }).ok, "a broken saved design passed");
+ok(!judge({ name: "x.exe", bytes: new Uint8Array(10) }).ok, "an unknown file passed");
+
+console.log(`gate: ${n} checks, ${bad} failed`);
+process.exit(bad ? 1 : 0);

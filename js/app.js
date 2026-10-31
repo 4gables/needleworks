@@ -2,15 +2,15 @@
 import { buildBookmark, DONE, hiddenBlocks, READY, RED, stepsFor } from "./core/bookmark.js";
 import { turnForMachine, turnPattern } from "./core/design.js";
 import { FONTS, fontOf, loadFont } from "./core/fonts.js";
-import { COLOR_CHANGE, STITCH, designBlockAgrees, designStats, machineThreads, readEmbroidery, validatePES, writePES } from "./core/formats.js";
+import { COLOR_CHANGE, STITCH, designStats, machineThreads, readEmbroidery, validatePES, writePES } from "./core/formats.js";
 import { DEFAULT_MACHINE, MACHINES, MARGIN, hoop as getHoop } from "./core/machines.js";
 import { DENSITY, picturePlan } from "./core/digitize.js";
 import { hexToRgb, nearestBrotherThread, pecThread } from "./core/threads.js";
 import { CLOTHS, colorBlocks, draw } from "./render.js";
 import { FINISH, FIRST_STEP, TURN_PIC, cutSVG, nextThread, sewSheet, youHtml } from "./sheet.js";
-import { zip } from "./zip.js";
-import { blockThreads, checkup, fewerBlocks, fix, heat, landJumps, pauses, shortJumps, sortedChanges } from "./doctor.js";
-import { HARD, MAX_BLOCKS, denseWords, endsEarly, moves, stopWords, verdictOf } from "./quality.js";
+import { handOut, judge } from "./gate.js";
+import { DST_COLOURS, checkup, fewerBlocks, fix, heat, openedFile, pauses, shortJumps, sortedChanges } from "./doctor.js";
+import { HARD, MAX_BLOCKS, denseWords, moves, stopWords, verdictOf } from "./quality.js";
 import { BRANDS, chartSpools, exampleSpools, lab, nearestSpool, spools } from "./core/brands.js";
 import { COLORS as LINE_THREADS, initStudio } from "./studio/ui.js";
 
@@ -382,14 +382,8 @@ function safeName(s, fallback) {
   // added after the name here always follows a dot or an underscore, so only the bare word needs one)
   return /^(con|prn|aux|nul|com[1-9]|lpt[1-9])$/i.test(t) ? t + "_" : t || fallback;
 }
-// a file handed to the browser's downloads
-function saveFile(blob, name) {
-  const url = URL.createObjectURL(blob), a = document.createElement("a");
-  a.href = url; a.download = name; document.body.append(a); a.click(); a.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 2000);
-}
+// (every file leaves through gate.js `handOut`: checked first, nothing handed over when one is refused)
 // iPhone/iPad/Android share sheet: Messages, Mail, AirDrop, Save to Files
-function pesFile(v) { return new File([v.bytes], v.filename, { type: "application/octet-stream" }); }
 function canShareFile() {
   try { return !!(navigator.canShare && navigator.canShare({ files: [new File([new Uint8Array(1)], "x.pes", { type: "application/octet-stream" })] })); }
   catch { return false; }
@@ -414,10 +408,10 @@ function shareText(v) {
 }
 $("share").onclick = async () => {
   const v = state.view; if (!v) return;
-  const check = validatePES(v.bytes, v.verifyAgainst || null, hoop());
-  if (!check.ok) { showError("Sending stopped: " + check.error); return; }
+  const r = handOut([{ name: v.filename, bytes: v.bytes, against: v.verifyAgainst }], { hoop: hoop(), share: { title: v.filename, text: shareText(v) } });
+  if (!r.ok) { showError("Sending stopped: " + r.error); return; }
   try {
-    await navigator.share({ files: [pesFile(v)], title: v.filename, text: shareText(v) });
+    await r.shared;
   } catch (err) {
     if (err && err.name !== "AbortError") showError("Couldn't open the share sheet. Use Download instead.");
   }
@@ -425,24 +419,15 @@ $("share").onclick = async () => {
 
 $("download").onclick = () => {
   const v = state.view; if (!v) return;
-  if (v.split) {   // one file per hooping, each proven like any other download
-    const files = [];
-    for (const p of v.split) {
-      const bytes = writePES(p.pattern), check = validatePES(bytes, p.pattern, hoop());
-      if (!check.ok) { showError(`Download stopped (${p.filename}): ${check.error}`); return; }
-      files.push({ name: p.filename, bytes, problems: verdictOf(bytes) });
-    }
-    saveFile(new Blob([zip(files)], { type: "application/zip" }), v.filename);
-    downloaded(v, true, files);
-    return;
-  }
-  // never hand out a file we haven't proven decodes to exactly this design
-  const check = validatePES(v.bytes, v.verifyAgainst || null, hoop());
-  if (!check.ok) { showError("Download stopped: " + check.error); return; }
-  saveFile(new Blob([v.bytes], { type: "application/octet-stream" }), v.filename);
+  // never hand out a file we haven't proven decodes to exactly this design and the machine can take
   // (judged on the bytes saved, every time: a verdict made earlier from the design described something else, and an
   // opened file's PEC header listing 2 threads for 1 block was saved "Checked")
-  downloaded(v, false, [{ name: v.filename, bytes: v.bytes, problems: verdictOf(v.bytes) }]);
+  // (a design in two hoopings: one file per hooping, in a .zip, each proven like any other download)
+  const files = v.split ? v.split.map((p) => ({ name: p.filename, bytes: writePES(p.pattern), against: p.pattern })) : [{ name: v.filename, bytes: v.bytes, against: v.verifyAgainst }];
+  const r = handOut(files, { hoop: hoop(), zip: v.split ? v.filename : "" });
+  // (a file the machine can't take isn't saved: the dialog says why and offers a fixed copy when one helps)
+  if (!r.ok && !r.files.some((f) => f.hard.length)) { showError("Download stopped: " + r.error); return; }
+  downloaded(v, !!v.split, r.files, r.ok);
 };
 // A copy of a file that fails the quality check, fixed by the design doctor (thin to 24 hits/mm², drop tiny and
 // same-hole stitches, even out sparse satins; long stitches are always split), judged again, or null when that doesn't
@@ -457,7 +442,7 @@ function fixedCopy(bytes, problems) {
       let src = readEmbroidery(bytes, "x.pes");
       if (k.has("blocks") && !(src = fewerBlocks(src))) return null;
       const p = fix(src, opts), out = writePES(p), left = verdictOf(out);
-      if (validatePES(out, p, hoop()).ok && !left.length) return out;
+      if (validatePES(out, p, hoop()).ok && !left.length) return { bytes: out, against: p };
       for (const q of left) k.add(q.key);
     }
   } catch {}
@@ -471,9 +456,9 @@ function badFiles(files) {
 }
 // the fixed copies saved: one file, or the whole zip again with the bad files swapped
 function saveFixed(files, bad, zipName) {
-  if (!zipName) { saveFile(new Blob([bad[0].fixed], { type: "application/octet-stream" }), fixedName(bad[0].name)); return; }
+  if (!zipName) return handOut([{ name: fixedName(bad[0].name), ...bad[0].fixed }], { hoop: hoop() });
   const swap = new Map(bad.filter((b) => b.fixed).map((b) => [b.name, b.fixed]));
-  saveFile(new Blob([zip(files.map((f) => (swap.has(f.name) ? { name: f.name, bytes: swap.get(f.name) } : f)))], { type: "application/zip" }), fixedName(zipName));
+  return handOut(files.map((f) => ({ name: f.name, ...(swap.get(f.name) || { bytes: f.bytes, against: f.against }) })), { hoop: hoop(), zip: fixedName(zipName) });
 }
 // what's wrong with saved files, in plain words, and a button for the fixed copies when every one could be fixed
 function badReport(el, files, zipName) {
@@ -498,14 +483,15 @@ function badReport(el, files, zipName) {
   if (fixable) {
     const btn = document.createElement("button"); btn.type = "button"; btn.className = "primary";
     btn.textContent = zipName ? `Save fixed copies (${fixedName(zipName)})` : `Save a fixed copy (${fixedName(bad[0].name)})`;
-    btn.onclick = () => { saveFixed(files, bad, zipName); btn.disabled = true; btn.textContent = "Saved to your downloads"; };
+    btn.onclick = () => { const r = saveFixed(files, bad, zipName); btn.disabled = true; btn.textContent = r.ok ? "Saved to your downloads" : "Couldn't save it: " + r.error; };
     el.append(btn);
   }
   return bad;
 }
 // what was checked and the next steps at the machine, until "Don't show this again" (a file that fails the quality
 // check always says so)
-function downloaded(v, zipped, files = []) {
+// (`saved` false: refused at the gate for a rule the machine needs, nothing saved)
+function downloaded(v, zipped, files = [], saved = true) {
   const box = $("done-bad") || Object.assign(document.createElement("div"), { id: "done-bad", className: "done-bad" });
   if (!box.isConnected) $("done-checked").after(box);
   const bad = badReport(box, files, zipped ? v.filename : null);
@@ -522,7 +508,7 @@ function downloaded(v, zipped, files = []) {
   const part = state.mode === "open" && state.opened?.short;
   // (a rule the machine itself needs, broken: never "It opens on a Brother PE900")
   const hardBad = bad.some((b) => b.problems.some((q) => HARD.has(q.key)));
-  $("done-checked").textContent = hardBad ? `It may not open or sew right ${what}: ${bad.length > 1 ? `${bad.length} of the files break` : zipped ? "one of the files breaks" : "it breaks"} a rule the machine needs.`
+  $("done-checked").textContent = hardBad ? `${saved ? "It may not open or sew right" : "Not saved: it wouldn't open or sew right"} ${what}: ${bad.length > 1 ? `${bad.length} of the files break` : zipped ? "one of the files breaks" : "it breaks"} a rule the machine needs.`
     : bad.length ? `It opens ${what}, but ${bad.length > 1 ? `${bad.length} of the files` : zipped ? "one of the files" : "it"} may not sew well:`
     : part ? `It opens ${what}, but only part of the design is in it: the file it came from ends early. Download that file again if you can.` : `Checked: it opens ${what}.`;
   $("done-checked").className = bad.length || part ? "warn" : "good";
@@ -567,7 +553,8 @@ addEventListener("afterprint", () => { $("sheet").innerHTML = ""; });
 $("cut-file").onclick = () => {
   const v = state.view; if (!v?.sheet?.cut?.length) return;
   const name = v.filename.replace(/\.pes$/i, "");
-  saveFile(new Blob([cutSVG(v.sheet.cut, name)], { type: "image/svg+xml" }), `${name}_cut.svg`);
+  const r = handOut([{ name: `${name}_cut.svg`, bytes: cutSVG(v.sheet.cut, name) }]);
+  if (!r.ok) showError("Cut file stopped: " + r.error);
 };
 
 // ---------- on my item ----------
@@ -723,11 +710,13 @@ $("names-make").onclick = async () => {
   for (const name of list) {
     await new Promise((r) => setTimeout(r, 0));
     try {
-      const { pattern, shown, smaller, thin, turned: sideways, runs } = n.build(name, $("names-shrink").checked), bytes = writePES(pattern), check = validatePES(bytes, pattern, hoop());
-      if (!check.ok) throw new Error(check.error);
+      const { pattern, shown, smaller, thin, turned: sideways, runs } = n.build(name, $("names-shrink").checked);
       let base = safeName(name, "name") + (n.bookmark ? "_bookmark" : ""), f = base, k = 2;
       while (used.has(f.toLowerCase())) f = `${base}_${k++}`;
-      used.add(f.toLowerCase()); files.push({ name: f + ".pes", bytes, problems: verdictOf(bytes) }); made.push({ name, file: f + ".pes", pattern, shown, smaller, thin, sideways, runs });
+      // (judged as the zip will be: a name the gate would refuse is left out and said so, not the whole zip)
+      const j = judge({ name: f + ".pes", bytes: writePES(pattern), against: pattern }, hoop());
+      if (!j.ok) throw new Error(j.error);
+      used.add(f.toLowerCase()); files.push(j); made.push({ name, file: f + ".pes", pattern, shown, smaller, thin, sideways, runs });
     } catch (err) { bad.push(`${name} (${/hoop fits|too big/i.test(err.message) ? "too long for the hoop" : err.message})`); }
   }
   $("names-make").disabled = false;
@@ -740,8 +729,8 @@ $("names-make").onclick = async () => {
   }
   const zipName = n.bookmark ? `bookmarks_${files.length}.zip` : `${n.zip || "names"}_${files.length}_${n.monogram ? "monograms" : "names"}.zip`;
   if (files.length) {
-    saveFile(new Blob([zip(files)], { type: "application/zip" }), zipName);
-    $("names-cancel").textContent = "Done";
+    const r = handOut(files, { hoop: hoop(), zip: zipName });
+    if (!r.ok) { bad.push(r.error); files.length = 0; } else $("names-cancel").textContent = "Done";
   }
   // (each file through the same quality check as a single download, with fixed copies when they help)
   const box = $("names-bad") || Object.assign(document.createElement("div"), { id: "names-bad", className: "warn" });
@@ -1323,44 +1312,12 @@ function pesVersion(v) {
 async function openDesign(file) {
   try {
     const bytes = new Uint8Array(await file.arrayBuffer());
-    // (jumps landed on their first stitch: a DST converted here, or a fixed copy, would gain a hole where each ended)
-    let d = landJumps(readEmbroidery(bytes, file.name));
-    if (!d.stitches.some((s) => s[2] === STITCH)) throw Object.assign(new Error(`${file.name} has no stitches in it. It may be damaged or not an embroidery file: try downloading it again.`), { plain: true });
-    // (a file cut short still decodes, as the part that's there: peace.pes cut in half opened as 2,658 stitches, "Fits")
-    const short = endsEarly(bytes, file.name);
-    // A PES whose design block (what PE-DESIGN opens) isn't what its PEC block (what the machine sews) holds: its
-    // threads are the PEC block's too (the header said "Red" for a block the machine sews green), and it's saved
-    // again as what the machine sews, so both agree. (A file cut short disagrees too: it says so already.)
-    const disagree = d.format === "pes" && !short && designBlockAgrees(bytes) === false;
-    if (disagree) d.threads = d.pec.map((i) => { const t = pecThread(i); return { color: t.hex, name: t.name, brand: "Brother" }; });
-    // a file with no thread colours (DST): each block gets its own, to tell them apart and to change
-    const blocks = d.stitches.filter((s) => s[2] === COLOR_CHANGE).length + 1, colourless = d.threads.length < blocks;
-    if (colourless) d.threads = Array.from({ length: blocks }, (_, i) => d.threads[i] || brother(DST_COLOURS[i % DST_COLOURS.length]));
-    d = blockThreads(d);
-    // A PES that breaks a rule the machine itself needs (a thread list that isn't one per colour, appliqué codes for
-    // threads, too many thread changes) is never saved as it came: it's written again, or not saved at all. It was
-    // "Save a copy", byte for byte, then "It opens on a Brother PE900" (pec_count_ff.pes, colours_121.pes).
-    const hard = d.format === "pes" && !short ? verdictOf(bytes).filter((q) => HARD.has(q.key)) : [];
-    const misplaced = d.format === "pes" && !!d.misplaced, repair = misplaced || (d.format === "pes" && (short || disagree || hard.length > 0));
-    const isPes = d.format === "pes" && !repair;
-    // More colour blocks than the machine steps through (99; the PES writer refuses over 127: colors150.pes has 150,
-    // and was called damaged): each thread's parts sewn together if that brings it under (`fewer`), else it's shown
-    // but not saved (`stuck`; a PES too, since round 8: colours_121.pes was saved as it came).
-    // (its stops as the facts beside the preview count them: thread changes, and pauses in the same thread)
-    const same = Math.min(blocks - 1, pauses(d)), stops = stopWords(blocks - 1 - same, same);
-    const tooMany = blocks > MAX_BLOCKS, fewer = tooMany ? fewerBlocks(d) : null, stuck = tooMany && !fewer && !isPes;
-    let merged = null;
-    if (tooMany && fewer && !isPes) { merged = [blocks - 1, fewer.threads.length - 1]; d = { ...fewer, format: d.format, version: d.version }; }
-    const out = isPes ? bytes : stuck ? null : writePES(d);
-    // (the checkup reads the file as it will be saved: the original bytes, or the copy written here)
-    const check = checkup(out ? readEmbroidery(out, "x.pes") : d);
-    // A file that's written again here anyway (a misplaced or cut-short PES, a DST) is written fixed: what it fails
-    // is ticked. dense_k.pes was saved as "_fixed" with only its box mended, still 40 hits/mm².
-    const need = new Set(isPes || stuck ? [] : check.verdict.map((q) => q.key));
+    // (what the file is and what's saved from it: doctor.js `openedFile`, shared with tests/open_fuzz.test.mjs)
+    const o = openedFile(bytes, file.name), { d, check, need } = o;
     const base = safeName(file.name.replace(/\.[^.]+$/, ""), "design"), st = designStats(d);
-    state.opened = { d, bytes, out, isPes, repair, hard, misplaced, short, disagree, colourless, name: file.name, base, tooMany, blocks, stops, merged, stuck, noFix: stuck || (tooMany && !fewer), fixBase: isPes && fewer ? fewer : null,
+    state.opened = { ...o, bytes, name: file.name, base,
       opts: { scale: 1, tiny: need.has("tiny") || need.has("same"), thin: need.has("dense"), sort: false, split: need.has("long"), satin: need.has("sparse") },
-      sorted: tooMany ? null : sortedChanges(d, colourless), needed: need.size ? check.verdict : null, pick: 0, srcLong: moves(d.stitches),
+      sorted: o.tooMany ? null : sortedChanges(d, o.colourless), needed: need.size ? check.verdict : null, pick: 0, srcLong: moves(d.stitches),
       check, longer: Math.max(st.widthMm, st.heightMm), size: [st.widthMm, st.heightMm], auto: false };
     $("doctor-fix").innerHTML = ""; $("doctor-fix").hidden = state.opened.noFix; setMode("open"); openView();
   } catch (err) {
@@ -1635,7 +1592,6 @@ $("open-words").onclick = () => {
   studio.addWords(v.bytes && v.verifyAgainst ? readEmbroidery(v.bytes, "x.pes") : o.d, o.base);
 };
 // colours for files that carry none (DST): distinct exact Brother threads, then round again
-const DST_COLOURS = ["#0e1f7c", "#ed171f", "#00673e", "#e8a900", "#770176", "#f64a8a", "#000000", "#c70156"];
 const DST_SWATCHES = [...DST_COLOURS, "#f0f0f0", "#2584bb", "#b27624", "#66ba49"];
 const brother = (hex) => { const t = nearestBrotherThread(hex); return { color: hex, name: t.name, brand: "Brother" }; };
 $("open-file").onchange = (e) => e.target.files[0] && openDesign(e.target.files[0]);
@@ -1676,7 +1632,7 @@ function showStep(i) {
   state.step = i; document.dispatchEvent(new CustomEvent("nw:step", { detail: i })); paint();
 }
 const studio = initStudio({
-  hoop: designHoop, machineHoop: hoop, turned: designTurned, unturn: () => { if (state.turn.design) { state.turn.design = false; store.set("turn", state.turn); $("turn").setAttribute("aria-pressed", false); } }, fit: () => { state.zoom = 1; state.pan = [0, 0]; }, store, showError, busy, safeName, escapeHtml, saveFile, keepFocus, showStep, step: () => state.step, setMode, spool, ownSpool, threadList, ownedSpools,
+  hoop: designHoop, machineHoop: hoop, turned: designTurned, unturn: () => { if (state.turn.design) { state.turn.design = false; store.set("turn", state.turn); $("turn").setAttribute("aria-pressed", false); } }, fit: () => { state.zoom = 1; state.pan = [0, 0]; }, store, showError, busy, safeName, escapeHtml, handOut, keepFocus, showStep, step: () => state.step, setMode, spool, ownSpool, threadList, ownedSpools,
   // (undo, redo and Open saved put the hoop's turn back as it was; the caller rebuilds)
   setTurn: (on) => { state.turn.design = !!on; store.set("turn", state.turn); $("turn").setAttribute("aria-pressed", designTurned()); },
   hoopId: () => hoop().id,
