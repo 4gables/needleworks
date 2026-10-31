@@ -483,6 +483,7 @@ export function validatePES(bytes, source = null, hoop = null) {
   if (source) {
     const norm = normalize(source), want = moves(norm), got = moves(st);
     if (want.length !== got.length) return no(`Stitch count changed in the file (${got.length} vs ${want.length}).`);
+    if (!got.length) return no("The file has no stitches.");   // (every stitch on the hole before it: nothing to compare)
     for (let i = 0; i < want.length; i++) {
       if (want[i][0] !== got[i][0] || want[i][1] !== got[i][1]) return no(`Stitch ${i + 1} moved when written to the file.`);
     }

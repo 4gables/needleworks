@@ -1,13 +1,13 @@
 /*! Needleworks (c) 2026 4Gables. All rights reserved. Proprietary, see LICENSE. https://4gables.com/needleworks/ */
 // Design doctor for opened files: what might go wrong at the machine, a thickness map, and gentle fixes (resize
 // 80-120 %, drop tiny stitches, thin the densest spots). Stitch units 0.1 mm; the PES writer stays untouched.
-import { COLOR_CHANGE, END, JUMP, STITCH, STOP, TRIM } from "./core/formats.js";
+import { COLOR_CHANGE, END, JUMP, STITCH, STOP, TRIM, designBlockAgrees, readEmbroidery, writePES } from "./core/formats.js";
 import { Design, relieve } from "./core/design.js";
 import { fillPolygon } from "./core/digitize.js";
 import { distanceTransform } from "./core/raster.js";
 import { contours } from "./studio/quilt.js";
-import { pyRound } from "./core/threads.js";
-import { LIMIT, MAX_BLOCKS, MAX_STITCH, moves, peak, satinGap, verdict } from "./quality.js";
+import { nearestBrotherThread, pecThread, pyRound } from "./core/threads.js";
+import { HARD, LIMIT, MAX_BLOCKS, MAX_STITCH, endsEarly, moves, peak, satinGap, stopWords, verdict, verdictOf } from "./quality.js";
 
 // (LIMIT: 24 needle hits per mm² per colour block, the densest spot in sold designs; the counts are pe900_check.py's,
 // from quality.js, so the checkup and the download's verdict agree)
@@ -561,12 +561,22 @@ export function landJumps(pattern) {
   let st = pattern.stitches;
   const out = [], k = st.findIndex((s) => s[2] === STITCH || s[2] === JUMP), a = st[k], b = st[k + 1];
   if (a?.[2] === STITCH && b?.[2] === STITCH && Math.hypot(b[0] - a[0], b[1] - a[1]) > MAX_STITCH) st = [...st.slice(0, k), [b[0], b[1], JUMP], ...st.slice(k + 1)];
+  // (and any design starting with a stitch starts with a jump there, as our own do: the writer starts at the origin,
+  // so a DST or mended PES whose first stitch was elsewhere read back with a stitch more, out from the origin, and
+  // was refused at Download: tests/open_fuzz.test.mjs)
+  else if (a?.[2] === STITCH) st = [...st.slice(0, k), [a[0], a[1], JUMP], ...st.slice(k)];
   for (let i = 0; i < st.length; i++) {
     if (st[i][2] !== JUMP) { out.push(st[i]); continue; }
     let j = i;
     while (st[j + 1]?.[2] === JUMP) j++;
     const s = st[j + 1];
-    out.push(s?.[2] === STITCH ? [s[0], s[1], JUMP] : st[j]);
+    // (jumps that go nowhere are dropped: at the very end, or before a trim or thread change after which the needle
+    // jumps again. The writer puts the needle down where a jump ends, so each was a stitch the file never had, and a
+    // damaged file's last jump 3.5 m away made the design unwritable)
+    let k = j + 1;
+    while (st[k] && st[k][2] !== STITCH && st[k][2] !== JUMP && st[k][2] !== END) k++;
+    if (!s || s[2] === END || (s[2] !== STITCH && (!st[k] || st[k][2] !== STITCH))) { i = j; continue; }
+    out.push(s[2] === STITCH ? [s[0], s[1], JUMP] : st[j]);
     i = j;
   }
   return { ...pattern, stitches: out };
@@ -686,4 +696,71 @@ function dropTiny(st) {
     out.push(s);
   }
   return out;
+}
+
+// An opened file (Open a design): what it is, what's wrong with it, and the bytes a download starts from (`out`: the
+// file's own bytes when they can go out as they are, else written again; null when it can't be saved at all). Throws
+// an error with `plain` (words to show) for a file with no stitches; anything else that throws is an unreadable file.
+// app.js `openDesign` shows it; tests/open_fuzz.test.mjs feeds it damaged files.
+export const DST_COLOURS = ["#0e1f7c", "#ed171f", "#00673e", "#e8a900", "#770176", "#f64a8a", "#000000", "#c70156"];
+const brother = (hex) => { const t = nearestBrotherThread(hex); return { color: hex, name: t.name, brand: "Brother" }; };
+// A design far from the origin (over 200 mm: a PES box holds 204.8 mm either way, so it can't be written there) moved
+// to sit on it, as the machine centres it anyway. Files that fit stay where they are, byte for byte.
+// (centred on its stitches, and any jump still out there stops at their edge: the frame needn't travel further)
+function centred(d) {
+  const far = (c) => { for (const [x, y, k] of d.stitches) if ((k === STITCH || k === JUMP) && Math.max(Math.abs(x - c[0]), Math.abs(y - c[1])) > 2000) return true; return false; };
+  if (!far([0, 0])) return d;
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+  for (const [x, y, c] of d.stitches) if (c === STITCH) { x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y); }
+  const cx = Math.round((x0 + x1) / 2), cy = Math.round((y0 + y1) / 2), lim = (v, a, b) => Math.min(b, Math.max(a, v));
+  return { ...d, stitches: d.stitches.map(([x, y, c]) => (c === JUMP ? [lim(x, x0, x1) - cx, lim(y, y0, y1) - cy, c] : [x - cx, y - cy, c])) };
+}
+// A design starts with its first needle move: thread changes and trims before it (empty blocks at the start of a
+// damaged file) go, with their threads. Written as they were, the writer's start read back as one stitch more and
+// Download refused the file.
+function firstMove(d) {
+  const k = d.stitches.findIndex((s) => s[2] === STITCH || s[2] === JUMP);
+  if (k <= 0) return d;
+  const skipped = d.stitches.slice(0, k).filter((s) => s[2] === COLOR_CHANGE).length;
+  return { ...d, stitches: d.stitches.slice(k), threads: d.threads.slice(Math.min(skipped, Math.max(0, d.threads.length - 1))), pec: d.pec?.slice(skipped) };
+}
+export function openedFile(bytes, name) {
+  // (jumps landed on their first stitch: a DST converted here, or a fixed copy, would gain a hole where each ended)
+  let d = centred(firstMove(landJumps(readEmbroidery(bytes, name))));
+  // (a needle move: a stitch that goes somewhere. A file cut down to one stitch on the origin opened, then Download
+  // refused it as having no stitches)
+  if (!d.stitches.some((s, i) => s[2] === STITCH && i && (s[0] !== d.stitches[i - 1][0] || s[1] !== d.stitches[i - 1][1]))) throw Object.assign(new Error(`${name} has no stitches in it. It may be damaged or not an embroidery file: try downloading it again.`), { plain: true });
+  // (a file cut short still decodes, as the part that's there: peace.pes cut in half opened as 2,658 stitches, "Fits")
+  const short = endsEarly(bytes, name);
+  // A PES whose design block (what PE-DESIGN opens) isn't what its PEC block (what the machine sews) holds: its
+  // threads are the PEC block's too (the header said "Red" for a block the machine sews green), and it's saved
+  // again as what the machine sews, so both agree. (A file cut short disagrees too: it says so already.)
+  const disagree = d.format === "pes" && !short && designBlockAgrees(bytes) === false;
+  if (disagree) d.threads = d.pec.map((i) => { const t = pecThread(i); return { color: t.hex, name: t.name, brand: "Brother" }; });
+  // a file with no thread colours (DST): each block gets its own, to tell them apart and to change
+  const blocks = d.stitches.filter((s) => s[2] === COLOR_CHANGE).length + 1, colourless = d.threads.length < blocks;
+  if (colourless) d.threads = Array.from({ length: blocks }, (_, i) => d.threads[i] || brother(DST_COLOURS[i % DST_COLOURS.length]));
+  d = blockThreads(d);
+  // A PES that breaks a rule the machine itself needs (a thread list that isn't one per colour, appliqué codes for
+  // threads, too many thread changes) is never saved as it came: it's written again, or not saved at all. It was
+  // "Save a copy", byte for byte, then "It opens on a Brother PE900" (pec_count_ff.pes, colours_121.pes).
+  const hard = d.format === "pes" && !short ? verdictOf(bytes).filter((q) => HARD.has(q.key)) : [];
+  const misplaced = d.format === "pes" && !!d.misplaced, repair = misplaced || (d.format === "pes" && (short || disagree || hard.length > 0));
+  const isPes = d.format === "pes" && !repair;
+  // More colour blocks than the machine steps through (99; the PES writer refuses over 127: colors150.pes has 150,
+  // and was called damaged): each thread's parts sewn together if that brings it under (`fewer`), else it's shown
+  // but not saved (`stuck`; a PES too, since round 8: colours_121.pes was saved as it came).
+  // (its stops as the facts beside the preview count them: thread changes, and pauses in the same thread)
+  const same = Math.min(blocks - 1, pauses(d)), stops = stopWords(blocks - 1 - same, same);
+  const tooMany = blocks > MAX_BLOCKS, fewer = tooMany ? fewerBlocks(d) : null, stuck = tooMany && !fewer && !isPes;
+  let merged = null;
+  if (tooMany && fewer && !isPes) { merged = [blocks - 1, fewer.threads.length - 1]; d = { ...fewer, format: d.format, version: d.version }; }
+  const out = isPes ? bytes : stuck ? null : writePES(d);
+  // (the checkup reads the file as it will be saved: the original bytes, or the copy written here)
+  const check = checkup(out ? readEmbroidery(out, "x.pes") : d);
+  // A file that's written again here anyway (a misplaced or cut-short PES, a DST) is written fixed: what it fails
+  // is ticked. dense_k.pes was saved as "_fixed" with only its box mended, still 40 hits/mm².
+  const need = new Set(isPes || stuck ? [] : check.verdict.map((q) => q.key));
+  return { d, out, check, need, isPes, repair, hard, misplaced, short, disagree, colourless, tooMany, blocks, stops, merged, stuck,
+    noFix: stuck || (tooMany && !fewer), fixBase: isPes && fewer ? fewer : null };
 }

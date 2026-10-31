@@ -99,7 +99,7 @@ export const STARTERS = [
 ];
 
 // api: { hoop(), setView(pattern, filename, look) (null pattern: nothing to show), showError(msg), busy(on, text),
-//        safeName(s, fb), escapeHtml(s), saveFile(blob, name), store, showStep(i), step(), setMode(mode), spool(hex) }
+//        safeName(s, fb), escapeHtml(s), handOut(files, opts) (gate.js: the only way a file leaves), store, showStep(i), step(), setMode(mode), spool(hex) }
 export function initStudio(api) {
   const $ = (id) => document.getElementById(id);
   const saved = api.store.get("studio", null);
@@ -1532,8 +1532,9 @@ export function initStudio(api) {
   // a design file to keep and change later (the pieces, not the stitches)
   $("st-save").onclick = () => {
     // (with the hoop it was laid out in and its turn: a turned design reopened said Too big)
-    api.saveFile(new Blob([JSON.stringify({ needleworks: 1, pieces, fabric, baste, thread, fitted, ...(two ? { two } : {}), hoop: api.hoopId(), turned: api.turned() }, null, 1)], { type: "application/json" }),
-      `${api.safeName(firstWords(), "design")}.needleworks.json`);
+    const r = api.handOut([{ name: `${api.safeName(firstWords(), "design")}.needleworks.json`,
+      bytes: JSON.stringify({ needleworks: 1, pieces, fabric, baste, thread, fitted, ...(two ? { two } : {}), hoop: api.hoopId(), turned: api.turned() }, null, 1) }]);
+    if (!r.ok) api.showError(r.error === "The saved design is empty." ? "Add a piece first: there's nothing to save yet." : r.error);
   };
   const bad0 = "it isn't a design saved from this page, or it's damaged (saved designs end in .needleworks.json)";
   $("st-load").onchange = async (e) => {

@@ -24,7 +24,8 @@ const maxOf = (a) => { let m = -Infinity; for (const v of a) if (v > m) m = v; r
 const lettering = new Map();   // font + text -> centre-line strokes (rendering is the slow part)
 // Nothing drawn before its font has loaded is cached: it was drawn in the browser's fallback font, and caching it
 // kept that lettering after the font arrived.
-const fontReady = (family) => !family || typeof document === "undefined" || document.fonts.check(`40px "${family}"`);
+// (a family name the CSS parser can't read, from a crafted saved design, is a font that isn't ready, not a DOMException)
+const fontReady = (family) => { try { return !family || typeof document === "undefined" || document.fonts.check(`40px "${family}"`); } catch { return false; } };
 function letterStrokes(text, family, spacing = 0, kern = null) {
   const key = family + "\n" + text + "\n" + spacing + (kern ? "\n" + kern.join() : "");
   if (lettering.has(key)) return lettering.get(key);
@@ -469,7 +470,14 @@ function stitchLetters(parts, satinW, fab = "cotton", small = false) {
     // pull comp 0.15 mm a side; 0.05 on thin columns (more widens them enough to close small counters). It starts
     // from the centre: two satins back to back at a junction ended and began on opposite edges, a column's width
     // apart (2.4 mm on a 24 mm name), which was a jump and a trim: 11 needless trims on "Ashley" in Yellowtail.
-    if (satinW) return [p[0], ...satin(p, satinW, density, (satinW >= 1.5 ? 0.3 : 0.1) + pull, false, false, wAt, en?.shape)];
+    // (`reach`: the needle, at the end of the column before, is at most half this column from its start, under it. A
+    // knit's wider pull took that past the 2 mm jump rule: a Satisfy Z sewed 8 trims and locks round one junction,
+    // 26 hits/mm²: tests/browser/engine_fuzz.html)
+    if (satinW) {
+      const pc = (satinW >= 1.5 ? 0.3 : 0.1) + pull, r = [p[0], ...satin(p, satinW, density, pc, false, false, wAt, en?.shape)];
+      r.reach = (satinW + pc) / 2 + 0.1;
+      return r;
+    }
     const r = spaced(followRun(p, 1.6, 0.1, 0.8)), back = r.slice().reverse();   // the walk's way back: back, forth and back again
     return r.length > 1 ? [...r, ...back.slice(1), ...r.slice(1)] : r;
   }
@@ -802,7 +810,7 @@ function placed(st, place) {
   return s;
 }
 // a path's points moved, keeping its `gap` (sewn after a jump: the first stroke of a separate letter)
-const moved = (q, f) => { const r = q.map(f); if (q.gap) r.gap = true; if (q.lockAt) r.lockAt = f(q.lockAt); return r; };
+const moved = (q, f) => { const r = q.map(f); if (q.gap) r.gap = true; if (q.lockAt) r.lockAt = f(q.lockAt); if (q.reach) r.reach = q.reach; return r; };
 // mirrored (left to right) before it's turned
 function placer({ x, y, rot, flip }) {
   const a = ((rot || 0) * Math.PI) / 180, c = Math.cos(a), sn = Math.sin(a), f = flip ? -1 : 1;
@@ -1494,6 +1502,8 @@ export function cleanPiece(p) {
       if (q.pending != null) q.pending = q.pending === true;
     } else { if (orig.length) q.blocks = orig; delete q.orig; delete q.scale; delete q.pending; }
   } else return null;
+  // (only lettering has a font: a frame carrying a crafted one stopped the design building)
+  if (p.kind !== "text" && p.kind !== "monogram" && p.kind !== "letters") delete q.font;
   return q;
 }
 
@@ -2029,7 +2039,7 @@ function build(pieces, hoop, opts) {
         const t = enter(q, ahead[i]), c = (a) => (d.cur ? moveCost(Math.hypot(a[0][0] - d.cur[0], a[0][1] - d.cur[1])) : 0) + moveCost(Math.hypot(a[0][0] - ahead[i][0], a[0][1] - ahead[i][1]));
         if (c(t) < c(q)) r = t;
       }
-      d.path(r, true, !!q.gap, q.lockAt);
+      d.path(r, true, !!q.gap, q.lockAt, r === q ? q.reach : 0);
     }
   }
   if (!steps.length) throw Object.assign(new Error("Nothing to stitch yet: type some words, or pick a starting idea."), { empty: true });

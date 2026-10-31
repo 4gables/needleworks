@@ -29,9 +29,10 @@ export class Design {
   // lockAt: a point under stitches still to come (1 mm along a lettering stroke that's satined back over): the needle
   // comes down and locks there, then stitches to the run's start. A lock on the start itself, a column's end, put two
   // hits on the letter's outer edge (Josefin's h, at the top of its stem).
-  path(pts, lock = true, jump = false, lockAt = null) {
+  // reach: how far (mm, over 2) the needle may be and still stitch to the start (a satin column whose start it's under)
+  path(pts, lock = true, jump = false, lockAt = null, reach = 0) {
     if (!pts.length) return;
-    const far = !this.cur || jump || Math.hypot(pts[0][0] - this.cur[0], pts[0][1] - this.cur[1]) > 2.0;
+    const far = !this.cur || jump || Math.hypot(pts[0][0] - this.cur[0], pts[0][1] - this.cur[1]) > Math.max(2.0, reach || 0);
     if (this.cur && far) { this.tieOff(); this.stitches.push([0, 0, TRIM]); }
     if (far && lock && lockAt && Math.hypot(lockAt[0] - pts[0][0], lockAt[1] - pts[0][1]) >= 0.7) {
       this.path([lockAt, pts[0]], true, false);
@@ -78,6 +79,15 @@ export class Design {
     this.tieOff();
     this.stitches.push([0, 0, END]);
     this.stitches = relieve(dedupe(drop ? untiny(this.stitches) : this.stitches));
+    // A design that ends up over 200 mm from the hoop's centre (a piece placed far out, a word on a 400 mm curve from a
+    // saved design) is moved onto it, as the machine centres it anyway: a PES design box holds 204.8 mm either way,
+    // and past that the file read back shifted and was refused at Download (tests/browser/engine_fuzz.html). Designs
+    // nearer the centre stay exactly where they are.
+    const [x0, y0, x1, y1] = this.bounds();
+    if (Math.max(-x0, x1, -y0, y1) > 200) {
+      const cx = Math.round((x0 + x1) * 5), cy = Math.round((y0 + y1) * 5);
+      this.stitches = this.stitches.map(([x, y, c]) => [x - cx, y - cy, c]);
+    }
     this.check();
     return this;
   }

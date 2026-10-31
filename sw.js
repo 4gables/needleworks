@@ -55,6 +55,7 @@ const FILES = [
   "js/quilt-worker.js",
   "js/worker.js",
   "js/zip.js",
+  "js/gate.js",
 ];
 self.addEventListener("install", (e) => { e.waitUntil(caches.open(CACHE).then((c) => c.addAll(FILES)).then(() => self.skipWaiting())); });
 self.addEventListener("activate", (e) => {
