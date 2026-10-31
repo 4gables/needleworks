@@ -72,10 +72,11 @@ export class Design {
     this.cur = null;
   }
 
-  finish() {
+  // opts.untiny: drop stitches under 0.3 mm first (the Design tab; pictures and the bookmark sew as they always have)
+  finish({ untiny: drop = false } = {}) {
     this.tieOff();
     this.stitches.push([0, 0, END]);
-    this.stitches = relieve(dedupe(this.stitches));
+    this.stitches = relieve(dedupe(drop ? untiny(this.stitches) : this.stitches));
     this.check();
     return this;
   }
@@ -116,6 +117,31 @@ export function dedupe(st) {
   return out;
 }
 
+// No stitch of `min` or less (0.1 mm units, as the file rounds them) between two others: Ink/Stitch's minimum stitch
+// length. The point that ends one is dropped (or, when that point is a lock's or a command's, the one before it), so
+// the needle goes on to the next point. Skeleton junctions in small script (a knot of strokes 0.1-0.3 mm long, each
+// sewn out and back) gave lettering 1-4% tiny stitches. Tie-ins (7 stitches after a command) and the stitches just
+// before one (a tie-off and its stroke end) are never touched.
+export function untiny(st, min = 3) {
+  const n = st.length, fixed = new Uint8Array(n);
+  for (let i = 0; i < n; i++) if (st[i][2] !== STITCH) {
+    for (let j = i - 5; j <= i + 7; j++) if (j >= 0 && j < n) fixed[j] = 1;
+  }
+  const out = [], from = [];
+  const R = (s) => [pyRound(s[0]), pyRound(s[1])];
+  const far = (a, b) => { const [ax, ay] = R(a), [bx, by] = R(b), d = Math.hypot(bx - ax, by - ay); return d === 0 || d > min; };   // (exactly 0.3 too: the checker reads it as 0.29999)
+  for (let i = 0; i < n; i++) {
+    const s = st[i], q = out[out.length - 1];
+    if (s[2] === STITCH && q && q[2] === STITCH && !far(q, s)) {
+      if (!fixed[i]) continue;   // (drop this point: the next stitch starts from q)
+      const p = out[out.length - 2];
+      if (!fixed[from[from.length - 1]] && p && p[2] === STITCH && far(p, s)) { out.pop(); from.pop(); }
+    }
+    out.push(s); from.push(i);
+  }
+  return out;
+}
+
 // No 1 x 1 mm square may take more than `limit` needle hits within one colour block (nest / broken needle risk;
 // tests/pe900_check.py enforces the same). Where strokes pile up (satin junctions), drop interior stitch points:
 // two stitches become one slightly longer one. Tie-ins and tie-offs (5 points around any jump/trim/colour change)
@@ -146,17 +172,24 @@ export function relieve(st, limit = 24) {
       for (let cap = 40; inside.length > limit && cap <= 70; cap += 30) while (inside.length > limit) {
         // merged stitch stays under 4 mm (fill stitches are 3.5); where that isn't enough (travel through one spot),
         // under 7 mm
-        let best = -1, bestD = cap;
+        let best = -1, bestD = cap, pair = -1, pairD = cap;
         for (const i of inside) {
           if (!removable(i)) continue;
           const a = near(i, -1), c = near(i, 1);
           if (a < 0 || c >= n || st[a][2] !== STITCH || st[c][2] !== STITCH) continue;
           const d = Math.hypot(X(c) - X(a), Y(c) - Y(a));
-          if (d === 0) continue;   // (A, B, A: dropping B would put the needle into A's hole again)
-          if (d < bestD) { bestD = d; best = i; }
+          // (A, B, A: dropping B would put the needle into A's hole again; and never a stitch of 0.3 mm or less: the
+          // shortest merge across a satin is its own edge, which on a tight inner curve is 0.1-0.2 mm, and small
+          // script lettering came out of here with 2-4% tiny stitches. Then B and C go together, if that's enough.)
+          if (d > 3) { if (d < bestD) { bestD = d; best = i; } continue; }
+          const e = near(c, 1);
+          if (!removable(c) || e >= n || st[e][2] !== STITCH) continue;
+          const d2 = Math.hypot(X(e) - X(a), Y(e) - Y(a));
+          if (d2 > 3 && d2 < pairD) { pairD = d2; pair = i; }
         }
-        if (best < 0) break;
-        keep[best] = 0; inside.splice(inside.indexOf(best), 1);
+        if (best < 0 && pair < 0) break;
+        const drop = best >= 0 ? [best] : [pair, near(pair, 1)];
+        for (const i of drop) { keep[i] = 0; const at = inside.indexOf(i); if (at >= 0) inside.splice(at, 1); }
       }
     }
   }

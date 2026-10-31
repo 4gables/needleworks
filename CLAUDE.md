@@ -555,6 +555,31 @@ Embroidery-file tools for home machines. Two implementations of the same engine:
     becomes a space with a note; a line "... for Lily" names the file; a layout dragged or nudged past the field is
     recentred on release (`settle`), the machine centres it anyway. Harness: the Python test server sometimes drops a
     module request under load (`fonts.js` status 0) and the page never starts; reload.
+  - Re-run fixes (2026-10-30): lettering stitch quality (stream 1). Small script failed the checker on tiny stitches
+    (Great Vibes "Emma" 12 mm 3.2%, towel 3.7%, the 4x4 pouch after Make it bold 2.0%, Ms Madi/Yellowtail "Abbie
+    goes" 12 mm 2.7-3.3%): a sweep of 16 fonts x 5-20 mm x Emma/Makeup/Abbie goes x auto/bold/towel/towel 30 wt
+    (1726 files) failed 549 before, 0 after, tiny 0 in every file. Two sources: `relieve()` dropped the point whose
+    merge was shortest, i.e. a satin's own edge, 0.1-0.2 mm on a tight inner curve (3/4 of them); it now never
+    merges to 0.3 mm or less (else B and C go together). The rest were skeleton knots: `Design.finish({ untiny })`
+    (Design tab only) drops a point that ends a stitch of 0.3 mm or less (Ink/Stitch's minimum stitch length), never
+    a tie-in's or tie-off's. Exactly 0.3 counts: the checker reads x/10 floats, so 0.3 is 0.29999.
+    Junction knots (`knots` in `skeletonEdges`, pieces.js only, the bookmark unchanged): edges under 0.75 stroke
+    between two junctions are contracted to one junction; each was sewn as a full-width column, a little star of
+    satin at script joins. Loose short strokes (`notches`/`notchCaps`: an e's tongue) sew narrower, down to 0.8 mm,
+    where their notch would close under 0.8 mm (Yellowtail's e read as c at 20 mm). Appliqué holes with an
+    inscribed radius under 3 mm get a satin 0.2 mm out (not 0.4), 1.6 mm wide at least, leaving 1.6 mm open
+    (`holeRadius`; Lilita's A counter in BABY was a dot). Auto satin that closes a letter's own loop (over a tenth
+    of the x-height to its middle, under 0.85 mm) says so (`loopsFill`: "Thin line keeps them open, or make it N
+    mm"); flipping auto to a fine line instead left Sacramento names thin at 28 mm. The pouch starter's "Makeup"
+    is 20 mm (at 16 its loops filled). Kerning: Chrome's canvas already applies the fonts' GPOS kern pairs (Quicksand
+    AV -0.09 em, To -0.12); `renderWord` now asks for it (`fontKerning = "normal"`), byte-identical in Chrome.
+    Batch: 400/400 ok; tiny 2510 -> 691 (Design tab 1770 -> 0), stitches -0.7% on 240 changed studio files, trims
+    1721 -> 1719, density <= 24, same-hole 0; 11 of 97 bookmarks and 5 pictures changed only by `relieve` (same
+    stitch counts +-2, bookmark tiny 377 -> 344). Checked, no change: towel minimum agrees with what sews (Great
+    Vibes "Harper" 30 wt: "Make it 37 mm", a/p/e open at 37; the r's curl fills, as allowed). Not done: the dots by
+    READ's stars are the satin round the stars' own points (no stitch outside them); Quicksand M apexes (thinning
+    aims the apex stub between stem and diagonal; re-aiming it along either stroke looked worse); dense columns
+    where 3 strokes and the towel lattice meet (The Smiths' joins: inherent to skeleton lettering, density <= 24).
 - The preview is the file: `setView` decodes `v.bytes` with `readEmbroidery` and draws/counts/fit-checks that, and
   thread labels come from the file's own PEC palette.
 

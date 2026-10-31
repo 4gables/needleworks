@@ -200,7 +200,10 @@ export function prune(edges, minLen, keep = null) {
 // is two short ends; stopped half a stroke short they hid inside the bowl's satin and the a sewed as an o.
 // tongues (px, or 0): keep a short dead end whose ink reaches on past 1.5 strokes and this far from the stroke it leaves
 // (Yellowtail's e is a c with a tongue curled in from the top: script pruning cut it, and the e sewed as a c)
-export function skeletonEdges(mask, stroke, { spur = 1.3, dots = false, sk = null, reach = false, tongues = 0 } = {}) {
+// knots (px, or 0): where strokes cross, thinning often leaves two or three junctions a few pixels apart, joined by
+// edges shorter than this; each is contracted to one junction at their middle (`untangle`). Every edge is sewn out and
+// back as a full-width column, so a 0.2 mm edge sewed a little star of satin across the join (towel "The Smiths").
+export function skeletonEdges(mask, stroke, { spur = 1.3, dots = false, sk = null, reach = false, tongues = 0, knots = 0 } = {}) {
   const { pos, edges } = skeletonGraph(sk || skeletonize(mask));
   const ink = (x, y) => { const X = Math.round(x), Y = Math.round(y); return X >= 0 && Y >= 0 && X < mask.w && Y < mask.h && mask.data[Y * mask.w + X]; };
   const tongue = ([, , p], fromA) => {
@@ -212,7 +215,9 @@ export function skeletonEdges(mask, stroke, { spur = 1.3, dots = false, sk = nul
     while (t < stroke * 2 && ink(e[0] + u[0] * (t + 0.5), e[1] + u[1] * (t + 0.5))) t += 0.5;
     return q.length + t >= Math.max(stroke * 1.5, tongues);
   };
-  const out = prune(edges, stroke * spur, tongues ? tongue : null).map(([a, b, path]) => {
+  let kept = prune(edges, stroke * spur, tongues ? tongue : null);
+  if (knots) kept = untangle(kept, pos, knots);
+  const out = kept.map(([a, b, path]) => {
     const pts = path.map((q) => q.slice());
     pts[0] = pos.get(a).slice(); pts[pts.length - 1] = pos.get(b).slice();
     return [a, b, smooth(pts, Math.max(3, Math.floor(stroke * 0.8) | 1))];
@@ -233,6 +238,25 @@ export function skeletonEdges(mask, stroke, { spur = 1.3, dots = false, sk = nul
     out.push([`dot${c}a`, `dot${c}b`, [[x - r, y], [x, y], [x + r, y]]]);
   }
   return done();
+}
+
+// edges between two junctions (3+ strokes each) shorter than `len` px contracted, shortest first: the two junctions
+// become one at the middle of the two (`pos` is updated), so the strokes meet at one point
+function untangle(edges, pos, len) {
+  edges = edges.slice();
+  for (;;) {
+    const deg = new Map();
+    for (const [a, b] of edges) { deg.set(a, (deg.get(a) || 0) + 1); deg.set(b, (deg.get(b) || 0) + 1); }
+    let k = -1;
+    edges.forEach(([a, b, p], i) => {
+      if (a !== b && p.length < len && deg.get(a) >= 3 && deg.get(b) >= 3 && (k < 0 || p.length < edges[k][2].length)) k = i;
+    });
+    if (k < 0) return edges;
+    const [a, b] = edges[k], pa = pos.get(a), pb = pos.get(b);
+    pos.set(a, [(pa[0] + pb[0]) / 2, (pa[1] + pb[1]) / 2]);
+    edges.splice(k, 1);
+    edges = edges.map(([u, v, p]) => [u === b ? a : u, v === b ? a : v, p]);
+  }
 }
 
 // (in place) loose ends of `edges` carried on to 0.1 stroke short of the ink's edge, along the last ~0.6 stroke
