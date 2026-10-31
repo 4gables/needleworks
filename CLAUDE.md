@@ -723,6 +723,47 @@ Embroidery-file tools for home machines. Two implementations of the same engine:
     (`WORN`; etsy_8 hit 72 hits/mm² in a neck). Line drawing has a thread picker (`opts.line`, Auto = darkest).
   Not done: combining same-thread appliqué stages (6 pauses could be 3), owned spools as swatches, dusty pinks
   (chroma ~6) still Warm Gray, the etsy_5 4-colour lesson doesn't hold (grass and yellow merge).
+- Round 7 persona tests (2026-10-30, new tasks: teacher tote, first-Christmas ornament, a photo, undo storms, 4x4 fit,
+  share; 12-bib shop batch, key fob initials, felt mug rug, combined bought files, appliqué ABC in 3 fonts, a two-hooping
+  banner; round-trip fidelity, size-extreme lettering audit, picture palettes, keyboard flows, placement stress).
+  Scores 8/7/7, no P0, 4 P1 (all fixed):
+  - Design tab: when `spotIn` finds no room, `freeRoom` takes the nearest free spot in the hoop (or an in-the-hoop
+    project's front), the layout still one hooping, shrinking to `least`; otherwise nothing is added and a toast says so
+    ("Add it anyway" outside in-the-hoop projects is the only way adding a piece makes two hoopings). 15 adds had stacked
+    12 pieces on one spot with one warning. The "runs into" note names every pair (`collisions`/`touchingAll`). Starters
+    are fitted to the chosen hoop when picked (`fitHoop(false)`; four opened Too big on 4x4). Too big and not
+    splittable: `twoHoopings` offers the hoop turned, or straight lettering split at a middle word gap ("Sew it in two
+    hoopings"), else says why. `monoSize` grows only while CLEAR of the frame. Names batches keep bold (a half-mm walk
+    back from the last bold size; Bold at >= 85 % of the design's x-height); a thin line left is captioned. Arch
+    toggles keep the word's place. Tall frames offer "Turn it to run up the frame" (rot -90: key fob JMK 10 -> 16.5 mm).
+    `fonts.js` `min` is a per-font x-height used by `minSize`; "Put it on two lines" when two lines are >= 25 % bigger.
+    `cleanPiece` clamps sizes to 180; text layout uses loop min/max (`Math.min(...)` overflowed on 5000 letters).
+  - Guide: a step's "what you do" is one sentence per action, and three or more show as numbered sub-steps (`youHtml`
+    in sheet.js) everywhere. `hang` frames list the ribbon. Split designs: the rehooping is a `{ rehoop: true }` entry,
+    not a step; the slide distance comes from the two files' centres (`crossStep`); pauses are counted per file. The
+    share text carries the steps (`shareText`, <= ~1800 characters). The laptop tier hid every field hint, fabric tips
+    included (now kept in `.sewn-on`).
+  - UI: a keyboard press that redraws its control moves focus to the nearest surviving control (capture-phase click
+    listener, `detail` 0 only); chips list every block in sewing order; stops read "thread changes" and "pauses in the
+    same thread" on every tab (`stopsFact`/`stopCounts`/`stopWords`); a size chip says "Hoop turned" or "As the
+    machine shows it". `fileBlocks` gives a block the exact Brother colour of the file's own thread where the writer's
+    nearest match would differ (ufront's Purple became Light Lilac). Toasts sit over the Download bar on phones and
+    swallow taps for 700 ms as they fade.
+  - Stitches (pe900 batch and bookmarks byte-identical): Thin-line corner strokes aren't sewn, the strokes run on to
+    where their centre lines meet (`pointed`: a 6 mm A read as Y). `decurl`/`endShape` refinements keep Josefin's flat
+    v/w tops <= 0.31 mm outside the ink at 40 mm (measure on the engine's own mask with locks: the tester's 1.17 mm was
+    image misfit). Appliqué letters keep >= `GAP` 4.9 mm between neighbours (`spread` in outline.js: 1 mm of fabric
+    between satins; ~1 trim per gap per stage); the batch's Alfa cases are now AB_58, BABY_27, Q8_42.
+  - Pictures (21 files, stitches -4.6 %, peak 24): hue families at Lab hue 40/85/109/170/290/345 (where Brother's names
+    change) add half the hue penalty for a thread of another family; threads under chroma 10 count partly grey; a
+    merged colour's thread minimises its parts' solid-pixel-weighted costs (capped at 20), not the nearest thread to the
+    mean (Russet, Khaki, Dark Fuchsia compromises); merging across families costs x1.7, hued vs grey x1.5, big colours
+    up to x1.5. Size is measured on the sewn result and rebuilt by asked/got when > 0.4 mm off. The narrow-gaps note
+    needs >= 2 mm² and 1.5 % of the sewn area.
+  Open: Alex Brush's b loop is lost by the skeleton at every size ("Abbie" reads "Avvie"); O'Neil's apostrophe is
+  bridged into the O (core/text.js: don't bridge to punctuation); etsy_7's pastel lines (k-means learns flat pixels
+  only); etsy_4's greyish-lavender title; pe900_check's max density reads lower than a full offset scan below the limit
+  (pass/fail unaffected); combining same-thread appliqué stages.
 - The preview is the file: `setView` decodes `v.bytes` with `readEmbroidery` and draws/counts/fit-checks that, and
   thread labels come from the file's own PEC palette.
 
