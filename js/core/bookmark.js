@@ -1,7 +1,7 @@
 /*! Needleworks (c) 2026 4Gables. All rights reserved. Proprietary, see LICENSE. https://4gables.com/needleworks/ */
 // In-the-hoop applique bookmark with a name (or blank).
 // Five colour blocks, one thread: each block change is a machine pause for a fabric step. Blank skips the name block.
-import { circle, edgeWalk, filletPolygon, normals, resample, run, satin, zigzag } from "./geom.js";
+import { back, circle, edgeWalk, filletPolygon, loop, normals, resample, run, satin, zigzag } from "./geom.js";
 import { Design } from "./design.js";
 import { MARGIN } from "./machines.js";
 import { order } from "./raster.js";
@@ -62,7 +62,6 @@ function textPaths(name, family, boxLen, boxH, lead, tail, print) {
   const deco = print ? { deco: "dash", join: false, leadIn: lead ? 2.2 : 0, tail: tail ? 2.2 : 0 }
     : { leadIn: lead ? 1.8 : 0, tail: tail ? 2.6 : 0 };
   const { edges, info } = letterStrokes(name, family, deco);
-  const comps = order(edges);
   const all = info.sized;
   const mn = [Math.min(...all.map((p) => p[0])), Math.min(...all.map((p) => p[1]))];
   const mx = [Math.max(...all.map((p) => p[0])), Math.max(...all.map((p) => p[1]))];
@@ -76,6 +75,9 @@ function textPaths(name, family, boxLen, boxH, lead, tail, print) {
   const s = Math.min((LETTERS * boxH) / (2 * halfBody), boxH / (2 * half), boxLen / (mx[0] - mn[0]));
   // px -> mm, rotate 90° clockwise so the word reads top-to-bottom with letter tops to the right
   const xf = (p) => p.map(([x, y]) => [-(y - c[1]) * s, (x - c[0]) * s]);
+  // (script pieces start within stitching reach of where the last one began: the satin ends half a column and its
+  // pull off the centre line, and moves up to 2 mm are stitched; print letters always jump)
+  const comps = order(edges, print ? 0 : (2 - (TEXT_SATIN + 0.3) / 2) / s, 5 / s);
   return comps.map((comp) => comp.map(([p, mode]) => [xf(p), mode]));
 }
 
@@ -92,25 +94,30 @@ export function buildBookmark({ name, family, color = RED, hoop, lead = true, ta
 
   const d = new Design(hoop);
   d.color(color, "Step 1 - Placement");
-  d.path(run(edge, 2.5, true)); d.path([edge[0]]);
+  // (every pass round a closed outline is a `loop`, and the second tack-down goes `back` from the same start: the
+  // placement line closed with a 2.4 mm jump, the tack-down's way back started 8 mm round the outline, and the border's
+  // zigzag ended a column away from its satin, each a trim and two locks, until 2026-10-31)
+  d.path(loop(run(edge, 2.5, true)));
   d.color(color, "Step 2 - Tack down front");
-  d.path(run(edge, 2.0, true)); d.path(run(edge.slice().reverse(), 2.0, true));
+  d.path(loop(run(edge, 2.0, true))); d.path(loop(run(back(edge), 2.0, true)));
   if (!blank) d.color(color, "Step 3 - Name");
   // (print letters are separate pieces: the needle jumps between them, never a stitch across)
   comps.forEach((comp, k) => comp.forEach(([p0, mode], j) => {
     const p = p0.map(([x, y]) => [x, y + shift]);
-    d.path(mode === "run" ? run(p, 1.2) : satin(p, TEXT_SATIN, 0.38, 0.3), true, print && k > 0 && j === 0);
+    // (a satin starts from the stroke's centre, where the walk is: back to back at a junction, satins ended and
+    // began on opposite edges 2.1 mm apart, a trim and a loose thread each, ~6 per bookmark name; as the Design tab)
+    d.path(mode === "run" ? run(p, 1.2) : [p[0], ...satin(p, TEXT_SATIN, 0.38, 0.3)], true, print && k > 0 && j === 0);
   }));
   d.color(color, `Step ${blank ? 3 : 4} - Tack down back`);
-  d.path(run(edge, 2.0, true));
+  d.path(loop(run(edge, 2.0, true)));
   d.color(color, `Step ${blank ? 4 : 5} - Border + eyelet`);
   const ring = circle(eye, EYE_R, 64);
-  d.path(run(ring, 1.0, true));
-  d.path(zigzag(ring, EYE_W * 0.6, 1.2, true));
-  d.path(satin(ring, EYE_W, 0.35, 0.2, true));
+  d.path(loop(run(ring, 1.0, true)));
+  d.path(loop(zigzag(ring, EYE_W * 0.6, 1.2, true)));
+  d.path(loop(satin(ring, EYE_W, 0.35, 0.2, true)));
   d.path(edgeWalk(edge, BORDER, true));
-  d.path(zigzag(edge, BORDER * 0.7, 2.0, true));
-  d.path(satin(edge, BORDER, 0.4, 0.3, true));
+  d.path(loop(zigzag(edge, BORDER * 0.7, 2.0, true)));
+  d.path(loop(satin(edge, BORDER, 0.4, 0.3, true)));
   // the front fabric for the cut file: the outline plus the 1.5 mm it's trimmed to (the 3.6 mm satin reaches 1.95 mm
   // past the line, so ⅛ in left raw fabric showing outside it)
   d.cut = [[grow(edge, 1.5)]];
