@@ -217,7 +217,7 @@ export function skeletonEdges(mask, stroke, { spur = 1.3, dots = false, sk = nul
     return q.length + t >= Math.max(stroke * 1.5, tongues);
   };
   let kept = prune(edges, stroke * spur, tongues ? tongue : null);
-  if (knots) kept = untangle(kept, pos, knots);
+  if (knots) kept = untangle(kept, pos, knots, reach);
   const out = kept.map(([a, b, path]) => {
     const pts = path.map((q) => q.slice());
     pts[0] = pos.get(a).slice(); pts[pts.length - 1] = pos.get(b).slice();
@@ -228,9 +228,28 @@ export function skeletonEdges(mask, stroke, { spur = 1.3, dots = false, sk = nul
     if (!reach) return out;
     // (print with knots, i.e. the Design tab, not the bookmark: a junction's tiny loops, under a stroke long, are left
     // over from contracting knots; each sewed as a block of satin across the join, square stubs out of W's and M's points)
-    if (knots) for (let i = out.length - 1; i >= 0; i--) if (out[i][0] === out[i][1] && typeof out[i][0] !== "string" && out[i][2].length < stroke) out.splice(i, 1);
-    const b = out.map((e) => e[2]); reachEnds(out, mask, stroke, !!knots); out.before = b;
-    return out;
+    // (and a stroke that ran on straight through such a loop, or on into a short end, is one stroke again: a slanted
+    // end's fork with a loop in it was left as two strokes, the short one a column of its own turned into the corner, a
+    // knot of thread on Josefin's X. Two that meet at an angle, a V's point, stay two)
+    const o = out;
+    if (knots) {
+      const gone = new Set();
+      for (let i = o.length - 1; i >= 0; i--) if (o[i][0] === o[i][1] && typeof o[i][0] !== "string" && o[i][2].length < stroke) { gone.add(o[i][0]); o.splice(i, 1); }
+      for (const k of gone) {
+        const at = o.flatMap((e, i) => (e[0] === k || e[1] === k ? [i] : []));
+        if (at.length !== 2 || at[0] === at[1] || o[at[0]][0] === o[at[0]][1] || o[at[1]][0] === o[at[1]][1]) continue;
+        const [e1, e2] = at.map((i) => o[i]), p1 = e1[1] === k ? e1[2] : e1[2].slice().reverse(), p2 = e2[0] === k ? e2[2] : e2[2].slice().reverse();
+        const d = (p, r) => { const L = Math.hypot(r[0] - p[0], r[1] - p[1]) || 1; return [(r[0] - p[0]) / L, (r[1] - p[1]) / L]; };
+        const n = Math.max(2, Math.round(stroke * 0.6)), u = d(p1[Math.max(0, p1.length - 1 - n)], p1[p1.length - 1]), v = d(p2[0], p2[Math.min(p2.length - 1, n)]);
+        const deg = (j) => o.reduce((t, e) => t + (e[0] === j) + (e[1] === j), 0), far = (e) => (e[0] === k ? e[1] : e[0]);
+        const stub = (e) => e[2].length < stroke && deg(far(e)) === 1;   // (the fork's short side, out to the end)
+        if (u[0] * v[0] + u[1] * v[1] < Math.cos(Math.PI / 6) && !stub(e1) && !stub(e2)) continue;
+        o.splice(Math.max(...at), 1); o.splice(Math.min(...at), 1);
+        o.push([e1[1] === k ? e1[0] : e1[1], e2[0] === k ? e2[1] : e2[0], p1.concat(p2.slice(1))]);
+      }
+    }
+    const b = o.map((e) => e[2]); reachEnds(o, mask, stroke, !!knots); o.before = b;
+    return o;
   };
   if (!dots) return done();
   // a dot (the i's, a full stop) thins to a lone point with no edge: give it a short stroke so it's stitched
@@ -250,14 +269,17 @@ export function skeletonEdges(mask, stroke, { spur = 1.3, dots = false, sk = nul
 
 // edges between two junctions (3+ strokes each) shorter than `len` px contracted, shortest first: the two junctions
 // become one at the middle of the two (`pos` is updated), so the strokes meet at one point
-function untangle(edges, pos, len) {
+// (far: print, also never two junctions over 2.4 x `len` apart: a junction is the middle of its pixels, and a short edge can
+// join two far apart. Josefin's x had a spur off its slanted top left end, and that junction and the crossing, 2 strokes
+// apart, became one halfway between: the crossing sewed 1.75 mm out of the ink at 40 mm)
+function untangle(edges, pos, len, far = false) {
   edges = edges.slice();
   for (;;) {
     const deg = new Map();
     for (const [a, b] of edges) { deg.set(a, (deg.get(a) || 0) + 1); deg.set(b, (deg.get(b) || 0) + 1); }
     let k = -1;
     edges.forEach(([a, b, p], i) => {
-      if (a !== b && p.length < len && deg.get(a) >= 3 && deg.get(b) >= 3 && (k < 0 || p.length < edges[k][2].length)) k = i;
+      if (a !== b && p.length < len && (!far || Math.hypot(pos.get(a)[0] - pos.get(b)[0], pos.get(a)[1] - pos.get(b)[1]) < 2.4 * len) && deg.get(a) >= 3 && deg.get(b) >= 3 && (k < 0 || p.length < edges[k][2].length)) k = i;
     });
     if (k < 0) return edges;
     const [a, b] = edges[k], pa = pos.get(a), pb = pos.get(b);
@@ -272,8 +294,12 @@ function untangle(edges, pos, len) {
 // W's bottom, an A's apex, an M's tops) also gets the ink's width across it at every point (e[3], px, never less
 // nearer the junction): it runs into the point, where the ink is narrower than a stroke, and sewn as a full-width
 // column its square end stuck out of the point (Quicksand "WILD" at 43.5 mm: 4-5 mm stubs). The lettering narrows it
-// to fit (`taper` in pieces.js). Only with `corners` (the Design tab; the bookmark is unchanged).
+// to fit (`taper` in pieces.js), and e[4] is the cosine of the angle between it and the strokes it comes from.
+// Every other loose end gets e[5] = { a, b } (its end at the path's start / end, or null): how the ink ends there
+// (`endShape`), and every stroke but a corner e[6], the ink either side of its line. Only with `corners` (the Design
+// tab; the bookmark is unchanged).
 function reachEnds(edges, mask, stroke, corners = false) {
+  const edges0 = edges.map((e) => e[2]);
   const deg = new Map(), at = new Map();
   edges.forEach(([a, b], i) => {
     for (const k of [a, b]) { deg.set(k, (deg.get(k) || 0) + 1); if (!at.has(k)) at.set(k, []); at.get(k).push(i); }   // (a loop counts twice)
@@ -313,23 +339,117 @@ function reachEnds(edges, mask, stroke, corners = false) {
   // a corner's point narrows: at its tip under 0.9 of a stroke across, and short (1.5 strokes: Quicksand's rounded
   // points) or under 0.92 of a stroke across halfway (Josefin's sharp ones; a Quicksand A's leg is a stroke wide there)
   const narrows = (q, w) => w[w.length - 1] < 0.9 * stroke && (q.length <= 1.5 * stroke || w[w.length >> 1] < 0.92 * stroke);
+  // Thinning bends the last half stroke or so of a stroke the font cuts on a slant toward its sharper corner (Josefin's
+  // K arms, x, y tail and A feet, cut level with the baseline or cap height), and the reach carried that bend on out
+  // of the ink: a hook 1-1.8 mm past it at 40 mm. Where the last 0.9 stroke turns over 6° from the 0.4-0.6 stroke
+  // before it, that went the way the stroke before it did (not a curve, nor the bend into a junction) and it ends in a
+  // corner of the ink, it goes straight on instead. q runs toward the loose end.
+  const decurl = (q) => {
+    // (a short stroke, an X's arm from its crossing: the 0.6 stroke before is from wherever it starts)
+    const n = q.length, i1 = n - 1 - Math.round(stroke * 0.9), i0 = Math.max(0, n - 1 - Math.round(stroke * 1.5)), ih = n - 1 - Math.round(stroke * 2.1);
+    if (i1 - i0 < stroke * 0.4) return q;
+    const dir = (p, r) => { const L = Math.hypot(r[0] - p[0], r[1] - p[1]); return L < 1 ? null : [(r[0] - p[0]) / L, (r[1] - p[1]) / L]; };
+    const turn = (u, v) => Math.abs(Math.atan2(u[0] * v[1] - u[1] * v[0], u[0] * v[0] + u[1] * v[1]));
+    const m = q[i1], e = q[n - 1], u = dir(q[i0], m), ue = dir(m, e), uh = ih >= 0 ? dir(q[ih], q[i0]) : null, deg6 = (6 * Math.PI) / 180;
+    if (!u || !ue || turn(u, ue) < deg6 || (uh && turn(uh, u) > deg6)) return q;
+    // (a curl runs into a corner of the ink; a stroke curving on into its end, a j's or y's hook, ends in the middle)
+    if (depth(e[0], e[1], Math.ceil(stroke / 2)) > stroke * 0.3) return q;
+    // (on from m a px at a time while there's ink, as far as the end was; the reach then takes it to the ink's edge)
+    const Le = Math.hypot(e[0] - m[0], e[1] - m[1]), out = q.slice(0, i1 + 1);
+    for (let t = 1; t <= Le && ink(m[0] + u[0] * t, m[1] + u[1] * t); t++) out.push([m[0] + u[0] * t, m[1] + u[1] * t]);
+    return out.length > i1 + 1 ? out : q;
+  };
+  // how deep in the ink (x, y) is: the distance to the nearest background, up to r px
+  const depth = (x, y, r) => {
+    let d = r;
+    for (let dy = -r; dy <= r; dy++) for (let dx = -r; dx <= r; dx++) if (dx * dx + dy * dy < d * d && !ink(x + dx, y + dy)) d = Math.hypot(dx, dy);
+    return d;
+  };
+  // (the reach filled in a px at a time, so the width is known along it)
+  const fill = (q) => { const e = q[q.length - 2], t = q[q.length - 1], L = Math.hypot(t[0] - e[0], t[1] - e[1]), n = Math.floor(L); return n > 1 ? [...q.slice(0, -1), ...Array.from({ length: n - 1 }, (_, m) => [e[0] + ((t[0] - e[0]) * (m + 1)) / n, e[1] + ((t[1] - e[1]) * (m + 1)) / n]), t] : q; };
+  const reached = (p, a, b) => {
+    if (deg.get(b) === 1) { const t = out(p); if (t) p = [...p, t]; }
+    if (deg.get(a) === 1) { const t = out(p.slice().reverse()); if (t) p = [t, ...p]; }
+    return p;
+  };
   edges.forEach((ed, i) => {
     const [a, b] = ed;
     if (a === b || typeof a === "string") return;   // (a loop, or a dot: those stay as they are)
-    let p = ed[2];
-    if (deg.get(b) === 1) { const t = out(p); if (t) p = [...p, t]; }
-    if (deg.get(a) === 1) { const t = out(p.slice().reverse()); if (t) p = [t, ...p]; }
+    const p = reached(ed[2], a, b);
     ed[2] = p;
-    // (the reach filled in a px at a time, so the width is known along it)
-    const fill = (q) => { const e = q[q.length - 2], t = q[q.length - 1], L = Math.hypot(t[0] - e[0], t[1] - e[1]), n = Math.floor(L); return n > 1 ? [...q.slice(0, -1), ...Array.from({ length: n - 1 }, (_, m) => [e[0] + ((t[0] - e[0]) * (m + 1)) / n, e[1] + ((t[1] - e[1]) * (m + 1)) / n]), t] : q; };
-    const j = !corners ? null : deg.get(b) === 1 && deg.get(a) >= 3 ? a : deg.get(a) === 1 && deg.get(b) >= 3 ? b : null;
-    if (j === null) return;
-    const q = j === a ? p : p.slice().reverse(), u = corner(q, j, i);
-    if (!u) return;
-    const r = fill(q), w = across(r, u);
-    if (!narrows(r, w)) return;
-    ed[2] = j === a ? r : r.slice().reverse(); ed[3] = j === a ? w : w.reverse();
+    if (!corners) return;
+    const j = deg.get(b) === 1 && deg.get(a) >= 3 ? a : deg.get(a) === 1 && deg.get(b) >= 3 ? b : null;
+    if (j !== null) {
+      const q = j === a ? p : p.slice().reverse(), u = corner(q, j, i);
+      const r = u && fill(q), w = u && across(r, u);
+      if (u && narrows(r, w)) {
+        ed[2] = j === a ? r : r.slice().reverse(); ed[3] = j === a ? w : w.reverse();
+        let c = 0, n = 0;
+        for (const o of at.get(j)) if (o !== i) { const v = away(edges[o], j); if (v) { c -= u[0] * v[0] + u[1] * v[1]; n++; } }
+        ed[4] = n ? c / n : 1;
+        return;
+      }
+    }
+    // any other loose end: straightened, reached again, and how the ink ends round it (both ends of a lone stroke
+    // get half its length each)
+    let d = edges0[i];
+    if (deg.get(b) === 1) d = decurl(d);
+    if (deg.get(a) === 1) d = decurl(d.slice().reverse()).reverse();
+    d = reached(d, a, b);
+    if (deg.get(b) === 1) d = fill(d);
+    if (deg.get(a) === 1) d = fill(d.slice().reverse()).reverse();
+    const lim = deg.get(a) === 1 && deg.get(b) === 1 ? d.length / 2 : d.length - 1;
+    const A = deg.get(a) === 1 ? endShape(d.slice().reverse(), lim) : null, B = deg.get(b) === 1 ? endShape(d, lim) : null;
+    if (A || B) { ed[2] = d; ed[5] = { a: A, b: B }; }
   });
+  // e[6] (corners only, not on a corner stroke): the ink either side of every point of the line, px along its normal
+  // ([-u1, u0], u the way it runs), or null where the line is off the ink. Fonts thin their strokes where they join
+  // (Josefin's m and n shoulders) and a column the stroke's usual width stuck 0.6-0.7 mm out of the ink there.
+  if (corners) for (const ed of edges) {
+    if (typeof ed[0] === "string" || ed[3]) continue;
+    const p = ed[2], side = (x, y, v) => { let t = 0; while (t < stroke && ink(x + v[0] * (t + 0.5), y + v[1] * (t + 0.5))) t += 0.5; return t; };
+    ed[6] = p.map(([x, y], m) => {
+      const a = p[Math.max(0, m - 2)], b = p[Math.min(p.length - 1, m + 2)], L = Math.hypot(b[0] - a[0], b[1] - a[1]);
+      if (L < 0.5 || !ink(x, y)) return null;
+      const v = [-(b[1] - a[1]) / L, (b[0] - a[0]) / L];
+      return [side(x, y, v), side(x, y, [-v[0], -v[1]])];
+    });
+  }
+  // A loose end (q runs toward it, points about a px apart), as [[px from the end, k, side, other side], ...] from the
+  // end in, over the last stroke or so, or null where it's a plain square or round end the column already fits: the
+  // stitches' slant k (they run along n + k u, u the way out, n = [-u1, u0]) and how far the ink reaches along them
+  // either side of the line (px off the line, as a square stitch would measure it). A slanted cut (where the ink's
+  // edge 0.3 stroke either side of the line ends over 10° off square) turns the last stitches onto the cut, over a
+  // stroke or 1.5 x the slant's run, whichever is longer; then each stitch reaches only as far as the ink does, so
+  // points and rounded ends are followed too.
+  function endShape(q, lim) {
+    const n = q.length, e = q[n - 1], f = q[Math.max(0, n - 1 - Math.round(stroke * 0.6))], L = Math.hypot(e[0] - f[0], e[1] - f[1]);
+    if (L < 1 || n < 3) return null;
+    const u = [(e[0] - f[0]) / L, (e[1] - f[1]) / L], nv = [-u[1], u[0]], o = stroke * 0.3;
+    const edgeAt = (s) => {   // how far past e the ink goes at s off the line
+      const x = e[0] + nv[0] * s - u[0] * stroke * 0.5, y = e[1] + nv[1] * s - u[1] * stroke * 0.5;
+      if (!ink(x, y)) return null;
+      let t = 0; while (t < stroke * 2 && ink(x + u[0] * (t + 0.5), y + u[1] * (t + 0.5))) t += 0.5;
+      return t - stroke * 0.5;
+    };
+    const tA = edgeAt(o), tB = edgeAt(-o);
+    let k = tA === null || tB === null ? 0 : (tA - tB) / (2 * o);
+    if (Math.abs(k) < Math.tan((10 * Math.PI) / 180)) k = 0;
+    k = Math.max(-1.4, Math.min(1.4, k));   // (55°)
+    const ramp = Math.max(stroke * 0.5, 0.75 * stroke * Math.abs(k)), reach = Math.min(lim, Math.max(stroke, ramp));
+    const rows = [], side = (x, y, v) => { let t = 0; while (t < stroke && ink(x + v[0] * (t + 0.5), y + v[1] * (t + 0.5))) t += 0.5; return t; };
+    let d = 0, plain = !k;
+    for (let m = n - 1; m >= 0 && d <= reach; m--) {
+      if (m < n - 1) d += Math.hypot(q[m][0] - q[m + 1][0], q[m][1] - q[m + 1][1]);
+      const kk = k * Math.max(0, 1 - d / ramp), v = [nv[0] + u[0] * kk, nv[1] + u[1] * kk], [x, y] = q[m];
+      const sa = ink(x, y) ? side(x, y, v) : 0, sb = ink(x, y) ? side(x, y, [-v[0], -v[1]]) : 0;
+      rows.push([d, kk, sa, sb]);
+    }
+    // (plain: no slant, and the ink as wide at the end as a stroke in: nothing to change)
+    const ref = Math.min(rows[rows.length - 1][2], rows[rows.length - 1][3]);
+    if (plain && rows.every((r) => r[2] >= ref - 1 && r[3] >= ref - 1)) return null;
+    return rows;
+  }
 }
 
 // the median stroke width: twice the distance to the background along the skeleton (sk: the mask's, if already
