@@ -51,6 +51,7 @@ const FILES = [
   "js/studio/quilt.js",
   "js/studio/ui.js",
   "js/doctor-worker.js",
+  "js/quilt-worker.js",
   "js/worker.js",
   "js/zip.js",
 ];

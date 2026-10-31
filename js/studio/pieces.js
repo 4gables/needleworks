@@ -14,7 +14,7 @@ import { strokes } from "../core/text.js";
 import { PEC_MATCH, pecThread } from "../core/threads.js";
 import { MOTIFS } from "./motifs.js";
 import { letterOutlines, motifOutlines } from "./outline.js";
-import { QUILTS, contours, echo, stipple } from "./quilt.js";
+import { QUILTS, contours, quiltOf } from "./quilt.js";
 
 // min and max of a long list (spread into Math.min, 60 letters' points overflowed the stack: a crafted file's "WWW…")
 const minOf = (a) => { let m = Infinity; for (const v of a) if (v < m) m = v; return m; };
@@ -311,14 +311,19 @@ export function collisions(pieces) {
   return out;
 }
 // the biggest size (0.5 mm steps, down to 60 %, never too small to stitch) at which p clears `other`, or 0
+// (halving the range, not 0.5 mm at a time: a 113 mm filled heart over a monogram stitched ~90 sizes, 4.7 s per change)
 export function clearSize(p, pieces, other) {
-  const from = fittedSizes(pieces).get(p.id) ?? p.size;
-  for (let s = Math.ceil(from * 2) / 2 - 0.5; s >= Math.max(5, from * 0.6); s -= 0.5) {
-    const q = { ...p, size: s };
-    if (minSize(q)) return 0;
-    if (!near(cloud(pieceStitches(q)), pieceStitches(other), CLEAR)) return s;
-  }
-  return 0;
+  const from = fittedSizes(pieces).get(p.id) ?? p.size, theirs = pieceStitches(other), sizes = [];
+  for (let s = Math.ceil(from * 2) / 2 - 0.5; s >= Math.max(5, from * 0.6); s -= 0.5) sizes.push(s);
+  // the sizes before the first one too small to stitch (smaller is never better there)
+  let x = -1, n = sizes.length;
+  while (n - x > 1) { const m = (x + n) >> 1; if (minSize({ ...p, size: sizes[m] })) n = m; else x = m; }
+  const clears = (i) => !near(cloud(pieceStitches({ ...p, size: sizes[i] })), theirs, CLEAR);
+  if (!n || !clears(n - 1)) return 0;
+  if (clears(0)) return sizes[0];
+  let lo = 0, hi = n - 1;
+  while (hi - lo > 1) { const m = (lo + hi) >> 1; if (clears(m)) hi = m; else lo = m; }
+  return sizes[hi];
 }
 // points every 0.5 mm along stitch paths, in 1 mm cells
 function cloud(paths) {
@@ -1382,6 +1387,9 @@ const pick = (v, ok, d) => (ok.includes(v) ? v : d);
 // (no piece bigger than the biggest hoop holds: one piece can't be shared between two hoopings, and `size: 1e9` loaded
 // as an 808 mm word)
 const BIG = 180;
+// (as small as Fit to hoop makes things, so a saved design opens as it was: a fitted 6.5 mm monogram reopened at 10;
+// the editor warns about sizes too small to stitch)
+const MIN = 2;
 export function cleanPiece(p) {
   if (!p || typeof p !== "object" || Array.isArray(p)) return null;
   // (a place far past any hoop is taken as the middle, not the hoop's edge: x 1e9 made a 1072 mm design)
@@ -1394,9 +1402,9 @@ export function cleanPiece(p) {
   if (p.kind === "text") {
     if (typeof q.text !== "string" || !q.text.trim()) return null;
     q.text = q.text.slice(0, 60).split("\n").slice(0, 3).join("\n");
-    q.font = font(FONTS, "NW Great Vibes"); q.size = num(q.size, 5, BIG, 18); style();
-    q.shape = pick(q.shape, Object.keys(TEXT_SHAPES), "straight"); q.radius = num(q.radius, 8, 400, 30);
-    for (const [k, lo, hi] of [["ry", 8, 400], ["amp", 0, 100], ["waves", 0.5, 6], ["bulge", 0, 100], ["spacing", -10, 40], ["leading", 80, 200]])
+    q.font = font(FONTS, "NW Great Vibes"); q.size = num(q.size, MIN, BIG, 18); style();
+    q.shape = pick(q.shape, Object.keys(TEXT_SHAPES), "straight"); q.radius = num(q.radius, MIN, 400, 30);
+    for (const [k, lo, hi] of [["ry", MIN, 400], ["amp", 0, 100], ["waves", 0.5, 6], ["bulge", 0, 100], ["spacing", -10, 40], ["leading", 80, 200]])
       if (q[k] != null) { q[k] = num(q[k], lo, hi, undefined); if (q[k] === undefined) delete q[k]; }
     if (q.align != null) q.align = pick(q.align, ["left", "center", "right"], "center");
     if (q.deco != null && !own(MOTIFS, q.deco)) delete q.deco;
@@ -1406,16 +1414,16 @@ export function cleanPiece(p) {
     }
   } else if (p.kind === "monogram") {
     if (typeof q.letters !== "string" || !q.letters.trim()) return null;
-    q.letters = q.letters.slice(0, 12); q.font = font(FONTS, "NW Great Vibes"); q.size = num(q.size, 10, BIG, 30); style();
+    q.letters = q.letters.slice(0, 12); q.font = font(FONTS, "NW Great Vibes"); q.size = num(q.size, MIN, BIG, 30); style();
   } else if (p.kind === "letters") {
     if (typeof q.text !== "string" || !q.text.trim()) return null;
-    q.text = q.text.slice(0, 12); q.font = font(APPLIQUE_FONTS, APPLIQUE_FONTS[0].family); q.size = num(q.size, 10, BIG, 60);
+    q.text = q.text.slice(0, 12); q.font = font(APPLIQUE_FONTS, APPLIQUE_FONTS[0].family); q.size = num(q.size, MIN, BIG, 60);
   } else if (p.kind === "motif") {
-    q.motif = own(MOTIFS, q.motif) ? q.motif : "heart"; q.size = num(q.size, 5, BIG, 40);
+    q.motif = own(MOTIFS, q.motif) ? q.motif : "heart"; q.size = num(q.size, MIN, BIG, 40);
     q.style = pick(q.style, ["fill", "outline", "applique"], "fill");
   } else if (p.kind === "frame") {
     q.shape = own(SHAPES, q.shape) ? q.shape : "circle"; q.border = own(BORDERS, q.border) ? q.border : "satin";
-    q.w = num(q.w, 10, BIG, 80); q.h = num(q.h, 10, BIG, q.w);
+    q.w = num(q.w, MIN, BIG, 80); q.h = num(q.h, MIN, BIG, q.w);
     if (q.fill != null) q.fill = hex(q.fill, "#0e1f7c");
     if (q.blend != null) { q.blend = hex(q.blend, undefined); if (!q.blend) delete q.blend; }
     if (q.pattern != null && !own(FILL_PATTERNS, q.pattern)) delete q.pattern;
@@ -1611,8 +1619,12 @@ const fd = (x) => (wt === "30" ? x + 0.05 : x);
 // (after the front fabric on an in-the-hoop frame, before what goes on it). Kept for the last few layouts: it's the
 // slowest thing in compose.
 const QUILTED = (p) => p.kind === "frame" && (p.quilt === "stipple" || p.quilt === "echo") && p.border !== "patch";
+export function quiltDone(key, paths) { quilted.set(key, paths); if (quilted.size > 12) quilted.delete(quilted.keys().next().value); }
 const quilted = new Map(), lastQuilt = new Map();   // (lastQuilt: per frame, reused while a piece is being dragged)
-function withQuilt(p, stages, others, dragging = false) {
+// `later`: a list to put the quilting on when it isn't worked out yet, for a worker to do (`quiltOf`, then `quiltDone`):
+// the quilting last sewn in this frame stands in meanwhile, as while dragging (a 15-piece design with a stippled frame
+// held the page 4-5 s after each drop, letter typed or font change)
+function withQuilt(p, stages, others, dragging = false, later = null) {
   // around every other piece's stitches, and inside none of their filled shapes (an appliqué's fabric)
   // (not a shape the frame itself sits on, a patch or appliqué under the whole frame: that would leave no room)
   const edge = shapeOf(p).path(p.w, p.h).map(placer(p)), key0 = JSON.stringify(p), frame = key0;
@@ -1623,11 +1635,11 @@ function withQuilt(p, stages, others, dragging = false) {
   for (const o of [...obstacles, ...solids.flat()]) for (const [x, y] of o) h = (Math.imul(h ^ Math.round(x * 10), 16777619) ^ Math.round(y * 10)) | 0;
   const key = JSON.stringify([p, h]);
   if (!quilted.has(key) && !(dragging && lastQuilt.has(frame))) {
-    quilted.set(key, (p.quilt === "echo" ? echo : stipple)(edge, obstacles, { inset: p.border === "line" || p.border === "bold" ? 3 : 4.5, solids }));
-    if (quilted.size > 12) quilted.delete(quilted.keys().next().value);
+    const job = { key, kind: p.quilt, edge, obstacles, opts: { inset: p.border === "line" || p.border === "bold" ? 3 : 4.5, solids } };
+    if (later) later.push(job); else quiltDone(key, quiltOf(job));
   }
-  const paths = quilted.get(key) || lastQuilt.get(frame);
-  lastQuilt.set(frame, paths); if (lastQuilt.size > 12) lastQuilt.delete(lastQuilt.keys().next().value);
+  const paths = quilted.get(key) || lastQuilt.get(frame) || [];
+  if (!later || quilted.has(key)) { lastQuilt.set(frame, paths); if (lastQuilt.size > 12) lastQuilt.delete(lastQuilt.keys().next().value); }
   if (!paths.length) return stages;
   const q = { color: p.color, paths, sews: `Quilts the ${shapeOf(p).name.toLowerCase()} (${p.quilt}).`, label: label(p) };
   // (an in-the-hoop frame lists its batting already; a quilt block's Have ready had none)
@@ -1890,7 +1902,7 @@ function build(pieces, hoop, opts) {
   const box = (paths) => { const [x0, y0, x1, y1] = bounds(paths.flat()); return [x0 - 1, y0 - 1, x1 + 1, y1 + 1]; };
   const hits = (a, b) => a[0] < b[2] && b[0] < a[2] && a[1] < b[3] && b[1] < a[3];
   const order = [], last = [], edges = [], staged = pieces.map((p) => pieceStages(p, fab).map((st) => ({ label: label(p), ...st })));
-  pieces.forEach((p, i) => { if (QUILTED(p)) staged[i] = withQuilt(p, staged[i], staged.filter((_, j) => j !== i).flat(), opts.dragging); });
+  pieces.forEach((p, i) => { if (QUILTED(p)) staged[i] = withQuilt(p, staged[i], staged.filter((_, j) => j !== i).flat(), opts.dragging, opts.later); });
   // patches: no fill under what's sewn on them (fine-line lettering excepted)
   pieces.forEach((p, i) => {
     if (p.kind !== "frame" || p.border !== "patch" || opts.dragging) return;
