@@ -508,6 +508,7 @@ function downloaded(v, zipped, files = [], saved = true) {
   const part = state.mode === "open" && state.opened?.short;
   // (a rule the machine itself needs, broken: never "It opens on a Brother PE900")
   const hardBad = bad.some((b) => b.problems.some((q) => HARD.has(q.key)));
+  $("done-title").textContent = saved ? "Saved to your downloads" : "Not saved";
   $("done-checked").textContent = hardBad ? `${saved ? "It may not open or sew right" : "Not saved: it wouldn't open or sew right"} ${what}: ${bad.length > 1 ? `${bad.length} of the files break` : zipped ? "one of the files breaks" : "it breaks"} a rule the machine needs.`
     : bad.length ? `It opens ${what}, but ${bad.length > 1 ? `${bad.length} of the files` : zipped ? "one of the files" : "it"} may not sew well:`
     : part ? `It opens ${what}, but only part of the design is in it: the file it came from ends early. Download that file again if you can.` : `Checked: it opens ${what}.`;
