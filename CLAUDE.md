@@ -469,6 +469,24 @@ Embroidery-file tools for home machines. Two implementations of the same engine:
   comment, `meta copyright`, `rel=license` and one footer line. Third-party parts stay under their own licences in
   `THIRD_PARTY_NOTICES.md`. The repo stays public (GitHub Free can't serve Pages from a private repo, and the served JS
   is readable anyway).
+- **No one else's code or data gets committed: clean room only** (project rule, 2026-10-30). Nothing written by
+  someone else (code, ported code, icon/SVG paths, data tables, images) is committed, whatever its licence. Learning
+  from other projects is encouraged, but only by the clean-room method:
+  1. One agent reads the outside source and writes a spec in `docs/` with behaviour, byte layouts, formulas and facts
+     in prose and tables. No code, no line-by-line paraphrase.
+  2. A separate agent that has never seen the source (not in its context, not opened, not from memory) implements
+     from the spec alone, in its own structure.
+  3. Tests prove the result against the spec or an outside oracle. Running an outside tool as a test oracle
+     (pyembroidery in `tests/`, installed from pip, never vendored) is fine.
+  - Ideas, algorithms and numbers from papers, manuals, docs and issue threads may be used directly (credit them in a
+    comment, e.g. "Ink/Stitch's contour underlay"). Copying their code or wording may not.
+  - Facts such as thread colours come from the maker's own published source, cited in the file's header, never from
+    another project's table.
+  - Drawings are drawn here, without looking at other icon sets.
+  - The one exception is the bundled fonts (OFL/Apache), kept under their own licences in `THIRD_PARTY_NOTICES.md`.
+    A new font follows the same rule: an OFL file with its licence text beside it.
+  - The 2026-10-30 clean-room round replaced `formats.js`/`threads.js` (was a pyembroidery port, spec in
+    `docs/formats-spec.md`), `motifs.js` (was Phosphor) and `brandcharts.js` (was Embroidermodder).
 - **PES writer is locked** (2026-10-29, after Ashley's PE900 failure). `writePES`/`writePEC`/`pecEncode` output is
   frozen by `tests/fixtures/golden/*.pes` (byte-for-byte, checked in CI along with `pe900_check.py`). Browser and
   Node produce identical bytes (verified in Chrome). New features (design tools, UI) build stitch patterns and hand
