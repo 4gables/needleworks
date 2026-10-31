@@ -445,6 +445,23 @@ function readDesignBlock(bytes, end) {
   return { w, h, stitches };
 }
 
+// Whether a version 6 PES file's design block (what PE-DESIGN opens) holds the stitches its PEC block (what the
+// machine sews) does; null when there's nothing to compare (PEC only, another version's layout, unreadable). A file
+// pieced together from two designs opened as a star and satin box in PE-DESIGN and sewed a bigger star (round 6's
+// disagree.pes). Same stitch count (one either way: pyembroidery's own files count an origin stitch on one side
+// only) and the same size within 1 mm. Reading only: the writer is untouched.
+export function designBlockAgrees(bytes) {
+  if (text(bytes.subarray(0, 8)) !== "#PES0060") return null;
+  try {
+    const pecAt = bytes[8] | (bytes[9] << 8) | (bytes[10] << 16) | (bytes[11] << 24), block = readDesignBlock(bytes, pecAt);
+    if (!block) return null;
+    const got = moves(readPES(bytes).stitches), seg = moves(block.stitches);
+    if (!got.length || !seg.length) return null;
+    const [a0, b0, a1, b1] = extents(got), [c0, d0, c1, d1] = extents(seg);
+    return Math.abs(got.length - seg.length) <= 1 && Math.abs(a1 - a0 - (c1 - c0)) <= 10 && Math.abs(b1 - b0 - (d1 - d0)) <= 10;
+  } catch { return null; }
+}
+
 // Checks a PES file before it's handed out: it must read back as `source` (when given) and fit `hoop` (mm).
 export function validatePES(bytes, source = null, hoop = null) {
   const no = (error) => ({ ok: false, error });

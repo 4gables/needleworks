@@ -2,7 +2,7 @@
 // always give a file that validates.
 import { readFileSync, readdirSync, existsSync } from "fs";
 import { readEmbroidery, validatePES, writePES } from "../js/core/formats.js";
-import { checkup, fix, sortColors } from "../js/doctor.js";
+import { checkup, fix, landJumps, sortColors } from "../js/doctor.js";
 import { moves, verdictOf } from "../js/quality.js";
 
 const dirs = ["tests/fixtures/golden", "tests/external/pes"].filter(existsSync);
@@ -57,6 +57,19 @@ for (const dir of dirs) for (const f of readdirSync(dir).filter((x) => /\.(pes|d
   const sq = (x0) => [[x0, 0, 0], [x0 + 20, 0, 0], [x0 + 20, 20, 0], [x0, 20, 0]];
   const red = { color: "#ed171f", name: "Red" }, p = { stitches: [...sq(0), [0, 20, 5], ...sq(100), [100, 20, 5], ...sq(200), [200, 20, 4]], threads: [red, red, red] };
   if (sortColors(p)) { bad++; console.error("FAIL colour sort merged a same-thread pause"); }
+}
+// a file starting with a stitch at the origin and going on 54 mm: that move is a jump, never sewn (origin_start.pes);
+// and a pattern listing more threads than it has blocks is saved with one per block (disagree.pes's "2 colours")
+{
+  n++;
+  const arc = Array.from({ length: 30 }, (_, k) => [500 + Math.round(30 * Math.sin(k / 5)), 200 + k * 10, 0]);
+  const p = landJumps({ stitches: [[0, 0, 0], ...arc, [arc[29][0], arc[29][1], 4]], threads: [{ color: "#ed171f", name: "Red" }] });
+  if (p.stitches[0][2] !== 1 || p.stitches[0][0] !== 500) { bad++; console.error("FAIL origin start not a jump: " + JSON.stringify(p.stitches.slice(0, 2))); }
+  n++;
+  const two = fix({ ...p, threads: [{ color: "#ed171f", name: "Red" }, { color: "#0e1f7c", name: "Navy" }] }), v = verdictOf(writePES(two));
+  if (two.threads.length !== 1 || v.length) { bad++; console.error(`FAIL threads per block: ${two.threads.length}, ${v.map((q) => q.key)}`); }
+  n++;
+  if (!verdictOf(writePES({ ...p, threads: [{ color: "#ed171f" }, { color: "#0e1f7c" }] })).some((q) => q.key === "colours")) { bad++; console.error("FAIL verdict misses a PEC thread count that isn't the block count"); }
 }
 console.log(`doctor: ${n} fixes, ${bad} bad (colour sort helped ${sorted} files)`);
 if (bad || !n) process.exit(1);

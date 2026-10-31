@@ -7,7 +7,7 @@ import { fillPolygon } from "./core/digitize.js";
 import { distanceTransform } from "./core/raster.js";
 import { contours } from "./studio/quilt.js";
 import { pyRound } from "./core/threads.js";
-import { LIMIT, MAX_BLOCKS, moves, peak, satinGap, verdict } from "./quality.js";
+import { LIMIT, MAX_BLOCKS, MAX_STITCH, moves, peak, satinGap, verdict } from "./quality.js";
 
 // (LIMIT: 24 needle hits per mm² per colour block, the densest spot in sold designs; the counts are pe900_check.py's,
 // from quality.js, so the checkup and the download's verdict agree)
@@ -554,8 +554,13 @@ function refill(runs, angle, taken = new Set(), scale = 0, from = null) {
 // ends before the first stitch, so a file whose jumps stop short of it (all 49 of peace.pes's, by 0.5-12 mm) gained a
 // hole there, often 2-5 mm from the last stitch: a loose thread too short for the machine to trim (3 -> 31 when
 // re-saved). A run of jumps becomes one (the writer splits any over 121 mm).
+// A file that starts with a stitch and goes straight on further than the machine sews in one stitch (12.1 mm) starts
+// with its way to the design: a pyembroidery file starting at the origin (round 6's origin_start.pes) was saved
+// sewing a line out from the origin in 6.7 mm stitches. That first move is a jump.
 export function landJumps(pattern) {
-  const st = pattern.stitches, out = [];
+  let st = pattern.stitches;
+  const out = [], k = st.findIndex((s) => s[2] === STITCH || s[2] === JUMP), a = st[k], b = st[k + 1];
+  if (a?.[2] === STITCH && b?.[2] === STITCH && Math.hypot(b[0] - a[0], b[1] - a[1]) > MAX_STITCH) st = [...st.slice(0, k), [b[0], b[1], JUMP], ...st.slice(k + 1)];
   for (let i = 0; i < st.length; i++) {
     if (st[i][2] !== JUMP) { out.push(st[i]); continue; }
     let j = i;
@@ -644,7 +649,15 @@ export function fix(pattern, { scale = 1, tiny = false, thin = false, sort = fal
     if (c === STITCH || c === JUMP) last = [x, y]; else if (c === TRIM || c === COLOR_CHANGE) last = null;
   }
   const done = slide(thin ? relieve(out, LIMIT) : out);
-  return { stitches: tiny ? dropTiny(done) : done, threads: pattern.threads };
+  return blockThreads({ stitches: tiny ? dropTiny(done) : done, threads: pattern.threads });
+}
+// One thread per colour block, as the writer needs: it lists every thread it's given in the PEC header, and the
+// machine (and pe900_check) expects one per block. A PES whose header named two threads for its one block was saved
+// "Checked" with "2 colours" for 1 (round 6's disagree.pes).
+export function blockThreads(pattern) {
+  let blocks = 1;
+  for (const s of pattern.stitches) if (s[2] === COLOR_CHANGE) blocks++;
+  return pattern.threads.length > blocks ? { ...pattern, threads: pattern.threads.slice(0, blocks) } : pattern;
 }
 // The last word on tiny stitches, on the coordinates the writer will use (whole 0.1 mm, half to even) and by the
 // checker's rule (under 0.3 mm, bar the first 6 after a jump, trim or thread change): measured before thinning and on
