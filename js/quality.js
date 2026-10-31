@@ -3,7 +3,7 @@
 // written (decoded from its bytes, so the writer's splits and rounding count), so "Checked" means what the checker
 // means. Until 2026-10-30 the download dialog said "Checked: it opens on a Brother PE900" for files the checker
 // failed (density 25, a 12.7 mm stitch). Stitch units 0.1 mm.
-import { COLOR_CHANGE, JUMP, STITCH, STOP, TRIM, readEmbroidery } from "./core/formats.js";
+import { COLOR_CHANGE, JUMP, STITCH, STOP, TRIM, designBlockAgrees, readEmbroidery } from "./core/formats.js";
 
 export const LIMIT = 24;       // needle hits per mm² per colour block (pe900_check MAX_PER_MM2)
 export const MAX_STITCH = 121; // 12.1 mm, the longest needle move (pe900_check MAX_STITCH)
@@ -85,16 +85,29 @@ export function moves(st) {
 // what's wrong with a pattern (decoded from the file's bytes), in plain words: [{ key, text }] (empty: it passes)
 export function verdict(pattern) {
   pattern = withStops(pattern);
-  let blocks = 1;
-  for (const s of pattern.stitches) if (s[2] === COLOR_CHANGE || s[2] === STOP) blocks++;
+  let blocks = 1, stops = 0;
+  for (const s of pattern.stitches) if (s[2] === COLOR_CHANGE || s[2] === STOP) { blocks++; if (s[2] === STOP) stops++; }
   const m = moves(pattern.stitches), { max, hot } = peak(pattern), gap = satinGap(pattern.stitches), out = [];
-  if (hot) out.push({ key: "dense", text: `${hot} ${hot === 1 ? "spot is" : "spots are"} too dense (up to ${max} needle hits per mm²; 24 is the most sold designs have): the thread can break or nest there.` });
+  if (hot) out.push({ key: "dense", text: `${hot} ${hot === 1 ? "spot is" : "spots are"} too dense (${denseWords(max)}): the thread can break or nest there.` });
   if (m.longest > MAX_STITCH / 10) out.push({ key: "long", text: `${m.over} ${m.over === 1 ? "stitch is" : "stitches are"} longer than the 12 mm the machine sews in one stitch (up to ${m.longest.toFixed(1)} mm).` });
   if (m.tiny > TINY_SHARE * m.stitches) out.push({ key: "tiny", text: `${m.tiny} ${m.tiny === 1 ? "stitch is" : "stitches are"} shorter than 0.3 mm (${((100 * m.tiny) / m.stitches).toFixed(1)}%): they pile up thread and can break it.` });
   if (m.same > SAME_SHARE * m.stitches) out.push({ key: "same", text: `${m.same} ${m.same === 1 ? "stitch goes" : "stitches go"} back into the hole the needle is already in.` });
-  if (blocks > MAX_BLOCKS) out.push({ key: "blocks", text: `${blocks - 1} thread changes: the machine handles ${MAX_BLOCKS - 1} at most in one design.` });
+  // (the PEC header's thread list, one per block, is what the machine steps through: pe900_check fails any other count)
+  if (pattern.pec && pattern.pec.length !== blocks) out.push({ key: "colours", text: `The file lists ${pattern.pec.length} ${pattern.pec.length === 1 ? "thread" : "threads"} for ${blocks} ${blocks === 1 ? "colour" : "colours"}: the machine may ask for the wrong threads.` });
+  if (blocks > MAX_BLOCKS) out.push({ key: "blocks", text: `${stopWords(blocks - 1 - stops, stops)}: the machine stops ${MAX_BLOCKS - 1} times at most in one design.` });
   if (gap != null && gap > SPARSE) out.push({ key: "sparse", text: `The satin stitches are far apart (${gap.toFixed(2)} mm on each edge; well-made designs 0.3–0.4 mm), so fabric may show through.` });
   return out;
+}
+
+// the densest spot in plain words, one wording everywhere (the checkup said "sold designs stay under 25" beside
+// Download's "24 is the most sold designs have"; "needle hits per mm²" meant nothing to a newcomer)
+export const denseWords = (max) => `up to ${max} stitches in one square millimetre, about a pinhead; sold designs have ${LIMIT} at most`;
+
+// "195 thread changes and 4 pauses", as the facts beside the preview count a design's stops (a 200-colour file said
+// "changes thread 199 times" beside "195 thread changes · 4 pauses")
+export function stopWords(changes, pauses) {
+  const c = `${changes} thread ${changes === 1 ? "change" : "changes"}`, p = `${pauses} ${pauses === 1 ? "pause" : "pauses"}`;
+  return changes && pauses ? `${c} and ${p}` : pauses ? p : c;
 }
 
 // a thread change to the same PEC thread is a machine pause (pyembroidery's interpolate_duplicate_color_as_stop)
@@ -106,8 +119,13 @@ function withStops(pattern) {
 }
 
 // the verdict on PES bytes (a file that won't decode is someone else's problem: validatePES refuses it first)
+// (and, from the bytes, a PES design block that isn't the design the machine sews: PE-DESIGN would show another)
 export function verdictOf(bytes) {
-  try { return verdict(readEmbroidery(bytes, "check.pes")); } catch { return []; }
+  try {
+    const out = verdict(readEmbroidery(bytes, "check.pes"));
+    if (designBlockAgrees(bytes) === false) out.push({ key: "block", text: "PE-DESIGN would show a different design from the one the machine sews." });
+    return out;
+  } catch { return []; }
 }
 
 // A file that ends before its stitches do (cut short in a download or copy): PES/PEC whose stitch block runs past

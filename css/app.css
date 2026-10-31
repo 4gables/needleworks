@@ -379,6 +379,7 @@ body[data-mode="design"] #view { cursor: grab; }
 .doctor li::before { position: absolute; left: 0; top: 0; font-weight: 700; }
 .doctor li.good::before { content: "✓"; color: var(--good); }
 .doctor li.warn::before { content: "!"; color: var(--warn); left: 5px; }
+.doctor li.note::before { content: "→"; color: var(--muted); }
 #doctor .edit { margin-top: 10px; }
 .motifs { display: grid; grid-template-columns: repeat(auto-fill, minmax(40px, 1fr)); gap: 6px; }
 .motifs button { aspect-ratio: 1; border: 1.5px solid var(--line); background: var(--panel); border-radius: 10px; padding: 6px; cursor: pointer; color: var(--ink); }
