@@ -33,7 +33,9 @@ export const initials = (s) => graphemes(String(s ?? "").replace(/\s+/g, ""));
 export function tidy(s, { lines = 1, max = Infinity } = {}) {
   if (typeof s !== "string") return "";
   let t = (s.toWellFormed ? s.toWellFormed() : s.replace(/[\ud800-\udbff](?![\udc00-\udfff])|(?<![\ud800-\udbff])[\udc00-\udfff]/g, "\ufffd"))
-    .replace(/\ufffd/g, "").replace(BREAK, "\n").replace(SPACE, " ").replace(INVISIBLE, (c) => (c === "\n" ? c : "")).normalize("NFC");
+    .replace(/\ufffd/g, "").replace(BREAK, "\n").replace(SPACE, " ").replace(INVISIBLE, (c) => (c === "\n" ? c : "")).normalize("NFC")
+    // (a variation selector with nothing before it to vary: "︎ " alone was words with nothing to stitch)
+    .replace(/(^|\s)[\ufe00-\ufe0f]+/g, "$1");
   const ls = t.split("\n");
   if (ls.length > lines) t = [...ls.slice(0, lines - 1), ls.slice(lines - 1).join(" ")].join("\n");
   if (t.length > max) {

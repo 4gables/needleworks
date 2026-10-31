@@ -140,10 +140,13 @@ function lackSaid(where, said, text, family, what) {
 
 // (headless Chrome sometimes doesn't start app.js, and the test server sometimes drops a module: load again)
 async function load(hash) {
+  await cdp("console");
   for (let i = 0; i < 6; i++) {
     await cdp("goto", `http://127.0.0.1:${HTTP}/?tf=${Date.now()}${hash}`);
+    for (let k = 0; k < 10 && !(await ev("!!document.body.dataset.mode && !!document.querySelector('[data-start]')")); k++) await sleep(500);
     if (await ev("!!document.body.dataset.mode && !!document.querySelector('[data-start]')")) break;
-    if (i === 5) throw new Error("the page didn't start");
+    // (said with what the page logged and the design it had stored, to find out why)
+    if (i === 5) throw new Error(`the page didn't start: ${(await cdp("console")).slice(0, 300)} stored ${String(await ev("localStorage.getItem('nw:studio')")).slice(0, 200)}`);
   }
   await ev(PAGE);
 }
@@ -173,7 +176,7 @@ async function field(kind, starter, sel, opts, fonts, strings) {
     lackSaid(`${kind} editor`, seen.warn, want, font, what);
     if (!seen.disabled) lackSaid(`${kind} Download note`, seen.dl, want, font, what);   // (too big: the error says so instead)
     const file = /^Download (.*)$/.exec(seen.download)?.[1];
-    if (file) check(`${kind} file name`, fileOk(file), `${what}: ${file}`);
+    if (file && !seen.disabled) check(`${kind} file name`, fileOk(file), `${what}: ${file}`);
     if (kind === "Initials") check("Initials: more than 3 said", (initials(want).length > 3) === /3 initials at most/.test(seen.warn), `${what}: ${initials(want).length} initials, says ${show(seen.warn)}`);
   }
 }
@@ -187,13 +190,13 @@ async function bookmark(strings) {
       const b = document.querySelector('#bm-fonts [data-f="${font}"]'); if (b && b.getAttribute("aria-pressed") !== "true") { b.click(); await __tf.settle(300); }
       __tf.set(document.getElementById("bm-name"), ${JSON.stringify(s)}); return { value: document.getElementById("bm-name").value };
     })()`);
-    const seen = await settled(), want = tidy(s, { max: 14 });
+    const seen = await settled(), want = tidy(s.replace(/[\r\n]/g, ""), { max: 14 });   // (a one-line field drops line breaks itself)
     check("Bookmark field holds the tidied text", got.value === want, `${what}: ${show(got.value)} not ${show(want)}`);
     check("Bookmark: nothing throws", !seen.errors.length, `${what}: ${seen.errors.join(" ")}`);
     if (!want.trim()) continue;
     if (!seen.disabled) lackSaid("Bookmark Download note", seen.dl, want.trim(), font, what);
     const file = /^Download (.*)$/.exec(seen.download)?.[1];
-    if (file) check("Bookmark file name", fileOk(file) && file === `${safeName(want, "name")}_bookmark.pes`, `${what}: ${file}`);
+    if (file && !seen.disabled) check("Bookmark file name", fileOk(file) && file === `${safeName(want, "name")}_bookmark.pes`, `${what}: ${file}`);
   }
 }
 

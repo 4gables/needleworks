@@ -57,8 +57,9 @@ function letters(text, family, size, style = "auto", spacing = 0, kern = null) {
   const all = comps.flatMap((c) => c.flatMap(([p]) => p));
   if (!all.length) return { parts: [], satinW: 0 };
   // (sized by the strokes before their loose ends reached out to the ink's edge, so a word keeps its size)
-  // (marks alone, with no letter or digit, are sized as the font's x-height: a "." 20 mm tall was 5880000000000 mm wide)
-  const [x0, y0, x1, y1] = bounds(info.sized), s = size / Math.max(y1 - y0, /[\p{L}\p{N}]/u.test(text) ? 1e-9 : info.mid), cx = (x0 + x1) / 2;
+  // (strokes never count as less than half the x-height tall, a whole one for marks alone: a "." 20 mm tall was
+  // 5880000000000 mm wide, and a stand-in keycap emoji thinned to a point in Meow Script; any word's strokes are taller)
+  const [x0, y0, x1, y1] = bounds(info.sized), s = size / Math.max(y1 - y0, (/[\p{L}\p{N}]/u.test(text) ? 0.5 : 1) * info.mid), cx = (x0 + x1) / 2;
   // (print letters: the third entry marks the first stroke of each separate piece after the first, so the needle jumps
   // to it and never stitches across, however close: an i's stem reaching up to its dot was sewn to it)
   const print = !!fontOf(family).print;
