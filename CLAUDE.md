@@ -1,955 +1,449 @@
 # needleworks
 
-Embroidery-file tools for home machines. Two implementations of the same engine:
+Embroidery files for Brother home machines (PE900 first). Static site, no build step, GitHub Pages from the repo
+root (https://4gables.com/needleworks/). JavaScript is the only engine; Python is test tooling only
+(`tests/pe900_check.py`, `tests/batch_server.py`, venv `.venv` from `requirements.txt`). Serving a non-technical
+user through Claude Code: `.claude/skills/embroidery/SKILL.md`.
 
-- **Website (primary)**: static, no build step, served by GitHub Pages from the repo root
-  (https://4gables.com/needleworks/). ES modules in `js/`. Heavy picture digitizing runs in `js/worker.js`.
-- JavaScript is the only engine (the Python tools were removed). Python remains only for test tooling:
-  `tests/pe900_check.py` (pyembroidery oracle) and `tests/batch_server.py`, venv in `.venv` from `requirements.txt`.
-  For serving a non-technical user via Claude Code, see `.claude/skills/embroidery/SKILL.md` (it points at the site).
+Rules, the reason for each (it stops someone undoing it), gotchas, how to test. History is in `git log`; the
+measurements behind each number are in the code's comments.
 
-## Engine notes (both implementations)
-- Units: mm while designing; stitch data is pyembroidery's 0.1 mm, y down. Commands: STITCH 0, JUMP 1, TRIM 2, END 4, COLOR_CHANGE 5.
-- Lettering: render the word, add swashes tangent to the first letter's entry / last letter's exit stroke, bridge letters
-  the font leaves unjoined (e.g. Sacramento A→s), skeletonize, build a stroke graph, prune spurs, then walk it so each
-  stroke is a centre-run out and a satin back (no jumps within a connected word).
-- Swashes (lead-in and tail, each with its own on/off checkbox): one calligraphic stroke leaving the
-  letter's own stroke end along its tangent, dipping into a shallow cup under the baseline and flicking up at the far
-  end. Letters with no low entry end (E, O) are joined tangentially at their lowest left point. Never let it run flat
-  along the baseline; that reads as a ruled line.
-- `satin()`: stations spaced by the outer edge so curves don't gap; short stitches (every other one at 60%) where the
-  inner edge is hit at under half the outer's rate (until 2026-10-29 only under 0.09 mm, which rarely triggered).
-- `Design.finish()` runs `relieve()`: no 1 mm square (at any 0.1 mm grid offset, since the checker's grid is the
-  file's) gets more than 24 needle hits per colour block; interior points at satin junctions are dropped, tie-ins kept.
-  Added when a turned 172 mm picture hit 26.
-- Bookmark (the first "Start from" card in Design your own, or `#bookmark`; its own panel and engine, mode
-  `bookmark` with the Design tab highlighted and a back link): 5 colour blocks of one thread = 4 machine pauses for the in-the-hoop fabric steps (blank = no name block,
-  4 blocks / 3 pauses). Name is centred across on the middle of the x-height (cap height for all-caps), so the bulk of the letters is
-  centred and loops may reach further one way; lengthwise it's centred with equal room below
-  the eyelet and above the border. Letters are sized so their band fills `LETTERS` (72%) of the inner width, the same with
-  or without decorations; only a word too long for the bookmark shrinks. Needs the 5x7 hoop.
-  Its swatches are exact Brother PEC colours like the Design tab's (until 2026-10-29 crimson read "Dark Fuchsia", navy
-  "Peacock Blue", black "Olive Green" on the machine); a colour saved from the old swatches maps to the new one.
-- Print fonts (`print: true` in `js/core/fonts.js`): letters aren't bridged (each is its own piece, the machine trims
-  between them), decorations are straight dashes on the middle of the x-height (cap height for all-caps), and spur
-  pruning is gentler (0.45 vs 1.3 stroke widths) so t crossbars and a's stems survive. Dots (i, j) that thin to a lone
-  point get a short stroke (`skeletonEdges(..., { dots: true })`).
-- Design tab (`js/studio/`): pieces (lettering straight or arched on a circle, 1/3-letter monogram, frames) are built
-  from the shared lettering/satin engines in mm around the hoop centre, composed in list order (neighbours in one
-  thread share a block), then handed to `writePES`. The preview keeps the hoop centre fixed (`draw(..., { center })`)
-  so dragged pieces stay put; the machine centres the whole design anyway. Swatches are exact Brother PEC colours
-  so on-screen names match the machine (a near-black hex showed as "Olive Green").
-  Pieces sew in stages (`pieceStages`): an appliqué frame is placement line, pause (lay fabric, trim), tack-down,
-  pause, satin; `compose` returns the steps shown under "How to stitch it". Each step is a button: the preview then shows the design
-  as it is after that colour block (`state.step` in app.js: `upto` = the block's last stitch, later stitches faint via
-  `draw(..., { ghost })`, placement lines shown until the fabric step covers them); steps a stage joined early say so. In-the-hoop frames (`border: "ith"`, the Ornament starter) are an appliqué front, the pieces after them, then
-  a `last` stage (`compose` moves it after everything) that tacks taped-on backing and satins through every layer; a stage's
-  `after` text becomes "When it's done". A stage never joins an earlier block that's `under` (it would be hidden in the
-  preview). Designs with a fabric step show a plain-words appliqué guide (`#st-appl`) until "Got it"
-  (`studio.applSeen`), then an "Appliqué tips" link in the steps. Starters may carry a `tip` (stabilizer/topper advice) shown under the cards. Opened PES/DST files become pieces
-  (stitches as is: move/turn, no resize). Lettering satin width = the font's stroke, capped at 1/5 of the x-height
-  (1/6 for thin monoline fonts, which get a satin sized to the letters); under 1 mm it's a fine line instead
-  (bean stitch: three runs, strokes under 0.6 mm skipped, points 0.4 mm apart), because satin on small script fills
-  the loops. Each text/monogram has Stitch: automatic / Satin / Fine line; the editor warns under a 4 mm x-height.
-  Starter cards draw their own stitched thumbnails (`draw(..., { pad })`). Appliqué letters (`kind: "letters"`,
-  `js/studio/outline.js`): the word is rendered in a bold OFL display font (Graduate, Lilita One, Alfa Slab One in
-  `APPLIQUE_FONTS`), every edge traced with marching squares (holes too), corners filleted 1.6 mm (Douglas-Peucker 0.1 mm, then
-  `filletPolygon`; ~1 mm smoothing left satin fans 1.5 mm past an M's notches); round inside corners tighter than the satin's half-width the edge offset folds back on itself (a star), so appliqué/outline edges (`edgeSatin`) cut each fold where the edge crosses itself (`fold` in `satin`/`zigzag`/`edgeWalk`, `unfold` in geom.js) and the stitches meet there; only those files change, density same or lower, corner stitches up to 4.6 mm;
-  placement, tack-down, satin per outline, each stage starting a third further round so seams don't stack; the satin
-  sits 0.4 mm outside the placement line (`outward`, holes included) so it covers a ~1 mm trim; a hole too small for a
-  2.8 mm satin gets a narrower one (min dimension / 3.5, at least 2 mm). The preview fills every placement outline with fabric (even-odd). Patches: `fillPolygon()` (digitize.js)
-  rasterises a frame (inset 1 mm) and returns the picture tool's underlay + tatami, then a satin edge covers the
-  row ends. `compose` moves a stage up to join an earlier block in the same thread (one pause fewer) only if it
-  overlaps nothing it would jump ahead of (bbox + 1 mm) and isn't an appliqué stage. Save design / Open saved write
-  and read `{ needleworks: 1, pieces }` JSON (editable pieces, not stitches). Straight lettering centred inside an
-  earlier frame shrinks to fit across it (`fittedSizes`), and the editor says so. Arched lettering bends onto an ellipse (`radius` = half-width,
-  optional `ry` = half-height, missing = circle), letters spaced by arc length; "Follow the frame" (`followFrame`) puts
-  the curve just inside an earlier circle/oval/scallop frame, and the editor warns when letters reach further inside the
-  curve than 0.8 x its tightest radius of curvature under the word (`archTight`). Lettering drawn before its font has
-  loaded is never cached (it's the fallback font; `warn()` measuring other pieces early had cached it). Starter cards are one scrolling
-  row so the pieces and editor stay in view at desktop height (checked at 1413 x 717 and 390 x 844). `tests/browser/studio_batch.html` builds ~70 Design-tab files
-  (starters x hoops, shapes x borders, every font as monogram and arcs, turns, a file combo) for `pe900_check.py`;
-  look at a rendered contact sheet too, the checker can't see mush. Running the browser batches: Chrome caches the
-  ES modules, so load with a fresh `?v=N` and hard-reload (Cmd+Shift+R) after code changes; if a batch page stops
-  writing files (it happened once), navigate to it again. Its title reads `DONE <files> <problems>`. Without the
-  Chrome extension: headless Chrome with `--remote-debugging-port`, then over CDP import the page's module script as a
-  blob with absolute URLs (the inline module doesn't start on its own in headless).
-- Second study (2026-10-29, Ink/Stitch + its 142 fonts, PEmbroider, libembroidery, Wilcom docs) found most numbers
-  already match (stagger, max stitch, row spacing, underlay angle, satin density, contour inset). Not done, and why:
-  Ink/Stitch-style short stitches and 3-hole locks (would change the bookmark for a small gain), contour underlay
-  under picture fills (more stitches; the overlap fixed the gaps), a fabric preset (later), split satin (nothing over
-  3.6 mm yet; split at 7 mm if added).
-- Lessons from other open-source projects (researched 2026-10-29), now handled:
-  - PEC palette 62-64 are applique codes on Brother machines ("Applique Material/Position"), not Orange/Cream Yellow
-    as pyembroidery named them: `PEC_MATCH` excludes them (inkstitch/pyembroidery#140, SE700-verified).
-  - Every cut is locked: `Design.tieOff()` sews 0.7 mm back-and-forth along the last line before each trim, colour
-    change and the end (one hit of each lock 0.35 mm to the side, so no hole takes three hits) (a trimmed thread can work loose otherwise: PEmbroider#105). `relieve()` keeps 5 points
-    around commands so locks survive thinning.
-  - The PE900 never trims a jump at or under its "jump stitch not to trim" setting (5 mm lowest, manual p.38), so
-    1-5 mm jumps stay as loose thread. Stitching them as connectors would draw lines between print letters, so
-    instead the preview counts them ("N short jumps to snip"); both ends are locked so snipping is safe.
-- Satin density (`geom.satin`): `density` is the gap between needle hits on the SAME edge (0.4 mm, as Ink/Stitch and
-  Brother-made files: ursula 0.36, gnome 0.30, ufront 0.42). Until 2026-10-29 stations were `density` apart, so each
-  edge was hit every 0.8 mm: half the coverage, fabric showing through (found by the cross-library study; the
-  bookmark Ashley was sent has it). Satin samples the line every 0.02 mm (0.05 rounded every setting up to 0.4).
-  `zigzag(p, w, spacing)` is unchanged (same-edge gap = spacing). Lettering pull comp 0.15 mm a side on satins
-  >= 1.5 mm, 0.05 below (Ink/Stitch small fonts: 0.02-0.05; more closes counters). Lettering satins >= 2.5 mm get a
-  zigzag underlay (width - 0.8, i.e. 0.4 mm inside each edge, 2.5 mm) as the walk's way out instead of the centre run (every forward run in `order()`
-  is satined back exactly once, so it's always covered). Fine-line lettering uses `followRun` (geom.js): stitches up to
-  1.6 mm but within 0.1 mm of the line and a hole on every turn over 30° (uniform 1.6 mm cut a 1 mm loop by 0.3 mm).
-  Lettering under a 6 mm x-height adds a "Small letters" tip (60 wt thread, 65/9-70/10 needle) to the steps and sews
-  its satins at 0.34 mm (60 wt is ~70% of 40 wt's width). Measure with the same-edge statistic, not by eye on a PNG. Satin borders 2.5-4 mm (frames, patch and
-  appliqué edges, the bookmark border) sew `edgeWalk` first: a run 0.4 mm inside each edge, then the zigzag, then
-  the satin (Ink/Stitch contour underlay), for a firm edge on felt.
-- `edgeWalk` ends on the side where zigzag/satin start (ending on the other side left a 2 mm gap: a jump, trim and
-  two locks on the seam), and `Design.path` adds no stitch when a run starts within 0.3 mm of the needle.
-- The checker counts a STOP as a new block: pyembroidery reads a pause between two blocks of the same thread (the
-  bookmark's and appliqué's fabric steps) as a STOP, which had lumped separate fabric steps into one density count.
-- Tie-ins point at the first point more than 0.3 mm from the start: strokes often begin with repeated points, which
-  made 143 zero-length tie-ins (5 hits in one hole) across the 109-file batch before 2026-10-29.
-- Machines/hoops: `js/core/machines.js`. Designs are checked to fit
-  the hoop field minus a 2 mm margin. Brother PE900 5x7 = 130 x 180 mm and 4x4 = 100 x 100 mm, auto-trims jumps.
-- "Turn hoop" (per tab, bookmark defaults on) only turns the preview; the PES is always written in machine orientation
-  (the hoop clips on one way). A turned picture is digitized in the sideways field and `turnPattern()`ed clockwise
-  before `writePES`; the preview turns the file back.
-- "Sewing on" (`FABRICS` in pieces.js, Design tab; `compose(pieces, hoop, { fabric, baste })`, saved in the JSON):
-  cotton/felt/denim sew as before (tips only); knit gets the zigzag underlay from 1.5 mm satins, +0.15 mm pull comp a
-  side, a 0.42 mm satin and the Lighter fill on patches; towel makes lettering satin (a fine line sinks), at least
-  2.5 mm wide (up to 0.3 of the x-height), on a knockdown: a lattice 0.3 mm wider than the satin (zigzag out and back
-  along each stroke, 2 mm apart since 2026-10-29: 3 mm was too open to hold the loops; `spaced`), sewn per connected word
-  just before its letters, so it adds no jumps (the walk ends where it began). Tried and dropped: a tatami fill of the
-  grown word (+17 trims on a name), one 1.5 mm zigzag (the checker's median read it as a sparse satin), 1 mm wider
-  (a fringe), zigzag underlay as well (24 hits/mm²). "Baste first": a 4 mm run box 9 mm round everything (clamped to
-  the hoop, centred on the design) at the start of the first block, unpicked at the end. The towel starter sets both.
-- Lettering satins start from the stroke's centre point and the zigzag underlay ends on it: back-to-back satins at a
-  junction began on the opposite edge, a column apart (2.4 mm > the 2 mm jump rule), so each was a jump + trim (11
-  on "Ashley" in Yellowtail). Across the studio batch trims -14%, none worse; the bookmark has its own engine and
-  is unchanged.
-- Lettering layout (`textRows` in pieces.js): straight text takes up to 3 lines (Enter in Words), every line at the
-  first line's x-height, `align` left/centre/right, `leading` % of size; `spacing` % of size via canvas
-  `letterSpacing`, print fonts only (script letters pulled apart came out unjoined); shapes `wave` (sine by arc
-  length, `amp` mm, `waves`) and `bridge` (above-baseline points stretched toward the middle, `bulge` %). The rarer
-  ones sit in the editor's "More". `flip` mirrors a piece at placement (not part of the stitch cache key).
-- One for each name (link under Download, Design tab and bookmark): the biggest lettering (the name, nearly always;
-  starters select their last piece, which was "2026") or the bookmark name is swapped for each line, every file goes
-  through `validatePES`, and they download as one stored ZIP (`js/zip.js`). Names that don't fit are listed.
-- Thread brands (`js/core/brands.js`, data `brandcharts.js`: Isacord, Sulky Rayon, Robison-Anton Rayon, Hemingworth,
-  collected 2026-10-30 from each maker's own published colours, sources in the file's header (Amann's digital card
-  has numbers only, so Isacord spools have no names, and it draws whites bluish: pure white is nearest 0003; Robison-
-  Anton is its 2005 web chart with A&E's 2023 Top 100 colours over it). Sigma and Madeira aren't there.) The top-bar select labels threads "≈ Isacord 1306", or the nearest spool listed in "Threads I own" ("your
-  …"). Matching is CIELAB: the red-mean distance called black "Ivy" in Robison-Anton's approximate darks. Labels
-  only: files always carry Brother PEC colours. Picture tab "Use only threads I own" sends `palette` to the worker;
-  `toPalette()` maps each colour cluster to the nearest owned spool and merges clusters that land on the same one
-  (the sample flower: 3 thread changes -> 2).
-  Naming decision (2026-10-30), following how the trade works: a spool is bought and stored by brand + number. The
-  number is printed on the spool and used by shops, conversion charts and design colour sheets. Names vary even
-  between a maker's own resellers (Isacord 0015 is "White" or "Bright White", 0010 "White" or "Silky White"), and the
-  same name means different colours in different brands. So:
-  - every thread shows the swatch, the machine's own name (what its screen says at the colour change) and
-    "≈ Brand number";
-  - the maker's name is added only where the maker publishes one;
-  - no name translation or naming toggle.
-  CIEDE2000 matching was tried: it picks the same whites and blacks (pure white is still Isacord 0003), so CIELAB
-  stays. Open: whether pure white should say Isacord 0015 rather than 0003 (Amann's card draws whites bluish).
-- Design doctor (`js/doctor.js`, Open tab "Checkup"): needle hits per mm² per block (> 24 flagged), stitches under
-  0.3 mm, satin same-edge gap (median, as pe900_check.py; > 0.6 flagged), stitches over 10 mm, a stabilizer hint from
-  stitches per square inch. Fixes: Size 80-120 % about the centre (coordinates rounded to whole 0.1 mm and zero-length
-  stitches dropped first, or the writer's rounding broke `validatePES`), remove tiny stitches (on by itself when
-  shrinking: 80 % made 55 on a file with none), thin to 24 with `relieve()`, split stitches over 12 mm. A file that
-  starts with a stitch at the origin (gnome.pes) gets a jump to its first point when it changes, or the scaled file
-  sewed a stitch out from the origin. Untouched files still download as their own bytes. `tests/doctor.test.mjs`
-  (CI) validates every fix on the fixtures (and tests/external when present). "Thickness" under the preview overlays
-  the hits per mm² (12+ yellow, 18+ orange, 24+ red) on every tab, over the stitches faded so it shows on black.
-- Picture styles (`opts.style`, Picture tab "Style"): Filled (`build`), Line drawing (`lineArt`: outlines of shapes
-  over 1.5 mm across, drawn on one side only where two colours meet, plus thin shapes' centre lines, thickened to 2 px,
-  skeletonized and walked like lettering so each line is sewn out and back; one thread, the darkest colour) and
-  Cross-stitch (`crossStitch`: `cross` mm cells, majority colour or empty when mostly background; a row run is two
-  diagonal zigzags, out and back, with one straight stitch up its last edge; climbing every cell edge drew bowties).
-  The batch adds 4 line/cross cases per picture. Not done: "make it stitchable" (thicken/drop too-fine detail).
-- Quilting (`js/studio/quilt.js`, frame `quilt`: stipple | echo): (stipple and echo rewritten 2026-10-30: see "Before round 4"; the
-  description that follows is the first version) the free space is the frame inset 3-4.5 mm minus a
-  2.5 mm disc round every other piece's stitches, on a 4 px/mm mask. Stipple: 7 mm cells wholly free, a random (fixed
-  seed) spanning tree, the closed walk round it through the 2 x 2 sub-cells (each once, never crossing), points nudged
-  (0.35 of a sub-cell) and averaged over ~9 mm. The tree is depth-first but turns rather than goes straight on (odds
-  0.15 against): a plain depth-first tree made long corridors that sewed as a maze; a Prim's tree made sharp teeth.
-  Echo: marching-squares contours of the free space's distance field every 4 mm, chained into one line (each ring from
-  its point nearest the last one's end, joined by a stitched step; a ring over 6.4 mm away starts a new line): 4 mm
-  apart, every ring was a jump under the machine's 5 mm trim setting plus two locks. `compose` adds the quilt stage right after the frame (before an in-the-hoop frame's
-  `last` stage) in the frame's thread. A visible stage that joins a tack-down block un-hides that block in the
-  preview (the quilting, or same-thread lettering on an ITH frame, was hidden with the tack line). Starters: Mug rug,
-  Coaster, Quilt block.
-- Motifs (`js/studio/motifs.js`: 30 filled icons, our own drawings (2026-10-30, replacing Phosphor Icons; built
-  from circles, ellipses, rounded polygons and brush strokes, nonzero, holes and parts >= 26 of 256 units; contact sheets:
-  `tests/browser/motifs.html` ?sheet=shapes|stitch); `kind: "motif"`, `motif`, `size` mm across
-  the longer side, `style` fill | outline | applique): the SVG path is filled on a canvas and traced like appliqué
-  letters (`motifOutlines` in outline.js, holes included). Fill = `fillPolygon(loops, { inset: 0.6 })` (it now takes
-  several loops, even-odd) plus a 1.4 mm satin edge; outline = `edgeSatin` (narrower round small holes); appliqué =
-  `appliqued()`, shared with appliqué letters. Filled under 25 mm the detail closes up (the editor says so). Lettering
-  `deco` puts a small filled motif either side (More > Motif either side; the "Name with motifs" starter).
-- In-the-hoop projects: frame `border: "zip"` (Zipper pouch, square/oval/circle only in the editor): zipper line
-  (under), pause: tape the zipper, tack both sides of the teeth (under), pause: two folded front pieces, tack round the
-  outline (`fabric`, `nocut`: the cut file would be the wrong shape), topstitch beside the zipper, the pieces after it,
-  then a `last` stage: open the zipper halfway, back face down, three times round. The tack lines run 5 mm either side of
-  the teeth (3.5 left 0.5 mm beside a coil) and Have ready asks for a #3 nylon coil zipper. The zipper line overhangs 5 mm a
-  side (6 took the 120 mm starter past 126 mm). Stages may carry `before` ("Have ready": fabric sizes from the frame's
-  size, +2.5 cm; folded front pieces twice what they cover); `compose` returns it, the steps list it first and the sew
-  sheet prints it. ITH frames list their front/back pieces too. Starters: Zipper pouch, Key fob. The preview's fabric
-  shape uses only the block's closed outlines (the pouch's topstitch lines share it), and a visible stage joining any
-  hidden block (fabric too) shows it.
-- Phones (<= 600 px): the sewing controls and the links under Download wrap (Thickness made the row overflow to 481 px).
-- Sew along (link under Download, `#along` dialog): one step per screen, the preview after the step (`draw` with
-  `upto`/`ghost`), thread + spool, what to do, minutes (block stitches / 550), Back/Next, "Finished" with the `after`
-  text; Screen Wake Lock while open (taken again on visibilitychange). Steps come from `v.sheet.steps` or the colour
-  blocks. The preview's fabric shape keeps segments whose ends are within 5 mm: R15's 1.5 mm dropped the bookmark's
-  fabric (its outline stops one 2.5 mm stitch short) and only a screenshot of the bookmark caught it.
-- Installable/offline: `manifest.webmanifest` (icons in assets/, share target) and `sw.js` (precaches `FILES`, then
-  network first with the cache as fallback; the Google UI fonts are cached too). `tests/sw.test.mjs` (CI) fails when a
-  module, font or icon is missing from `FILES`: add new files there. Registered only over https (not the local test
-  server). A share POSTs to `./?share`; the worker stores the file in the `needleworks-shared` cache and redirects to
-  `./?shared`, and app.js opens it with `route()`.
-- On my item (button by Turn hoop, `#item` dialog): a photo of the real item; two dots dragged onto something measured
-  plus its length set `state.backdrop = { bmp, unit (0.1 mm per photo px), center }`; `draw` puts it under everything at
-  true size (the hoop is hidden), and a drag that isn't on a piece slides the photo. Nothing leaves the device and
-  nothing is saved. (Found doing this: since round 2 a trailing comment in app.js's state had swallowed `showHoop`, so
-  the Hoop box showed unticked while the hoop was drawn and the saved choice was ignored.)
-- Bigger than the hoop (`splitPieces` in pieces.js): when `compose` throws `overBy`, the Design tab shares whole pieces
-  (never a cut stitch) between two hoopings along the long side, at the most even cut where both fit (field - 2 mm).
-  Two basting crosses on the cut line, placed as near the middle of the gap as both hoopings allow, are sewn at the end
-  of the first and first in the second (`compose` opts `marks`), with plain-words lining-up steps; the download is a
-  ZIP of both files, each through `validatePES`. The preview shows the whole design (composed in a 2 m pretend hoop);
-  step view, sew sheet, sew along, share and one-per-name are off for a split design. Embrilliance patents its
-  seam-hiding auto-split; this is the manual method (whole pieces + alignment marks). One piece bigger than the hoop
-  by itself can't be split: the error says to use Fit to hoop.
-- Sew sheet + cut file (`js/sheet.js`, links under Download): "Print a sew sheet" fills a hidden `#sheet` and calls
-  `window.print()` (print CSS hides the app). Page 1 is the hoop field at 1:1 (SVG sized in mm) with the design centred
-  as the machine centres it, a crosshair and a 5 cm check bar; page 2 the steps with the machine's thread names
-  (`machineThreadList`, step i = colour block i); page 3 the appliqué shapes. A view carries `sheet: { steps, after,
-  notes, cut }`; `cut` is the placement outlines in mm (`compose` puts them on fabric steps; the bookmark's is its outline
-  grown 3 mm, the ⅛ in it's trimmed to), never stitches (tie-ins would show as spikes in a cutter). "Cut file" downloads
-  them as one SVG at actual size, one group per fabric. Verified with headless Chrome `Page.printToPDF`: field 130 x 180
-  mm, bar 50 mm. Never test with the real print dialog through the Chrome extension (it blocks the page).
-- Heart frames: the dip at the top is filled with a 3 mm round (the circle that just fits the notch): a satin border
-  couldn't turn the sharp inside corner (underlay poked out 1.75 mm, both sides piled up).
-- Zero-based review fixes (2026-10-29, no stitch changed: both batches byte-identical to the commit before):
-  a design that won't build or is too big to split clears the old preview and Download (it handed out the previous
-  file); too big is drawn whole in a pretend 2 m hoop with Download reading "Too big for this hoop". A hoop change
-  drops the other tabs' designs so they rebuild when shown (a stale 5x7 split on 4x4), and no longer stitches the
-  picture from another tab. Arrow keys on the tab bar no longer nudge the selected piece; a click without a drag adds
-  no undo step. The quilting cache is keyed on a hash of every obstacle point (moving a middle piece reused quilting
-  sewn through it). Min/max over every stitch uses loops (`Math.min(...pts)` overflows the stack past ~110k).
-  `routeFill`'s A* gives up at once between 8-connected regions it can't cross and reuses typed arrays (etsy_3 6.2 s
-  -> 2.7 s, byte-identical); then a binary-heap open list (ties break differently: 12 of 377 batch files changed,
-  stitches +0.09%, trims 2149 -> 2152, peak density unchanged). The
-  picture worker runs one job at a time and keeps only the newest waiting.
-- Speed (2026-10-29, byte-identical): `renderWord` thins the word once (stroke width, stroke ends and, when no join or
-  swash was drawn, the final skeleton) and finds stroke ends/letter pieces only when joins or swashes need them;
-  `strokeWidth` runs the distance transform on the ink's box plus a 1 px ring (same distances). The bookmark caches its
-  lettering. Pan, pinch and wheel paint at most once a frame; starter thumbnails compose one per idle moment.
-  `index.html` modulepreloads the module graph.
-- Usability round (2026-10-29): the site opens on Design your own (`#design`); the default name is Emma (no more
-  "like the photo"). After a download a dialog says what was checked (machine, hoop, size, pauses) and the three USB
-  steps, plus "open the .zip first" for ZIPs, until "Don't show this again" (`doneSeen`). Editor warnings with a fix:
-  arched words wrapping over 55% of their curve get "Widen the curve" (`archRoom`, to 45%), and any piece whose stitches
-  come within 1 mm of another's says so (`touching`; patches excepted). Plain words: Bold / Thin line (satin / fine
-  line), "N loose threads to snip after", the PES version only as a tooltip. Opened files: "Save a copy" / "Save fixed
-  copy" / "Save as PES" instead of "Download x.pes"; tiny stitches flagged only past max(50, 1% of stitches). One for
-  each name: long names shrink to fit (90%… 55%), a thumbnail per name, Done. Decluttered: Hoop/Thickness/On my item in
-  a View menu, Sewing on folded to one line, Fill direction and Fill under More settings, no hex codes under threads,
-  the appliqué guide only for real appliqué (not the pouch) and not on top of the 3-step guide. Phones: Download is a
-  fixed bar at the bottom; the arrow-key hint hides on touch screens.
-- UI engineering (2026-10-29): file inputs are `.sr-file` (visually hidden but focusable; `hidden` ones couldn't be
-  reached by keyboard), their labels show the focus ring via `:has()`. Redraws of the studio editor/list and the
-  bookmark panel go through `keepFocus` (app.js: the focused control is found again by its data- attributes and
-  `[data-seg]` group, caret kept), so Enter on a swatch no longer drops focus to the page. Arrow keys nudge a piece
-  only from the page or the focused preview (`#view` has tabindex). Dragging composes once a frame (`compose`
-  `dragging`: quilting reused from the last layout until the drop). Colours come from `--danger/--warn/--good` tokens
-  with dark variants; dark mode fills the hoop field light (`fieldColor`; navy vanished on the dark stage);
-  `forced-colors` keeps thread colours and outlines what's selected; coarse pointers get 44 px targets. Cmd+P fills
-  the sew sheet on `beforeprint` (it printed a blank page). `sw.js` (cache v2) serves the cached copy when the network
-  takes over 3 s and refreshes in the background. A studio save too big for localStorage says so once.
-- Expert features (2026-10-29):
-  - Patches: `pattern` (FILL_PATTERNS in digitize.js: Plain tatami, Brick, Chevron, Wave; the row stagger lines the
-    needle points into a visible texture) and `blend` (a second colour: two layers whose row spacing changes
-    gradually, `share` in `tatami`, each colour's spacing density/share, none under 0.15; the second has no underlay).
-    Random row-by-row assignment was tried first: long links and jumps everywhere. Editor: patch > More.
-  - Carving (`carve` in pieces.js): a patch's fill is cut away under what's sewn on it, only where that's wide
-    (somewhere 4 mm across) and 20 mm² or more; thin satin lettering keeps the fill as its base (carving round every
-    stroke took trims 3 -> 9). Holes stay 1.5 mm inside the patch outline (even-odd would add fill outside it).
-  - Colour sort (`sortColors` in doctor.js, Open tab checkup): a block joins the last earlier block of the same
-    thread if it touches nothing sewn in between (1 mm cells grown by one); files with machine stops or without
-    thread colours (DST) are left alone.
-  - Resize 50-250 %: within 80-120 % stitches are scaled as before; past that `restitch` rebuilds each block: zigzag
-    runs keep their edges with a station every 0.2 mm (satins over 8 mm wide become fills), fill runs (over 3 mm
-    both ways, 70% of length one way, or 45% plus 80% with the 90° underlay) are traced and refilled at 0.4 mm,
-    together per block and direction and minus what an earlier direction already filled (the peace sign piled 37
-    hits/mm² otherwise), the rest are running lines (0.5-3.5 mm). gnome/ufront/peace at 0.6x and 1.6x: satin gap
-    0.40-0.41, peak density <= 24. `tests/doctor.test.mjs` covers 0.5-2.5x with and without sort (slow: ~3 min).
-  - Realistic thread (View menu): the twist drawn across each stitch when zoomed in (`real` in `draw`).
-  - Letter pairs (print fonts, text > More): `kern` = { index of the pair's first letter in the words: % of the
-    height }, added to the font's own kerning (`renderWord` `kern`: letters drawn one by one where the whole word
-    puts them, plus the shifts; dash decorations measured from the drawn ink). Lines and arches map the indices
-    through the trimmed lines; editing the words keeps pairs in the unchanged start and end (`rekern` in ui.js).
-  - Thread weight (Sewing on, `THREADS`, compose opts `thread`, saved with the design): Automatic is byte-identical to
-    before (40 wt, small lettering sewn for 60). 30 wt: lettering satin 0.45, other satins x1.15, fills +0.05 mm;
-    60 wt: lettering 0.34, other satins x0.88, fills unchanged (0.3 mm rows fail the PE900 check), no small-letters
-    tip. Knit adds 0.04 to the lettering satin. `wt` is a module variable set for the length of `compose`; stitch
-    caches key on it.
-  - Not done from the gap review: photo stitch, free-standing lace, 3D puff.
-- Persona user tests (2026-10-30, plan in ~/.claude/plans/needleworks-user-testing.md): newcomer (phone), hobbyist
-  (laptop), expert (desktop, keyboard, bad files) as parallel agents, each on its own headless Chrome driven by
-  `tests/cdp.mjs` (`start DIR`, `viewport W H [mobile]`, `goto`, `shot`, `els`, `click`/`tap`, `type`, `key`, `upload`,
-  `eval`, `console`, `nocache`). Subagents can't write report files: they hand the report back. Round 1 fixes: Turn hoop
-  in the Design tab lays pieces out in the turned field (long side across) and turns the file clockwise into machine
-  orientation (`designHoop`/`toMachine` in app.js, names ZIP and cut outlines too); it used to turn the preview only, so a
-  long word could never use the 7 in side. Redo (⇧⌘Z / Ctrl+Y, was a second undo), undo skips snapshots equal to now,
-  Delete removes the selected piece, the preview picks the smallest piece under the pointer (letters inside a frame).
-  Warnings list every problem: characters the font lacks (`missing` in ui.js: past Latin Extended by code point, Latin
-  by width; width alone misses CJK because the fallback chain changes), towel lettering under an 8 mm x-height
-  (`towelMin`, with a one-tap size), arcs past the whole way round. Words are capped at 3 lines as typed. Open tab: a
-  file with no stitches says so and clears the old one (it showed -Infinity mm, "Fits"). Have ready (fabric `ready`,
-  bookmark `READY`) on the steps, sew sheet and first Sew along screen. Too big: one size everywhere, with a Turn the
-  hoop / Fit to hoop button. Byte compares need a fresh no-cache baseline (`out/base` had gone stale by 3 commits).
-  Round 2 (stitches changed, all 396 batch files still pass): `Design.finish` drops a stitch onto the hole the needle
-  is already in (`dedupe`; line drawings had ~25% doubled, lettering 12-47 per file: batch stitches -0.8%, same-hole
-  11,378 -> 107, no file gained a stitch; the bookmark lost its doubles too) and `pe900_check.py` fails files over 1%
-  (`same_hole`). `relieve()` takes a second pass allowing merges up to 7 mm where 4 mm can't get a cell to 24 (a
-  picture's travel funnel sewed 25). Starters set the fabric (cotton unless they say: towel stuck to every later
-  starter, +40-75% stitches). Fit to hoop composes and shrinks again until what's sewn fits (outlines leave out satin
-  and swashes: 142 mm in a 126 mm field). Thread descriptions in the file are ASCII (“Noah” read back as â€œNoahâ€).
-  A step whose thread differs from the last says "Change to the next thread." before its fabric instructions. Turned
-  Design-tab files carry a hooping note (steps, done dialog, sew sheet). Lettering that sews as a fine line says so
-  with a "Make it bold" link; names in a batch say "(smaller, thin line)". Header wraps the tabs to a second row at
-  861-1240 px (the machine select covered "Open a design" at 1024). `tests/cdp.mjs start` disables background timer
-  throttling (headless pages are "hidden": a 300 ms debounce took 57 s). Then: a patch's satin edge (`edge` stage)
-  sews after everything on the patch (covers the lettering's pull at the border; batch: only patch/carve/blend files
-  changed); monograms inside a frame shrink to fit it both ways (`fittedSizes`, 0.92 of the frame less half the gap,
-  so the starters' monograms are unchanged; a script R on the key fob overran it); "+ Design file" goes above the
-  pieces (below if only that fits), sews first after frames, and the layout is recentred. Not done: picture specks/trims.
-  Round 3 (stitches changed; VM: FITS 17/17, PE-DESIGN opened bookmark, towel, turned picture, monogram):
-  `relieve()` also tries windows whose corner cell is empty (towel names reached 27 hits/mm² at some offsets) and never
-  merges A,B,A' into a same-hole stitch; `dedupe`/`relieve` round half-to-even like the writer; `pe900_check.py`
-  checks density at every 0.1 mm offset (its own scan had the same empty-corner gap). Turned designs (pictures and
-  the Design tab) are thinned after the turn (`turnForMachine`). Lettering satin width is continuous:
-  min(3.5, 0.2 xh, max(stroke, 0.12 xh)) (two rules met at a 0.95 mm stroke: Allura 2.0 mm at 24 mm, 1.2 at 28;
-  script monograms that fell back to a fine line are satin now). Lock side hits go toward the stitches they lock
-  (`inward`; they poked 0.5 mm out of script strokes). Fine-line dots (full stops, i dots) are kept: a lone stroke
-  under 0.9 mm sews as 0.7 mm out and back (it comes twice from the walk: sewn once). Pictures drop compact specks
-  (under 4 mm² and 2.5 mm across; 4 mm² for everything erased a bouquet's stems) and sew moves inside a fill up to
-  2 mm straight (trims -5%, loose threads -12% on the batch). Quilt label starter uses Quicksand 9 mm (Josefin's
-  single-storey a merges its stem into the bowl and reads as o; still true for Josefin and small Quicksand: open).
-  Tried and reverted: split satin 7-14 mm in the doctor's re-stitch (tapered ends piled 39-49 hits/mm²).
-  Before round 4 (2026-10-30; four parallel worktree agents, merged, then UI: Picture tab "How to stitch it", a
-  "runs into" warning beside Download, new pieces placed beside the others (`freeSpot`/`recentre`), roving tabindex on
-  the starter row, piece buttons named with their piece, field edges at 3:1 (`--field-line`), oversized designs
-  fitted whole (`v.whole`); the checkup's thickness at every grid offset (`peak` in doctor.js)):
-  Batch after merging: 396/396 ok, 153 files changed, stitches -1.5%, same-hole 0, script bookmarks byte-identical.
-  VM: FITS 18/18; PE-DESIGN opened peace at 150 %, appliqué AB, mug rug, cross-stitch.
-  Round 4 fixes (2026-10-30; testers 6/5/6 found a picture that never finished, a cut file with slits into every
-  appliqué letter, thread names that didn't match swatches; four worktree agents again, then UI: a 60 s picture
-  watchdog that restarts the worker, a supply list on every design, Turn hoop reset per starter, off-centre layouts
-  say the machine centres them, "Knit / T-shirt" and "Towel / fleece", motifs beside the words, one-tap 5x7 for the
-  bookmark, `bookmarks_N.zip`, section headings, the "colours too alike" note). `tests/cdp.mjs` puts Chrome's temp
-  files beside its profile (TMPDIR, MAC_CHROMIUM_TMPDIR): a full system disk stopped headless Chrome starting.
-  Batch after merging: 400/400 ok (4 new BABY cases), 249 changed, script bookmarks byte-identical. VM: FITS 16/16;
-  PE-DESIGN opened BABY appliqué, etsy_8 (title sewn), gnome at 160 %, the patch (fill, JD, edge last).
-  - Picture travel searches stop past `SEWN` (3 mm) on finished stitches or past their length limit; a fill's sections
-    are chosen with one search from the needle per move (`reach`), not one per section. Limits: 50k cells per search,
-    6M per router, 12M per picture (`routeBudget`, counted in cells so browser and Node match); past them it jumps.
-    etsy_5 (a framed photo's textured backdrop, 1782 sections) took over 280 s, now 0.55 s; the app also stops a job
-    after 60 s and restarts the worker.
-  - Frames (`findFrame`): edge ring mixed but a ring within 8% inwards 85% one colour family (ΔE < 10) for 2% -> the
-    band's pieces are the frame; colours learned again without it, its blended inner edge cut, background read from
-    5 clean rings. Shades within ΔE 8 of the background, or ΔE 15 and over a quarter of the border, are background.
-  - Near-identical k-means clusters (ΔE < 6) are learned again with more clusters (twice at most); `analyze` returns
-    `merged` (asked-for colours that came out the same; the Picture tab says so) and `frame`.
-  - Thin lines (< 1 mm) are never dropped as specks: walked, sewn out as a triple run and back. Groups (pieces within
-    2 mm) under 6 mm of line are specks; parts of filled shapes narrower than 0.7 mm (`THIN_PART`) are lines too;
-    anti-aliased blend pixels between the fabric and another colour are left out. (etsy_8's title and etsy_1's stems
-    had vanished from Filled.) Filled pictures +25% stitches from this (triple run kept on purpose).
-  - Picture colours are snapped to Brother threads by CIEDE2000 (`snapToThreads`, unique, never 62-64; plain Lab sent
-    olive to Russet Brown): `hex` is the thread colour, `picture` the picture's own; the writer's red-mean match then
-    picks the same thread, so swatch, name and machine agree (a green was "Pewter").
-  - Open: etsy_6 green panel (63% of the picture) still sewn. (etsy_7's doodles and the framed-picture size: fixed in
-    the re-run fixes below.)
-  - Lettering satin (round 4 fixes): min(3.5, 0.2 xh, max(stroke, 0.12 xh, min(0.15 xh, 1.2))); auto satin from 0.8 mm,
-    under that a fine line (it was 1.0, bumped to 1.2: 20 mm script names sewed as a thin line). Counters:
-    `counterPockets` (raster.js) measures each gap between the centre lines; `counterCaps` narrows only the strokes
-    round one that would close (0.8 mm between needle points after pull; gaps under 0.6 mm left to fill; explicit Satin
-    and towel ignore it). Script skeletons keep short ends reaching 1.5 strokes and 0.2 xh out (`tongues`; pieces.js
-    only, the bookmark unchanged): Yellowtail's e tongue and y tail came back, so Yellowtail words are a little
-    smaller at the same size. `towelMin` checks counters under the towel column (down arches squeeze by the bend:
-    Great Vibes "Oliver" 17 -> 38 mm); `archTight` also flags an up arch whose letters are taller than 0.6 x its curve
-    radius; `archFit` grows the arch (both size buttons use it). Print monograms spaced by their stitches in 0.5 mm
-    bands (gap + 0.4 mm). `Design.path(..., lockAt)`: lettering runs lock 1 mm in under their satin. Satin dots are one
-    satin at least 1 mm long with no run under it. Design-tab stitches +7.6%; files at 24 hits/mm² 99 -> 160 (more
-    small script is satin now; all <= 24). Dropped: satin cut short at junctions (gaps in Josefin's A and h).
-  - Appliqué routing (`applRoutes`, replaced `chained()`, after a tester's cut file had slits into every letter): each
-    stage moves between outlines only where it ends up hidden. Placement: inside the letter or under a satin still to
-    come (a hole with no exit goes back across to its outline and along it). Tack-down: along its own line, then across
-    gaps the satin covers. Satin: each starts where it leaves (reached along its own centre line), moving from its outer
-    edge into the next satin. Covered = 0.15 mm short of the satin's reach (1.8 mm out, 1.0 in). New runs start at
-    least 5.5 mm from the last stop, across pauses too. Holes still trim in tack-down and satin. BABY (Lilita 34 mm)
-    21 -> 18 trims; appliqué-letter batch 228 -> 176. Cut files are the outlines (`cut` on the stage), never the
-    placement run; the preview's fabric splits a placement run into its rings (`rings` in render.js). Open: only the
-    first fabric block gets a fabric shape in the preview.
-  - Stipple seed: the outline of a random Kruskal tree over knots 1.5 x space apart (lobes 0.4-0.8 x space, leaves
-    x1.4, necks 0.32), holes filled, then `relax` with no growth within 0.9 x space of the free edge (a tester still
-    saw a maze). Longest straight run 22-30 -> 12-22 mm. Dropped: knots 2 x space apart (sparse coral), full growth at
-    the edge (lines along the frame).
-  - `hang` on in-the-hoop frames (ornament and key fob starters; unquilted ITH frames by default) adds the ribbon text.
-  - Re-stitch (round 4 fixes): keeps the source's density, satin same-edge gap clamped to `SATIN` 0.3-0.5 and fill rows
-    (area / row length) to `ROWS` 0.35-0.5; zigzags over `OPEN` 1 mm (underlay) stay lines (rebuilt as satin, peace's
-    took +81 % thread). A column's half-stitch at either end is sewn but isn't an edge point (it pulled edges in at
-    joins: ursula 250 % 21 bare spots -> 6); edges are interpolated by their own point counts. Column ends reach `EXT`
-    0.5 mm on only where the source sews within 0.3 mm past (`COV`) and never outside the source's scaled box (`BOX`).
-    Square-wave satins count as zigzags (star_badge 250 %: 100 bare spots -> 0). Refills start from the end nearer the
-    needle and `travel` reaches them through cells inside the fill or sewn by this colour or a later one.
-  - `respace` (resizes within 80-120 %, or `fix({ satin: true })`): satins outside 0.3-0.5 are re-spaced in place, first
-    and last hole kept. Checkup flags satins tighter than 0.25 and offers "Even out the satin stitches".
-  - `fix` runs in `js/doctor-worker.js` (newest job only, spinner after 150 ms); the slider rebuilds on `change`; a
-    "Longer side" box sets the size in mm; Tiny/Thin ticked by shrinking are unticked back at >= 100 %.
-  - File pieces label each stage with the block's own thread name (all were "gnome").
-  - Picture travel (2026-10-30): `makeRouter` (digitize.js) is the shared 0.5 mm-cell A* (`routeFill` refactored onto
-    it, byte-identical). In `build`, a move between a colour's sections or shapes (up to 10 mm, `TRAVEL`) travels, with
-    stitches up to 2.5 mm, through cells this colour's unsewn fills (0.25 mm inside) or a later colour's solid fill
-    (over 0.6 mm inside a non-speck shape) will cover; at most 2 mm on finished own-colour stitches, route at most 1.5 x
-    the gap + 3 mm. Moves under 2 mm are always sewn (a jump that short is never trimmed: a loose thread plus two locks).
-    Shapes go nearest-first, preferring a hidden route, then a jump over 5 mm (trimmed) over a 2-5 mm one (loose).
-    Batch pictures: trims -9%, loose threads -59%, stitches +0.4%. Remaining jumps cross background or earlier colours.
-  - Tatami (pictures and patches): the step to the next row is split into pieces <= 3 mm (it reached 7.6 mm along
-    shallow edges) and a row-end stitch over 4 mm is halved: stitches over 4 mm 1492 -> 60, +1.4% stitches.
-  - Cross-stitch: runs chained by Dijkstra over cell corners (edge step costs 1 beside this colour, 2 beside another,
-    4 over open fabric, back over a sewn diagonal 1; limit 6), else a jump preferring over 5 mm. A cell with no
-    same-colour cell within 2 and no other colour touching it is dropped (dropping every lone cell erased sprigs).
-    Trims -78%, no loose threads, stitches -41% (locks).
-  - Line drawing: whole pieces under 2 mm dropped (pruning 2 mm dead ends cut small lettering apart; `spur: 1` kept);
-    a line end within 2 mm of another drawing is joined (out-and-back tour, back over the same stitch; 3 mm drew bars
-    between letters); each drawing entered nearest the needle, preferring over 5 mm to 2-5 mm. Trims -78%, no loose.
-  - Doctor re-stitch (`restitch`, 2026-10-30): wide satin columns stay satin (filled only past 30 mm median width);
-    stitches over 6.8 mm are split (`split`: pieces <= 5.5 mm, cuts staggered by a quarter piece in golden-ratio steps)
-    because the writer halves anything over 7 mm out of sight of `relieve`; crowded edge hits become short stitches
-    (`room`, 16 per 1 mm window on a 0.5 mm grid); cuts slide along their own stitch out of crowded spots (`spread`,
-    then `slide`). Filling each wide column on its own (everything over 8 mm until then) criss-crossed peace's ring:
-    trims 49 -> 103 at 150 %, now 48. A rebuilt column ends on the edge its run ended on (ursula 150 %: trims 24 -> 3,
-    loose 20 -> 1). Dropped: fixed-place split cuts (33-40 hits/mm²), filling columns over 25 mm (peace 250 % trims 54->82).
-  - `slide()` (end of every `fix`): where a 1 mm window at any 0.1 mm offset has over 24 hits in one block, a point in
-    the middle of a straight line (>= 5 stitches from any command) slides along it, both stitches kept 1-6.8 mm.
-  - `landJumps` (on open and in every `fix`): a jump lands on its first stitch. The writer puts the needle down where a
-    jump ends; all 49 of peace.pes's jumps stop 0.5-12 mm short, so re-saving gave 31 loose threads instead of 3.
-    `fileBlocks` starts runs at the first stitch for the same reason (a Design-tab file piece: 31 -> 3). `fix` keeps the
-    stitch a jump lands on and splits stitches over 6.8 mm itself.
-  - Shrinking turns on Remove tiny stitches and Thin; the checkup says how many jumps shrinking brought under 5 mm, flags
-    stitches over 12.1 mm with a "Split long stitches" fix, and shows the 10 mm note only when none are over 12.
-    Open: the checkup's "Thickness" still counts at grid offset 0 only (peace 17 vs 25 at another offset).
-  - Print-font stroke ends reach the ink's edge (`reachEnds` in raster.js, `skeletonEdges(..., { reach: true })`, print
-    only): thinning stops ~half a stroke short, so a single-storey a (Josefin, small Quicksand) lost its stem's ends
-    inside the bowl's satin and sewed as o. Lettering is sized from the strokes before that (`info.sized`, also the
-    bookmark's band), so sizes are unchanged. Loops count twice for the loose-end test; dots aren't extended.
-  - Print letters always jump between separate pieces (`gap` on the first stroke of each piece after the first, through
-    `letters` -> shapes -> `stitchLetters` -> placement -> `d.path(q, true, q.gap)`; towel moves it to the lattice;
-    bookmark: `print && k > 0 && j === 0`): the reached i stem came within 2 mm of its dot and Design.path sewed it as a
-    stitch. Script unchanged.
-  - Appliqué letters: each ink piece is closed (grow then shrink 1.4 mm, `closeMask` in outline.js) before tracing, so
-    slivers inside a letter (M's notches) go and the satin no longer spikes; closing the whole word merged near letters
-    and i dots. `chained()` (pieces.js) sews the placement line letter by letter, left to right, reaching each hole by a
-    straight run across the letter (under the fabric): AB 14 -> 12 trims. Tack-down and satin still trim between loops.
-  - Heart frames: the bottom cusp is an arc of the 1.8 mm circle that fits it, then refitted to h (placement/tack
-    showed ~1 mm past the flat-ended satin, the edge walk 2 mm).
-  - Print trims (S10): every walk ends where it began, so each move between letters is a trim or a visible connector
-    whatever the order; left as is.
-  - Quilting (rewritten 2026-10-30 after a quilter called stipple a maze with V points and echo's steps/corner
-    triangles ugly): `freeMask` also returns distance to the frame (`dtA`) and to the pieces (`dtB`). Stipple: the
-    spanning-tree walk (cells 1.2 x `space`, 5 mm) is only a seed; `relax` (up to 600 rounds on 1.2 mm points):
-    repulsion from other parts of the line closer than `space` (arc neighbours within 1.7 x space skipped), a push
-    `space`/2 off the free space's edge, bending (-1 4 -6 4 -1, 0.6) and growth where there's room (0.3), max 0.25 mm a
-    round; stops when under 0.2% longer per 25 rounds, then 15 rounds to round off kinks. Loops under 40 mm dropped.
-    Sewn with `followRun(2.5, 0.15)`. Dropped: Laplacian pull (halved the line), growth at the curve's scale (wiggles),
-    long-range repulsion (6.7 mm spacing), smaller seed cells (a maze).
-    Echo: rings are levels of f = a/(a+b) (a = mm out from the pieces' clearance, b = mm in from the frame), n = round(
-    30th-percentile width / gap), so they turn gradually from the lettering's shape into the frame's; where width/n <
-    0.5 gap rings are cut into arcs. Empty frame: rings every `gap` in from it. `chain` sews innermost first as a
-    spiral (each ring glides over its last 3 gaps onto the next; a ring reached by glide stops halfway round);
-    straight steps only under 2.5 gaps crossing nothing. Batch quilting: trims 105 -> 84, stitches -0.3%, density
-    unchanged. Open: narrow heart/diamond tips stay empty; quilt label with stipple sews as 3 lines.
-  Re-run fixes (2026-10-30): Open tab, checkup and the app's own verdict:
-  - `js/quality.js` is pe900_check.py's stitch rules in JS (longest > 12.1 mm, tiny under 0.3 mm > 2 % bar the first 6
-    after a jump/trim/thread change, same hole > 1 %, > 24 hits/mm² at any 0.1 mm offset per block, satin same-edge gap
-    > 0.6), run on the bytes decoded back. Agrees with the checker on all 416 batch + sample files (max density under
-    24 can read higher: it scans more windows; misplaced pyembroidery-style files decode differently, and are rewritten
-    anyway). `setView` runs it 250 ms after a view settles (not per drag frame; 60 ms on a 326 kB picture) and says
-    what's wrong beside Download; every download, split ZIP and names ZIP is judged: the dialog says "Checked" only
-    when it passes, else lists the problems and offers "Save a fixed copy" (`fixedCopy`: the doctor's `fix` with thin /
-    tiny / satin as needed, validated and judged again; `<name>_fixed.pes` or `<zip>_fixed.zip`), and it shows even
-    after "Don't show this again". All failing samples (peace, gnome, flower_rl, rosacea, wreath, Ashley v1-3) fix.
-  - The checkup reads the file as it will be saved (`checkup(readEmbroidery(bytes))`, in the worker too): it described
-    the pattern before the writer, "11 spots up to 26" at 50 % thinned where the file had 24; gnome.pes's 12.66 mm
-    stitch (a jump stopping short: `landJumps` hid it) wasn't flagged. Its counts come from quality.js.
-  - Colour sort is off for files whose consecutive blocks share a thread (`pauses` in doctor.js): those are fabric
-    steps; merging the bookmark's four took its copy to 25 hits/mm². The Open facts say "N pauses in the same thread".
-  - `fix` ends with `dropTiny` (whole 0.1 mm, the checker's rule) when tiny is ticked and always after a re-stitch:
-    gnome 70 % 23 -> 0, 150 % 43 -> 0, ufront 150 % 44 -> 0, peace 150 % 25 -> 0. The rest of what testers counted
-    (star_badge 80 %: 48) were exact 0.3 mm square-wave steps the checker read as 0.29999 in float; it counts tiny in
-    0.1 mm units now (39 batch/sample files lower by <= 9, no verdict changed). Not done: trims after re-stitching at
-    70 % (gnome 17 -> 28; the checker doesn't fail trims and the re-stitch's refills are where they come from).
-  - Open tab: the file card follows the current copy (stitches, fits / too big with "Make it the largest that fits");
-    "Largest that fits the hoop: N % (mm)" under Size; a typed longer side that overflows the other side stops at the
-    largest and says so (ursula 170 mm -> 144). Fixed copies are `<name>[_Npct]_fixed.pes`. A PES whose stitch block
-    runs past the end of the file or has no end marker, or a DST without its end code (`endsEarly`), says it ends
-    early and is saved rewritten. DST (no colours) gets a colour per block (navy, red, green, gold...) with a colour
-    picker each. Malformed .needleworks.json says it isn't a saved design (it showed the JSON parser's error).
-  - File pieces (Design tab): blocks named Placement/Tackdown/Cutting get appliqué words at their pauses, and a block
-    in the same thread as the one before keeps its pause (`compose` merged them).
-  - pe900_check: `stitches` was the last dense window's count (`pts` reused); `identical_to_pyembroidery` is
-    "except pauses" for files with same-thread pauses (pyembroidery reads them as STOPs and writes another palette
-    index: every bookmark and appliqué file, single or zipped; only those bytes differ).
-- Re-run fixes (2026-10-30): stream 5, UI only (both batches byte-identical, 400/400, plus one new file for the
-  book motif; all 401 pass pe900_check):
-  - Layout: the "runs into" note beside Download is its own row (`.dl-warn` in `.bottom`; it squeezed the thread chips
-    to "B / P"); thread chips keep 10em before the buttons wrap under them. Two columns from 700 px wide when 560 px
-    tall (820 x 1180 had the guide 1150 px down, 800 x 600 the editor 1370 px down); a compact tier at <= 760 px tall.
-    Phones: the thread select beside the logo (one header row fewer), the sewing buttons on one row under the slider,
-    the preview `calc(100svh - 370px)`, so Watch it sew and Turn hoop show above the fixed Download bar at load; Watch it
-    sew scrolls so they stay above it; a solid strip behind the bar (the slider showed at its corners). Stacked, the
-    preview is as tall as its row (its 420 px minimum ran under the controls at 840 x 525 and on an iPhone SE).
-    `draw` keeps `padBottom` clear for the message over the preview, and draws the hoop with nothing to stitch.
-    Skip links (settings / preview and Download). Undo and Redo sit on the Pieces heading line (a shorter list moved
-    them ~70 px); a piece row wraps its buttons rather than cut the name to "Cir…".
-  - A font that fails to load stays failed in its @font-face (every `document.fonts.load` rejects with "A network
-    error occurred." until a reload): `loadFont` (fonts.js) adds a second FontFace from the stylesheet's own URL and
-    says so plainly with Try again. `document.fonts.check` stays false for that family, so its lettering isn't cached
-    (slower, correct).
-  - Threads: Brother is a brand (`brother` in brands.js: Brother's own spool numbers, from its Artspira thread list,
-    on the PEC colours; 60 colours, Linen 307 has no PEC colour); labels "spool 800". An owned brand reads "My Isacord"
-    ("(threads I own)" was cut off). Supply lists name the owned spools (`ownSpool`), white/cream thread gets an edge in
-    every preview.
-  - Supplies: `ready` on every fabric in `FABRICS` (one source with `tip`; denim had none), names "Knit / T-shirt",
-    "Towel / fleece" (texts say towel or fleece, "the pile"), Canvas / tote added (sews as cotton), the pillowcase/tote
-    hint in the cotton tip. The appliqué line and tips only for real appliqué (`appliqued()`: letters, appliqué motif or
-    frame), not an in-the-hoop front. The sew sheet prints one "Have ready" list. Done dialog: no "at every pause" with
-    no pauses, Android gets USB-C wording. Sew along draws a turned design as the machine shows it.
-  - Editor: readable input font (the preview shows the script), the automatic stitch chip says "Automatic: bold/thin
-    line", missing letters also beside Download (variation selectors ignored), "Removed … Undo" toast and a 600 ms guard
-    on a second ✕, copy/paste of pieces (as `{ needleworks: 1, pieces }` text), tappable fact chips (`data-tip`), the
-    guide counts as seen after a starter or an added piece, a Book motif.
-  - Headless Chrome with `nocache` sometimes doesn't start app.js after `goto` (4 in 14 loads, baseline code too):
-    check `document.body.dataset.mode` and navigate again.
-  Re-run fixes (2026-10-30): Design tab layout (stream 4; studio batch: only the 4 split files changed, crosses moved;
-  pe900 batch byte-identical; 400/400 ok):
-  - `touching` measures needle points every 0.5 mm along the stitch lines (`cloud`/`near`), at fitted sizes, flagging
-    under `CLEAR` 1.5 mm (~1 mm of fabric between threads). The old whole-mm cells flagged up to ~2.8 mm: a key fob R
-    the app had just fitted, 2 mm clear, "ran into" its frame. A bib name at 1.0 mm looked sewn in; 2.5 mm reads clear.
-  - `fittedSizes` then shrinks a fitted piece 0.5 mm at a time (to 60 %) until it clears its frame's stitches by CLEAR
-    (`clearOf`, cached): the room is the outline, so a scallop's valleys met a Great Vibes JMK after Circle -> Scallop.
-    No batch file changed (no fitted piece was that close).
-  - Every one-tap fix is checked before it's offered (`landing` in ui.js: fits as is, fits turned -> the button
-    "... and turn the hoop" does both, else none; nor if it runs into something new or leaves the frame it sat in).
-    Too small and towel need one size (5 mm on towel: "Make it 24 mm", not 9 then 24); a size the frame fit would shrink
-    back offers two lines at a size that clears everything (ornament "Our First Christmas": 7 mm -> 11.5 mm on two
-    lines), never "Make it 10 mm" again; towel sizes past the hoop even turned say so, with fewer/shorter lines, a bolder
-    font or "Sew it as Cotton" (flat-weave tea towels); within 4 % of the towel minimum isn't warned (The Smiths 32 vs 33).
-    Arches: "Widen the curve" or "Make the letters N mm" (`archShrink`), whichever lands. A piece running into the frame
-    around it gets "Make it N mm" (`clearSize`), not "drag it apart".
-  - Words wrapped right round into themselves block Download ("Fix the lettering first", `block` on the view).
-  - Split: crosses on a line between the halves, each 1.5 mm clear of every stitch, near 1/4 and 3/4 across and at
-    least 20 mm apart when the hoop allows (`crossSpots`; a 27 mm-tall name had them 13 mm apart, one on the "e");
-    named where they are as the machine shows it (`crossName`: top/bottom/left/right; turned, the preview's too). The
-    preview draws the crosses and each hooping's field (`boxes` in `draw`).
-  - Turn: off and disabled on a square hoop (`square()` in app.js); Save design stores `hoop` and `turned`, Open saved
-    restores them; undo/redo snapshots carry the turn and Turn hoop is an undo step. A turned names batch lays out
-    upright any name that fits upright; turned files are listed in the dialog and captioned.
-  - Thread weight resets per starter like fabric; a weight picked by hand gets its own tip (small letters: "60 wt sews
-    them crisper"), Automatic keeps the small-letters tip. Steps stay current while Too big ("Waiting for a fit").
-    Two colours in a row on the same owned spool: "Keep the same thread on".
-  - Names batch: off while Too big; a name with a missing glyph is refused; one that runs into another piece shrinks
-    with "Make long names smaller" or is captioned; filenames transliterate Ł ø ß æ œ đ þ (Lukasz, Soren).
-  - Smaller: "+ Motif" starts at 1.25 x the biggest lettering (25-40 mm); Fit to hoop recentres and keeps the design
-    fitted through font/style changes (`fitted`); too-big sizes never round down to look as if they fit; a 4th Enter
-    becomes a space with a note; a line "... for Lily" names the file; a layout dragged or nudged past the field is
-    recentred on release (`settle`), the machine centres it anyway. Harness: the Python test server sometimes drops a
-    module request under load (`fonts.js` status 0) and the page never starts; reload.
-  - Re-run fixes (2026-10-30): lettering stitch quality (stream 1). Small script failed the checker on tiny stitches
-    (Great Vibes "Emma" 12 mm 3.2%, towel 3.7%, the 4x4 pouch after Make it bold 2.0%, Ms Madi/Yellowtail "Abbie
-    goes" 12 mm 2.7-3.3%): a sweep of 16 fonts x 5-20 mm x Emma/Makeup/Abbie goes x auto/bold/towel/towel 30 wt
-    (1726 files) failed 549 before, 0 after, tiny 0 in every file. Two sources: `relieve()` dropped the point whose
-    merge was shortest, i.e. a satin's own edge, 0.1-0.2 mm on a tight inner curve (3/4 of them); it now never
-    merges to 0.3 mm or less (else B and C go together). The rest were skeleton knots: `Design.finish({ untiny })`
-    (Design tab only) drops a point that ends a stitch of 0.3 mm or less (Ink/Stitch's minimum stitch length), never
-    a tie-in's or tie-off's. Exactly 0.3 counts: the checker reads x/10 floats, so 0.3 is 0.29999.
-    Junction knots (`knots` in `skeletonEdges`, pieces.js only, the bookmark unchanged): edges under 0.75 stroke
-    between two junctions are contracted to one junction; each was sewn as a full-width column, a little star of
-    satin at script joins. Loose short strokes (`notches`/`notchCaps`: an e's tongue) sew narrower, down to 0.8 mm,
-    where their notch would close under 0.8 mm (Yellowtail's e read as c at 20 mm). Appliqué holes with an
-    inscribed radius under 3 mm get a satin 0.2 mm out (not 0.4), 1.6 mm wide at least, leaving 1.6 mm open
-    (`holeRadius`; Lilita's A counter in BABY was a dot). Auto satin that closes a letter's own loop (over a tenth
-    of the x-height to its middle, under 0.85 mm) says so (`loopsFill`: "Thin line keeps them open, or make it N
-    mm"); flipping auto to a fine line instead left Sacramento names thin at 28 mm. The pouch starter's "Makeup"
-    is 20 mm (at 16 its loops filled). Kerning: Chrome's canvas already applies the fonts' GPOS kern pairs (Quicksand
-    AV -0.09 em, To -0.12); `renderWord` now asks for it (`fontKerning = "normal"`), byte-identical in Chrome.
-    Batch: 400/400 ok; tiny 2510 -> 691 (Design tab 1770 -> 0), stitches -0.7% on 240 changed studio files, trims
-    1721 -> 1719, density <= 24, same-hole 0; 11 of 97 bookmarks and 5 pictures changed only by `relieve` (same
-    stitch counts +-2, bookmark tiny 377 -> 344). Checked, no change: towel minimum agrees with what sews (Great
-    Vibes "Harper" 30 wt: "Make it 37 mm", a/p/e open at 37; the r's curl fills, as allowed). Not done: the dots by
-    READ's stars are the satin round the stars' own points (no stitch outside them); Quicksand M apexes (thinning
-    aims the apex stub between stem and diagonal; re-aiming it along either stroke looked worse); dense columns
-    where 3 strokes and the towel lattice meet (The Smiths' joins: inherent to skeleton lettering, density <= 24).
-  Re-run fixes (2026-10-30): Picture tab (stream 3)
-  - Colours are learned once per picture (`learnColours`, digitize.js) from an 800 px copy of the content box (app.js
-    `LEARN`), never from the working image, then any working image is labelled with them (`labelWith`, nearest of the
-    fine clusters): Size and Turn hoop no longer change threads (turned etsy_1 swapped olive greens for Warm Gray and
-    Lavender). `analyze(img)` = both on one image (the batch). The worker keeps the model per picture/colours/background.
-  - Palette: 24 k-means clusters on flat pixels; background shades set aside (ΔE76 < 8 of the border colour, < 15 and
-    10% of the border, or < 20 and 3%: a shadowed backdrop); the rest merged two at a time, cheapest first, down to the
-    count asked. Cost = CIEDE2000 with kH 0.6 (hue counts more) on colours whose a/b fade out below L 30 (darks read as
-    black), times sqrt(solid area / 0.5% of the ink) capped at 1, where solid = pixels whose 4 neighbours are in the
-    same group (computed per group from bit-masked neighbour sets: a textured white splits into shades none solid on
-    its own). Merges also continue below the count while the cheapest is under `SAME` 7. Each count's palette is the
-    next one's with one colour split, so more colours never loses one. Merging into the background only under SAME.
-    A group whose thread was taken by a bigger one and whose next thread is > max(15, own + 10) off joins the group
-    that took it. The swatch colour is the group's solid pixels' mean (blends turned a yellow "Light Brown").
-    Tried: kL 2 (dark green stems merged into pale leaves), 16 clusters (etsy_2's tansy yellow got none), 2% area
-    weight (a pink flower merged first), hue-weighted thread snapping (Cream Brown for sage, Khaki for yellow).
-    etsy_5: default 4 lost pink and merged yellow into olive grass; now 4 = white/black/grass/yellow, 5+ adds pink, no
-    second black at any count. Default colours 6 (`state.pic.colors`, `DEFAULTS`): the SAME stop keeps simple pictures
-    at what they have (sample flower: 5). The per-group "fold slivers into a neighbour" step is gone (it sent etsy_7's
-    pastel doodles into the background; with merged groups it changed nothing else).
-  - Size = the sewn design's longer side (`picturePlan`): the model returns each colour's extent (pieces over 0.02% of
-    the copy), the page crops to the sewn colours' union (+2% and 3 px), scales it to Size and caps it to the field
-    (the slider's max is the largest that fits this picture in this hoop, turned or not: etsy_5 124 mm, 174 turned).
-    Two messages on a new picture/colour count: measure (the model, `measure: true`), then stitch. etsy_5 at 100 mm
-    was 67 x 47, max 84 x 58; now 100 x 70, 170 x 118 turned; cross-stitch of it is recognisable at that size.
-  - Line drawing: dark colours' (L <= max(35, darkest + 15)) parts no 3 mm disc reaches (`BAND`) are bands sewn once
-    along their centre (own skeleton, spur-pruned at their 90th-percentile width), unless the whole piece is under 6 mm
-    (an eye stays an outline); outlines aren't drawn against a band, nor between colours within ΔE00 15 (a lawn in two
-    greens); thin pieces that are a shade of their main neighbour (into the fabric only specks) or a blend between two
-    colours (to the ink side if one is fabric: grey-edged lettering stays) take the neighbour's colour, decided all at
-    once (chained moves erased etsy_1's pale sprigs); fabric slivers (< 0.6 mm across by closing) between two
-    different colours and enclosed fabric specks < 0.5 mm² join the ink (`closeSlivers`: the white/black halo round
-    Snoopy was outlined as a second line). Runs follow the curve (`followRun` 2 mm, 0.1 mm), points under 0.4 mm apart
-    merged (tiny stitches failed 6 batch files first). Snoopy's outline: two parallel lines -> one.
-  - Filled: thin-line walks under 1.5 mm (dots, each sewn 4x with two locks and a trim) are dropped even beside a
-    bigger piece. Not done: narrow outlines (1-2 mm) as satin instead of tatami (needs a variable-width satin through
-    junctions; the density risk is more than this round should take).
-  - Messages: blank/see-through and one-colour pictures say there's nothing to stitch (`learnColours().empty`); errors
-    carry `code` (small, cross, skipped, empty) and the page adds only advice that can still be followed (a "Make it as
-    big as fits" button below max, smaller crosses above 1.5 mm, "Sew every thread"); the centre's "Choose a picture"
-    is cleared beside an error. The small-details note dropped the hairline count (thin lines are sewn as lines on
-    purpose; it fired on the sample flower) and "fewer colours"; it says a bigger Size helps only below the max.
-  - Turned pictures get the hooping note (steps, done dialog, Sew along, sew sheet notes) like the Design tab
-    (`turnedFile`). Threads list in sewing order, skipped last. Line drawing labels the slider "Colours to trace". A
-    .pes/.pec/.dst chosen as a picture opens in Open a design. Have ready names T-shirts as knits (no fabric selector:
-    the Design tab's fabric changes satin underlay/pull/lettering; a picture's only fabric knob is fill density,
-    already Standard/Dense).
-  - pe900 batch: 125/125 ok, 27 picture files changed, nothing else; studio batch byte-identical. Picture totals:
-    trims 2067 -> 1899, stitches 172k -> 205k (line drawings follow curves: +45-120% stitches each; etsy_4/etsy_8 now
-    sew the white and pink flowers they lost), peak density 24 -> 24. Harness sweep, 6 colours at 120 mm: trims down
-    on 8 of 9 pictures (etsy_8 379 -> 259, etsy_3 365 -> 303, etsy_2 174 -> 117; etsy_5 41 -> 84 because it's now
-    sewn 120 mm wide, not 81). The batch page still sizes by the whole image (`workingSize`), not `picturePlan`.
-- Round 5 persona tests (2026-10-30, new tasks: onesie/tote/patch/owned spools/Sew along on a phone; coasters,
-  On my item, quilt block + appliqué motif, DST colours, Chevron blend patch, copy/paste + save; bad files, letter pairs,
-  big lettering, owned-thread pictures, offline, a11y, sheet 1:1). Scores 7/8/7, no P0. Fixed in 5 worktree streams:
-  - Open tab: `readPES` with a misplaced box: two long-form values are pyembroidery's opening jump (as before), anything
-    else is the first stitches of a file starting at the origin (dense.pes `00 00 01 80` read as 276 x 253 mm of
-    garbage); `endsEarly` tries both. Reader only, writer bytes unchanged. A copy is "Save fixed copy"/`_fixed` only when
-    it passes quality.js; `fixedCopy` tries up to 3 times adding what still failed (never `_fixed_fixed`); `fix()` drops
-    zero-length stitches at any size (long15's hid behind its long stitches). The PE900 steps through 99 colour blocks
-    at most (quality.js `blocks`): `fewerBlocks` joins consecutive same-colour blocks then sorts; a file still over is
-    shown but not saved. DST parts get Brother swatches + Any colour; colour sort is recomputed after colour changes.
-  - Design tab: `cleanPiece` checks/clamps every field on Open saved, paste and the saved state (a crafted file threw a
-    raw TypeError and survived reload). New pieces go inside the biggest frame they fit (`inFrame`) and, on a patch, in a
-    thread that shows (`against`; contrast < 1.6 or the same thread is "hard to see"). `underPatch`: a patch later in
-    the list covers the piece (one-tap "Sew it after the patch"). Initials take up to 12 characters; a name typed there
-    ("Max", or > 3 letters) gets "Sew it as lettering" (`asText`). `main()` (biggest text or monogram) names the file and
-    is what One for each name swaps (initials for monograms); names ZIP `<starter or file>_<N>_names|monograms.zip`, file
-    names deduplicated ignoring case (emma/Emma collide on macOS, Windows and FAT). Letter pairs that push letters into
-    each other warn (`overlapping`: first letter grown by half the satin + 0.3 mm). Copy/paste anywhere but text
-    fields/selects/dialogs; nothing selected copies the whole design. `FACING` motifs are mirrored on one side for deco.
-  - Guide: step 1 says how to hoop, which thread and Start (`compose` returns `hoop`: bare stabilizer for ITH/zip,
-    felt/twill for a patch, the quilt sandwich, else `FABRICS[fab].hoop`); every fabric has ready/hoop/tip/after (knit:
-    trim the cut-away, don't tear it). Patch supplies and finishing (cut out, iron-on or sew on). Owned spools: `far`
-    when > 25 apart or hue/saturation differs > max(15, 0.25 x sat) (white -> Light Blue wasn't flagged); Have ready
-    splits "Your threads" from "To buy". Picture tab says which colours owned threads merged (`owned` from `toPalette`).
-    Brand menu: "Thread names" + "Add spool numbers for"; Threads I own placeholder per brand (`exampleSpools`).
-  - Layout: side by side needs 700 wide AND 560 tall (200 % of 1920x1080 is 960x540: the preview was a 130 px strip);
-    short side-by-side screens (700-1365 x 560-760) are slimmer (1024x600 preview 293 -> 344); header: tabs on row 2 up
-    to 1259 px, one row without the MACHINE label at 1260-1365, no tagline at 1366-1480. The piece list is one Tab stop
-    (`rove`: arrows, Home/End, Delete); touch shows a word under each row button. The View menu closes after a choice.
-    `tests/cdp.mjs forced on|off`.
-  - Stitches (37 studio files changed, stitches -2.6 %, no file gained stitches or trims, peak <= 24; pe900 batch and
-    bookmarks byte-identical): stages carry `solid` (closed loops, even-odd) and quilting keeps 2.5 mm clear of them
-    (rings ran under an appliqué heart; a solid the quilted frame sits on is ignored); `pieceStages` places `cut` with
-    the piece (cut outlines stayed in local coordinates). Carving is per piece: all of it only when its median column
-    width is >= `CARVE_W` 3.4 mm ("Sam" at 16.5 mm had only its m carved; Zoe blend trims 10 -> 3). Print corners
-    (Design tab, gated on `knots`): junction self-loops under one stroke dropped; a corner stroke (others > 120° away,
-    <= 2.6 strokes, narrowing) is shrunk by satin / stroke and sewn as wide as the point is across (`geom.satin` `wAt`),
-    centre-run underlay: Quicksand WILD at 43.5 mm had 4-5 mm square stubs (covers the old "M apex" item).
-  VM: FITS 24/24; PE-DESIGN opened the blend patch, arched Quicksand, JKM coaster, Max patch, quilt label, dense_k and
-  long15 fixed copies. Skipped (owner's rule): 1 px source lines in Filled pictures, On my item photo kept across
-  starters, undo history across reloads. Open: on the unchanged Patch starter + Lettering still lands below JD.
-- Round 6 persona tests (2026-10-30, new tasks: stocking cuff, bandana, napkin initials, an emailed PES, owned
-  spools on a phone; blanket arch + appliqué, turned tea-towel names, 4x4 pouch monogram, colour sort, etsy line/fill,
-  two-appliqué quilt block; hostile files, print/script audits, layout stress, hostile names). Scores 8/7/7, no P0, 6 P1:
-  - Design tab: new pieces go through `spotIn` (ui.js): the biggest unturned frame's front (`frontPanel`: a zip pouch's
-    front is below its topstitch, zip line + 7 mm), middle first, then below/above/beside what's in it, shrinking to
-    `least(p)`; an in-the-hoop frame never gets a piece outside it (a 4x4 pouch monogram split the design in two). A
-    piece on a patch gets a contrasting thread wherever it lands. Turned names batches turn every file like the design
-    (they were upright while the steps said turned). Names are drawn at the design's letter scale (`inkHeight`: "emma"
-    with no capital came out twice "Emma"); fewer monogram initials keep the monogram's width (`monoSize`); `safeName`
-    suffixes Windows device names (CON_.pes); names past 40 are listed as left out. Script arched up: x-height <= 0.24 x
-    radius; first bend `archStart` (~30 % round). Wave/Bridge/arches say they join lines.
-  - Layout: a piece drag holds the view's fit (`state.hold` <- `draw`'s `tf.base`, passed back as `opts.base`) until
-    release (the view refitted mid-drag and the piece ran 2-3x faster than the pointer). A design reaching past 204.8 mm
-    from its centre overflows the PEC box's 12 bits and reads back shifted (too-big preview only): `unwrap()`. Escape or a
-    tap on empty preview deselects. `draw(..., { corner })` keeps the hoop clear of the zoom pad.
-  - Open tab: `designBlockAgrees` (reader) flags a v6 PES whose design block isn't its PEC block: threads from the PEC
-    palette, saved as the machine sews, plain warning. quality.js fails a PEC thread count that isn't the block count
-    ("colours") and a disagreeing design block ("block"); the download dialog judges the saved bytes. `blockThreads`
-    keeps one thread per block (the writer lists every thread in the PEC header). `landJumps`: a first stitch followed by
-    one over 12.1 mm away becomes a jump. A resize alone is "Save resized copy". Chips: machine name, then "the file
-    calls it X" (not a number, same name, or > ΔE 70 off).
-  - Guide: a same-thread pause says "Keep the same thread on"; Sew along step 1 has its own Have ready list
-    (`#along-ready`); `fabricTip()` says when the fabric changes nothing (patch, ITH, quilted: `ownBase()`); step
-    instructions use `--ink` (red is for warnings); the sew sheet hatches the appliqué fabric outlines.
-  - Stitches (39 studio files, +0.4 % stitches, trims level): print corners are the ink width minus (stroke - satin) /
-    cos(angle), stopping at 0.4 mm (round 5's shrink by satin/stroke plus a 0.8 mm stop double-shortened points);
-    loose ends are `decurl`ed and cut onto the font's own end line (`endShape`/`endCut`, `geom.satin` `shape`); each
-    side stays within 0.15 mm of the ink (`sideClip`); `untangle` won't merge junctions over 2.4 knot lengths apart.
-    Josefin "AVWMNK vwmxyz" points > 0.8 mm outside the ink: 133 -> 0 at 40 mm; all print fonts < 0.75 mm. Snowflake
-    redrawn (reads from ~15 mm). Quicksand's rounded V/M bottoms still stop short (one bent stroke, no corner).
-  - Pictures (20 files: trims 1798 -> 1701, stitches -12 %, peak <= 24): a group's colour is its solid pixels' own mean
-    (cluster means took in blends: etsy_1's pinks went grey); thread snapping charges grey threads x(1 + 0.08(C - 4))
-    for colours over chroma 4 and other hues from 35° to 90° off (sage -> Leaf Green, dusty blue -> Sky Blue, not Gray);
-    merging hues over 45° apart costs up to 30 % more; a taken thread can move the taker once; design colours skip the
-    background's thread unless within SAME. Picture fills stop travelling through a 0.5 mm cell crossed 20 times
-    (`WORN`; etsy_8 hit 72 hits/mm² in a neck). Line drawing has a thread picker (`opts.line`, Auto = darkest).
-  Not done: combining same-thread appliqué stages (6 pauses could be 3), owned spools as swatches, dusty pinks
-  (chroma ~6) still Warm Gray, the etsy_5 4-colour lesson doesn't hold (grass and yellow merge).
-- Round 7 persona tests (2026-10-30, new tasks: teacher tote, first-Christmas ornament, a photo, undo storms, 4x4 fit,
-  share; 12-bib shop batch, key fob initials, felt mug rug, combined bought files, appliqué ABC in 3 fonts, a two-hooping
-  banner; round-trip fidelity, size-extreme lettering audit, picture palettes, keyboard flows, placement stress).
-  Scores 8/7/7, no P0, 4 P1 (all fixed):
-  - Design tab: when `spotIn` finds no room, `freeRoom` takes the nearest free spot in the hoop (or an in-the-hoop
-    project's front), the layout still one hooping, shrinking to `least`; otherwise nothing is added and a toast says so
-    ("Add it anyway" outside in-the-hoop projects is the only way adding a piece makes two hoopings). 15 adds had stacked
-    12 pieces on one spot with one warning. The "runs into" note names every pair (`collisions`/`touchingAll`). Starters
-    are fitted to the chosen hoop when picked (`fitHoop(false)`; four opened Too big on 4x4). Too big and not
-    splittable: `twoHoopings` offers the hoop turned, or straight lettering split at a middle word gap ("Sew it in two
-    hoopings"), else says why. `monoSize` grows only while CLEAR of the frame. Names batches keep bold (a half-mm walk
-    back from the last bold size; Bold at >= 85 % of the design's x-height); a thin line left is captioned. Arch
-    toggles keep the word's place. Tall frames offer "Turn it to run up the frame" (rot -90: key fob JMK 10 -> 16.5 mm).
-    `fonts.js` `min` is a per-font x-height used by `minSize`; "Put it on two lines" when two lines are >= 25 % bigger.
-    `cleanPiece` clamps sizes to 180; text layout uses loop min/max (`Math.min(...)` overflowed on 5000 letters).
-  - Guide: a step's "what you do" is one sentence per action, and three or more show as numbered sub-steps (`youHtml`
-    in sheet.js) everywhere. `hang` frames list the ribbon. Split designs: the rehooping is a `{ rehoop: true }` entry,
-    not a step; the slide distance comes from the two files' centres (`crossStep`); pauses are counted per file. The
-    share text carries the steps (`shareText`, <= ~1800 characters). The laptop tier hid every field hint, fabric tips
-    included (now kept in `.sewn-on`).
-  - UI: a keyboard press that redraws its control moves focus to the nearest surviving control (capture-phase click
-    listener, `detail` 0 only); chips list every block in sewing order; stops read "thread changes" and "pauses in the
-    same thread" on every tab (`stopsFact`/`stopCounts`/`stopWords`); a size chip says "Hoop turned" or "As the
-    machine shows it". `fileBlocks` gives a block the exact Brother colour of the file's own thread where the writer's
-    nearest match would differ (ufront's Purple became Light Lilac). Toasts sit over the Download bar on phones and
-    swallow taps for 700 ms as they fade.
-  - Stitches (pe900 batch and bookmarks byte-identical): Thin-line corner strokes aren't sewn, the strokes run on to
-    where their centre lines meet (`pointed`: a 6 mm A read as Y). `decurl`/`endShape` refinements keep Josefin's flat
-    v/w tops <= 0.31 mm outside the ink at 40 mm (measure on the engine's own mask with locks: the tester's 1.17 mm was
-    image misfit). Appliqué letters keep >= `GAP` 4.9 mm between neighbours (`spread` in outline.js: 1 mm of fabric
-    between satins; ~1 trim per gap per stage); the batch's Alfa cases are now AB_58, BABY_27, Q8_42.
-  - Pictures (21 files, stitches -4.6 %, peak 24): hue families at Lab hue 40/85/109/170/290/345 (where Brother's names
-    change) add half the hue penalty for a thread of another family; threads under chroma 10 count partly grey; a
-    merged colour's thread minimises its parts' solid-pixel-weighted costs (capped at 20), not the nearest thread to the
-    mean (Russet, Khaki, Dark Fuchsia compromises); merging across families costs x1.7, hued vs grey x1.5, big colours
-    up to x1.5. Size is measured on the sewn result and rebuilt by asked/got when > 0.4 mm off. The narrow-gaps note
-    needs >= 2 mm² and 1.5 % of the sewn area.
-  Open: Alex Brush's b loop is lost by the skeleton at every size ("Abbie" reads "Avvie"); O'Neil's apostrophe is
-  bridged into the O (core/text.js: don't bridge to punctuation); etsy_7's pastel lines (k-means learns flat pixels
-  only); etsy_4's greyish-lavender title; pe900_check's max density reads lower than a full offset scan below the limit
-  (pass/fail unaffected); combining same-thread appliqué stages.
-- Round 8 persona tests (2026-10-31, new tasks: dog-bed name + paw, fleece baby blanket, a child's crayon drawing,
-  wrong thread mid-sew, reload/share; ring-bearer pillow arch on an oval, towel monogram set 4x4/5x7, knit appliqué,
-  owned Isacord spools, words on a bought design, 8 coaster names; non-lettering satin/fill audit (184 files),
-  international names, a two-colour logo picture, keyboard + dark + 960x540, crafted files, 15-piece performance).
-  Scores 7/7/6, no P0, 8 P1 (all fixed in 7 worktree streams):
-  - Missing letters: `js/core/glyphs.js` is each bundled font's character map (regenerate with `tests/make_glyphs.py`
-    after adding a font); everything past U+024F was flagged, so Vietnamese and Cyrillic names were refused in fonts
-    that have them. `safeName` transliterates Greek, Cyrillic and Hebrew (they all saved as design.pes).
-  - `freeRoom` re-checks the half-mm-rounded spot: rounding took a full 4x4 layout to 95.08 mm in a 95 mm field, so
-    every later add counted as a second hooping and went outside the hoop.
-  - File pieces resize in Design your own: `orig` + `scale` (0.5-2.5), re-stitched by the doctor's `fix` in a worker
-    (`resizeFile`/`restitchFiles`); `pending` holds Download; Fit to hoop resizes them. Open tab "Add words to this
-    design" (`studio.addWords`) starts a design from the file with lettering under it.
-  - Owned spools: Threads I own shows the brand's chart as swatches in colour-card order (`chartSpools`), searchable;
-    the numbers box stays the record. The Design tab adds a "Yours:" swatch row (`api.ownedSpools`): the piece takes
-    the spool's colour, the file still carries the nearest Brother PEC colour.
-  - Open tab: a PES whose own bytes break a rule the machine needs (`HARD` in quality.js: thread count not one per
-    block, palette 62-64 unless its thread names say appliqué/placement/tack-down, a disagreeing design block, > 99
-    blocks) is never saved as it came: rewritten as a fixed copy, or, past 99 blocks with no `fewerBlocks` fix, shown
-    but not saved (a 121-block file had been saved byte for byte). `setView` reruns `sizeUI()` (Largest that fits
-    followed the old hoop). The empty Open preview has a "Choose a design file" button (below the fold at 960x540).
-  - Lettering that won't read once sewn (too small, closes up on towel/fleece, loops fill) is listed beside Download
-    (`v.warn`) and in the done dialog, which then isn't green; monograms are checked per initial (`eachInitial`).
-    Steps name the thread ("Change to Brother Red", `threadNames`/`nextThread`); step 1 is one sentence per action
-    (numbered sub-steps); Sew along has "Sewed with the wrong thread?" (its stitch-back wording is from memory of
-    Brother manuals, not checked on a PE900); the turned-hoop note has a drawing (`TURN_PIC`, no text in it). The split
-    download dialog used an undefined `cc` and never opened. No "stops" wording left anywhere.
-  - Layout: on stacked layouts the too-big message sits under the hoop (it squeezed the hoop to 35 px) and is
-    repeated by the piece's controls (`#st-big`); its Fit to hoop runs in place (a programmatic `.click()` has detail 0,
-    which the focus-restore listener took as a key press and scrolled 1185 px). "Sewing on" sits under the starters.
-    One-tap fixes added: "Move it below X" (`moveAway`), "Make the frame N mm" (`frameFor`), 2/3 lines or a turned hoop
-    (`lineChoice`), a bigger hoop offers Fit to hoop, the first frame wraps what's there 6 mm inside, a starter over a
-    design says "Replaced your design… Undo". Names prefer lettering with letters over a date. Thread chips repeat a
-    thread the design returns to (up to 12 changes).
-  - Speed (byte-identical): the slow part of a 15-piece patch design was `carve`, not quilting: cached per patch
-    shape, per piece by stitch hash, and per final hole mask, so typing and moving uncarved pieces never refill. `bulk()`
-    (a multi-line text drawn again as one line) no longer holds up the preview (`bulkReady`, checked 350 ms later).
-    Font change blocked the select 785 ms -> 1 ms; a text drop 1.16 -> 0.42 s.
-  - Stitches (102 studio files; pe900 batch identical): the satin frame's edge walk isn't closed, so it runs straight
-    into the zigzag (was a 2.2 mm stitch back, lock, trim, 2.1 mm jump at 12 o'clock); bold laps and tack-downs go back
-    from the same start (`back(e)`; a plain reverse on a square was two trims and two 55-61 mm jumps). Quilting sews
-    before a satin/bold/line/appliqué border (`border: true` stages), led onto the frame line by `toFrame`, and the
-    border starts where it stopped (`startAt`): quilted trims 81 -> 58, short jumps 13 -> 1. Chevron (6-row arms, half a
-    stitch) and Wave (quarter stitch over 16 rows) patches now show. Motifs warn: Filled < 25 mm, Outline/Appliqué
-    < 30 mm. Josefin's w at 40 mm is narrower/shorter than the ink only because the satin is capped on the centre line.
-  - Pictures (13 files): line drawing sews a whole piece that is one even stroke once along its centre, any colour
-    (width 2 x median depth, 20th pct >= 0.6 x 80th, <= 4 % of the longer side within 3-6 mm, >= 3 widths long or as
-    wide as the colour's strokes); part-by-part decisions half-outlined a logo's 4 mm letters (12 tiny stitches, failed)
-    and a crayon drawing's corners. `lineEnds` carries loose ends to the ink's edge (line drawing only). Filled keeps a
-    mark >= 2 mm long, 1.5x longer than wide, within 2 mm of a bigger piece of its colour (apostrophes). `lostLines`
-    says when a line finer than thread is left out; `contentBox` downsamples smoothly (1 px rules vanished). Busy
-    pictures' trims are their separate shapes (etsy_8: 260 shapes, 80 already joined by hidden travel): no safe win.
-  Batch 401/401 ok; VM: FITS 115/115 (every changed file); PE-DESIGN opened quilt stipple, square bold, heart appliqué,
-  mug rug, chevron patch, etsy_4 line drawing, ornament. Open: "Add words" once left focus on the page (not
-  reproduced); the appliqué tack-down now ends 1.4 mm from the edge walk's start (2 more short jumps across a pause).
-- The preview is the file: `setView` decodes `v.bytes` with `readEmbroidery` and draws/counts/fit-checks that, and
-  thread labels come from the file's own PEC palette.
+## Repo map
+- `index.html`, `css/app.css`, `sw.js`, `manifest.webmanifest`; `js/app.js` (tabs, state, `setView`, downloads).
+- `js/core/`: `formats.js` (PES writer, readers, `validatePES`), `threads.js` (PEC palette), `design.js` (`Design`,
+  locks, `finish`), `geom.js`, `raster.js` (skeleton, stroke graph), `text.js` (`renderWord`), `fonts.js`, `glyphs.js`,
+  `digitize.js` (pictures, `fillPolygon`), `bookmark.js`, `brands.js`/`brandcharts.js`, `machines.js`.
+- `js/studio/`: `pieces.js` (pieces, `compose`, fitting, `FABRICS`), `ui.js` (editor, starters, warnings, one-tap
+  fixes), `outline.js`, `quilt.js`, `motifs.js`. `js/doctor.js` + `doctor-worker.js` (Open tab fixes), `quality.js`
+  (the checker's rules), `sheet.js` (step text, sew sheet, cut file), `render.js` (`draw`), `worker.js`, `zip.js`.
 
-## Gotchas
-- **Proprietary, not open source** (2026-10-30): `LICENSE` is all rights reserved to 4Gables (a trade name: no
-  personal name anywhere on the site or in the code). Every shipped file (js, css, sw.js) starts with a `/*! Needleworks (c)
-  2026 4Gables ... */` line; new files get it as well. The page has a
-  comment, `meta copyright`, `rel=license` and one footer line. Only the fonts are third-party (`THIRD_PARTY_NOTICES.md`). The repo stays public (GitHub Free can't serve Pages from a private repo, and the served JS
-  is readable anyway).
-- **No one else's code or data gets committed: clean room only** (project rule, 2026-10-30). Nothing written by
-  someone else (code, ported code, icon/SVG paths, data tables, images) is committed, whatever its licence. Learning
-  from other projects is encouraged, but only by the clean-room method:
-  1. One agent reads the outside source and writes a spec in `docs/` with behaviour, byte layouts, formulas and facts
-     in prose and tables. No code, no line-by-line paraphrase.
-  2. A separate agent that has never seen the source (not in its context, not opened, not from memory) implements
-     from the spec alone, in its own structure.
-  3. Tests prove the result against the spec or an outside oracle. Running an outside tool as a test oracle
-     (pyembroidery in `tests/`, installed from pip, never vendored) is fine.
-  - Ideas, algorithms and numbers from papers, manuals, docs and issue threads may be used directly (credit them in a
-    comment, e.g. "Ink/Stitch's contour underlay"). Copying their code or wording may not.
-  - Facts such as thread colours come from the maker's own published source, cited in the file's header, never from
-    another project's table.
-  - Drawings are drawn here, without looking at other icon sets.
-  - The spirit: if we can build it ourselves, we build it ourselves. Using someone else's code or asset needs a good
-    reason:
-    - it's clearly better for our customers (a hand-designed typeface beats one we'd draw), or
-    - it's the industry standard (people expect that exact thing, and our own version would be a worse copy).
-  - Exception, only with such a reason: free assets under a permissive licence (OFL, MIT, Apache). They may be
-    committed as is, each with its licence text beside it and a line in `THIRD_PARTY_NOTICES.md` saying why we didn't
-    make our own. Today that's the bundled fonts. Code, ported code and data tables never fall under this exception.
-  - The 2026-10-30 clean-room round replaced `formats.js`/`threads.js` (was a pyembroidery port, spec in
-    `docs/formats-spec.md`), `motifs.js` (was Phosphor) and `brandcharts.js` (was Embroidermodder).
-- **PES writer is locked** (2026-10-29, after Ashley's PE900 failure). `writePES`/`writePEC`/`pecEncode` output is
-  frozen by `tests/fixtures/golden/*.pes` (byte-for-byte, checked in CI along with `pe900_check.py`). Browser and
-  Node produce identical bytes (verified in Chrome). New features (design tools, UI) build stitch patterns and hand
-  them to `writePES`; they never touch `js/core/formats.js`. Only change the writer to fix a proven machine problem,
-  then redo the Brother checks below before regenerating the golden files.
-- PEC design box (the cause of Ashley's clipped files, 2026-10-27): Brother machines read the two 16-bit fields after
-  `0x1E0, 0x1B0` in the PEC stitch block as the design box's top-left relative to the origin, big-endian
-  `0x9000 | -minX`, `0x9000 | -minY`, and start decoding stitches after them. pyembroidery writes its opening jump
-  there instead, so machines drop that jump and show the design shifted, clipped to about half (her PE900 showed the
-  94.9 x 36 mm School of Medicine file as 1.84" x 0.69"). We write the box, then the opening jump. `readPEC` decodes
-  the machine's way; files whose stitches leave the box get `misplaced` (decoded as meant), `validatePES` refuses
-  them, and opened ones are rewritten fixed. Every Brother-made sample fits its box; flower_ludd, star_badge, wreath
-  and pyembroidery's own output don't. Checked 2026-10-29 in a Windows VM: all 380 PES files that ship with Brother's
-  PE-DESIGN 11 trial have the box exactly at the stitch minimum, as ours now do; only our 3 old files failed.
-  PE-DESIGN itself reads only the PES design block (PEC-only files open as an empty page, and an old file with a
-  good design block but a bad box opens fine), so it can check the CEmbOne/CSewSeg block but not the PEC bytes the
-  machine sews. Same bug, verified on hardware: kircherlabs/embroidery-studio#4,
-  nkymut/p5.embroider#42.
-- PES is written as full v6 (header + thread chart + `CEmbOne`/`CSewSeg` design block + PEC + colour addendum) like
-  pyembroidery `write_pes(..., {"version": 6})` plus the box above. The design block is what PE-Design opens; the
-  machine sews the PEC block, and PEC-only (truncated) files are fine on it if the box is right. Coordinates are
-  rounded half-to-even like Python's `round()`; `tests/formats.test.mjs` asserts output byte-identical to
-  `tests/fixtures/ashley_v3.pes` and `multi.pes` once the 4 box bytes are stripped (fixtures written by
-  `tests/make_fixture.py` from the `*_commands.json`, full float precision). We split jumps over 121 mm
-  (pyembroidery allows 204), so fixtures keep jumps shorter.
-- PE900 proof: `tests/pe900_check.py` re-reads PES files with pyembroidery plus its own PEC byte walk (no shared code
-  with formats.js) and checks every stitch sits inside the PEC design box (decoded the machine's way), satin coverage (same-edge gap of long zigzag runs <= 0.6 mm; `--writer-only` skips it for the frozen golden files), trims and short jumps (reported), the PES design block matches the PEC stitches, hoop fit, PEC size field, toggle bytes, longest stitch, tiny stitches and needle hits per
-  mm² per colour block (limit 24 = densest spot in sold designs; script loops crossing on a tight curve reach 23).
-  `tests/browser/pe900_batch.html` served by `tests/batch_server.py OUT` builds a ~110-file sample (every font × 3 names × decorations
-  on/off, blank, 4 pictures × 3 settings incl. turned) with the site's own code and saves the PES files for the checker. Run both after any engine
-  change. The three files emailed to Ashley are in `tests/external/emailed/`.
-- **Brother diff: our PEC encoder against Brother's** (2026-10-30, `tests/brother_diff_core.js`). PE-DESIGN only
-  reads the PES design block, and the machine sews the PEC block, so "PE-DESIGN opens it" never tested the bytes that
-  matter. The trial can't save, so we can't hand it a design and compare its PEC with ours. Instead:
-  - Every Brother-made PES already holds Brother's encoding of its stitches. We read those stitches, write them again
-    with `writePES`, and compare PEC blocks field by field: palette, the stitch block's fixed fields, design box, size,
-    the stream byte for byte, and, where bytes differ, the machine's holes, jumps, trims and colour changes.
-  - Corpus: the 379 PES files that ship in PE-DESIGN 11, gathered into `C:\bro` in the VM. They can't come out:
-    InstallShield encrypts the installer, the VM has no way back to the Mac, and macOS blocks reading UTM's disk.
-    So it runs in the VM. `sh tests/vm/run.sh` builds `tests/vm/make.mjs`'s page (formats.js bundled as one classic
-    script), swaps it in as the VM's CD and opens it in Edge with `--allow-file-access-from-files` and `?dir=C:/bro`.
-    `out/vm/result.png` shows the verdict.
-  - Node: `node tests/brother_diff.mjs tests/external/pes` (ursula, gnome, ufront are Brother-made).
-  - Run it after any change to `formats.js`, and before files go to Ashley.
-  - First result: 378 compared, 227 byte-identical, 0 sew differently. Every byte difference is one of these:
-    - Brother keeps stitches up to 15.7 mm whole; we split anything over 7 mm.
-    - **We trim at every jump**: the writer has no uncut jump (flag 0x10). 78 Brother designs jump without cutting
-      where ours cut (more trims, never a missed one).
-    - The palette differs in 28: our thread choice. The sample's thread chart doesn't always match Brother's codes.
-    - Brother's size field is the page (120 x 170 mm) on 3 lace/tutorial samples; ours is the stitches' extent.
-  - Open question for a real machine: whether the PE900 also cuts 0x20 trims of 5 mm or less. The "N short jumps to
-    snip" count assumes it doesn't.
-- PEC palette: two colours never share a Brother thread (pyembroidery's rule), so a colour can get its second-closest
-  thread. Always label threads with `machineThreads()` (or an opened PES's own `pec` bytes), never plain
-  `nearestBrotherThread()`, or the site and the machine's screen name different threads. Our order is block order;
-  pyembroidery's is Python set order, so files with competing colours differ from pyembroidery only in those bytes.
-- Digitize shrinks a picture that lands over the hoop field (fill/satin edges overshoot the image) instead of erroring.
-- Pictures: every shape 1 mm wide or more is a solid tatami fill that follows its outline (skeleton satin broke letter
-  corners into ragged columns); only hairlines under 1 mm get a centre-line run. k-means clusters within ΔE 6 are
-  merged, and any colour within ΔE 8 of the border colour is background (a white logo box on an off-white page was
-  stitched as "Brother White"). Moves between pieces jump instead of sewing across open fabric. Within one fill,
-  `routeFill` connects the sections with travel run inside the shape through rows not sewn yet (A* on 0.5 mm
-  cells, finished rows cost 6x, at most 2 mm on top of finished rows; sections in row order with a lookahead that
-  may reverse one), so the fill covers it (Ink/Stitch's tatami travel): trims -75% and short jumps -82% across the
-  batch pictures, thread coverage unchanged. Travel stitches 0.6-2.5 mm; `relieve()` may merge stitches up to 4 mm. Pictures are
-  sampled at 8 px/mm (5 lost the notches of small lettering); thin shapes (< 2 mm) get 0.05 mm pull, not 0.15, so the
-  gaps between small letters stay open. Notches under ~0.5 mm can't be kept by any thread: open them in the artwork.
-- Picture colours overlap (second study, 2026-10-29): each shape's fill grows `OVERLAP` 0.35 mm under the colours
-  sewn after it (never into background or earlier colours), so thread pull can't open fabric at a join. Specks under
-  1.5 mm² are dropped first and each shape grows on its own (BFS, never touching another shape): growing the raw mask
-  merged scattered specks into big shapes filled under the next colour (stitches x2, trims x4). Neighbouring colours
-  alternate fill angle (base, base + 90°). `routeFill` charges +2 per earlier travel through a cell, or travel funnels
-  through one spot (50 hits/mm²). Net on the batch pictures: trims down, stitches +1-18%, max density unchanged.
-  Ashley's School of Medicine file has no touching colours, so it gains nothing; it wasn't resent.
-- Fill density (`DENSITY` in digitize.js): Standard 0.4 mm rows (the 40 wt norm; the default since 2026-10-29) or
-  Dense 0.35 (felt, patches, dark fabric; Design-tab patches always use it). 0.3 fails the PE900 check
-  (row links become < 0.3 mm stitches). `digitize()` also returns `fine`: area of gaps < 0.5 mm that stay narrow over a
-  length (clusters >= 0.3 mm²; corner tips don't count) and the count of hairline (< 1 mm) shapes. The site warns at
-  >= 0.8 mm² or >= 5 hairlines.
-- Download names are ASCII only (`safeName`): the machine's USB reader may not show accented names.
-- Desktop layout fits the window (min-width 861px, or 700px when at least 560px tall: tablets, 800 x 600): body is
-  100dvh with no page scroll; only `.controls` may scroll on short screens (it's `position: relative`, or an off-screen
-  file input made the page 869-970 px tall), and a max-height 900px tier hides ledes/captions. Stacked layouts (phones,
-  landscape phones, 200 % zoom) scroll normally; the preview is first in the HTML so Tab follows what's seen.
-- Thread names come from the 64-colour Brother PEC palette with pyembroidery's red-mean distance; that's what
-  the machine itself maps to, so a dusty pink can legitimately show as "Gray".
-- The fonts after Meow Script are free (OFL/Apache) lookalikes of popular embroiderydesigns.com samples; the
-  sample is named in the font's `note`. The store's own PES letters aren't used (paid, 1–2 letters per sample).
-  To try more, add an `@font-face` and look at `tests/browser/fonts.html?name=<word>` (every font, stitched);
-  reject fonts whose stitched letters come out unjoined or with spurs (Petit Formal, Comforter, Damion did).
-- Script fonts render via CSS `@font-face` families named `NW <Font>` (local WOFF2 in `fonts/` (converted from the OFL TTFs with fontTools; stitches byte-identical), OFL); the
-  lettering engine needs `document.fonts.load()` before drawing.
-- `tests/external/` (gitignored) holds third-party PES/DST samples and Etsy images used for manual testing, with
-  pyembroidery read oracles in `tests/external/oracle/`.
-- Every download goes through `validatePES()` (js/core/formats.js): re-reads the bytes and requires the same needle
-  movements as the source design (PEC's zero-length anchor stitches after jumps are ignored), an END marker, enough
-  threads, colour-change toggle bytes alternating 2,1,2… (what Brother writes; real files follow it), and fit in the hoop field (less the 2 mm margin,
-  like every other check; it used the whole hoop until 2026-10-29). Validation only: the written bytes are unchanged.
-  Opened PES files are offered as their original bytes after the same structural checks. Tests: re-encode of all
-  samples, 300 fuzz designs, and 50 byte-flip corruptions must all behave.
-- Hosting: 4gables.com is the `4gables/website` repo's custom domain (a *project* site). Other repos only appear under
-  4gables.com/<repo>/ if the org site repo is named `4gables.github.io` and carries the custom domain.
+## Hard rules
+- **Proprietary.** `LICENSE`: all rights reserved to 4Gables (a trade name; no personal name anywhere on the site or
+  in the code). Every shipped file (js, css, sw.js) starts with `/*! Needleworks (c) 2026 4Gables ... */`, new ones
+  too; the page has a comment, `meta copyright`, `rel=license`, a footer line. Only the fonts are third-party
+  (`THIRD_PARTY_NOTICES.md`). The repo stays public (GitHub Free can't serve Pages from a private repo).
+- **Clean room: no one else's code or data is committed**, whatever its licence (code, ports, icon/SVG paths, data
+  tables, images). Learn from other projects only this way:
+  1. One agent reads the source and writes a spec in `docs/` (behaviour, byte layouts, formulas, facts; prose and
+     tables, no code, no line-by-line paraphrase).
+  2. A separate agent that has never seen the source implements from the spec alone, in its own structure.
+  3. Tests prove it against the spec or an outside oracle (pyembroidery from pip in `tests/`, never vendored).
+  - Ideas, algorithms and numbers from papers, manuals, docs and issues may be used, credited in a comment
+    ("Ink/Stitch's contour underlay"); their code or wording may not. Thread colours etc. come from the maker's own
+    published source, cited in the file header. Drawings are drawn here, without looking at icon sets.
+  - Someone else's asset needs a reason (clearly better for customers, or the industry standard) and must be a
+    permissive free asset (OFL, MIT, Apache), committed as is with its licence and a line in
+    `THIRD_PARTY_NOTICES.md` saying why. Today: the fonts. Code and data tables never qualify.
+  - Replaced this way: `formats.js`/`threads.js` (a pyembroidery port; spec `docs/formats-spec.md`), `motifs.js`
+    (Phosphor), `brandcharts.js` (Embroidermodder).
+- **The PES writer is locked.** `writePES` output is frozen byte for byte by `tests/fixtures/golden/*.pes` (CI);
+  browser and Node write identical bytes. Features hand stitch patterns to `writePES` and never touch
+  `js/core/formats.js`. Change it only to fix a proven machine problem, then redo the Brother checks before
+  regenerating the golden files.
+- **PEC design box.** Brother machines read the two 16-bit fields after `0x1E0, 0x1B0` in the PEC stitch block as
+  the design box's top-left (big-endian `0x9000 | -minX`, `0x9000 | -minY`) and decode stitches after them.
+  pyembroidery writes its opening jump there: a real PE900 showed the design shifted and clipped to half. We write
+  the box, then the opening jump (all 380 PES files in PE-DESIGN 11 have the box at the stitch minimum). The reader
+  decodes the machine's way; stitches outside the box = `misplaced` (read as meant: two long-form values are an
+  opening jump, else the first stitches of a file starting at the origin), refused by `validatePES`, rewritten when
+  opened. PE-DESIGN reads only the PES design block (`CEmbOne`/`CSewSeg`), so "PE-DESIGN opens it" never tests the PEC
+  bytes the machine sews. Same bug: kircherlabs/embroidery-studio#4, nkymut/p5.embroider#42.
+- **PES layout:** full v6 (header, thread chart, `CEmbOne`/`CSewSeg`, PEC, colour addendum) as pyembroidery
+  `write_pes(..., {"version": 6})` plus the box; coordinates half-to-even (`pyRound`); stitches over 7 mm and jumps
+  over 121 mm split; every jump written as a trim (no uncut-jump flag 0x10).
+- **Every download goes through `validatePES()`**: the source's needle movements (PEC's zero-length anchors after
+  jumps ignored), an END, enough threads, toggle bytes 2,1,2… (as Brother writes), fit in the field less 2 mm.
+- **PEC palette:** 62-64 are appliqué codes on Brother machines, not pyembroidery's Orange/Cream Yellow:
+  `PEC_MATCH` excludes them (inkstitch/pyembroidery#140). Two colours never share a thread, so label threads with
+  `machineThreads()` (or an opened file's palette), never plain `nearestBrotherThread()`, or site and machine disagree.
+  Red-mean matching (`colorDistance`) is what the machine shows (a dusty pink can read "Gray"). Order = block order.
+  Thread descriptions in the file are ASCII.
+- **Every cut is locked** (a trimmed thread works loose: PEmbroider#105). `Design.tieOff()`: 0.7 mm back and forth
+  along the last line before each trim, colour change and the end. Tie-ins: 0.7 mm toward the first point over 0.3 mm
+  away (repeated points made zero-length tie-ins). One hit of each lock goes 0.35 mm aside toward the stitches it
+  locks (`inward`): no hole takes three hits, and it hides.
+- **Short jumps:** the PE900 never trims a jump at or under its "jump stitch not to trim" setting (5 mm lowest,
+  manual p.38), so 1-5 mm jumps stay as loose thread. Not sewn as connectors (lines between print letters): counted
+  ("N loose threads to snip", `shortJumps`), both ends locked. `Design.path` jumps from over 2 mm.
+- **24 needle hits per 1 mm square per colour block**, at any 0.1 mm grid offset (the machine's grid isn't ours):
+  the densest spot in sold designs. A pause between two blocks of one thread (STOP) starts a new block.
+- **Checker rules** (`quality.js` = `pe900_check.py`): longest over 12.1 mm; tiny (0.3 mm or less in whole 0.1 mm:
+  float 0.3 reads 0.29999) over 2 % bar the first 6 after a jump/trim/colour change; same hole over 1 %; density over
+  24; satin same-edge gap over 0.6 mm; over 99 colour blocks (the PE900's limit); PEC thread count not one per block;
+  design block disagreeing with PEC.
+- **Hoops** (`machines.js`): fit the field minus `MARGIN` 2 mm. PE900 5x7 = 130 x 180 mm, 4x4 = 100 x 100 mm.
+- **Download names are ASCII** (`safeName`: transliterates Ł ø ß æ œ đ þ, Greek, Cyrillic, Hebrew; `CON_.pes` for
+  Windows device names): the machine's USB reader may not show others.
+- **The preview is the file:** `setView` decodes `v.bytes` with `readEmbroidery` and draws, counts and fit-checks
+  that; thread labels come from the file's own palette.
+- **Stitch changes ship only after** both browser batches pass `pe900_check.py`, the VM check passes and no rule
+  above is broken. UI-only changes don't need the VM.
+
+## Stitch model (`design.js`, `geom.js`)
+- mm while designing; stitches `[x, y, cmd]` in 0.1 mm, y down. STITCH 0, JUMP 1, TRIM 2, STOP 3, END 4,
+  COLOR_CHANGE 5.
+- `Design.path(pts, lock, jump, lockAt)`: jumps (trim + locks) over 2 mm or when told the way would show; no stitch
+  when within 0.3 mm of the needle. `lockAt`: lettering locks 1 mm in, under satin to come (a lock on the stroke end
+  put two hits on the letter's edge).
+- `Design.finish({ untiny })`: `dedupe` (a stitch into the hole the needle is in), `untiny` (Design tab: drop the
+  point ending a stitch of 0.3 mm or less, never a lock's; Ink/Stitch's minimum), then `relieve()` to 24: drops
+  interior points, keeps 5 points round every command, never makes a stitch of 0.3 mm or less (drops B and C together
+  instead) or an A,B,A' same-hole, merged stitches under 4 mm then a second pass to 7 mm, checks windows whose corner
+  cell is empty. Rounding half-to-even like the writer.
+- `turnPattern` (clockwise: sideways design into the machine's hoop); `turnForMachine` thins again after the turn.
+- `satin(p, width, density = 0.4, pullComp, closed, fold, wAt, shape)`: `density` = gap between hits on the SAME
+  edge (Ink/Stitch default; Brother files 0.30-0.42). Stations `density`/2 apart by whichever of outer edge, inner
+  edge or centre moves most (curves don't gap), sampled every 0.02 mm. Where the inner edge is hit at under half the
+  outer's rate, every other pair is cut to 60 %. `pullComp` = total extra width; `wAt` tapers; `shape` gives per-side
+  widths and a slant (ends cut on the font's angle). Measure satin by the same-edge statistic, not by eye.
+- `zigzag(p, w, spacing)` = satin with same-edge gap `spacing`, no pull. `followRun(p, length, tol, min)`: stitches up
+  to `length` within `tol` of the line, a hole at every turn over 30°.
+- `fold`/`unfold`: an edge offset round an inside corner tighter than the half-width folds over (a star); cut where it
+  crosses itself. Appliqué/outline edges (`edgeSatin`) use it.
+- Satin borders 2.5-4 mm (frames, patch/appliqué edges, bookmark border): `edgeWalk` (run 0.4 mm inside each edge,
+  open, ending where the zigzag starts), zigzag, satin: Ink/Stitch contour underlay, a firm edge on felt.
+
+## Lettering (`text.js`, `raster.js`, `pieces.js`)
+- `renderWord` draws on a canvas (`fontKerning = "normal"`), adds swashes, bridges letters the font leaves unjoined
+  (Sacramento A→s), skeletonizes; `skeletonEdges` builds the stroke graph and prunes spurs; `order()` walks it: each
+  stroke a centre run out and a satin back, every forward run satined exactly once, no jumps inside a connected word.
+  Each walk ends where it began, so moves between print letters are trims whatever the order. Lettering drawn before
+  its font loaded is never cached (it's the fallback font).
+- Swashes (lead-in, tail): one calligraphic stroke from the letter's stroke end along its tangent, a shallow cup
+  under the baseline, a flick up. E, O (no low entry) join at their lowest left point. Never flat along the baseline
+  (reads as a ruled line).
+- Print fonts (`print: true`): no bridges (the machine trims between pieces); decorations are dashes on the middle of
+  the x-height (cap height for all-caps); spur pruning 0.45 strokes (script 1.3) so t bars and a stems survive; dots
+  get a short stroke (`dots`); stroke ends reach the ink's edge (`reachEnds`; thinning stops half a stroke short and a
+  single-storey a sewed as o), sized from the strokes before that (`info.sized`). Separate pieces always jump (`gap`;
+  bookmark `print && k > 0 && j === 0`): an i stem came within 2 mm of its dot and was stitched to it.
+- Design-tab-only skeleton work (the bookmark is unchanged): `tongues` keeps short script ends (an e's tongue, a y
+  tail); `knots` contracts edges under 0.75 stroke between junctions (each was a star of satin); `untangle` caps
+  merges at 2.4 knot lengths. Print corners: self-loops under one stroke dropped; a corner stroke is sewn as wide as
+  the ink less (stroke - satin) / cos(angle), stopping at 0.4 mm (`wAt`); in Thin line strokes run on to where centre
+  lines meet (`pointed`: an A read as Y). Ends are `decurl`ed and cut on the font's end line (`endShape`/`endCut`);
+  sides stay within 0.15 mm of the ink (`sideClip`). Measure on the engine's mask with locks, not an image overlay.
+- Satin width: `min(3.5, 0.2 xh, max(stroke, 0.12 xh, min(0.15 xh, 1.2)))`. Automatic: satin from 0.8 mm, fine line
+  below (loops stay open); explicit Satin at least 1.0. (15 % of big x-heights filled thin scripts' e's; satin only
+  from 1 mm sewed 20 mm script names as a thin line.)
+- Counters: `counterPockets` measures gaps between centre lines; `counterCaps` narrows the strokes round one that
+  would close (0.8 mm between needle points after pull; gaps under 0.6 mm left), `notchCaps` loose short strokes down
+  to 0.8 mm. Explicit Satin and towel ignore both. `loopsFill` warns when auto satin still closes a loop (switching
+  those to a fine line left names thin at 28 mm).
+- Satin spacing 0.38 (40 wt), 0.34 under a 6 mm x-height (sewn for 60 wt; "Small letters" tip: 60 wt, 65/9-70/10
+  needle), 0.42 knit, else `THREADS[wt].satin` (+0.04 knit). Pull 0.15 mm a side from 1.5 mm satins, 0.05 below (more
+  closes counters); knit +0.15. Underlay: from 2.5 mm (knit 1.5) a zigzag (width - 0.8, 2.5 mm) as the walk's way
+  out, else a centre run. Satins start from the stroke's centre point and the underlay ends there (starting on the far
+  edge put back-to-back satins 2.4 mm apart: a jump each).
+- Fine line: bean stitch with `followRun(p, 1.6, 0.1, 0.8)`, points at least 0.4 mm apart (`spaced`). A lone stroke
+  under 0.9 mm (full stop) sews 0.7 mm out and back once. Satin dots: one satin at least 1 mm long, no run under it.
+- Layout (`textRows`): up to 3 lines at the first line's x-height; `align`, `leading`, `spacing` (print only:
+  pulled-apart script came out unjoined), `wave`, `bridge`, `flip` (not in the cache key). Letter pairs `kern` (print
+  only) add to the font's kerning; `rekern` keeps them across edits; `overlapping` warns.
+- Arches: an ellipse (`radius`, optional `ry`), letters spaced by arc length; `followFrame` sits inside an earlier
+  circle/oval/scallop. `archTight`: letters reach inside over 0.8 x the tightest radius of curvature, or an up arch's
+  letters exceed 0.6 x its radius; script arched up keeps x-height at most 0.24 x radius. `archFit` grows the arch,
+  `archRoom` flags over 55 % of the curve (widen to 45 %), `archShrink`, `archStart` (~30 % round). Words wrapped into
+  themselves block Download.
+- Monograms: print ones spaced by their stitches in 0.5 mm bands (gap + 0.4); in a frame they fit both ways
+  (`fittedSizes`, 0.92 of the frame less half the gap); `monoSize` grows only while clear of the frame; checks run per
+  initial (`eachInitial`). Initials take 12 characters; a name there gets "Sew it as lettering" (`asText`).
+- Fonts: `@font-face` families `NW <Font>` (WOFF2 in `fonts/`), `document.fonts.load()` before drawing; a failed
+  font stays failed until reload, so `loadFont` adds a second FontFace (Try again). `glyphs.js` = each font's
+  characters for `missing` (regenerate with `tests/make_glyphs.py`). Per-font `min` x-height feeds `minSize` (default
+  4 mm). Fonts after Meow Script are free lookalikes of embroiderydesigns.com samples (`note`). Try a font in
+  `tests/browser/fonts.html?name=<word>`; reject unjoined or spurred ones (Petit Formal, Comforter, Damion).
+
+## Design tab (`js/studio/`)
+### Compose and stages
+- Pieces (lettering, monogram, frame, motif, appliqué letters, file) are built in mm round the hoop centre, composed
+  in list order, handed to `writePES`. The preview keeps the hoop centre fixed (`draw(..., { center })`); the machine
+  centres the design anyway (off-centre layouts say so; one dragged past the field recentres, `settle`).
+- `pieceStages` -> stages; `compose(pieces, hoop, opts)` -> design, steps, `before` (Have ready), `after`, `hoop`
+  (step 1), `cut`, `solid`. Neighbours in one thread share a block. A stage joins an earlier same-thread block (one
+  pause fewer) only if it overlaps nothing it would jump ahead of (bbox + 1 mm), isn't appliqué, and the block isn't
+  `under` (hidden in the preview). `last` stages go after everything; a patch's `edge` after everything on it (covers
+  the lettering's pull). A visible stage joining a hidden block un-hides it.
+- Opts `fabric`, `thread`, `baste`, `marks`, `dragging` (quilting and carving reused until the drop). `wt` is set for
+  the length of `compose`; stitch caches key on it.
+- Save / Open saved / copy-paste: `{ needleworks: 1, pieces }` JSON plus `hoop`, `turned`, fabric, thread. `cleanPiece`
+  checks and clamps every field (sizes to 180) on open, paste and the saved state (crafted files threw TypeErrors).
+- Starters (`ui.js`) reset fabric (cotton unless they say), thread weight and Turn hoop, are fitted to the hoop
+  (`fitHoop(false)`), may carry a `tip`, draw stitched thumbnails (`draw(..., { pad })`) in one scrolling row.
+### Fabric (`FABRICS`) and thread weight (`THREADS`)
+- Each fabric holds `ready`, `hoop`, `tip`, `after` so supplies, step 1 and finish agree. Cotton, felt, denim, canvas
+  sew alike. Knit: zigzag underlay from 1.5 mm, +0.15 mm pull a side, 0.42 satin, Lighter patch fill.
+- Towel / fleece: lettering always satin (a fine line sinks), at least `min(2.5, 0.3 xh)`, on a knockdown lattice 0.3
+  mm wider each side (zigzag out and back along each stroke, 2 mm apart: 3 was too open), sewn per connected word
+  just before its letters (no jumps). Worse: a tatami of the grown word (+17 trims), one 1.5 mm zigzag (read as sparse
+  satin), 1 mm wider (fringe), adding zigzag underlay (24 hits/mm²). `towelMin` checks counters under the column;
+  within 4 % isn't warned. `fabricTip()` says when fabric changes nothing (`ownBase()`: patch, ITH, quilted).
+- Baste first: 4 mm run box 9 mm round everything (clamped to the hoop), unpicked at the end. The towel starter sets it.
+- Automatic = 40 wt, small lettering for 60. 30 wt: lettering 0.45, other satins x1.15, fills +0.05. 60 wt: 0.34,
+  x0.88, fills unchanged (0.3 mm rows fail the check).
+### Frames, appliqué, patches
+- Borders: line, bold, satin, patch, appliqué, `ith`, `zip`; `quilt` stipple | echo. Bold laps and tack-downs go back
+  from the same start (`back(e)`; a reverse cost trims and long jumps).
+- Heart: top dip filled with a 3 mm round, bottom cusp an arc of a 1.8 mm circle (a satin can't turn a sharp inside
+  corner: underlay poked out).
+- Appliqué: placement, pause (lay fabric, trim), tack-down, pause, satin. Real appliqué (`appliqued()`, not an ITH
+  front or the pouch) shows the guide (`#st-appl`) until "Got it" (`studio.applSeen`).
+- Appliqué letters (`APPLIQUE_FONTS` Graduate, Lilita One, Alfa Slab One): each ink piece closed (`closeMask`,
+  `CLOSE` 1.4 mm; closing the word merged letters), traced by marching squares (holes too), Douglas-Peucker 0.1 mm,
+  filleted 1.6 mm (`filletPolygon`); letters spread to `GAP` 4.9 mm (1 mm of fabric between satins). Satin 0.4 mm
+  outside the placement line (`outward`) covers a ~1 mm trim; width 2.0-2.8 (min dimension / 3.5); holes under 3 mm
+  inscribed radius (`holeRadius`) get a satin 0.2 mm out, at least 1.6 wide, 1.6 mm left open.
+- `applRoutes`: moves between outlines only where hidden. Placement: inside the letter or under satin to come.
+  Tack-down: along its line, then across gaps the satin covers. Satin: from its outer edge into the next. Covered =
+  0.15 mm short of the satin's reach (1.8 out, 1.0 in). New runs start 5.5 mm or more from the last stop, across
+  pauses. Each stage starts a third further round (seams don't stack).
+- Cut files are the outlines (`cut`, placed with the piece), never the placement run (tie-ins cut slits). The preview
+  fills placement outlines with fabric (even-odd; `rings`; segment ends within 5 mm join: the bookmark's outline stops
+  a stitch short), from closed outlines only.
+- Patches: `fillPolygon(loops, opts)` (inset 1 mm, even-odd) = underlay + tatami at Dense, then the satin edge covers
+  the row ends. `pattern` (`FILL_PATTERNS`: tatami, Brick, Chevron, Wave) and `blend` (two layers, spacing varying
+  gradually, `share` in `tatami`; random row assignment made jumps everywhere).
+- `carve`: a patch's fill is cut away under pieces whose median column is at least `CARVE_W` 3.4 mm, holes 20 mm² or
+  more, 1.5 mm inside the outline; thin lettering keeps the fill as its base (carving every stroke tripled trims).
+  Cached per patch shape, piece stitch hash and hole mask (it was the slow part).
+- On a patch a piece gets a thread that shows (`against`); `underPatch` flags a later patch covering it.
+### In-the-hoop
+- `ith` (Ornament, Key fob): appliqué front, the pieces, then a `last` stage tacking taped-on backing and satining
+  through every layer. `hang` adds the ribbon.
+- `zip` (Zipper pouch): zipper line, pause, tack 5 mm either side of the teeth (#3 nylon coil), pause (two folded
+  fronts), tack the outline (`fabric`, `nocut`), topstitch, the pieces, `last`: zipper half open, back face down,
+  three times round. Zipper line overhangs 5 mm a side. New pieces go below the topstitch (`frontPanel`). `before`
+  sizes fabric from the frame + 2.5 cm.
+### Quilting (`quilt.js`)
+- Free space (`freeMask`, 4 px/mm): frame inset 3 mm (line/bold) or 4.5, `clear` 2.5 mm from other pieces' stitches
+  and `solid` areas (it ran under an appliqué heart). Cache keyed on a hash of every obstacle point.
+- Stipple (`space` 5): seed = outline of a random spanning tree over knots `NODE` 1.5 x space apart, then `relax`
+  (repulsion under `space`, push off the edge, bending, growth where there's room but not at the edge) and
+  `followRun(2.5, 0.15)`; fixed seed. Worse, don't retry: a grid spanning tree (a maze of corridors), averaging only
+  (V points), Laplacian pull, long-range repulsion, knots 2 x apart (sparse), full growth at the edge.
+- Echo (`gap` 4): rings are levels of a/(a+b) (out from the pieces, in from the frame), so they morph from the
+  lettering's shape to the frame's; `chain` sews them innermost first as a spiral (jumps between rings were loose
+  threads under the 5 mm trim setting).
+- The quilt stage goes in the frame's thread right after the frame, before a `border: true` stage, led onto the frame
+  by `toFrame`, the border starting there (`startAt`). Starters: Mug rug, Coaster, Quilt block.
+### Motifs (`motifs.js`)
+- Our own drawings: 256-unit paths from circles, ellipses, rounded polygons, brush strokes, nonzero, parts at least 26
+  units (`tests/browser/motifs.html?sheet=shapes|stitch`). `FACING` ones mirror for deco.
+- `style`: fill (`fillPolygon(loops, { inset: 0.6 })` + 1.4 mm satin edge), outline (`edgeSatin`), applique. Traced
+  like letters (`motifOutlines`). Warn under 25 mm filled, 30 mm otherwise. Lettering `deco` puts one either side.
+### Placement, fitting, warnings
+- `spotIn`: the biggest unturned frame's front, middle first, then round what's in it, shrinking to `least(p)`; never
+  outside an ITH frame. No room: `freeRoom` (nearest free spot, still one hooping, re-checked after rounding), else a
+  toast; "Add it anyway" is the only add that makes two hoopings.
+- `touching`/`touchingAll`/`collisions`: needle points every 0.5 mm along stitch lines (`cloud`/`near`) at fitted
+  sizes, under `CLEAR` 1.5 mm (~1 mm of fabric); patches excepted.
+- `fittedSizes`: lettering centred in an earlier frame fits across it, then shrinks 0.5 mm at a time (to 60 %) to
+  clear it by CLEAR (`clearOf`). Fit to hoop shrinks until what's sewn fits (outlines omit satin and swashes) and stays
+  fitted (`fitted`); too-big sizes never round down to look as if they fit.
+- One-tap fixes are checked first (`landing`: fits, or fits turned -> "... and turn the hoop", else not offered; nor if
+  it hits something new or leaves its frame): one size for too small/towel (`minSize`, `towelMin`), `lineChoice`,
+  `clearSize`, `moveAway`, `frameFor`, `archShrink`, run up a tall frame (rot -90), "Sew it as Cotton",
+  `twoHoopings` (turn, or split lettering at a middle word gap). Never a size the frame fit would shrink back.
+- Lettering that won't read sewn (too small, closes up, loops fill) or lacks letters is listed beside Download
+  (`v.warn`) and in the done dialog.
+### Two hoopings (`splitPieces`)
+- On `overBy`, whole pieces (never a cut stitch) split along the long side at the most even cut where both fit.
+  Basting crosses (`crossSpots`: 1.5 mm clear, near 1/4 and 3/4, 20 mm apart if possible) end the first file and
+  start the second (`marks`), named as the machine shows them (`crossName`); `{ rehoop: true }` step (`crossStep`).
+  ZIP of both, each validated; step view, sew sheet, Sew along, share and names batch off. Manual method (Embrilliance
+  patents seam-hiding). One piece over the hoop can't split.
+- Not splittable: drawn in a pretend 2 m hoop, "Too big for this hoop", old file cleared. Past 204.8 mm from its
+  centre the PEC box's 12 bits overflow and it reads back shifted: `unwrap()` (preview only).
+### Turn hoop
+- Per tab; bookmark defaults on; off on a square hoop (`square()`). The Design tab lays out in the turned field
+  (`designHoop`) and turns the file clockwise (`toMachine`, names ZIP and cut file too): the PES is always as the hoop
+  clips on. Turned files (pictures too, `turnedFile`) get a hooping note (`TURN_PIC`). An undo step; saved.
+### File pieces
+- Opened PES/DST become pieces: blocks start at their first stitch (`fileBlocks`), keep the file's exact Brother
+  colour; blocks named Placement/Tackdown/Cutting get appliqué words; same-thread blocks keep their pause. Resize via
+  `orig` + `scale` 0.5-2.5, re-stitched by `fix` in a worker (`resizeFile`/`restitchFiles`; `pending` holds Download).
+  Open tab "Add words to this design" (`studio.addWords`).
+### One for each name
+- `main()` (biggest text or monogram, letters before a date) names the file and is swapped. Names drawn at the
+  design's letter scale (`inkHeight`), keep bold, shrink to fit (90 %… 55 %) or are captioned; a missing glyph refuses
+  a name; past 40 are left out; turned batches turn every file. Each file validated and judged;
+  `<starter or file>_<N>_names|monograms.zip`, names deduplicated ignoring case (emma/Emma collide on macOS, FAT).
+
+## Bookmark (`bookmark.js`)
+- First "Start from" card (`#bookmark`), own panel and engine. 5 blocks of one thread = 4 pauses for the in-the-hoop
+  steps (blank: 3). Needs 5x7. Name centred on the middle of the x-height (cap height all-caps), lengthwise between
+  eyelet and border; letters fill `LETTERS` 72 % of the inner width with or without decorations; only too-long words
+  shrink. Cut file: outline grown 3 mm. Texts `READY`/`DONE`/`STEPS`; `bookmarks_N.zip`. Keeps the original lettering
+  engine (no `tongues`, `knots`, `untiny`, print corners) so script bookmarks stay byte-identical.
+
+## Pictures (`digitize.js` in `worker.js`)
+- One job at a time, newest kept; restarted after 60 s. Styles: Filled (`build`), Line drawing (`lineArt`),
+  Cross-stitch (`crossStitch`). No fabric selector: density is the only fabric knob.
+- Colours are learned once per picture (`learnColours`, `LEARN` 800 px copy of the content box) and labelled onto any
+  working image (`labelWith`): Size and Turn never change threads (`analyze` = both, for the batch).
+- Palette: `FINE` 24 k-means clusters on flat pixels, background shades set aside, merged pairwise, cheapest first, to
+  the count asked and on while under `SAME` 7 (CIEDE2000, hue weighted, darks below L 30 read black, non-solid groups
+  cheap, cross-family dear). Each count = the next with one split (more colours never lose one). Default 6
+  (`DEFAULTS`). Worse: kL 2 (stems into leaves), 16 clusters, folding slivers into neighbours. `findFrame`: an edge band
+  of one colour family is a frame; learned again without it.
+- Threads: each group the nearest unique Brother thread no bigger group took (CIEDE2000, never 62-64; plain Lab sent
+  olive to Russet Brown); greys and other hue families (`FAMILY`, where Brother's names change) cost more for hued
+  colours; the background's thread is skipped unless within SAME. Swatch = solid pixels' mean. The writer's red-mean
+  then picks the same thread. Owned threads only: `toPalette()` merges colours landing on one spool.
+- Size = the sewn design's longer side (`picturePlan`, capped to the field), rebuilt when over 0.4 mm off; over the
+  field it shrinks, not errors. 8 px/mm (5 lost notches).
+- Filled: shapes 1 mm or wider get tatami following the outline (skeleton satin broke corners); parts under 2 x
+  `THIN_PART` and lines under 1 mm sew a triple run, never dropped. Specks: under 4 mm² and 2.5 mm across, groups
+  under 6 mm of line, walks under 1.5 mm (`lostLines` reports dropped fine lines). Thin shapes (< 2 mm) 0.05 mm
+  pull, else 0.15. `OVERLAP` 0.35 mm under later colours, shape by shape (growing the raw mask merged specks);
+  neighbours alternate angle (+90°). `DENSITY` Standard 0.4 (the app's default; `DEFAULTS.density` is Dense) / Dense
+  0.35; 0.3 fails the check (row links under 0.3 mm). Row steps split to 3 mm, row-end stitches over 4 mm halved.
+- Travel (`makeRouter`, A* on 0.5 mm cells; Ink/Stitch's tatami travel): `routeFill` takes sections in row order
+  through rows not sewn yet (`reach`), at most `SEWN` 3 mm on finished rows, repeated travel costs more, `WORN` 20
+  crossings closes a cell. Between shapes (up to `TRAVEL` 10 mm) travel hides under fill still to come; moves under
+  2 mm are sewn; else a jump over 5 mm (trimmed) beats 2-5 mm (loose). Budgets in cells (`routeBudget`), not time, so
+  browser and Node match.
+- Line drawing (`opts.line`, Auto = darkest): outlines once where colours meet, none between colours within ΔE00 15;
+  dark bands (`BAND`) and whole even strokes sewn once along their centre (both edges drew double lines);
+  `closeSlivers`; `lineEnds` reach the ink's edge; pieces under 2 mm dropped (`spur: 1`: pruning cut letters apart);
+  ends within 2 mm of another drawing joined (3 mm drew bars).
+- Cross-stitch (`cross` mm cells): a row is two diagonal zigzags out and back plus one straight stitch (climbing every
+  edge drew bowties); runs chained by Dijkstra over cell corners, else a jump over 5 mm; a lone cell dropped only if
+  nothing touches it.
+- `fine` (`narrowGaps`: gaps under 0.5 mm, at least 2 mm² and 1.5 % of the area) warns; notches under ~0.5 mm can't
+  be kept by thread. Errors carry `code` (small, cross, skipped, empty); only followable advice is offered.
+
+## Open tab (`formats.js`, `doctor.js`, `quality.js`)
+- `readEmbroidery`: PES, PEC, DST (three jumps = trim). Cut-short (`endsEarly`) and `misplaced` files are saved
+  rewritten. `designBlockAgrees` flags a v6 design block that isn't its PEC block. `HARD` failures (thread count,
+  palette 62-64 unless named appliqué/placement/tack-down, disagreeing block, over 99 blocks) are never saved as they
+  came: rewritten, or shown but not saved. Passing untouched files download as their own bytes.
+- `checkup(readEmbroidery(bytes))` reads the file as it will be saved, counts from quality.js: `peak` at every
+  offset, tiny past max(50, 1 %), satin gap (under 0.25: "Even out"), stitches over 10 mm (note) and 12.1 mm ("Split
+  long stitches"), jumps shrinking brought under 5 mm, a stabilizer hint.
+- `fix(pattern, { scale, tiny, thin, sort, join, satin })` in `doctor-worker.js`. Shrinking ticks Remove tiny and Thin.
+  - `landJumps` (also on open): a jump lands on its first stitch (the writer puts the needle down where a jump ends:
+    short-stopping jumps became loose threads); a first stitch followed by one over 12.1 mm becomes a jump.
+  - 80-120 %: scaled, rounded to 0.1 mm, zero-length dropped; `respace` brings satins into 0.3-0.5.
+  - Past that, `restitch` (50-250 %): zigzag columns rebuilt at the source density within `SATIN` 0.3-0.5, satin up to
+    `WIDE` 30 mm (filling wide columns criss-crossed); zigzags over `OPEN` 1 mm stay lines (underlay); ends reach `EXT`
+    0.5 mm only where the source sews (`COV`, `BOX`); fills refilled at `ROWS` 0.35-0.5 per block and direction,
+    minus earlier directions; the rest are runs. Over `MAXS` 6.8 mm is `split` into `PIECE` 5.5 mm with staggered
+    cuts (the writer halves over 7 mm out of `relieve`'s sight); crowded edges get short stitches (`SHORT`). Worse:
+    split satin 7-14 mm (39-49 hits/mm²), fixed-place cuts, filling columns over 25 mm.
+  - `relieve` if thin; `slide()` always; `dropTiny` when tiny and after any re-stitch.
+  - `sortColors`: a block joins the last earlier one of its thread if nothing sewn between touches it; off for machine
+    stops, DST and same-thread pauses (`pauses`: fabric steps). `fewerBlocks` for over 99 blocks; `blockThreads`.
+- `_fixed` (`<name>[_Npct]_fixed.pes`) only when it passes; `fixedCopy` retries up to 3 times.
+
+## Threads and brands (`brands.js`, `brandcharts.js`)
+- Brother (Artspira numbers), Isacord (numbers only), Sulky Rayon, Robison-Anton Rayon, Hemingworth, each from the
+  maker's own source (file header). No Sigma or Madeira.
+- Naming decision: spools are bought and stored by brand + number, and names vary even between resellers. So a thread
+  shows swatch, the machine's name (its screen at the colour change) and "≈ Brand number"; a maker's name only where
+  published; no translation or toggle. Labels only: files carry PEC colours.
+- Spool matching is CIELAB (red-mean called black "Ivy"). Threads I own: searchable swatches (`chartSpools`); the
+  Design tab's "Yours:" row (`api.ownedSpools`) gives a piece the spool's colour, the file the nearest PEC; `far` flags
+  a poor match; Have ready splits "Your threads" / "To buy" (`ownSpool`).
+
+## App and UI
+- Opens on `#design`; default name Emma.
+- Side by side needs 700 px wide AND 560 tall (200 % zoom on 1080p is 960x540); then 100dvh, only `.controls`
+  scrolls (`position: relative`). Tiers: max-height 900 hides ledes (not `.sewn-on` tips); 700-1365 x 560-760 slimmer;
+  header tabs wrap to 1259 px, no MACHINE label to 1365, no tagline to 1480. Stacked layouts scroll, preview first in
+  the HTML (Tab order). Phones (<= 600): fixed Download bar, preview `calc(100svh - 370px)`, too-big message under the
+  hoop and in the piece controls (`#st-big`). Check 1413x717, 1024x600, 960x540, 820x1180, 800x600, 390x844.
+- `draw` opts: `center`, `upto`/`ghost` (step view), `pad`, `padBottom`, `corner`, `boxes`, `real`, `base` (a drag
+  holds the fit via `state.hold`, or the piece outran the pointer). Dark mode fills the field light (`fieldColor`).
+  Thickness overlay (`heat`): 12+ yellow, 18+ orange, 24+ red.
+- Focus: file inputs `.sr-file` (hidden but focusable). Redraws go through `keepFocus`; a keypress that removes its
+  control moves focus to the nearest one (capture click listener, `detail` 0 only: a programmatic `.click()` has
+  detail 0 too, so call handlers directly). Arrow nudges only from the page or `#view`; the piece list is one Tab stop
+  (`rove`). Undo skips equal snapshots; Redo ⇧⌘Z / Ctrl+Y. 44 px coarse targets; `forced-colors` keeps thread
+  colours; `--danger/--warn/--good/--ink` tokens (red only for warnings).
+- Verdict: `setView` runs quality.js 250 ms after a view settles (not per drag frame). Every download and ZIP is
+  judged; the done dialog says "Checked" only when it passes, else offers "Save a fixed copy", even after "Don't show
+  this again" (`doneSeen`).
+- Steps (sheet.js): step 1 = how to hoop, which thread, Start; steps name the thread (`threadNames`/`nextThread`); a
+  same-thread pause says "Keep the same thread on"; one sentence per action, three or more numbered (`youHtml`).
+  "Thread changes" and "pauses in the same thread" (`stopWords`), never "stops".
+- Sew sheet (`sewSheet`: `#sheet` + `window.print()`, also on `beforeprint`): field at 1:1 in mm, centred as the
+  machine centres, 5 cm bar; steps with machine names (`machineThreadList`); appliqué shapes. `cutSVG`: one SVG at
+  actual size. Verify with headless `Page.printToPDF`, never the real print dialog via the Chrome extension (it blocks).
+- Sew along (`#along`): a step per screen, minutes = stitches / 550, own Have ready, Screen Wake Lock (retaken on
+  visibilitychange). Share text carries the steps (`shareText`). On my item (`#item`): a measured photo under the
+  design at true size (`state.backdrop`), never uploaded or saved.
+- Offline (`sw.js`, `needleworks-v2`): precaches `FILES`, network first, cache after 3 s; add every new file to
+  `FILES`. https only. Share target: POST `./?share` -> `needleworks-shared` cache -> `./?shared` -> `route()`.
+- A hoop change drops other tabs' designs. Min/max over stitches uses loops (`Math.min(...pts)` overflows past ~110k).
+
+## Testing and verification
+- CI: `node tests/formats.test.mjs` (golden bytes; identical to `tests/fixtures/ashley_v3.pes`/`multi.pes` less the 4
+  box bytes, fixtures by `tests/make_fixture.py` from `*_commands.json`; re-encoded samples, 300 fuzz designs, 50 byte
+  flips), `tests/doctor.test.mjs` (every fix, 0.5-2.5x, ~3 min), `tests/sw.test.mjs`, `pe900_check.py --writer-only`.
+- `.venv/bin/python -I tests/pe900_check.py [--writer-only] files...` (exit 1 on failure): pyembroidery plus its own
+  PEC byte walk (no code shared with formats.js): box, satin gap, trims and short jumps (reported), design block vs
+  PEC, fit, size field, toggles, longest, tiny, same hole, density at every offset. `identical_to_pyembroidery` reads
+  "except pauses" for same-thread pauses.
+- Browser batches: `.venv/bin/python tests/batch_server.py OUT [port]` (8765), then `tests/browser/pe900_batch.html`
+  (fonts x names x decorations, pictures x styles) and `tests/browser/studio_batch.html` (starters x hoops, shapes x
+  borders, fonts, arcs, files). Title `DONE <files> <problems>`. After any engine change run both plus the checker and
+  look at a contact sheet (the checker can't see mush). Byte compares need a fresh no-cache baseline. Load with a
+  fresh `?v=N` and hard-reload; the server sometimes drops a module request (status 0): reload. The batch sizes
+  pictures by `workingSize`, not `picturePlan`.
+- Headless without the extension: Chrome with `--remote-debugging-port`; import the module script over CDP as a blob
+  with absolute URLs (the inline module doesn't start).
+- Persona harness (`~/.claude/plans/needleworks-user-testing.md`): one headless Chrome per tester via `node
+  tests/cdp.mjs PORT CMD` (commands in its header). `start` disables timer throttling (a 300 ms debounce took 57 s)
+  and keeps temp files beside the profile (TMPDIR, MAC_CHROMIUM_TMPDIR). With `nocache` app.js may not start: check
+  `document.body.dataset.mode`, navigate again. Subagents hand reports back.
+- VM check (before shipping stitch changes): UTM "PESCHECK" with the PE-DESIGN 11 trial over VNC
+  (`/Volumes/4TB_SSD/vm-pescheck/tools/vnc.py`); files in on an ISO (`hdiutil makehybrid -iso -joliet`, `cat` it over
+  `vm-pescheck/files.iso`); `vm-pescheck/tools/boxcheck2.ps1` (box == stitch minimum: "FITS n/n"), then open them
+  in PE-DESIGN.
+- Brother diff (`tests/brother_diff_core.js`): Brother-made PES files are re-written with `writePES` and the PEC
+  blocks compared field by field, then by the machine's holes, jumps, trims and colour changes. The 379 PE-DESIGN
+  samples stay in the VM (`C:\bro`): `sh tests/vm/run.sh` (builds `tests/vm/make.mjs`'s page; verdict
+  `out/vm/result.png`); Node: `node tests/brother_diff.mjs tests/external/pes`. Run after any `formats.js` change and
+  before files go to a machine. Baseline: none sew differently; bytes differ only where Brother keeps stitches to
+  15.7 mm (we split over 7), we trim every jump, our palette choice, Brother's page-size field on lace samples.
+- `tests/external/` (gitignored): third-party samples and pictures, pyembroidery oracles (`oracle/`), files once
+  emailed to a tester (`emailed/`).
+### Category checks
+Automated checks that each guard a bug class (add a line with every new guard):
+- Writer drift: golden bytes (`formats.test.mjs`). Machine-readable PEC: `pe900_check.py`, `validatePES` on every
+  download, the Brother diff after writer changes.
+- App verdict = checker: `quality.js` agrees with `pe900_check.py` on every batch and sample file.
+- Doctor fixes give valid, passing files at every size (`doctor.test.mjs`).
+- Offline completeness: every module, font, icon in `FILES` (`sw.test.mjs`).
+
+## Hosting
+- 4gables.com is the `4gables/website` repo's custom domain (a project site). Other repos appear under
+  4gables.com/<repo>/ only if the org site repo is `4gables.github.io` with the custom domain.
+
+## Decided against
+- Ink/Stitch short stitches and 3-hole locks (would change the bookmark for little), contour underlay under picture
+  fills (overlap fixed the gaps), split satin (nothing over 3.6 mm in lettering; split at 7 mm if added), a 1.5 mm
+  minimum satin, sewing all moves of 3 mm or less (lines between print letters), satin cut short at junctions (gaps
+  in A and h), re-aiming print apex stubs.
+- 1 px source lines in Filled pictures, keeping the On my item photo across starters, undo across reloads.
+- Busy pictures' trims are their separate shapes: no safe win.
+
+## Open
+- Machine: does the PE900 also cut 0x20 trims of 5 mm or less (the loose-thread count assumes not)? Sew along's
+  "Sewed with the wrong thread?" wording is unchecked on a PE900.
+- Threads: pure white as Isacord 0015 rather than 0003 (Amann's card draws whites bluish)? Dusty pinks (chroma ~6)
+  still Warm Gray.
+- Lettering: Alex Brush's b loop is lost ("Abbie" reads "Avvie"); O'Neil's apostrophe bridges into the O (`text.js`:
+  don't bridge to punctuation); Quicksand's rounded V/M bottoms stop short; dense columns where 3 strokes meet the
+  towel lattice (within 24); dots by READ's stars (the satin round the stars' points).
+- Appliqué: combine same-thread stages (6 pauses could be 3); tack-down ends 1.4 mm from the edge walk's start (2
+  short jumps across a pause); only the first fabric block gets a fabric shape in the preview.
+- Quilting: narrow heart/diamond tips stay empty; quilt label with stipple sews as 3 lines.
+- Pictures: "make it stitchable" (thicken/drop too-fine detail); 1-2 mm outlines as satin (needs variable-width satin
+  through junctions); etsy_6's green panel still sewn; etsy_7's pastel lines; etsy_4's greyish-lavender title;
+  etsy_5 at 4 colours merges grass and yellow.
+- Open tab: Thickness overlay counts at grid offset 0 only (`heat`); trims rise after re-stitching at 70 %.
+- `pe900_check.py`'s max density reads lower than a full offset scan below the limit (pass/fail unaffected).
+- Design tab: Patch starter + Lettering lands below JD; "Add words" once left focus on the page (not reproduced).
+- Not built: photo stitch, free-standing lace, 3D puff.
