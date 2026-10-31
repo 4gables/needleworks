@@ -168,7 +168,9 @@ Embroidery-file tools for home machines. Two implementations of the same engine:
   `last` stage) in the frame's thread. A visible stage that joins a tack-down block un-hides that block in the
   preview (the quilting, or same-thread lettering on an ITH frame, was hidden with the tack line). Starters: Mug rug,
   Coaster, Quilt block.
-- Motifs (`js/studio/motifs.js`: 29 filled icons from Phosphor Icons, MIT; `kind: "motif"`, `motif`, `size` mm across
+- Motifs (`js/studio/motifs.js`: 29 filled icons, our own drawings (2026-10-30, replacing Phosphor Icons; built
+  from circles, ellipses, rounded polygons and brush strokes, nonzero, holes and parts >= 26 of 256 units; contact sheets:
+  `tests/browser/motifs.html` ?sheet=shapes|stitch); `kind: "motif"`, `motif`, `size` mm across
   the longer side, `style` fill | outline | applique): the SVG path is filled on a canvas and traced like appliqué
   letters (`motifOutlines` in outline.js, holes included). Fill = `fillPolygon(loops, { inset: 0.6 })` (it now takes
   several loops, even-odd) plus a 1.4 mm satin edge; outline = `edgeSatin` (narrower round small holes); appliqué =

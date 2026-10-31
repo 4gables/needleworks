@@ -20,7 +20,7 @@ Viewing the source to learn from it, and forking it on GitHub solely as GitHub's
 allow, are permitted; any other use of such a fork is not.
 
 Third-party components keep their own licences, listed in THIRD_PARTY_NOTICES.md (pyembroidery,
-Phosphor Icons, Embroidermodder thread charts, and the fonts in fonts/). Nothing in this licence
+Embroidermodder thread charts, and the fonts in fonts/). Nothing in this licence
 restricts what those licences allow for those components.
 
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED. IN NO EVENT SHALL
