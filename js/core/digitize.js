@@ -166,6 +166,10 @@ function findFrame(labels, w, h, C) {
 const FINE = 24;
 // colours closer than this (CIEDE2000) are one thread whatever was asked for
 const SAME = 7;
+// a colour (and a thread) with more chroma than this has a hue; threads within HUE degrees of it keep that hue
+const HUED = 4, HUE = 35;
+// degrees between two Lab colours' hues
+const hueOff = (p, q) => { const d = (Math.abs(Math.atan2(p[2], p[1]) - Math.atan2(q[2], q[1])) * 180) / Math.PI; return d > 180 ? 360 - d : d; };
 
 // Lab of every opaque pixel (-1: see-through)
 function pixels(img) {
@@ -254,20 +258,29 @@ export function learnColours(img, opts = {}) {
   // flower, a yellow bird) outlasts the shades of one dark outline. The difference weighs hue more (kH 0.6), so
   // distinct hues beat light and dark shades of one, and dark colours' hue fades out below L 30 (thread that dark
   // reads as black: etsy_5's outline took Dark Gray, Dark Brown, Black and Dark Olive).
+  // Two colours of different hue families (over 45 degrees apart, both with a hue) cost up to 30% more to merge: at 5
+  // colours etsy_1's pale pink flowers joined the lilac ones (one grey-mauve thread) rather than two blues or two greens.
   const dim = ([L, a, b]) => { const f = Math.min(1, L / 30); return [L, a * f, b * f]; };
-  const apart = (p, q) => deltaE2000(dim(p), dim(q), 1, 0.6);
+  const apart = (p, q) => {
+    const P = dim(p), Q = dim(q), v = deltaE2000(P, Q, 1, 0.6), c = Math.min(Math.hypot(P[1], P[2]), Math.hypot(Q[1], Q[2]));
+    if (c <= HUED) return v;
+    return v * (1 + 0.3 * Math.min(1, c / 8) * Math.min(1, Math.max(0, hueOff(P, Q) - 45) / 45));
+  };
   const ink = [];
   for (let j = 0; j < K; j++) if (area[j] && !isBg(j)) ink.push(j);
   const A = ink.reduce((s, j) => s + area[j], 0) || 1;
   // A group's solid pixels are those whose 4 neighbours are in it too (a textured white splits into shades none of
   // which is solid on its own): pixels counted by the set of clusters round them, as bit masks
-  const sets = new Map();
+  // (and their colour, summed per set: a group's colour is its solid pixels' mean)
+  const sets = new Map(), tone = new Map();
   for (let i = w; i < n - w; i++) {
     const x = i % w; if (x === 0 || x === w - 1) continue;
     const q = [labels[i], labels[i - 1], labels[i + 1], labels[i - w], labels[i + w]];
     if (q.some((v) => v < 0)) continue;
     const m = q.reduce((s, v) => (s | (1 << v)) >>> 0, 0) * 32 + labels[i];
     sets.set(m, (sets.get(m) || 0) + 1);
+    const t = tone.get(m) || tone.set(m, [0, 0, 0]).get(m);
+    t[0] += data[i * 4]; t[1] += data[i * 4 + 1]; t[2] += data[i * 4 + 2];
   }
   const effOf = (g) => {
     const gm = g.members.reduce((s, v) => (s | (1 << v)) >>> 0, 0);
@@ -301,15 +314,29 @@ export function learnColours(img, opts = {}) {
   // Threads: each colour the nearest Brother thread no bigger colour took. A colour whose own thread was taken and whose
   // next is far off (a pale green given "Russet Brown") joins the colour that took it: one thread fewer, but none wrong.
   const pec = PEC_MATCH.map((t) => (t ? srgbToLab(t[1], t[2], t[3]) : null));
-  // (the colour of its solid parts: edge pixels blend into their neighbours, and turned a yellow "Light Brown")
+  // (the colour of its solid parts: edge pixels blend into their neighbours, and turned a yellow "Light Brown"; the
+  // solid pixels' own colours, not their clusters' means: those take in every blended pixel nearest them, and greyed
+  // etsy_1's pinks from C 7 to 3)
   const pictureOf = (g) => {
     const s = [0, 0, 0]; let k = 0;
-    const gm = g.members.reduce((t, v) => (t | (1 << v)) >>> 0, 0), sol = new Map();
-    for (const [m, c] of sets) if (!(Math.floor(m / 32) & ~gm)) sol.set(m % 32, (sol.get(m % 32) || 0) + c);
-    for (const j of g.members) { const f = (sol.get(j) || 0) / area[j]; s[0] += rgb[j][0] * f; s[1] += rgb[j][1] * f; s[2] += rgb[j][2] * f; k += sol.get(j) || 0; }
+    const gm = g.members.reduce((t, v) => (t | (1 << v)) >>> 0, 0);
+    for (const [m, c] of sets) if (!(Math.floor(m / 32) & ~gm)) { const t = tone.get(m); s[0] += t[0]; s[1] += t[1]; s[2] += t[2]; k += c; }
     if (!k) for (const j of g.members) { s[0] += rgb[j][0]; s[1] += rgb[j][1]; s[2] += rgb[j][2]; k += area[j]; }
     return s.map((v) => Math.round(v / Math.max(1, k)));
   };
+  // A colour with a hue keeps it: a grey thread counts as further away the more colourful the colour is (x1.9 at
+  // chroma 15), and so, gradually, does a thread of another hue (over HUE degrees off, in full from 90). Brother's
+  // threads have no sage or dusty blue: nearest by difference alone, etsy_1's sage leaves were "Gray" and its blue
+  // flowers "Silver", so the picture sewed as grey silhouettes.
+  const cost = (lab, q) => {
+    const v = deltaE2000(lab, q), c = Math.hypot(lab[1], lab[2]) * Math.min(1, lab[0] / 30);
+    if (c <= HUED) return v;
+    const k = 0.08 * (c - HUED);
+    return v * (1 + (Math.hypot(q[1], q[2]) < HUED ? k : k * Math.min(1, Math.max(0, hueOff(lab, q) - HUE) / 55)));
+  };
+  // (nor the background's thread, unless it's that colour: etsy_7's pale grey lines on white were "White")
+  const bgHex = bg >= 0 ? rgbToHex(rgb[bg].map((v) => Math.round(v / Math.max(1, area[bg])))) : null;
+  const bgThread = bgHex ? nearestBrotherThread(bgHex).index : -1;
   for (;;) {
     groups.sort((a, b) => b.area - a.area);
     const taken = new Map();
@@ -320,16 +347,26 @@ export function learnColours(img, opts = {}) {
       let best = -1, bd = Infinity, own = -1, od = Infinity;
       pec.forEach((q, i) => {
         if (!q) return;
-        const v = deltaE2000(lab, q);
+        const v = cost(lab, q);
+        if (i === bgThread && v > SAME) return;
         if (v < od) { od = v; own = i; }
-        if (!taken.has(i) && v < bd) { bd = v; best = i; }
+        if (!taken.has(i) && i !== g.ban && v < bd) { bd = v; best = i; }
       });
+      g.own = od; g.got = bd;
       if (best < 0) continue;
-      if (best !== own && bd > Math.max(15, od + 10) && !worse) worse = [g, taken.get(own)];
+      if (best !== own && bd > Math.max(15, od + 10) && !worse) worse = [g, taken.get(own), own];
       taken.set(best, g); g.thread = pecThread(best);
     }
     if (!worse) break;
-    join(worse[1], worse[0]); groups.splice(groups.indexOf(worse[0]), 1);
+    // (unless the colour that took it has another thread that is near enough: then it moves over, once. etsy_1's
+    // lilac took Lavender and its blue flowers, closer to Lavender, had none left at 6 colours)
+    const [g, by, own] = worse;
+    if (by.ban === undefined && by.got <= Math.max(15, by.own + 10) && g.ban === undefined) {
+      const lab = srgbToLab(...hexToRgb(by.picture));
+      const alt = Math.min(...pec.map((q, i) => (q && i !== own && !taken.has(i) && (i !== bgThread || cost(lab, q) <= SAME) ? cost(lab, q) : Infinity)));
+      if (alt <= Math.max(15, by.own + 10)) { by.ban = own; continue; }
+    }
+    join(by, g); groups.splice(groups.indexOf(g), 1);
   }
   groups.sort((a, b) => b.area - a.area);
   const map = new Int16Array(K).fill(-1), colors = groups.map((g, id) => {
@@ -339,8 +376,7 @@ export function learnColours(img, opts = {}) {
   if (bg >= 0) {
     const id = colors.length;
     for (let j = 0; j < K; j++) if (map[j] < 0) map[j] = id;
-    const hex = rgbToHex(rgb[bg].map((v) => Math.round(v / Math.max(1, area[bg]))));
-    colors.push({ id, hex, picture: hex, thread: nearestBrotherThread(hex), lightness: C[bg][0], background: true });
+    colors.push({ id, hex: bgHex, picture: bgHex, thread: nearestBrotherThread(bgHex), lightness: C[bg][0], background: true });
   }
   // each colour's extent (pieces over 0.02% of the picture: a stray speck doesn't make the design bigger)
   const boxes = colors.map(() => [1, 1, 0, 0]);
@@ -528,9 +564,12 @@ function tatami(mask, comp, res, { angle, spacing, stitch, inset = 0, pull = 0.1
 // made one fill of 1782 sections, each tried from each: minutes, and the page never finished): one route gives up
 // after ROUTE_CELLS cells, a router after ROUTER_CELLS and a whole picture after PICTURE_CELLS (`budget`, shared), and
 // the needle jumps instead. Counted in cells, not time, so the browser and Node sew the same file.
+// In a picture's fill, a cell travelled through this often takes no more travel: a narrow neck that was a big fill's
+// only way between its parts was crossed 70 times (72 hits/mm² on etsy_8 at 4 colours, turned; trims 509 -> 384)
+const WORN = 20;
 const ROUTE_CELLS = 50000, ROUTER_CELLS = 6e6, PICTURE_CELLS = 12e6;
 export const routeBudget = () => ({ cells: PICTURE_CELLS });
-function makeRouter(mask, res, cell, hop = null, budget = routeBudget()) {
+function makeRouter(mask, res, cell, hop = null, budget = routeBudget(), worn = Infinity) {
   let mine = ROUTER_CELLS;
   const C = Math.max(1, Math.round(res * 0.5));   // 0.5 mm cells
   const gw = Math.ceil(mask.w / C), gh = Math.ceil(mask.h / C), n = gw * gh, inside = new Uint8Array(n);
@@ -613,7 +652,7 @@ function makeRouter(mask, res, cell, hop = null, budget = routeBudget()) {
       for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
         if (!dx && !dy) continue;
         const x = cx + dx, y = cy + dy; if (x < 0 || y < 0 || x >= gw || y >= gh) continue;
-        const m = y * gw + x; if (!inside[m]) continue;
+        const m = y * gw + x; if (!inside[m] || trod[m] >= worn) continue;
         const step = Math.hypot(dx, dy), v = g(c) + step * ((sewn[m] ? 6 : 1) + 2 * trod[m]);
         if (v >= g(m)) continue;
         const sw = SW[c] + (sewn[m] ? step * mmPer : 0), ln = LN[c] + step * mmPer;
@@ -688,8 +727,8 @@ function makeRouter(mask, res, cell, hop = null, budget = routeBudget()) {
 // yet, so the fill covers the travel. It only jumps (and trims) when every way would lie on top of finished rows for
 // more than SEWN mm. groups: [underlay paths, fill paths] in px; the underlay is covered by the fill, so travel over it is
 // hidden too.
-function routeFill(groups, comp, mask, res, budget = routeBudget()) {
-  const { w } = mask, R = makeRouter(mask, res, (x, y) => (comp.labels[y * w + x] === comp.id ? 1 : 0), null, budget);
+function routeFill(groups, comp, mask, res, budget = routeBudget(), worn = Infinity) {
+  const { w } = mask, R = makeRouter(mask, res, (x, y) => (comp.labels[y * w + x] === comp.id ? 1 : 0), null, budget, worn);
   const out = [];
   let cur = null;
   groups.forEach((paths, gi) => {
@@ -894,7 +933,7 @@ function build(img, analysis, opts) {
       const under = tatami(mask, comp, res, { angle: angle + 90, spacing: 2.5, stitch: 3, inset: 0.4, pull: 0 });
       // pull compensation widens a fill past its edge; on thin letters that closes the gaps between them
       const fill = tatami(mask, comp, res, { angle, spacing: o.density, stitch: 3.5, pull: widthMm < 2 ? 0.05 : 0.15 });
-      blocks.push({ centre, paths: routeFill([under, fill], comp, mask, res, budget).map(toMm), kind: "fill" });
+      blocks.push({ centre, paths: routeFill([under, fill], comp, mask, res, budget, WORN).map(toMm), kind: "fill" });
       filled[comp.id] = 1;
     }
     if (anyThin) {
@@ -1212,7 +1251,9 @@ function lineArt(img, analysis, opts) {
   };
   let left = tours.map((_, i) => i).filter((i) => find(i) === i).map((i) => nest(i, 0, -1));
   const d = new Design(o.hoop);
-  d.color(ink.hex, ink.thread.name);
+  // (sewn in the darkest colour, or the thread picked for the lines)
+  const line = o.line ? { hex: o.line, thread: nearestBrotherThread(o.line) } : ink;
+  d.color(line.hex, line.thread.name);
   const shapes = left.length;
   // nearest drawing next, entered at its nearest point; rather one over 5 mm away (the machine trims the jump) than
   // a loose 2-5 mm thread
@@ -1227,7 +1268,7 @@ function lineArt(img, analysis, opts) {
   }
   if (!d.stitches.length) throw Object.assign(new Error("No lines in this picture are big enough to stitch."), { code: "small" });
   d.finish();
-  return { design: d, summary: [{ ...ink, shapes, kinds: ["run"] }], fine: { narrowMm2: 0, hairlines: 0 } };
+  return { design: d, summary: [{ ...ink, hex: line.hex, thread: line.thread, shapes, kinds: ["run"] }], fine: { narrowMm2: 0, hairlines: 0 } };
 }
 
 // Cross-stitch: the picture on a grid of `cross` mm cells, each the colour most of its pixels have (or left empty when
