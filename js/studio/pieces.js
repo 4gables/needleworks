@@ -166,13 +166,36 @@ function archRho(p, l) {
 // Arched lettering whose letters reach further inside the curve than ~0.8 x its radius of curvature (somewhere
 // under the word) crowd into a knot there: "down" letters point inward, "up" ones only dip in with descenders. Letters
 // over the top taller than 0.6 x the radius fan out so far that their feet crowd together: Great Vibes "Oliver" 28 mm
-// on the bib's 32 mm arch bunched "iver" with no warning.
+// on the bib's 32 mm arch bunched "iver" with no warning. Joined script letters over the top also bunch where their
+// x-height is over 0.24 x the radius (Great Vibes "Olivia" 24 mm: "vi" ran together at 38 mm, read cleanly from ~48;
+// the bib's Emma is 0.23).
 export function archTight(p) {
   if (p.kind !== "text" || (p.shape !== "up" && p.shape !== "down")) return false;
   const l = letters(p.text, p.font, p.size, p.style);
   if (!l.parts.length) return false;
   const rho = archRho(p, l);
-  return p.shape === "up" ? l.bottom > 0.8 * rho || -l.top > 0.6 * rho : -l.top > 0.8 * rho;
+  return p.shape === "up" ? l.bottom > 0.8 * rho || -l.top > 0.6 * rho || (!fontOf(p.font).print && l.xh > 0.24 * rho) : -l.top > 0.8 * rho;
+}
+// The curve an arch starts on when lettering is first bent (the 30 mm default made a 24 mm "Olivia" read "Oliuia"): the
+// word over about a third of the way round, never tighter than its letters need (`archFit`).
+export function archStart(p) {
+  const l = letters(p.text, p.font, p.size, p.style);
+  if (!l.parts.length) return { radius: p.radius };
+  const xs = l.parts.flatMap(([q]) => q.map((v) => v[0])), span = Math.max(...xs) - Math.min(...xs);
+  const q = { ...p, radius: Math.max(15, Math.min(80, Math.round(span / (2 * Math.PI * 0.3)))) };
+  delete q.ry;
+  return { radius: archFit(q)?.radius ?? q.radius };
+}
+// The height (px, as drawn) of a word's strokes in its font: lettering `size` is that height in mm, so two words
+// drawn at the same scale have sizes in this ratio ("emma" has no capital: at Emma's size its letters came out twice
+// as big)
+export function inkHeight(text, family) {
+  const t = (text || "").replace(/\s*\n\s*/g, " ").trim();
+  if (!t) return 0;
+  const { info } = letterStrokes(t, family);
+  if (!info.sized?.length) return 0;
+  const [, y0, , y1] = bounds(info.sized);
+  return y1 - y0;
 }
 // The curve (radius, ry) an arched word needs to be neither tight nor wrapped too far round: the arch grown in 5% steps
 // (up to 4x), or null when it's fine as it is.
@@ -500,6 +523,16 @@ function fitBox(pts, w, h) {
 const shapeOf = (p) => SHAPES[p.shape] || SHAPES.circle;
 // a circle frame is w across both ways
 const frameH = (f) => (f.shape === "circle" ? f.w : f.h);
+// a zipper pouch's zipper line (frame-relative y, from the outline's top); its tack lines run 5 mm and its topstitch
+// 7 mm either side
+const zipY = (f, top) => top + Math.max(14, f.h * 0.2);
+// The part of frame f where what's sewn on it goes, as [top, bottom] in mm (hoop y): a zipper pouch's front below
+// its topstitch (the zipper band above is no place for a monogram: one fitted there sewed across the zipper), any
+// other frame the whole height.
+export function frontPanel(f) {
+  const [, top, , bot] = bounds(shapeOf(f).path(f.w, f.h));
+  return f.border === "zip" ? [f.y + zipY(f, top) + 7, f.y + bot] : [f.y + top, f.y + bot];
+}
 export const BORDERS = { line: "Thin line", bold: "Bold line", satin: "Satin border", patch: "Filled patch", applique: "Appliqué", ith: "In the hoop (two-sided)", zip: "Zipper pouch (in the hoop)" };
 // fabric to cut for a w x h mm in-the-hoop piece, with 2.5 cm (1 in) spare all round to trim off
 const cut = (w, h, extra = 25) => `${Math.ceil((w + extra) / 10)} × ${Math.ceil((h + extra) / 10)} cm (${((w + extra) / 25.4).toFixed(1)} × ${((h + extra) / 25.4).toFixed(1)} in)`;
@@ -679,7 +712,7 @@ function localStages(p, fab = "cotton") {
       // goes on the front (the pieces after it), then the back face down and one seam through everything; turned
       // right side out through the zipper
       const [, top, , bot] = bounds(edge), x = p.w / 2 + 5;
-      const yz = top + Math.max(14, p.h * 0.2), line = (y) => run([[-x, y], [x, y]], 2.5), a = yz - top, b = bot - yz;
+      const yz = zipY(p, top), line = (y) => run([[-x, y], [x, y]], 2.5), a = yz - top, b = bot - yz;
       stages = [
         { color: p.color, paths: [line(yz)], sews: "Sews the zipper line on the stabilizer.", under: true, bare: true,
           // (folded in half, each front piece has to reach from the zipper past the outline: twice that, plus spare)
@@ -1240,7 +1273,7 @@ export function fittedSizes(pieces) {
     const frame = frameAround(p, pieces.filter((f) => f === p || !(f.rot || 0)));
     if (!frame) return;
     const b = pieceBounds({ ...p, x: 0, y: 0 }); if (!b) return;
-    const dy = (p.y - frame.y) / (frameH(frame) / 2), gap = frame.border === "line" ? 4 : 8;
+    const dy = (p.y - frame.y) / (frameH(frame) / 2), gap = frame.border === "line" ? 4 : 8, [pt, pb] = frontPanel(frame);
     // room across the frame at the lettering's height (narrower toward the top and bottom of round shapes)
     const round = ["circle", "oval", "scallop", "heart"].includes(frame.shape) ? Math.sqrt(Math.max(0.2, 1 - dy * dy)) : 1;
     // (a monogram only shrinks when it would reach the border: the starters' monograms fill their frames on purpose)
@@ -1249,7 +1282,9 @@ export function fittedSizes(pieces) {
     let k = w > room && room > 5 ? room / w : 1;
     // a monogram is tall: it must fit up and down too (a script R overran a key fob's border)
     if (mono) {
-      const roomH = frameH(frame) * fill - gap / 2 - 2 * Math.abs(p.y - frame.y), h = b[3] - b[1];
+      // (in a zipper pouch, the front below the zipper: fitted to the whole frame, it sewed across the zipper)
+      const roomH = frame.border === "zip" ? (pb - pt) * fill - gap / 2 - 2 * Math.abs(p.y - (pt + pb) / 2)
+        : frameH(frame) * fill - gap / 2 - 2 * Math.abs(p.y - frame.y), h = b[3] - b[1];
       if (h > roomH && roomH > 5) k = Math.min(k, roomH / h);
     }
     if (k < 1) out.set(p.id, clearOf(p, frame, Math.max(5, Math.floor(p.size * k * 2) / 2)));
@@ -1270,6 +1305,19 @@ function clearOf(p, frame, size) {
     if (cleared.size > 200) cleared.delete(cleared.keys().next().value);
   }
   return cleared.get(key);
+}
+
+// A monogram given fewer initials inside a frame keeps the width it had (one letter left of the starter's "aMs" stayed
+// 23 mm tall in a 90 mm circle), as big as the frame then lets it be sewn (`fittedSizes`). More initials, or no
+// frame around it: its size stays (the frame fit shrinks it if it must).
+export function monoSize(p, letters, pieces) {
+  const count = (t) => [...(t || "").replace(/\s+/g, "")].length, n0 = count(p.letters), n1 = count(letters);
+  if (p.kind !== "monogram" || !n1 || n1 >= n0 || !frameAround(p, pieces.filter((f) => f === p || !(f.rot || 0)))) return p.size;
+  const wide = (q) => { const b = pieceBounds({ ...q, x: 0, y: 0 }); return b ? b[2] - b[0] : 0; };
+  const at = fittedSizes(pieces).get(p.id) ?? p.size, w0 = wide({ ...p, size: at }), w1 = wide({ ...p, letters, size: at });
+  if (!w0 || !w1 || w1 >= w0) return p.size;
+  const q = { ...p, letters, size: Math.min(90, Math.round(((at * w0) / w1) * 2) / 2) };
+  return fittedSizes(pieces.map((o) => (o.id === p.id ? q : o))).get(p.id) ?? q.size;
 }
 
 // The earlier round frame arched lettering sits in, and the curve that runs it just inside that frame's border

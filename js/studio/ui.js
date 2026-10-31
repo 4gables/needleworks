@@ -10,7 +10,7 @@ import { FILL_PATTERNS } from "../core/digitize.js";
 import { draw } from "../render.js";
 import { QUILTS } from "./quilt.js";
 import { MOTIFS } from "./motifs.js";
-import { BORDERS, FABRICS, THREADS, SHAPES, TEXT_SHAPES, splitPieces, archFit, archRoom, archShrink, archTight, cleanPiece, clearSize, collision, inFrame, letterMetrics, underPatch, crossName, layoutSize, touching, towelMin, fineLine, loopsFill, compose, fileBlocks, fittedSizes, followFrame, label, minSize, pieceBounds, previewLook, smallText } from "./pieces.js";
+import { BORDERS, FABRICS, THREADS, SHAPES, TEXT_SHAPES, splitPieces, archFit, archStart, frontPanel, inkHeight, monoSize, archRoom, archShrink, archTight, cleanPiece, clearSize, collision, inFrame, letterMetrics, underPatch, crossName, layoutSize, touching, towelMin, fineLine, loopsFill, compose, fileBlocks, fittedSizes, followFrame, label, minSize, pieceBounds, previewLook, smallText } from "./pieces.js";
 
 const SCRIPT = "NW Great Vibes", PRINT = "NW Josefin Sans", ROUND = "NW Quicksand";
 // exact Brother PEC thread colours, so the name on screen is the one the machine shows
@@ -419,15 +419,22 @@ export function initStudio(api) {
       arc = (room ? `The words wrap most of the way round the curve${room.full ? " and run into themselves" : ""}.` : "The curve is too tight for letters this tall: they'd bunch up.")
         + (fixes.length ? " " + fixes.map((f, i) => (i ? f.replace(">Make", ">make") : f)).join(" or ")
           : wl?.hit ? ` A curve wide enough would ${wl.out ? "go outside" : "run into"} ${api.escapeHtml(label(wl.hit))}: use fewer words.`
-          : wl ? ` A curve wide enough would be ${wl.w.toFixed(0)} × ${wl.h.toFixed(0)} mm, too big for the hoop: use fewer words.` : " Use fewer words, or make the curve bigger and the letters smaller.");
+          : wl ? ` A curve wide enough would be ${wl.w.toFixed(0)} × ${wl.h.toFixed(0)} mm, too big for the hoop: use fewer words.` : " Use fewer words.");
     }
     // run into another piece: the size that clears it (lettering centred in a frame isn't dragged apart, it's made smaller)
     let hit = "";
     if (near) {
-      const inside = near.kind === "frame" && pieces.indexOf(near) < pieces.indexOf(p) && Math.abs(p.x - near.x) < near.w / 2 && Math.abs(p.y - near.y) < (near.shape === "circle" ? near.w : near.h) / 2;
+      // (the frame it's on: the nearest earlier one whose box holds its middle)
+      const host = pieces.slice(0, pieces.indexOf(p)).reverse().find((f) => f.kind === "frame" && Math.abs(p.x - f.x) < f.w / 2 && Math.abs(p.y - f.y) < (f.shape === "circle" ? f.w : f.h) / 2);
+      const inside = host && host.id === near.id, frameName = host && api.escapeHtml(label(host).toLowerCase());
       const cs = lettering || p.kind === "motif" ? clearSize(p, pieces, near) : 0;
-      hit = inside ? `This runs into the ${api.escapeHtml(label(near).toLowerCase())} around it. ${cs ? btn(`data-size="${cs}"`, `Make it ${cs} mm`) : "Make it smaller."}`
-        : `This runs into ${api.escapeHtml(label(near))}. ${cs ? `${btn(`data-size="${cs}"`, `Make it ${cs} mm`)} or drag it apart.` : "Drag it apart or make it smaller."}`;
+      // (no size clears it: a spot in the frame that does, at a size that fits there, else no advice that can't work;
+      // "Make it smaller." with no button sat under a monogram across a pouch's zipper)
+      const to = host && !cs ? spotIn(p) : null, zip = host?.border === "zip";
+      const move = to ? btn("data-move", `Move it ${zip ? "below the zipper" : `to the free space in the ${frameName}`}${to.size !== (fs ?? p.size) ? `, ${to.size} mm` : ""}`) : "";
+      const full = host ? `There's no free space for it in the ${frameName}: make the frame bigger, or take something out.` : "";
+      hit = inside ? `This runs into the ${frameName} around it${zip ? " (the zipper and its stitching are across the top)" : ""}. ${cs ? btn(`data-size="${cs}"`, `Make it ${cs} mm`) : move || full}`
+        : `This runs into ${api.escapeHtml(label(near))}. ${cs ? `${btn(`data-size="${cs}"`, `Make it ${cs} mm`)} or drag it apart.` : move ? `${move}, or drag it apart.` : full || "Drag it apart."}`;
     }
     // (a bigger size for loops that fill in is offered only when it lands, like every other fix)
     const fillsAt = fills && !m && !towel && fabric !== "towel" && fills <= 3 * q.size ? landing(p, sizeChange(p, fills)) : null;
@@ -448,8 +455,12 @@ export function initStudio(api) {
     // letter pairs pushed into each other
     const pushed = p.kind === "text" ? overlapping(p) : [];
     const kerned = pushed.length ? `The letters ${pushed.map((i) => `“${api.escapeHtml(p.text[i] + p.text[i + 1])}”`).join(", ")} are pushed into each other: their stitches would pile up as a lump. ${pushed.map((i) => `<button type="button" class="link" data-kern-off="${i}">Space ${api.escapeHtml(p.text[i] + p.text[i + 1])} as the font does</button>`).join(" ")}` : "";
+    // lines typed into a curved shape (they're joined into one line: a 3-line text on a wave came out 203 mm long
+    // with nothing said)
+    const rows = p.kind === "text" ? p.text.split("\n").filter((l) => l.trim()).length : 0;
+    const oneLine = rows > 1 && p.shape !== "straight" ? `${TEXT_SHAPES[p.shape]} sews the words on one line, so the ${rows} lines are joined into one. ${btn(`data-seg-set="shape:straight"`, "Make it straight")} to keep the lines.` : "";
     // (said plainly, with a one-tap fix where there is one)
-    w.innerHTML = [named, under, same, kerned,
+    w.innerHTML = [named, oneLine, under, same, kerned,
       gone.length ? `This font has no ${gone.map((c) => `“${api.escapeHtml(c)}”`).join(" ")}: ${gone.length === 1 ? "it" : "they"} would be stitched in a stand-in letter. Take ${gone.length === 1 ? "it" : "them"} out or try another font.` : "",
       size, arc, hit,
       !m && !towel && fabric !== "towel" && fineLine(q) ? `At this size it sews as a thin line. <button type="button" class="link" data-seg-set="style:satin">Make it bold</button> (small loops may fill in).` : "",
@@ -644,7 +655,9 @@ export function initStudio(api) {
       // (the size said is the one the preview shows: the whole design, not the first try that failed)
       let msg = err.message, turn = false;
       try {
-        const composed = compose(pieces, { ...hoop, w: 2000, h: 2000 }, { fabric, baste, thread }), big = composed.design, [x0, y0, x1, y1] = big.bounds();
+        // (in a pretend hoop big enough for it: past 2 m the preview was left empty beside "This design is 6429 mm")
+        const whole = (o) => { try { return compose(pieces, { ...hoop, w: 2000, h: 2000 }, o); } catch (e) { if (!e.overBy) throw e; return compose(pieces, { ...hoop, w: 2000 * e.overBy * 1.1, h: 2000 * e.overBy * 1.1 }, o); } };
+        const composed = whole({ fabric, baste, thread }), big = composed.design, [x0, y0, x1, y1] = big.bounds();
         // (the size as the size chip says it, the stitches' extent: the error said 138 × 40 beside a 138 × 41 chip)
         // and never rounded down to look as if it fits ("126 × 23 mm, but the hoop fits 126 × 176" for 126.4)
         const st = designStats(big.pattern()), mm = (v, lim) => (v > lim && Math.round(v) <= lim ? v.toFixed(1) : v.toFixed(0));
@@ -719,7 +732,7 @@ export function initStudio(api) {
     }
     // (a monogram counts when it's the biggest: the ring with JKM in it downloaded as HANDMADE.pes)
     const m = main(true);
-    return (m?.kind === "monogram" ? m.letters : m?.text) || "design";
+    return (m?.kind === "monogram" ? m.letters : m?.text) || from || "design";   // (else the starter: a quilt block was design.pes)
   };
   // the design's main lettering: the biggest straight-or-arched words or monogram (`letters`: appliqué letters too)
   const main = (letters = false) => pieces.filter((p) => p.kind === "text" || p.kind === "monogram" || (letters && p.kind === "letters")).reduce((a, p) => (!a || p.size > a.size ? p : a), null);
@@ -753,14 +766,22 @@ export function initStudio(api) {
     const tall = Math.max(0, ...pieces.filter((q) => q.kind === "text" || q.kind === "monogram").map((q) => q.size));
     const p = b.dataset.add === "text" ? text({ y: 20 }) : b.dataset.add === "monogram" ? mono() : b.dataset.add === "letters" ? appl()
       : b.dataset.add === "motif" ? motif(tall ? { size: Math.min(40, Math.max(25, Math.round(tall * 1.25))) } : {}) : frame({ border: "line" });
-    // on a frame when there's room inside it: centred, or below or above what's already in it, in a thread that shows
-    // on a patch (+ Lettering on the patch starter came in navy on the navy fill, low and to one side)
-    const on = p.kind !== "frame" && inside(p);
+    // on a frame when there's room inside it (made smaller to fit, down to `least`: a second 40 mm motif landed
+    // outside the quilt block)
+    const at = p.kind !== "frame" && spotIn(p);
+    if (at) Object.assign(p, { x: at.x, y: at.y, size: at.size });
+    // nothing goes outside an in-the-hoop project (it would sew on the bare stabilizer, and a monogram added to a
+    // 4x4 zipper pouch split it into two hoopings): on its front, smallest, saying what it runs into
+    const ith = !at && p.kind !== "frame" && pieces.find((f) => f.kind === "frame" && (f.border === "zip" || f.border === "ith") && !(f.rot || 0));
+    if (ith) Object.assign(p, middleOf(ith, { ...p, size: least(p) }), { size: least(p) });
     // else a new piece that would land on another goes below what's there (it landed on top: + Lettering over a design)
-    const moved = p.kind !== "frame" && !on && !!touching(p, pieces);
+    const moved = p.kind !== "frame" && !at && !ith && !!touching(p, pieces);
     if (moved) freeSpot(p, "down");
     pieces.push(p); sel = p.id;
-    if (on?.border === "patch" && hard(p.color, on.fill || on.color)) p.color = against(on, pieces);
+    // in a thread that shows on a patch it's sewn on, wherever it landed (+ Lettering on the patch starter came in
+    // navy on the navy fill)
+    const base = p.kind !== "frame" && underPatch(p, pieces, true);
+    if (base && hard(p.color, base.fill || base.color)) p.color = against(base, pieces);
     if (moved) recentre();
     save(); ui(); make();
   };
@@ -820,6 +841,12 @@ export function initStudio(api) {
     if (t.type === "range") t.nextElementSibling.textContent = shown(t.value, t.dataset.unit);
     change((p) => {
       if (k === "text") { if (p.kern) p.kern = rekern(p.kern, p.text, t.value); pairAt = +Object.keys(rekern({ [pairAt]: 1 }, p.text, t.value) || { [-1]: 1 })[0]; }
+      // (fewer initials in a frame grow to its width: one letter of "aMs" stayed 23 mm tall in a 90 mm circle)
+      if (k === "letters" && p.kind === "monogram") {
+        const was = p.size; p.size = monoSize(p, t.value, pieces);
+        const r = edit.querySelector('input[data-k="size"]');
+        if (r && p.size !== was) { r.max = Math.max(+r.max, Math.ceil(p.size)); r.value = p.size; r.nextElementSibling.textContent = shown(p.size, "mm"); }
+      }
       p[k] = t.type === "range" ? +t.value : t.value;
     }, false, k === "font" || k === "deco");
     if (k === "text") { const box = edit.querySelector("[data-pairs]"); if (box) box.innerHTML = pairUI(current()); }   // (the pairs follow the words)
@@ -859,9 +886,25 @@ export function initStudio(api) {
     if (af) { sewAfter(+af.dataset.after); return; }
     const kr = e.target.closest("[data-kern-off]");
     if (kr) { change((p) => { delete p.kern[kr.dataset.kernOff]; if (!Object.keys(p.kern).length) delete p.kern; }, true); editor(); return; }
+    if (e.target.closest("[data-move]")) { const to = spotIn(current()); if (to) change((p) => Object.assign(p, { x: to.x, y: to.y, size: to.size }), true); editor(); return; }
     if (e.target.closest("[data-follow]")) { change((p) => Object.assign(p, followFrame(p, pieces)), true); editor(); return; }
     const s = e.target.closest("[data-seg] button");
-    if (s) { change((p) => (p[s.closest("[data-seg]").dataset.seg] = s.dataset.v), true, true); editor(); }
+    if (s) {
+      change((p) => {
+        const k = s.closest("[data-seg]").dataset.seg, arc = (v) => v === "up" || v === "down", was = p.shape;
+        p[k] = s.dataset.v;
+        // words first bent into an arch get a curve to suit them: just inside a round frame they're in, else one sized
+        // from the word (the 30 mm default made a 24 mm "Olivia" read "Oliuia")
+        // (kept where it was: the piece's place is the curve's centre, so a wider curve threw the word up out of the hoop)
+        if (p.kind === "text" && k === "shape" && arc(p.shape) && !arc(was)) {
+          delete p.ry;
+          const ff = followFrame(p, pieces);
+          if (ff) Object.assign(p, ff);
+          else { const { radius } = archStart(p); p.radius = radius; p.y = Math.round((p.y + (p.shape === "up" ? radius : -radius)) * 2) / 2; }
+        }
+      }, true, true);
+      editor();
+    }
   });
 
   // drag a piece on the preview (mm in the hoop; the machine centres the whole design)
@@ -998,18 +1041,45 @@ export function initStudio(api) {
     recentre(); save(); ui(); make();
     toast(add.length === 1 ? `Pasted ${label(add[0])}.` : `Pasted ${add.length} pieces.`);
   });
-  // p placed inside the biggest frame it fits in without running into anything: that frame, or null (p unmoved)
-  function inside(p) {
-    const H = (f) => (f.shape === "circle" ? f.w : f.h);
-    const frames = pieces.filter((f) => f.kind === "frame" && !(f.rot || 0)).sort((a, b) => b.w * H(b) - a.w * H(a)), fb = pieceBounds({ ...p, x: 0, y: 0 });
-    if (!fb) return null;
-    for (const f of frames) {
-      // what's in it already, and the spots either side of that
-      const bs = pieces.filter((o) => o.kind !== "frame" && inFrame(o, f, -2)).map(pieceBounds).filter(Boolean);
-      const ys = [f.y - (fb[1] + fb[3]) / 2, ...(bs.length ? [Math.max(...bs.map((b) => b[3])) + 4 - fb[1], Math.min(...bs.map((b) => b[1])) - 4 - fb[3]] : [])];
-      for (const y of ys) {
-        const q = { ...p, x: f.x - (fb[0] + fb[2]) / 2, y: Math.round(y * 2) / 2 };
-        if (inFrame(q, f, f.border === "patch" ? 3 : 4) && !touching(q, pieces)) { p.x = Math.round(q.x * 2) / 2; p.y = q.y; return f; }
+  // the smallest a new piece is made to fit a frame: half its size for lettering, what still stitches well for the
+  // rest (a filled motif under 25 mm starts to lose its detail, and the editor says so, but inside the quilt block's
+  // frame beats outside it)
+  const least = (p) => (p.size == null ? p.size : p.kind === "text" ? Math.max(5, Math.round(p.size) / 2) : p.kind === "monogram" ? Math.min(p.size, 15)
+    : p.kind === "motif" ? Math.min(p.size, 20) : p.kind === "letters" ? Math.min(p.size, 30) : p.size);
+  // x, y that put p in the middle of frame f's front (a zipper pouch's is below the zipper)
+  function middleOf(f, p) {
+    const fb = pieceBounds({ ...p, x: 0, y: 0 }), [t, b] = frontPanel(f);
+    return fb ? { x: Math.round((f.x - (fb[0] + fb[2]) / 2) * 2) / 2, y: Math.round(((t + b) / 2 - (fb[1] + fb[3]) / 2) * 2) / 2 } : { x: p.x, y: p.y };
+  }
+  // Where p goes inside the biggest (unturned) frame with room for it, running into nothing: in the middle of the
+  // frame's front, or below, above or beside what's in it already, at its own size or smaller (10 % steps, down to
+  // `least`). { f, x, y, size }, or null.
+  function spotIn(p) {
+    const H = (f) => (f.shape === "circle" ? f.w : f.h), others = pieces.filter((o) => o.id !== p.id);
+    const frames = others.filter((f) => f.kind === "frame" && !(f.rot || 0)).sort((a, b) => b.w * H(b) - a.w * H(a));
+    if (!frames.length) return null;
+    const sizes = p.size == null ? [p.size] : [...new Set(Array.from({ length: 10 }, (_, i) => Math.max(least(p), Math.round(p.size * (1 - i / 10) * 2) / 2)))];
+    for (const size of sizes) {
+      const q0 = { ...p, size }, fb = pieceBounds({ ...q0, x: 0, y: 0 });
+      if (!fb || (size !== p.size && minSize(q0))) continue;
+      const cx = (fb[0] + fb[2]) / 2, cy = (fb[1] + fb[3]) / 2;
+      for (const f of frames) {
+        // what's in it already (frames too: the quilt block's heart), and the spots round that
+        const [t] = frontPanel(f), mid = middleOf(f, q0), bs = others.filter((o) => o !== f && inFrame(o, f, -2)).map(pieceBounds).filter(Boolean);
+        const spots = [[mid.x, mid.y]];
+        if (bs.length) {
+          const L = Math.min(...bs.map((b) => b[0])), T = Math.min(...bs.map((b) => b[1])), R = Math.max(...bs.map((b) => b[2])), B = Math.max(...bs.map((b) => b[3]));
+          spots.push([mid.x, B + 4 - fb[1]], [mid.x, T - 4 - fb[3]], [R + 4 - fb[0], (T + B) / 2 - cy], [L - 4 - fb[2], (T + B) / 2 - cy]);
+        }
+        for (const [x, y] of spots) {
+          const q = { ...q0, x: Math.round(x * 2) / 2, y: Math.round(y * 2) / 2 };
+          // (on a zipper pouch, clear of the zipper band and its topstitch)
+          if (f.border === "zip" && q.y + fb[1] < t + 3) continue;
+          if (!inFrame(q, f, f.border === "patch" ? 3 : 4) || touching(q, others)) continue;
+          // (at the size the frame then sews it: "Shrunk to 23.5 mm so it fits" under a monogram just put in at 24)
+          const ps = pieces.some((o) => o.id === p.id) ? pieces.map((o) => (o.id === p.id ? q : o)) : [...pieces, q];
+          return { f, x: q.x, y: q.y, size: fittedSizes(ps).get(p.id) ?? size };
+        }
       }
     }
     return null;
@@ -1073,24 +1143,27 @@ export function initStudio(api) {
       // Each name is checked like the design itself: a letter the font lacks is refused (a stand-in glyph was stitched),
       // and a name that runs into another piece is made smaller with `shrink` (Lily-Rose's y in the bib's heart) or
       // said. shrink: a name too long for the hoop, or running into something, is tried at 90 %, 80 %… down to half.
-      // With the hoop turned, a name that fits upright is laid out upright (`turned` false): short names stayed turned.
+      // With the hoop turned every file is turned like the design (`turned`), as the steps and the hooping note say:
+      // names that fit upright came out upright beside turned ones, and a towel hooped sideways for the batch sewed
+      // them across it. Each name is drawn at the design's own letter scale (`inkHeight`: the size is the height of
+      // the word's strokes, so "emma", with no capital, came out twice Emma's size); fewer initials grow to the
+      // monogram's width (`monoSize`).
       build: (name, shrink = false) => {
+        if (!/[\p{L}\p{N}]/u.test(name)) throw new Error("no letters to stitch");
         const gone = missing(name, p.font);
         if (gone.length) throw new Error(`the font has no ${gone.map((c) => `“${c}”`).join(" ")}`);
         if (mono && [...name.replace(/\s+/g, "")].length > 3) throw new Error("a monogram takes 3 initials at most");
+        const h0 = mono ? 0 : inkHeight(p.text.split("\n").find((l) => l.trim()) || p.text, p.font), h1 = mono ? 0 : inkHeight(name, p.font);
+        const size0 = mono ? monoSize(p, name, pieces) : h0 && h1 ? Math.min(60, (p.size * h1) / h0) : p.size;
         for (let f = 1; ; f -= 0.1) {
           try {
-            const q = { ...p, [mono ? "letters" : "text"]: name, size: Math.round(p.size * f * 2) / 2 }, ps = pieces.map((r) => (r.id === p.id ? q : r));
-            let pattern, turned = false;
-            if (api.turned()) {
-              try { pattern = compose(ps, api.machineHoop(), opts).design.pattern(); }
-              catch (err) { if (!err.overBy) throw err; pattern = compose(ps, api.hoop(), opts).design.pattern(); turned = true; }
-            } else pattern = compose(ps, api.hoop(), opts).design.pattern();
+            const q = { ...p, [mono ? "letters" : "text"]: name, size: Math.round(size0 * f * 2) / 2 }, ps = pieces.map((r) => (r.id === p.id ? q : r));
+            const turned = api.turned(), pattern = compose(ps, api.hoop(), opts).design.pattern();
             // (lettering inside a frame shrinks to fit it, so a long name can come out small without f changing)
             const was = fittedSizes(pieces).get(p.id) ?? p.size, now = fittedSizes(ps).get(p.id) ?? q.size;
             const hit = clean && touching({ ...q, size: now }, ps);
             if (hit && shrink && f > 0.55) continue;
-            return { pattern, name, turned, runs: hit ? label(hit) : "", smaller: f < 1 || now < was - 0.25, thin: fabric !== "towel" && fineLine({ ...q, size: now }) && !fineLine({ ...p, size: was }) };
+            return { pattern, name, turned, runs: hit ? label(hit) : "", smaller: now < (mono ? was : (size0 * was) / p.size) - 0.25, thin: fabric !== "towel" && fineLine({ ...q, size: now }) && !fineLine({ ...p, size: was }) };
           }
           catch (err) { if (!shrink || !err.overBy || f < 0.55) throw err; }
         }
