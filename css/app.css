@@ -490,4 +490,9 @@ select, input[type="text"], .edit textarea, .cards button, .names textarea { bor
 .size-mm input { width: 6em; min-height: 36px; padding: 4px 8px; font: inherit; color: inherit; background: var(--panel);
   border: 1.5px solid var(--field-line); border-radius: var(--radius); }
 .size-mm input:focus { border-color: var(--accent); outline: none; box-shadow: 0 0 0 4px var(--accent-soft); }
+/* the Open tab's colour per block for files without colours (DST) */
+.doc-colours { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin-bottom: 4px; }
+.doc-colours > span { flex-basis: 100%; font-weight: 700; }
+.field .doc-colours label { display: inline-flex; flex-direction: column; align-items: center; gap: 2px; font-weight: 400; }
+.doc-colours input { width: 44px; height: 32px; padding: 0; border: 1px solid var(--field-line); border-radius: 6px; background: none; }
 @media (pointer: coarse) { .size-mm input { min-height: 44px; } }

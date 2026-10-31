@@ -598,7 +598,8 @@ export function initStudio(api) {
   $("st-load").onchange = async (e) => {
     const f = e.target.files[0]; e.target.value = ""; if (!f) return;
     try {
-      const data = JSON.parse(await f.text());
+      // (a damaged file said "Expected property name or '}' in JSON at position 1")
+      let data; try { data = JSON.parse(await f.text()); } catch { throw new Error("it isn't a design saved from this page, or it's damaged (saved designs end in .needleworks.json)"); }
       if (!data || data.needleworks !== 1 || !Array.isArray(data.pieces)) throw new Error("it isn't a design saved from this page");
       const kinds = new Set(["text", "monogram", "frame", "file", "letters", "motif"]);
       const loaded = data.pieces.filter((p) => p && kinds.has(p.kind) && Number.isFinite(p.x) && Number.isFinite(p.y));
