@@ -945,8 +945,8 @@ function localStages(p, fab = "cotton") {
           // (one sentence per action: the steps show them numbered. "On the front" was read while the hoop was upside
           // down, so the ribbon goes on once it's back on the machine, the embroidered side up)
           you: `Take the hoop off the machine (leave the fabric in the hoop) and turn it upside down. Tape the backing fabric over the stabilizer, right side facing you, covering the ${name} by ½ in. Turn the hoop back over and put it back on the machine.${hang ? ` For the loop, fold the ribbon in half and tape it on the embroidered side at the top of the ${name}, loop pointing in toward the middle, ends ½ in past the outline.` : ""} Press Start.`,
-          sews: "Tacks the backing on and covers the edge with satin through every layer.",
-          after: `Take it out of the hoop, tear the stabilizer away and cut round the ${name} as close to the satin as you can without nicking it${hang ? " (keep the ribbon loop clear of the scissors). Flip the ribbon loop up." : "."}` },
+          sews: "Tacks the backing on and covers the edge with satin stitch through every layer.",
+          after: `Take it out of the hoop, tear the stabilizer away and cut round the ${name} as close to the satin stitches as you can without nicking them${hang ? " (keep the ribbon loop clear of the scissors). Flip the ribbon loop up." : "."}` },
       ];
     } else if (p.border === "patch") {
       // solid tatami fill (inset so the satin edge covers its ragged ends), then the satin edge over it; `compose`
@@ -956,8 +956,8 @@ function localStages(p, fab = "cotton") {
       // (a patch is a separate piece: its fabric, a stabilizer firm enough for thousands of fill stitches, and how to
       // cut it out and put it on; it listed only "Tear-away stabilizer")
       const fill = patchFill(p, [inset(edge, 1.0)], fab);
-      stages = [...fill, { color: p.color, edge: true, solid: [edge], paths: satinBorder(edge), sews: `Sews the patch's satin edge.`,
-        after: `Take it out of the hoop, trim or tear the stabilizer away and cut the patch out close to the satin edge without nicking it. To put it on, iron patch adhesive (or fusible web) on the back and press it on, or sew it on by hand or machine just inside the edge.` }];
+      stages = [...fill, { color: p.color, edge: true, solid: [edge], paths: satinBorder(edge), sews: `Sews the patch's satin-stitch edge.`,
+        after: `Take it out of the hoop, trim or tear the stabilizer away and cut the patch out close to the satin-stitched edge without nicking it. To put it on, iron patch adhesive (or fusible web) on the back and press it on, or sew it on by hand or machine just inside the edge.` }];
     } else {
       stages = [{ color: p.color, paths: plainBorder(edge, p.border), sews: `Sews the ${name} frame.`, border: true }];
     }
@@ -1046,7 +1046,7 @@ function appliqued(loops, color, what, cover, trim, them = "it") {
     { color, pause: true, paths: R.tack,
       you: `Lay the appliqué fabric over ${cover}, right side up, covering ${them} by ½ in. Press Start: the machine tacks it down. Then take the hoop off the machine (leave the fabric in the hoop), trim the fabric close to the stitching ${trim}, and put the hoop back.`,
       sews: "", under: true },
-    { color, pause: true, paths: R.satin, you: "Press Start.", sews: "Covers the raw edges with satin." },
+    { color, pause: true, paths: R.satin, you: "Press Start.", sews: "Covers the raw edges with satin stitch." },
   ];
 }
 

@@ -2,6 +2,7 @@
 // Sew sheet (printed at 1:1 to take to the machine) and appliqué cut files (SVG for Cricut / ScanNCut).
 // Stitch units are 0.1 mm, cut outlines mm; the machine centres the design in the hoop, so the template does too.
 import { colorBlocks } from "./render.js";
+import { problemsItems } from "./words.js";
 
 // steps for a file that says nothing of its fabric or pauses (an opened design): both stabilizers, said plainly
 export const FIRST_STEP = "Hoop the fabric with stabilizer under it. Put on the first thread. Press Start.";
@@ -74,7 +75,7 @@ ${groups.map((g, i) => `  <g id="fabric-${i + 1}"><path d="${path(g)}" fill="non
 }
 
 // sheet: { steps: [{ title?, you?, sews? }], ready: [] (one "Have ready" list), after: [], notes: [], cut: [[loop...]...] }, thread names as the machine shows them
-export function sewSheet({ pattern, filename, hoop, facts, threads, hide, sheet = {}, spool = () => "" }) {
+export function sewSheet({ pattern, filename, hoop, facts, threads, hide, sheet = {}, spool = () => "", problems = [] }) {
   const { blocks } = colorBlocks(pattern);
   const steps = sheet.steps?.length ? sheet.steps : blocks.map((b, i) => ({ you: nextThread(blocks, i, threads[i] && `Brother ${threads[i].name}`) }));
   const after = sheet.after?.length ? sheet.after : [FINISH];
@@ -99,6 +100,7 @@ export function sewSheet({ pattern, filename, hoop, facts, threads, hide, sheet 
     <p class="note">${sheet.cut?.length ? "Hatched: where the fabric pieces go. " : ""}The machine stitches the design centred in the hoop, where the dashed lines cross. Pin this sheet on the fabric where you want the design and line the crosshair up with the hoop's grid sheet.</p>
   </section>
   <section class="pg"><h2>How to stitch it</h2>
+    ${problemsItems(problems, "div", "probs")}
     ${(sheet.ready || []).length ? `<h3>Have ready</h3><ul class="ready">${sheet.ready.map((r) => `<li>${esc(r)}</li>`).join("")}</ul>` : ""}
     <ol class="list">${rows}</ol>
     <h3>When it's done</h3><p>${esc(after.join(" "))}</p>

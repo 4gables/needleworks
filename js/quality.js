@@ -3,6 +3,7 @@
 // written (decoded from its bytes, so the writer's splits and rounding count), so "Checked" means what the checker
 // means. Until 2026-10-30 the download dialog said "Checked: it opens on a Brother PE900" for files the checker
 // failed (density 25, a 12.7 mm stitch). Stitch units 0.1 mm.
+import { stopWords } from "./words.js";
 import { COLOR_CHANGE, JUMP, STITCH, STOP, TRIM, designBlockAgrees, readEmbroidery } from "./core/formats.js";
 
 export const LIMIT = 24;       // needle hits per mm² per colour block (pe900_check MAX_PER_MM2)
@@ -110,12 +111,8 @@ export const HARD = new Set(["blocks", "colours", "block", "applique"]);
 
 export const denseWords = (max) => `up to ${max} stitches in one square millimetre, about a pinhead; sold designs have ${LIMIT} at most`;
 
-// "195 thread changes and 4 pauses", as the facts beside the preview count a design's stops (a 200-colour file said
-// "changes thread 199 times" beside "195 thread changes · 4 pauses")
-export function stopWords(changes, pauses) {
-  const c = `${changes} thread ${changes === 1 ? "change" : "changes"}`, p = `${pauses} ${pauses === 1 ? "pause" : "pauses"}`;
-  return changes && pauses ? `${c} and ${p}` : pauses ? p : c;
-}
+// (the words for stops live in words.js, one vocabulary for every surface)
+export { stopWords };
 
 // a thread change to the same PEC thread is a machine pause (pyembroidery's interpolate_duplicate_color_as_stop)
 function withStops(pattern) {

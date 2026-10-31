@@ -10,7 +10,8 @@ import { CLOTHS, colorBlocks, draw } from "./render.js";
 import { FINISH, FIRST_STEP, TURN_PIC, cutSVG, nextThread, sewSheet, youHtml } from "./sheet.js";
 import { zip } from "./zip.js";
 import { blockThreads, checkup, fewerBlocks, fix, heat, landJumps, pauses, shortJumps, sortedChanges } from "./doctor.js";
-import { HARD, MAX_BLOCKS, denseWords, endsEarly, moves, stopWords, verdictOf } from "./quality.js";
+import { HARD, MAX_BLOCKS, denseWords, endsEarly, moves, verdictOf } from "./quality.js";
+import { BLOCK, LOOK, LOOK_HEAD, TIP, TIP_HEAD, problemsInline, problemsItems, problemsOf, shownOn, stopWords, stopsAt } from "./words.js";
 import { BRANDS, chartSpools, exampleSpools, lab, nearestSpool, spools } from "./core/brands.js";
 import { COLORS as LINE_THREADS, initStudio } from "./studio/ui.js";
 
@@ -139,7 +140,7 @@ function setView(v) {
     // (the Design tab never said it fits, as the Open tab's file card does)
     v.split ? `<span>${v.split.length} hoopings</span>` : fits ? (state.mode === "design" ? `<span>Fits ${escapeHtml(h.name.replace(/ hoop$/, ""))}</span>` : "") : `<span class="bad">Too big for the ${h.name}</span>`,
     offCentre(v, fits) ? `<span class="note">Off centre here: the machine centres it <button type="button" class="link" id="recentre">Centre it</button></span>` : "",
-    snips ? `<span${tip("The machine only trims jumps longer than its “jump stitch not to trim” setting (5 mm at the lowest). The thread is locked at both ends, so these are safe to snip after stitching.")}>${snips} loose ${snips === 1 ? "thread" : "threads"} to snip after</span>` : "",
+    snips ? `<span${tip("The machine only trims moves between parts longer than its “jump stitch not to trim” setting (5 mm at the lowest). The thread is locked at both ends, so these are safe to snip after stitching.")}>${snips} loose ${snips === 1 ? "thread" : "threads"} to snip after</span>` : "",
   ].join("");
   const seen = new Set(), mt = machineThreadList(v);
   // (a thread the design comes back to gets a chip again where it's sewn: White, Red, Blue, Gold, Blue read White, Red,
@@ -157,8 +158,10 @@ function setView(v) {
   v.facts = [`${st.widthMm.toFixed(0)} × ${st.heightMm.toFixed(0)} mm (${inch(st.widthMm)} × ${inch(st.heightMm)} in)`, `${st.stitches.toLocaleString()} stitches`,
     counts[0] + counts[1] ? stopWords(...counts) : "no thread changes", `≈ ${minutes} min`, `${h.machineName} ${h.name}`];
   // (`block`: a design that can't be sewn as it is, such as words wrapped round into themselves: no file until it's fixed)
-  $("download").disabled = !fits || !!v.block; $("share").disabled = !fits || !!v.split || !!v.block;
-  $("sheet-print").disabled = $("along-open").disabled = !fits || !!v.split; $("cut-file").hidden = !v.sheet?.cut?.length; $("names-open").hidden = !!v.split || !namesFor();
+  const blocked = blocking(v);
+  $("download").disabled = !fits || !!blocked; $("share").disabled = !fits || !!v.split || !!blocked;
+  // (nor a sew sheet or Sew along for a file that can't be made)
+  $("sheet-print").disabled = $("along-open").disabled = !fits || !!v.split || !!blocked; $("cut-file").hidden = !v.sheet?.cut?.length; $("names-open").hidden = !!v.split || !namesFor();
   // (one per name from a design that doesn't fit yet made a zip of names that didn't fit either)
   $("names-open").disabled = !fits; $("names-open").title = fits ? "" : "Make the design fit the hoop first.";
   if (state.mode === "picture") picSteps(v, st);
@@ -169,21 +172,24 @@ function setView(v) {
   if (fits && !v.split && !v.verdict) qTimer = setTimeout(() => { if (state.view === v) { v.verdict = verdictOf(v.bytes); warnUI(v); } }, 250);
   // (and the size controls: "Largest that fits the 5x7" stayed after the hoop was changed to 4x4 on another tab)
   if (state.mode === "open" && state.opened) { openInfo(v, st, fits); if ($("doc-scale")) sizeUI(); }
-  $("download").textContent = v.split ? `Download ${v.split.length} files (.zip)` : !fits ? "Too big for this hoop" : v.block ? v.blockLabel || "Fix the lettering first" : v.action || `Download ${v.filename}`;
+  $("download").textContent = v.split ? `Download ${v.split.length} files (.zip)` : !fits ? "Too big for this hoop" : blocked ? v.blockLabel || "Fix the lettering first" : v.action || `Download ${v.filename}`;
   paint();
 }
 let qTimer = 0;
-// beside Download: the view's own warning, then what's wrong with the file itself
+// what stops a file being made: a wait (a design file re-stitching) or a problem that blocks it (words.js)
+const blocking = (v) => v.block || problemsOf(v).find((q) => q.level === BLOCK)?.text || "";
+// beside Download: the view's problems (words.js), then what's wrong with the file itself
 function warnUI(v) {
-  const bad = v.verdict?.length ? `This file may not sew well: ${v.verdict.map((p) => p.text).join(" ")}${state.mode === "open" ? "" : " Download it and the next screen offers a fixed copy."}` : "";
-  const t = [v.block || v.warn, bad].filter(Boolean).join(" ");
-  $("dl-warn").textContent = t; $("dl-warn").hidden = !t;
+  const all = shownOn(problemsOf(v), "download"), own = all.filter((q) => !q.file), file = all.filter((q) => q.file);
+  const html = [v.block ? escapeHtml(v.block) : "", problemsInline(own), own.length && v.fixHint ? escapeHtml(v.fixHint) : "",
+    file.length ? `This file may not sew well: ${problemsInline(file)}${state.mode === "open" ? "" : " Download it and the next screen offers a fixed copy."}` : ""].filter(Boolean).join(" ");
+  $("dl-warn").innerHTML = html; $("dl-warn").hidden = !html;
 }
 // thread changes, and pauses where the next block is in the same thread (an in-the-hoop bookmark's fabric steps: the
 // Open tab said "4 thread changes" for an all-red file)
 function stopsFact(ch, same) {
   return (ch ? `<span${tip("The machine stops for each one: thread the next colour and press Start.")}>${ch} thread ${ch === 1 ? "change" : "changes"}</span>` : "")
-    + (same ? `<span${tip("The machine stops but the thread stays the same: usually a fabric step (in-the-hoop or appliqué). Sew along says what to do at each stop.")}>${same} ${same === 1 ? "pause" : "pauses"} in the same thread</span>` : "");
+    + (same ? `<span${tip("The machine stops but the thread stays the same: usually a fabric step (in-the-hoop or appliqué). Sew along says what to do at each pause.")}>${same} ${same === 1 ? "pause" : "pauses"} in the same thread</span>` : "");
 }
 // a design's stops: [thread changes, pauses in the same thread]
 function stopCounts(p, n = designStats(p).colorChanges) { const same = Math.min(n, pauses(p)); return [n - same, same]; }
@@ -199,7 +205,7 @@ function picSteps(v, st) {
   const after = "Take the hoop off and snip any loose threads between parts. Tear-away stabilizer: tear it off gently, holding the stitches down with your thumb. Cut-away: trim it about ¼ in from the stitching (don't tear it: it keeps the design in shape).";
   v.sheet = { ...v.sheet, ready, steps, after: [after] };
   $("pic-steps-count").textContent = `· ${blocks.length} ${blocks.length === 1 ? "thread" : "threads"}`;
-  $("pic-steps").innerHTML = (turned() ? `<li class="after"><b>Hooping</b><span class="turned">${TURN_PIC}${escapeHtml($("done-turn").textContent)}</span></li>` : "")
+  $("pic-steps").innerHTML = problemsItems(shownOn(problemsOf(v), "steps")) + (turned() ? `<li class="after"><b>Hooping</b><span class="turned">${TURN_PIC}${escapeHtml($("done-turn").textContent)}</span></li>` : "")
     + `<li class="after"><b>Have ready</b><ul class="ready">${ready.map((r) => `<li>${escapeHtml(r)}</li>`).join("")}</ul></li>`
     + blocks.map((b, i) => { const t = mt[b.index] || nearestBrotherThread(b.color);
       return `<li><b><span class="n">${i + 1}</span><i style="background:${b.color}"></i>Brother ${escapeHtml(t.name)}${spool(b.color) ? ` <small>${escapeHtml(spool(b.color))}</small>` : ""}</b>${youHtml(steps[i].you, escapeHtml)}</li>`; }).join("")
@@ -402,6 +408,10 @@ function shareText(v) {
   const steps = sheet.steps?.length ? sheet.steps : blocks.map((b, i) => ({ you: nextThread(blocks, i, mt[i] && `Brother ${mt[i].name}`) }));
   const lines = [`Embroidery file for a ${hoop().machineName} (${hoop().name}). Copy it to a USB stick, plug it into the machine and pick the design.`];
   if (turnedFile()) lines.push("", $("done-turn").textContent);
+  // (what's still wrong, and worth knowing, as every other surface says it: before the steps, so a long list of steps
+  // can't cut it off)
+  const probs = shownOn(problemsOf(v), "share");
+  for (const [level, head] of [[LOOK, LOOK_HEAD], [TIP, TIP_HEAD]]) { const l = probs.filter((q) => q.level === level); if (l.length) lines.push("", head + ":", ...l.map((q) => `- ${q.text}`)); }
   if (sheet.ready?.length) lines.push("", "Have ready:", ...sheet.ready.map((r) => `- ${r}`));
   lines.push("", "Steps:", ...steps.map((st, i) => `${i + 1}. ${mt[i] ? `Brother ${mt[i].name}: ` : ""}${st.you || "Press Start."}`));
   if (sheet.after?.length) lines.push("", "When it's done: " + sheet.after.join(" "));
@@ -536,16 +546,16 @@ function downloaded(v, zipped, files = []) {
   // (Design-tab warnings still showing: "Checked" shouldn't read as "all good")
   // (what's said beside Download covers every piece, the editor's note only the one selected: a fleece name that closes
   // up downloaded under a green "Checked" with the editor scrolled away)
-  const warns = state.mode === "design" ? (v.warn ? [v.warn] : [...document.querySelectorAll("#st-edit [data-warn]:not([hidden])")].map((w) => w.textContent.trim())) : [];
-  // (an opened file's own note, such as two designs in one file, said again: not a cut-short file, said above)
-  const note = state.mode === "open" && !part ? v.warn : "";
-  $("done-warn").hidden = !warns.length && !note; $("done-warn").textContent = warns.length ? "Still to look at: " + warns.join(" ") : note || "";
+  // (the view's problems, as said beside Download (words.js); the file's own verdict is the list above, and a file cut
+  // short is said in the line above)
+  const warns = shownOn(problemsOf(v), "done").filter((q) => !q.file && !(part && q.id === "short"));
+  $("done-warn").hidden = !warns.length; $("done-warn").innerHTML = warns.length ? `${LOOK_HEAD}: ${problemsInline(warns)}` : "";
   if (warns.length && !bad.length && !part) { $("done-checked").textContent = `The file is checked: it opens ${what}.`; $("done-checked").className = ""; }
   // (only the Design tab and the bookmark have “How to stitch it”)
   // (and a design with no pauses has none to follow)
   // (two hoopings: which file first, and the rehooping between them; it said "Pick the design and press Start")
   // (stops named as they are: "at each pause, thread the next colour" on a picture with thread changes only)
-  const at = `at every ${ch && same ? "thread change and pause" : ch ? "thread change" : "pause"}`;
+  const at = stopsAt(ch, same);
   $("done-sew").textContent = parts ? `Sew ${v.split[0].filename} first${ch + same ? `, following “How to stitch it” ${at}` : ""}. Then hoop the fabric again as “How to stitch it” says (it lines up on the two crosses) and sew ${v.split[1].filename}.`
     : !(ch + same) ? "Pick the design and press Start."
     : state.mode === "design" || state.mode === "bookmark" ? `Pick the design, then follow “How to stitch it” (or Sew along) ${at}.`
@@ -558,7 +568,7 @@ $("done-close").onclick = () => { if ($("done-never").checked) store.set("doneSe
 // sew sheet: the design at 1:1 on the hoop field, the steps, appliqué shapes; printed from a hidden block
 function fillSheet() {
   const v = state.view; if (!v?.file || v.split) return false;
-  $("sheet").innerHTML = sewSheet({ pattern: v.file, filename: v.filename, hoop: hoop(), facts: v.facts, threads: machineThreadList(v), hide: v.hide, sheet: v.sheet, spool });
+  $("sheet").innerHTML = sewSheet({ pattern: v.file, filename: v.filename, hoop: hoop(), facts: v.facts, threads: machineThreadList(v), hide: v.hide, sheet: v.sheet, spool, problems: shownOn(problemsOf(v), "sheet") });
   return true;
 }
 $("sheet-print").onclick = () => { if (fillSheet()) window.print(); };
@@ -646,13 +656,16 @@ function alongShow() {
   if (done) {
     $("along-title").textContent = "Finished";
     $("along-you").innerHTML = youHtml((v.sheet?.after || []).join(" ") || FINISH, escapeHtml, "p");
-    $("along-ready").hidden = $("along-turn").hidden = true;
+    $("along-ready").hidden = $("along-turn").hidden = $("along-look").hidden = true;
     $("along-sews").textContent = ""; $("along-time").textContent = ""; $("along-wrong").hidden = true;
   } else {
     const s = steps[i], t = mt[i], sp = s.block && spool(s.block.color);
     $("along-title").innerHTML = `<i style="background:${s.block?.color || "#999"}"></i>${s.title ? escapeHtml(s.title) + " · " : ""}Brother ${escapeHtml(t?.name || "")}${sp ? ` <small>${escapeHtml(sp)}</small>` : ""}`;
     $("along-ready").hidden = !s.ready; $("along-ready").querySelector("ul").innerHTML = (s.ready || []).map((r) => `<li>${escapeHtml(r)}</li>`).join("");
     $("along-turn").hidden = !s.turn; $("along-turn").innerHTML = s.turn ? TURN_PIC + escapeHtml(s.turn) : "";
+    // (what's still wrong, and worth knowing, on the first screen, as the steps and the sew sheet say it: words.js)
+    const probs = i ? "" : problemsItems(shownOn(problemsOf(v), "along"), "div", "");
+    $("along-look").hidden = !probs; $("along-look").innerHTML = probs;
     $("along-you").innerHTML = s.you || !i ? youHtml(s.you || FIRST_STEP, escapeHtml, "p") : "";
     $("along-sews").textContent = s.sews || "";
     $("along-time").textContent = `About ${s.minutes} min of sewing.`;
@@ -995,7 +1008,7 @@ function drawBookmarkUI() {
     + `<span class="swatch-name">Closest Brother thread: <b>${nearestBrotherThread(state.bm.color).name}</b></span>`;
   $("bm-fabrics").innerHTML = Object.entries(CLOTHS).map(([k, f]) => `<button type="button" data-fab="${k}" aria-pressed="${k === state.bm.fabric}"><i style="background:${f.solid || `repeating-conic-gradient(${f.cross} 0 25%, ${f.base} 0 50%) 0 0/8px 8px`}"></i>${f.label}</button>`).join("");
   const steps = stepsFor(state.bm.blank), pauses = steps.length - 1;
-  $("bm-steps-count").textContent = `· ${steps.length} steps, ${pauses} pauses`;
+  $("bm-steps-count").textContent = `· ${steps.length} steps, ${stopWords(0, pauses)}`;
   $("bm-steps-lede").textContent = `Keep the same thread in the whole time. The machine pauses ${pauses} times. Each pause is a fabric step.`;
   $("bm-steps").innerHTML = steps.map((s) => `<li><b>${s.title}</b>${youHtml(s.you || s.machine, (t) => t)}</li>`).join("");
 }
@@ -1094,6 +1107,8 @@ function onPicture(e) {
   const base = safeName((state.pic.file?.name || "picture").replace(/\.[^.]+$/, ""), "picture");
   const v = { pattern: r.pattern, verifyAgainst: r.pattern, bytes: r.bytes, filename: `${base}${state.pic.style === "line" ? "_line" : state.pic.style === "cross" ? "_cross" : ""}.pes`, fabric: "linen",
     sheet: turned() ? { notes: [$("done-turn").textContent] } : undefined,
+    // (what the panel says of it, as every surface says it: words.js)
+    get problems() { return [...(state.pic.fineProblems || []), ...(state.pic.ownedProblem ? [state.pic.ownedProblem] : [])]; },
   };
   state.views.picture = v;
   if (state.mode === "picture") setView(v);
@@ -1134,8 +1149,12 @@ function ownedNote() {
   }
   const p = $("pic-owned") || Object.assign(document.createElement("p"), { id: "pic-owned", className: "hint" });
   if (!p.isConnected) $("pic-merged").after(p);
+  // (one of the picture's problems: said beside Download and after too, words.js)
+  const text = said.length ? `With only your threads, the picture's ${said.join(" Its ")}` : "";
+  state.pic.ownedProblem = text ? { id: "owned", level: LOOK, text } : null;
   p.hidden = !said.length;
-  p.textContent = said.length ? `With only your threads, the picture's ${said.join(" Its ")} Add a closer spool in Threads I own, or untick “Use only threads I own”.` : "";
+  p.innerHTML = text ? `<span data-problem="owned">${escapeHtml(text)} Add a closer spool in Threads I own, or untick “Use only threads I own”.</span>` : "";
+  if (state.view && state.view === state.views.picture) warnUI(state.view);
 }
 $("pic-palette").onclick = (e) => {
   const b = e.target.closest("button"); if (!b) return;
@@ -1162,10 +1181,13 @@ bindRange("pic-cross", "cross", (v) => `${v} mm`);
 // (and a line too thin to keep at all, a logo's 1 px rule, over 5% of the picture across: left out without a word before)
 function fineUI(fine) {
   const p = state.pic, gaps = fine?.narrowMm2 >= Math.max(2, 0.015 * (fine.inkMm2 || 0)), lost = fine?.lost >= 0.05;
+  // (the picture's problems, said beside Download and after too: words.js)
+  const gap = "Some gaps (like inside or between small letters) are narrower than ½ mm and will close up.", line = "A very thin line in the picture is finer than thread and is left out.";
+  p.fineProblems = [gaps && { id: "gaps", level: LOOK, text: gap }, lost && { id: "lost", level: LOOK, text: line }].filter(Boolean);
   $("pic-fine").hidden = !gaps && !lost;
-  $("pic-fine").textContent = [
-    gaps ? `Some gaps (like inside or between small letters) are narrower than ½ mm and will close up. ${p.size < (p.max || 0) ? "A bigger Size keeps more of them open." : "This is as big as the hoop allows."}` : "",
-    lost ? "A very thin line in the picture is finer than thread and is left out. Draw it thicker in the picture to have it sewn." : "",
+  $("pic-fine").innerHTML = [
+    gaps ? `<span data-problem="gaps">${gap} ${p.size < (p.max || 0) ? "A bigger Size keeps more of them open." : "This is as big as the hoop allows."}</span>` : "",
+    lost ? `<span data-problem="lost">${line} Draw it thicker in the picture to have it sewn.</span>` : "",
   ].filter(Boolean).join(" ");
 }
 const densityUI = () => document.querySelectorAll("#pic-density button").forEach((b) => b.setAttribute("aria-pressed", b.dataset.d === state.pic.density));
@@ -1413,18 +1435,24 @@ function showOpened(p, bytes, check, changed) {
   const v = { pattern: p, verifyAgainst: o.stuck ? null : changed || !o.isPes ? p : null, bytes,
     // (a fixed copy has a name of its own: the plain and fixed copies of rosacea.dst were both rosacea.pes)
     filename: `${o.base}${scale !== 1 ? `_${Math.round(scale * 100)}pct` : ""}.pes`, fabric: "linen", source: o.stuck ? o.bytes : changed || !o.isPes ? null : o.bytes,
-    block: o.stuck ? `It has ${o.stops}, more than the machine can take in one design (${MAX_BLOCKS - 1} at most), so it can't be saved for it here.` : "", blockLabel: "Too many thread changes",
+    blockLabel: "Too many thread changes",
     // (a file she already has: say what the button gives her)
     action: fixed ? "Save fixed copy" : scale !== 1 ? "Save resized copy" : o.d.format === "pes" ? "Save a copy" : "Save as PES",
     // (the checkup read the file as it will be saved: the same verdict beside Download)
     // (a file too full of thread changes to save already says so: not twice)
     // (nor the machine's other rules for a file that isn't saved: it isn't written, so there's nothing to break them)
     verdict: o.stuck ? check.verdict.filter((q) => !HARD.has(q.key)) : check.verdict,
-    warn: o.short ? "This file ends early: only part of the design is in it." : o.disagree ? "The file you opened holds two different designs, one for PE-DESIGN and one for the machine: the copy saved here is the one the machine sews, so both show the same." : "",
+    // (what the file card says of it, in the one list every surface shows: words.js)
+    problems: [o.stuck && { id: "stuck", level: BLOCK, text: `It has ${o.stops}, more than the machine can take in one design (${MAX_BLOCKS - 1} at most), so it can't be saved for it here.` },
+      o.short && { id: "short", level: LOOK, text: "This file ends early: only part of the design is in it." },
+      o.disagree && { id: "disagree", level: LOOK, text: "The file you opened holds two different designs, one for PE-DESIGN and one for the machine: the copy saved here is the one the machine sews, so both show the same." }].filter(Boolean),
     // (the machine's name, then what the file calls it: a design made here names its threads after its pieces)
     threadLabel: (b, t) => `Brother ${t.name}${fileCalls(b.name, t.name, b.color)}` };
   if (fixed) v.filename = fixedName(v.filename);
-  state.views.open = v; setView(v); doctorUI(p, check);
+  state.views.open = v; setView(v);
+  // (what the checkup warns of beyond the file's verdict is the view's problem too: said beside Download and after)
+  v.problems.push(...checkupWarns(check || checkup(p), v.file || p).filter((q) => !q.id.startsWith("file:")));
+  warnUI(v); doctorUI(p, check);
 }
 // What the file calls a thread, beside the machine's name, when it adds something: not a bare number (gnome.pes's
 // "24"), the machine's own name again, or a colour it isn't (ursula.pes calls its black thread "Red": the chip read
@@ -1452,9 +1480,9 @@ function openInfo(v, st, fits) {
     <span title="${d.format.toUpperCase()}${pesVersion(d.version)}">${st.stitches.toLocaleString()} stitches · ${o.colourless ? `no thread colours in the file (${threads === 1 ? "shown in one colour" : `shown in ${threads} colours to tell the parts apart`})` : `${threads} thread ${threads === 1 ? "colour" : "colours"}`}</span>
     ${fits ? `<span class="good">Fits the ${h.machineName} ${h.name}.</span>`
       : `<span class="warn">Too big for the ${h.name}: it's ${st.widthMm.toFixed(0)} × ${st.heightMm.toFixed(0)} mm. ${big.scale >= 0.5 ? `<button type="button" class="link" id="doc-largest">Make it the largest that fits (${big.pct} %)</button>` : "Even at half size it won't fit this hoop."}</span>`}
-    ${o.disagree ? `<span class="warn">This file holds two different designs: PE-DESIGN would open one, and your machine would sew the other. The copy saved here is the one the machine sews (shown here), so both will show the same.</span>` : ""}
-    ${o.short ? `<span class="warn">This file ends early: it may be damaged (cut short when it was downloaded or copied), so only part of the design is here. Download it again from where it came from if you can. A copy saved here is complete for the part that's left.</span>` : ""}
-    ${o.stuck ? `<span class="warn">This design has ${o.stops}. Brother machines stop ${MAX_BLOCKS - 1} times at most in one design, and sewing each thread's parts together doesn't bring it under, so it can't be saved for your machine here${o.misplaced ? " (as it is, this file would also load cut off on a Brother machine)" : ""}. Ask where it came from for a version with fewer colours.</span>` : ""}
+    ${o.disagree ? `<span class="warn" data-problem="disagree">This file holds two different designs: PE-DESIGN would open one, and your machine would sew the other. The copy saved here is the one the machine sews (shown here), so both will show the same.</span>` : ""}
+    ${o.short ? `<span class="warn" data-problem="short">This file ends early: it may be damaged (cut short when it was downloaded or copied), so only part of the design is here. Download it again from where it came from if you can. A copy saved here is complete for the part that's left.</span>` : ""}
+    ${o.stuck ? `<span class="warn" data-problem="stuck">This design has ${o.stops}. Brother machines stop ${MAX_BLOCKS - 1} times at most in one design, and sewing each thread's parts together doesn't bring it under, so it can't be saved for your machine here${o.misplaced ? " (as it is, this file would also load cut off on a Brother machine)" : ""}. Ask where it came from for a version with fewer colours.</span>` : ""}
     ${o.merged ? `<span>It had ${o.stops}, more than the machine can take in one design (${MAX_BLOCKS - 1} at most). The copy here sews each thread's parts together where nothing in between is in the way: ${o.merged[1]} thread changes, and it looks the same.</span>` : ""}
     ${o.stuck ? "" : hardWords(o) ? `<span class="warn">As it came, this file ${hardWords(o)}, which Brother machines don't take as it is. The copy saved here is fixed.</span>` : ""}
     ${o.stuck ? "" : o.misplaced && !o.short ? `<span class="warn">As it is, this file would load cut off on a Brother machine (shifted, about half shown). The download here is fixed.</span>`
@@ -1477,6 +1505,38 @@ function largest() {
 }
 // what a file failed as it came, for "As it came, this file ..."
 const NEED = { dense: "was too dense in places", long: "had stitches over 12 mm", tiny: "had too many tiny stitches", same: "had stitches into the hole the needle was already in", sparse: "had satin stitches too far apart", colours: "listed the wrong number of threads" };
+// What the checkup warns of, keyed as the view's problems are (words.js): the file's verdict where it has the rule
+// ("file:dense", its words beside Download), else its own ("packed", said beside Download too). `html`: the checkup's
+// longer words, with the fix to tick; `text`: one plain sentence for every other surface. `file`: the copy as saved.
+function checkupWarns(c, file) {
+  const failed = new Set((c.verdict || []).map((q) => q.key)), out = [], o = state.opened.opts;
+  const per = `title="Needle hits per square millimetre in one colour, at every 0.1 mm grid offset, as the machine check counts them"`;
+  const add = (key, level, text, html) => out.push({ id: failed.has(key) ? `file:${key}` : key, level, text, html });
+  // (a file too full of thread changes to save says so on the file card, "stuck": not the machine's other rules, as
+  // the view's verdict leaves them out for a file that isn't written)
+  if (state.opened.stuck) for (const k of HARD) failed.delete(k);
+  if (state.opened.noFix && !state.opened.stuck) { const t = `It has ${state.opened.stops}, more than the machine can take in one design (${MAX_BLOCKS - 1} at most), and sewing each thread's parts together doesn't bring it under, so it can't be fixed or resized here.`; add("blocks", LOOK, t, t + " Ask where it came from for a version with fewer colours."); }
+  if (c.hot) add("dense", LOOK, `${c.hot} ${c.hot === 1 ? "spot is" : "spots are"} very dense: thread can break or the fabric pucker there.`,
+    `${c.hot} ${c.hot === 1 ? "spot is" : "spots are"} very dense (<span ${per}>${denseWords(c.max)}</span>): thread can break or the fabric pucker there. Turn on <b>Thickness</b> under the preview to see ${c.hot === 1 ? "it" : "them"}, and tick <b>Thin the densest spots</b> below.`);
+  // (a few are normal in sold designs; only many are worth a worry, and always as many as pe900_check fails: 2 %)
+  if (c.tiny > Math.max(50, c.stitches * 0.01) || failed.has("tiny")) add("tiny", LOOK, `${c.tiny} ${c.tiny === 1 ? "stitch is" : "stitches are"} shorter than 0.3 mm: they pile up thread and can break it.`,
+    `${c.tiny} ${c.tiny === 1 ? "stitch is" : "stitches are"} shorter than 0.3 mm. They pile up thread and can break it. Tick <b>Remove tiny stitches</b> below.`);
+  if (failed.has("same")) { const t = c.verdict.find((q) => q.key === "same").text; add("same", LOOK, t, t + " Tick <b>Remove tiny stitches</b> below."); }
+  if (c.satinGap && c.satinGap > 0.6) add("sparse", LOOK, "The satin stitches are far apart, so fabric may show through.",
+    `The satin stitches are far apart (${c.satinGap.toFixed(2)} mm on each edge; well-made designs 0.3–0.4 mm), so fabric may show through. Tick <b>Even out the satin stitches</b> below.`);
+  // (packed tighter than sold designs: stiff, and the needle can deflect or the thread shred; gnome.pes at 80 %: 0.22)
+  if (c.satinGap && c.satinGap < 0.25) add("packed", LOOK, "The satin stitches are packed very close: stiff, and thread can shred or the needle break.",
+    `The satin stitches are packed very close (${c.satinGap.toFixed(2)} mm on each edge; well-made designs 0.3–0.4 mm): stiff, and thread can shred or the needle break. Tick <b>Even out the satin stitches</b> below.`);
+  // (the PE900 sews 12.1 mm at most: pe900_check.py fails a file with a longer one; every fixed copy splits them)
+  if (c.over) add("long", LOOK, `${c.over} ${c.over === 1 ? "stitch is" : "stitches are"} longer than 12 mm, more than the machine sews in one stitch.`,
+    `${c.over} ${c.over === 1 ? "stitch is" : "stitches are"} longer than 12 mm (up to ${c.longest.toFixed(1)} mm), more than the machine sews in one stitch. Tick <b>Split long stitches</b> below.`);
+  // (shrinking brings moves between parts under the machine's 5 mm trim setting: they stay as thread to snip)
+  const loose = shortJumps(file) - shortJumps(state.opened.d);
+  if (o.scale < 1 && loose > 0) { const t = `Made smaller, ${loose} ${loose === 1 ? "move between parts is" : "moves between parts are"} too short for the machine to trim: ${loose === 1 ? "it stays" : "they stay"} as loose thread to snip after stitching.`; add("loose", TIP, t, t); }
+  // (the rest of the file's verdict, said beside Download, in the checkup too)
+  for (const q of c.verdict || []) if (failed.has(q.key) && !out.some((x) => x.id === `file:${q.key}`)) out.push({ id: `file:${q.key}`, level: LOOK, text: q.text, html: escapeHtml(q.text) });
+  return out;
+}
 // what might go wrong at the machine, in plain words, with the fixes that are safe on a finished design
 function doctorUI(p, check) {
   const c = check || checkup(p), o = state.opened.opts, items = [], src = state.opened.check;
@@ -1486,26 +1546,16 @@ function doctorUI(p, check) {
   // (a file written again here is written fixed: say what it failed as it came, or the list reads as if all was well)
   const need = state.opened.needed, failedNow = !!(c.verdict || []).length;
   if (need && !failedNow) say(true, `As it came, this file ${need.map((q) => NEED[q.key]).filter(Boolean).join(", ").replace(/, ([^,]*)$/, " and $1")}. The fixes below are ticked, so the copy saved here passes the check.`);
-  if (state.opened.fixBase) say(false, `It has ${state.opened.stops}, more than the machine can take in one design (${MAX_BLOCKS - 1} at most): a fixed or resized copy sews each thread's parts together (${state.opened.fixBase.threads.length - 1} thread changes), and looks the same.`);
-  if (state.opened.noFix && !state.opened.stuck) say(false, `It has ${state.opened.stops}, more than the machine can take in one design (${MAX_BLOCKS - 1} at most), and sewing each thread's parts together doesn't bring it under, so it can't be fixed or resized here. Ask where it came from for a version with fewer colours.`);
-  say(!c.hot, c.hot ? `${c.hot} ${c.hot === 1 ? "spot is" : "spots are"} very dense (<span ${per}>${denseWords(c.max)}</span>): thread can break or the fabric pucker there. Turn on <b>Thickness</b> under the preview to see ${c.hot === 1 ? "it" : "them"}, and tick <b>Thin the densest spots</b> below.`
-    : `Thickness is fine: <span ${per}>at most ${c.max} stitches in one square millimetre</span> (sold designs have 24 at most).`);
-  // (a few are normal in sold designs; only many are worth a worry, and always as many as pe900_check fails: 2 %)
-  const failed = new Set((c.verdict || []).map((q) => q.key));
-  if (c.tiny > Math.max(50, c.stitches * 0.01) || failed.has("tiny")) say(false, `${c.tiny} ${c.tiny === 1 ? "stitch is" : "stitches are"} shorter than 0.3 mm. They pile up thread and can break it. Tick <b>Remove tiny stitches</b> below.`);
-  if (failed.has("same")) say(false, (c.verdict.find((q) => q.key === "same").text) + " Tick <b>Remove tiny stitches</b> below.");
-  if (c.satinGap && c.satinGap > 0.6) say(false, `The satin stitches are far apart (${c.satinGap.toFixed(2)} mm on each edge; well-made designs 0.3–0.4 mm), so fabric may show through. Tick <b>Even out the satin stitches</b> below.`);
-  // (packed tighter than sold designs: stiff, and the needle can deflect or the thread shred; gnome.pes at 80 %: 0.22)
-  if (c.satinGap && c.satinGap < 0.25) say(false, `The satin stitches are packed very close (${c.satinGap.toFixed(2)} mm on each edge; well-made designs 0.3–0.4 mm): stiff, and thread can shred or the needle break. Tick <b>Even out the satin stitches</b> below.`);
-  // (the PE900 sews 12.1 mm at most: pe900_check.py fails a file with a longer one; every fixed copy splits them)
-  if (c.over) say(false, `${c.over} ${c.over === 1 ? "stitch is" : "stitches are"} longer than 12 mm (up to ${c.longest.toFixed(1)} mm), more than the machine sews in one stitch. Tick <b>Split long stitches</b> below.`);
-  else if (c.long) say(true, `${c.long} ${c.long === 1 ? "stitch is" : "stitches are"} longer than 10 mm. Fine on a wall hanging; on clothes they can snag.`);
+  // (the copy saved here takes care of it: a note, not a warning)
+  if (state.opened.fixBase) say("note", `It has ${state.opened.stops}, more than the machine can take in one design (${MAX_BLOCKS - 1} at most): a fixed or resized copy sews each thread's parts together (${state.opened.fixBase.threads.length - 1} thread changes), and looks the same.`);
+  // (the warnings, keyed as the view's problems are: words.js)
+  const warns = checkupWarns(c, state.views.open?.file || p);
+  for (const q of warns) if (q.html) items.push(`<li class="warn" data-problem="${q.id}">${q.html}</li>`);
+  if (!warns.some((q) => q.id.endsWith("dense"))) say(true, `Thickness is fine: <span ${per}>at most ${c.max} stitches in one square millimetre</span> (sold designs have 24 at most).`);
+  if (!c.over && c.long) say(true, `${c.long} ${c.long === 1 ? "stitch is" : "stitches are"} longer than 10 mm. Fine on a wall hanging; on clothes they can snag.`);
   // (a copy written here has its stitches over 7 mm split by the writer: the ones over the machine's 12 mm said so)
   const srcLong = state.opened.srcLong;
   if (!c.over && srcLong?.over && !state.opened.isPes && !state.opened.stuck) say("note", `${srcLong.over} ${srcLong.over === 1 ? "stitch was" : "stitches were"} longer than 12 mm (up to ${srcLong.longest.toFixed(1)} mm), more than the machine sews in one stitch: the copy saved here splits ${srcLong.over === 1 ? "it" : "them"}.`);
-  // (shrinking brings jumps under the machine's 5 mm trim setting: they stay as thread to snip)
-  const loose = shortJumps(state.views.open?.file || p) - shortJumps(state.opened.d);
-  if (o.scale < 1 && loose > 0) say(false, `Shrinking brings ${loose} ${loose === 1 ? "jump" : "jumps"} under 5 mm, too short for the machine to trim: ${loose === 1 ? "it stays" : "they stay"} as loose thread to snip after stitching.`);
   say(true, c.perSqIn > 1500 ? `Heavy stitching (about ${c.perSqIn.toLocaleString()} stitches per square inch): use cut-away stabilizer, or two layers of tear-away.`
     : c.perSqIn > 600 ? `Medium stitching: tear-away stabilizer on woven fabric, cut-away on knits.` : `Light stitching: tear-away stabilizer is enough.`);
   $("doctor").hidden = false; $("doctor-list").innerHTML = items.join("");
@@ -1558,7 +1608,7 @@ function sizeUI() {
   $("doc-fit").textContent = "Use this size"; $("doc-fit").setAttribute("aria-label", `Use this size: ${big.pct} %, the largest that fits`);   // (the visible words first, for voice control)
   // within 80-120 % the stitches are scaled as they are; past that they're re-stitched at the new size
   $("doc-scale-hint").textContent = o.scale >= 0.8 && o.scale <= 1.2 ? "Up to 20 % either way the stitches are scaled as they are (denser smaller, more open bigger), with the satin stitches spaced evenly again."
-    : "Re-stitched at the new size: satins and fills keep the file's own density. Check it in the preview: lettering and fine detail can change.";
+    : "Re-stitched at the new size: the stitches stay as close together as the file had them. Check it in the preview: lettering and fine detail can change.";
 }
 // A new size. Shrinking packs short stitches into tiny ones, closer together: it ticks Remove tiny stitches and Thin,
 // and untick them again back at 100 % or more if it was the slider that ticked them (ufront back at 100 % had lost 88
@@ -1705,3 +1755,5 @@ if (new URLSearchParams(location.search).has("shared")) (async () => {
 })();
 // a link to another tab on this page (#bookmark, #design...) switches to it
 addEventListener("hashchange", () => { const m = location.hash.slice(1); if (m !== state.mode && MODES.includes(m)) setMode(m, false); });
+// for tests/surfaces.mjs: the view on screen, its problems and its share text (what every surface should agree on)
+globalThis.nwTest = { view: () => state.view, problems: () => problemsOf(state.view), share: () => state.view && shareText(state.view) };
