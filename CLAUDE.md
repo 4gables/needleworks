@@ -748,6 +748,27 @@ Embroidery-file tools for home machines. Two implementations of the same engine:
   `tests/browser/pe900_batch.html` served by `tests/batch_server.py OUT` builds a ~110-file sample (every font × 3 names × decorations
   on/off, blank, 4 pictures × 3 settings incl. turned) with the site's own code and saves the PES files for the checker. Run both after any engine
   change. The three files emailed to Ashley are in `tests/external/emailed/`.
+- **Brother diff: our PEC encoder against Brother's** (2026-10-30, `tests/brother_diff_core.js`). PE-DESIGN only
+  reads the PES design block, and the machine sews the PEC block, so "PE-DESIGN opens it" never tested the bytes that
+  matter. The trial can't save, so we can't hand it a design and compare its PEC with ours. Instead:
+  - Every Brother-made PES already holds Brother's encoding of its stitches. We read those stitches, write them again
+    with `writePES`, and compare PEC blocks field by field: palette, the stitch block's fixed fields, design box, size,
+    the stream byte for byte, and, where bytes differ, the machine's holes, jumps, trims and colour changes.
+  - Corpus: the 379 PES files that ship in PE-DESIGN 11, gathered into `C:\bro` in the VM. They can't come out:
+    InstallShield encrypts the installer, the VM has no way back to the Mac, and macOS blocks reading UTM's disk.
+    So it runs in the VM. `sh tests/vm/run.sh` builds `tests/vm/make.mjs`'s page (formats.js bundled as one classic
+    script), swaps it in as the VM's CD and opens it in Edge with `--allow-file-access-from-files` and `?dir=C:/bro`.
+    `out/vm/result.png` shows the verdict.
+  - Node: `node tests/brother_diff.mjs tests/external/pes` (ursula, gnome, ufront are Brother-made).
+  - Run it after any change to `formats.js`, and before files go to Ashley.
+  - First result: 378 compared, 227 byte-identical, 0 sew differently. Every byte difference is one of these:
+    - Brother keeps stitches up to 15.7 mm whole; we split anything over 7 mm.
+    - **We trim at every jump**: the writer has no uncut jump (flag 0x10). 78 Brother designs jump without cutting
+      where ours cut (more trims, never a missed one).
+    - The palette differs in 28: our thread choice. The sample's thread chart doesn't always match Brother's codes.
+    - Brother's size field is the page (120 x 170 mm) on 3 lace/tutorial samples; ours is the stitches' extent.
+  - Open question for a real machine: whether the PE900 also cuts 0x20 trims of 5 mm or less. The "N short jumps to
+    snip" count assumes it doesn't.
 - PEC palette: two colours never share a Brother thread (pyembroidery's rule), so a colour can get its second-closest
   thread. Always label threads with `machineThreads()` (or an opened PES's own `pec` bytes), never plain
   `nearestBrotherThread()`, or the site and the machine's screen name different threads. Our order is block order;
