@@ -488,6 +488,10 @@ select, input[type="text"], .edit textarea, .cards button, .names textarea { bor
 :root[data-theme="dark"] .cards canvas { background: #ece5da; border-radius: 8px; }
 /* many threads (a bought design combined with lettering) scroll instead of squeezing the preview */
 .threads { max-height: 92px; overflow-y: auto; }
+/* chips with a spool line under the name are two lines tall: room for two whole rows (the second was cut in half);
+   stacked layouts scroll the page, so nothing is cut there */
+.threads:has(small) { max-height: 120px; }
+@media (max-width: 600px) { .threads, .threads:has(small) { max-height: none; } }
 .facts .note { background: var(--panel); }
 /* the checkup's exact size: mm of the longer side */
 .field .size-mm { display: flex; justify-content: flex-start; align-items: center; gap: 8px; font-size: 14px; font-weight: 400; color: var(--muted); }

@@ -731,14 +731,16 @@ export function toPalette(analysis, palette) {
     labs.forEach((q, j) => { const d = (q[0] - L) ** 2 + (q[1] - A) ** 2 + (q[2] - B) ** 2; if (d < bd) { bd = d; bj = j; } }); return bj; };
   const groups = new Map();
   for (const c of analysis.colors) if (!c.background && c.area > 0) { const j = pick(c.picture || c.hex); groups.set(j, [...(groups.get(j) || []), c]); }
-  const to = new Map(), colors = analysis.colors.map((c) => ({ ...c }));
+  const to = new Map(), colors = analysis.colors.map((c) => ({ ...c })), owned = [];
   for (const [j, cs] of groups) {
     const rep = cs.reduce((a, b) => (b.area > a.area ? b : a)), hex = palette[j];
     for (const c of cs) { to.set(c.id, rep.id); if (c !== rep) colors[c.id].area = 0; }
     Object.assign(colors[rep.id], { hex, thread: nearestBrotherThread(hex), lightness: labs[j][0], area: cs.reduce((a, c) => a + c.area, 0) });
+    // (said on the page: yellow and pink both sewn in one owned spool went unmentioned)
+    owned.push({ hex, from: cs.map((c) => c.picture || c.hex) });
   }
   const labels = analysis.labels.map((l) => (to.has(l) ? to.get(l) : l));
-  return { ...analysis, labels, colors };
+  return { ...analysis, labels, colors, owned };
 }
 
 // Fill edges and satin outlines reach a little past the picture, so a picture sized to the hoop's edge can land

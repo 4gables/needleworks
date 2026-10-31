@@ -3,6 +3,10 @@
 // Stitch units are 0.1 mm, cut outlines mm; the machine centres the design in the hoop, so the template does too.
 import { colorBlocks } from "./render.js";
 
+// steps for a file that says nothing of its fabric or pauses (an opened design): both stabilizers, said plainly
+export const FIRST_STEP = "Hoop the fabric with stabilizer under it, put on the first thread and press Start.";
+export const FINISH = "Take the hoop off and snip any loose threads. Tear-away stabilizer: tear it off gently, holding the stitches down with your thumb. Cut-away: trim it about ¼ in from the stitching (don't tear it).";
+
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
 const f1 = (n) => (Math.round(n * 10) / 10).toString();
 // white and cream thread would vanish on paper
@@ -48,7 +52,8 @@ ${groups.map((g, i) => `  <g id="fabric-${i + 1}"><path d="${path(g)}" fill="non
 // sheet: { steps: [{ title?, you?, sews? }], ready: [] (one "Have ready" list), after: [], notes: [], cut: [[loop...]...] }, thread names as the machine shows them
 export function sewSheet({ pattern, filename, hoop, facts, threads, hide, sheet = {}, spool = () => "" }) {
   const { blocks } = colorBlocks(pattern);
-  const steps = sheet.steps?.length ? sheet.steps : blocks.map(() => ({}));
+  const steps = sheet.steps?.length ? sheet.steps : blocks.map((b, i) => ({ you: i ? "Change to the next thread and press Start." : FIRST_STEP }));
+  const after = sheet.after?.length ? sheet.after : [FINISH];
   const rows = steps.map((s, i) => {
     const b = blocks.find((x) => x.index === i), t = threads[i];
     return `<li><b><span class="sw" style="background:${b?.color || t?.color || "#999"}"></span>${s.title ? esc(s.title) + " · " : ""}Brother ${esc(t?.name || "")}${b && spool(b.color) ? ` <small>(${esc(spool(b.color))})</small>` : ""}</b>
@@ -72,7 +77,7 @@ export function sewSheet({ pattern, filename, hoop, facts, threads, hide, sheet 
   <section class="pg"><h2>How to stitch it</h2>
     ${(sheet.ready || []).length ? `<h3>Have ready</h3><ul class="ready">${sheet.ready.map((r) => `<li>${esc(r)}</li>`).join("")}</ul>` : ""}
     <ol class="list">${rows}</ol>
-    ${(sheet.after || []).length ? `<h3>When it's done</h3><p>${esc(sheet.after.join(" "))}</p>` : ""}
+    <h3>When it's done</h3><p>${esc(after.join(" "))}</p>
     ${(sheet.notes || []).filter(Boolean).map((n) => `<p class="tip">${esc(n)}</p>`).join("")}
     <p class="tip">Check the size on the machine's screen before you stitch.</p>
   </section>${shapes}`;

@@ -252,7 +252,7 @@ export function initStudio(api) {
         + `<p class="hint" data-lines-hint aria-live="polite" hidden>Three lines is the most: that new line became a space.</p>`;
       h += `<label class="field"><span>Font</span>${fontSelect(p)}</label>`;
       h += range("size", "Height", 5, 60, p.size);
-      h += `<p class="hint">About 10 mm for a pocket or cuff, 20-30 mm for a pillow or blanket corner, 30-50 mm for a towel.</p>`;
+      h += `<p class="hint">About 10 mm for a pocket or cuff, 15-20 mm for a T-shirt's chest, 20-30 mm for a onesie, pillow or blanket corner, 30-50 mm for a towel.</p>`;
       h += seg("shape", TEXT_SHAPES, p.shape);
       h += stitchSeg(p);
       h += `<label class="field"><span>Motif either side</span><select data-k="deco"><option value="">None</option>${Object.entries(MOTIFS).map(([k, m]) => `<option value="${k}" ${k === p.deco ? "selected" : ""}>${m.name}</option>`).join("")}</select></label>`;   // (a heart or star either side was hidden under More)
@@ -478,16 +478,23 @@ export function initStudio(api) {
     }
   }
   // the steps as shown and printed: what to have ready, what's done after, and whether the letters are small
-  function stepsOf({ design, steps, after, before }) {
+  function stepsOf({ design, steps, after, before, hoop }) {
     const fit = fittedSizes(pieces), small = thread !== "60" && pieces.some((p) => smallText(fit.has(p.id) ? { ...p, size: fit.get(p.id) } : p));
     // (what the fabric needs goes first: a towel's topper was only in the folded "Sewing on"; the threads by the
     // spools they own when they've listed them, not the Brother names)
-    const names = [...new Set(steps.map((st) => api.ownSpool(st.color) || "Brother " + nearestBrotherThread(st.color).name))];
-    // (plain cotton's "Tear-away stabilizer." is left out when a project's own list already has it)
-    const ready = [fabric === "cotton" && before.some((b) => /stabilizer/i.test(b)) ? "" : FABRICS[fabric].ready, ...before,
+    // (the fabric's own stabilizer and finishing are left out when a project's own list already says (in-the-hoop,
+    // patch, quilt sandwich), bar a towel's topper)
+    const own = (list) => fabric !== "towel" && list.some((b) => /stabilizer/i.test(b));
+    const ready = [own(before) ? "" : FABRICS[fabric].ready, ...before,
       appliqued() ? "A piece of fabric for each appliqué shape, 1 in bigger than its outline, and small curved scissors (iron-on fusible web on the back stops cotton fraying)." : "",
-      `Thread: ${names.join(", ")}.`].filter(Boolean), done = [...after, FABRICS[fabric].after].filter(Boolean);
-    return { design, steps: sameSpool(steps), done, ready, small };
+      api.threadList(steps.map((st) => st.color))].filter(Boolean), done = [own(after) ? "" : FABRICS[fabric].after, ...after].filter(Boolean);
+    return { design, steps: firstStep(sameSpool(steps), hoop), done, ready, small };
+  }
+  // step 1 says what to do too: hoop it, put the thread on, Start (a one-step design said only "Sews “Leo”.")
+  function firstStep(steps, hoop) {
+    if (!steps.length || !hoop) return steps;
+    const own = api.ownSpool(steps[0].color), t = own ? `your ${own}` : `Brother ${nearestBrotherThread(steps[0].color).name}`;
+    return [{ ...steps[0], you: steps[0].you ? `${hoop} and put on ${t}. ${steps[0].you}` : `${hoop}, put on ${t} and press Start.` }, ...steps.slice(1)];
   }
   // two colours in a row that are the same spool of theirs ("Threads I own"): keep it on, not "change to the next thread"
   function sameSpool(steps) {
@@ -535,7 +542,7 @@ export function initStudio(api) {
     // the whole design for the preview (a big pretend hoop) with the crosses the files sew, and every step of both
     // hoopings in order
     const all = compose(pieces, { ...hoop, w: 2000, h: 2000 }, { ...opts, marks: { pts: parts[0].marks, end: true } });
-    const steps = sameSpool([...built[0].steps, { color: built[1].steps[0].color, sews: ["Nothing: this step is the rehooping."], you: "Take the fabric out and hoop it again for the second half. The next step says how to line it up." }, ...built[1].steps]);
+    const steps = sameSpool([...firstStep(built[0].steps, built[0].hoop), { color: built[1].steps[0].color, sews: ["Nothing: this step is the rehooping."], you: "Take the fabric out and hoop it again for the second half. The next step says how to line it up." }, ...built[1].steps]);
     stepsUI(steps, [...built[0].after, ...built[1].after], false, built[0].before);
     for (const b of $("st-steps").querySelectorAll("[data-step]")) b.disabled = true;   // (the step view follows one file)
     // each hooping's field, where the machine centres that half (mm, as the preview shows it)
@@ -899,5 +906,5 @@ export function initStudio(api) {
   }
 
   cards(); ui();
-  return { make, start, move, end, nudge, forNames, remember, recentre: () => { remember(); recentre(); save(); ui(); make(); } };
+  return { make, relabel: () => { ui(); make(); }, start, move, end, nudge, forNames, remember, recentre: () => { remember(); recentre(); save(); ui(); make(); } };
 }
