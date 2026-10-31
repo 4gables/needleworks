@@ -224,7 +224,14 @@ export function skeletonEdges(mask, stroke, { spur = 1.3, dots = false, sk = nul
     return [a, b, smooth(pts, Math.max(3, Math.floor(stroke * 0.8) | 1))];
   });
   // (`before`: the strokes before the ends reach out; lettering is sized by them, so a word keeps the size it had)
-  const done = () => { if (reach) { const b = out.map((e) => e[2]); reachEnds(out, mask, stroke); out.before = b; } return out; };
+  const done = () => {
+    if (!reach) return out;
+    // (print with knots, i.e. the Design tab, not the bookmark: a junction's tiny loops, under a stroke long, are left
+    // over from contracting knots; each sewed as a block of satin across the join, square stubs out of W's and M's points)
+    if (knots) for (let i = out.length - 1; i >= 0; i--) if (out[i][0] === out[i][1] && typeof out[i][0] !== "string" && out[i][2].length < stroke) out.splice(i, 1);
+    const b = out.map((e) => e[2]); reachEnds(out, mask, stroke, !!knots); out.before = b;
+    return out;
+  };
   if (!dots) return done();
   // a dot (the i's, a full stop) thins to a lone point with no edge: give it a short stroke so it's stitched
   const { labels, count } = label(mask), hit = new Uint8Array(count + 1), sum = new Float64Array((count + 1) * 3);
@@ -260,10 +267,17 @@ function untangle(edges, pos, len) {
   }
 }
 
-// (in place) loose ends of `edges` carried on to 0.1 stroke short of the ink's edge, along the last ~0.6 stroke
-function reachEnds(edges, mask, stroke) {
-  const deg = new Map();
-  for (const [a, b] of edges) { deg.set(a, (deg.get(a) || 0) + 1); deg.set(b, (deg.get(b) || 0) + 1); }   // (a loop counts twice)
+// (in place) loose ends of `edges` carried on to 0.1 stroke short of the ink's edge, along the last ~0.6 stroke.
+// A corner (a short stroke that thinning leaves where two strokes meet at a point, pointing away from both: a V's or
+// W's bottom, an A's apex, an M's tops) also gets the ink's width across it at every point (e[3], px, never less
+// nearer the junction): it runs into the point, where the ink is narrower than a stroke, and sewn as a full-width
+// column its square end stuck out of the point (Quicksand "WILD" at 43.5 mm: 4-5 mm stubs). The lettering narrows it
+// to fit (`taper` in pieces.js). Only with `corners` (the Design tab; the bookmark is unchanged).
+function reachEnds(edges, mask, stroke, corners = false) {
+  const deg = new Map(), at = new Map();
+  edges.forEach(([a, b], i) => {
+    for (const k of [a, b]) { deg.set(k, (deg.get(k) || 0) + 1); if (!at.has(k)) at.set(k, []); at.get(k).push(i); }   // (a loop counts twice)
+  });
   const ink = (x, y) => { const X = Math.round(x), Y = Math.round(y); return X >= 0 && Y >= 0 && X < mask.w && Y < mask.h && mask.data[Y * mask.w + X]; };
   const k = Math.max(2, Math.round(stroke * 0.6));
   const out = (p) => {   // p runs toward the loose end
@@ -275,14 +289,47 @@ function reachEnds(edges, mask, stroke) {
     t -= stroke * 0.1;
     return t > 1 ? [e[0] + u[0] * t, e[1] + u[1] * t] : null;
   };
-  for (const ed of edges) {
+  // the way an edge leaves node j, about a stroke along it
+  const away = (ed, j) => {
+    const p = ed[0] === j ? ed[2] : ed[2].slice().reverse(), o = p[0], q = p[Math.min(p.length - 1, Math.round(stroke))], L = Math.hypot(q[0] - o[0], q[1] - o[1]);
+    return L < 1 ? null : [(q[0] - o[0]) / L, (q[1] - o[1]) / L];
+  };
+  // a corner: short, and every other stroke at the junction goes back the other way, over 120° from it a stroke along
+  // (Quicksand's W, curving into its points, 125-140°; an a's stem past its bowl 70-80°; a K's or k's leg 100-118°)
+  const corner = (p, j, i) => {
+    const u = away(edges[i], j);
+    if (!u || p.length > 2.6 * stroke) return null;
+    for (const o of at.get(j)) if (o !== i) { const v = away(edges[o], j); if (!v || u[0] * v[0] + u[1] * v[1] > -0.5) return null; }
+    return u;
+  };
+  // the ink's width across direction u at each point of p (p runs from the junction out), never less nearer the
+  // junction (thinning noise), with points every px along the reach added at the end
+  const across = (p, u) => {
+    const n = [-u[1], u[0]], side = (x, y, s) => { let t = 0; while (t < stroke && ink(x + n[0] * s * (t + 0.5), y + n[1] * s * (t + 0.5))) t += 0.5; return t; };
+    const w = p.map(([x, y]) => side(x, y, 1) + side(x, y, -1));
+    for (let m = w.length - 2; m >= 0; m--) w[m] = Math.max(w[m], w[m + 1]);
+    return w;
+  };
+  // a corner's point narrows: at its tip under 0.9 of a stroke across, and short (1.5 strokes: Quicksand's rounded
+  // points) or under 0.92 of a stroke across halfway (Josefin's sharp ones; a Quicksand A's leg is a stroke wide there)
+  const narrows = (q, w) => w[w.length - 1] < 0.9 * stroke && (q.length <= 1.5 * stroke || w[w.length >> 1] < 0.92 * stroke);
+  edges.forEach((ed, i) => {
     const [a, b] = ed;
-    if (a === b || typeof a === "string") continue;   // (a loop, or a dot: those stay as they are)
+    if (a === b || typeof a === "string") return;   // (a loop, or a dot: those stay as they are)
     let p = ed[2];
     if (deg.get(b) === 1) { const t = out(p); if (t) p = [...p, t]; }
     if (deg.get(a) === 1) { const t = out(p.slice().reverse()); if (t) p = [t, ...p]; }
     ed[2] = p;
-  }
+    // (the reach filled in a px at a time, so the width is known along it)
+    const fill = (q) => { const e = q[q.length - 2], t = q[q.length - 1], L = Math.hypot(t[0] - e[0], t[1] - e[1]), n = Math.floor(L); return n > 1 ? [...q.slice(0, -1), ...Array.from({ length: n - 1 }, (_, m) => [e[0] + ((t[0] - e[0]) * (m + 1)) / n, e[1] + ((t[1] - e[1]) * (m + 1)) / n]), t] : q; };
+    const j = !corners ? null : deg.get(b) === 1 && deg.get(a) >= 3 ? a : deg.get(a) === 1 && deg.get(b) >= 3 ? b : null;
+    if (j === null) return;
+    const q = j === a ? p : p.slice().reverse(), u = corner(q, j, i);
+    if (!u) return;
+    const r = fill(q), w = across(r, u);
+    if (!narrows(r, w)) return;
+    ed[2] = j === a ? r : r.slice().reverse(); ed[3] = j === a ? w : w.reverse();
+  });
 }
 
 // the median stroke width: twice the distance to the background along the skeleton (sk: the mask's, if already

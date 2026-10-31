@@ -108,14 +108,16 @@ export function followRun(p, length = 1.6, tol = 0.1, min = 0.8) {
 // default and what Brother-made files measure, 0.30-0.42). Stitches alternate edges, so stations are density / 2
 // apart, spaced by the outer edge so curves don't gap; where the inner edge crowds, every other stitch is shortened.
 // (Until 2026-10-29 stations were `density` apart: 0.8 mm per edge, half the coverage of sold designs.)
-export function satin(p, width, density = 0.4, pullComp = 0.2, closed = false, fold = false) {
+// (`wAt`, optional: the column's width at a fraction t of the way along, never over `width`: a tapered column)
+export function satin(p, width, density = 0.4, pullComp = 0.2, closed = false, fold = false, wAt = null) {
   const station = density / 2;
   let c = resample(p, 0.02, closed);
   let n = normals(c, closed);
   if (closed) { c = [...c, c[0]]; n = [...n, n[0]]; }
-  const half = (width + pullComp) / 2;
-  let A = c.map((q, i) => [q[0] + n[i][0] * half, q[1] + n[i][1] * half]);
-  let B = c.map((q, i) => [q[0] - n[i][0] * half, q[1] - n[i][1] * half]);
+  const at = wAt && arclen(c), halves = wAt && c.map((_, i) => (Math.min(width, wAt(at[i] / (at[at.length - 1] || 1))) + pullComp) / 2);
+  const hf = wAt ? (i) => halves[i] : () => (width + pullComp) / 2;
+  let A = c.map((q, i) => [q[0] + n[i][0] * hf(i), q[1] + n[i][1] * hf(i)]);
+  let B = c.map((q, i) => [q[0] - n[i][0] * hf(i), q[1] - n[i][1] * hf(i)]);
   if (fold) { A = unfold(A, c); B = unfold(B, c); }
   const lens = [arclen(A), arclen(B), arclen(c)];
   const idx = [0];
@@ -128,7 +130,7 @@ export function satin(p, width, density = 0.4, pullComp = 0.2, closed = false, f
   if (idx[idx.length - 1] !== c.length - 1) idx.push(c.length - 1);
   const out = [];
   idx.forEach((i, j) => {
-    const sgn = j % 2 === 0 ? 1 : -1;
+    const sgn = j % 2 === 0 ? 1 : -1, half = hf(i);
     let r = half;
     if (j > 0 && j < idx.length - 1) {
       const thisSide = sgn > 0 ? A : B, other = sgn > 0 ? B : A, k = idx[j - 1];
