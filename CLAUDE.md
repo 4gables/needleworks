@@ -764,6 +764,61 @@ Embroidery-file tools for home machines. Two implementations of the same engine:
   bridged into the O (core/text.js: don't bridge to punctuation); etsy_7's pastel lines (k-means learns flat pixels
   only); etsy_4's greyish-lavender title; pe900_check's max density reads lower than a full offset scan below the limit
   (pass/fail unaffected); combining same-thread appliqué stages.
+- Round 8 persona tests (2026-10-31, new tasks: dog-bed name + paw, fleece baby blanket, a child's crayon drawing,
+  wrong thread mid-sew, reload/share; ring-bearer pillow arch on an oval, towel monogram set 4x4/5x7, knit appliqué,
+  owned Isacord spools, words on a bought design, 8 coaster names; non-lettering satin/fill audit (184 files),
+  international names, a two-colour logo picture, keyboard + dark + 960x540, crafted files, 15-piece performance).
+  Scores 7/7/6, no P0, 8 P1 (all fixed in 7 worktree streams):
+  - Missing letters: `js/core/glyphs.js` is each bundled font's character map (regenerate with `tests/make_glyphs.py`
+    after adding a font); everything past U+024F was flagged, so Vietnamese and Cyrillic names were refused in fonts
+    that have them. `safeName` transliterates Greek, Cyrillic and Hebrew (they all saved as design.pes).
+  - `freeRoom` re-checks the half-mm-rounded spot: rounding took a full 4x4 layout to 95.08 mm in a 95 mm field, so
+    every later add counted as a second hooping and went outside the hoop.
+  - File pieces resize in Design your own: `orig` + `scale` (0.5-2.5), re-stitched by the doctor's `fix` in a worker
+    (`resizeFile`/`restitchFiles`); `pending` holds Download; Fit to hoop resizes them. Open tab "Add words to this
+    design" (`studio.addWords`) starts a design from the file with lettering under it.
+  - Owned spools: Threads I own shows the brand's chart as swatches in colour-card order (`chartSpools`), searchable;
+    the numbers box stays the record. The Design tab adds a "Yours:" swatch row (`api.ownedSpools`): the piece takes
+    the spool's colour, the file still carries the nearest Brother PEC colour.
+  - Open tab: a PES whose own bytes break a rule the machine needs (`HARD` in quality.js: thread count not one per
+    block, palette 62-64 unless its thread names say appliqué/placement/tack-down, a disagreeing design block, > 99
+    blocks) is never saved as it came: rewritten as a fixed copy, or, past 99 blocks with no `fewerBlocks` fix, shown
+    but not saved (a 121-block file had been saved byte for byte). `setView` reruns `sizeUI()` (Largest that fits
+    followed the old hoop). The empty Open preview has a "Choose a design file" button (below the fold at 960x540).
+  - Lettering that won't read once sewn (too small, closes up on towel/fleece, loops fill) is listed beside Download
+    (`v.warn`) and in the done dialog, which then isn't green; monograms are checked per initial (`eachInitial`).
+    Steps name the thread ("Change to Brother Red", `threadNames`/`nextThread`); step 1 is one sentence per action
+    (numbered sub-steps); Sew along has "Sewed with the wrong thread?" (its stitch-back wording is from memory of
+    Brother manuals, not checked on a PE900); the turned-hoop note has a drawing (`TURN_PIC`, no text in it). The split
+    download dialog used an undefined `cc` and never opened. No "stops" wording left anywhere.
+  - Layout: on stacked layouts the too-big message sits under the hoop (it squeezed the hoop to 35 px) and is
+    repeated by the piece's controls (`#st-big`); its Fit to hoop runs in place (a programmatic `.click()` has detail 0,
+    which the focus-restore listener took as a key press and scrolled 1185 px). "Sewing on" sits under the starters.
+    One-tap fixes added: "Move it below X" (`moveAway`), "Make the frame N mm" (`frameFor`), 2/3 lines or a turned hoop
+    (`lineChoice`), a bigger hoop offers Fit to hoop, the first frame wraps what's there 6 mm inside, a starter over a
+    design says "Replaced your design… Undo". Names prefer lettering with letters over a date. Thread chips repeat a
+    thread the design returns to (up to 12 changes).
+  - Speed (byte-identical): the slow part of a 15-piece patch design was `carve`, not quilting: cached per patch
+    shape, per piece by stitch hash, and per final hole mask, so typing and moving uncarved pieces never refill. `bulk()`
+    (a multi-line text drawn again as one line) no longer holds up the preview (`bulkReady`, checked 350 ms later).
+    Font change blocked the select 785 ms -> 1 ms; a text drop 1.16 -> 0.42 s.
+  - Stitches (102 studio files; pe900 batch identical): the satin frame's edge walk isn't closed, so it runs straight
+    into the zigzag (was a 2.2 mm stitch back, lock, trim, 2.1 mm jump at 12 o'clock); bold laps and tack-downs go back
+    from the same start (`back(e)`; a plain reverse on a square was two trims and two 55-61 mm jumps). Quilting sews
+    before a satin/bold/line/appliqué border (`border: true` stages), led onto the frame line by `toFrame`, and the
+    border starts where it stopped (`startAt`): quilted trims 81 -> 58, short jumps 13 -> 1. Chevron (6-row arms, half a
+    stitch) and Wave (quarter stitch over 16 rows) patches now show. Motifs warn: Filled < 25 mm, Outline/Appliqué
+    < 30 mm. Josefin's w at 40 mm is narrower/shorter than the ink only because the satin is capped on the centre line.
+  - Pictures (13 files): line drawing sews a whole piece that is one even stroke once along its centre, any colour
+    (width 2 x median depth, 20th pct >= 0.6 x 80th, <= 4 % of the longer side within 3-6 mm, >= 3 widths long or as
+    wide as the colour's strokes); part-by-part decisions half-outlined a logo's 4 mm letters (12 tiny stitches, failed)
+    and a crayon drawing's corners. `lineEnds` carries loose ends to the ink's edge (line drawing only). Filled keeps a
+    mark >= 2 mm long, 1.5x longer than wide, within 2 mm of a bigger piece of its colour (apostrophes). `lostLines`
+    says when a line finer than thread is left out; `contentBox` downsamples smoothly (1 px rules vanished). Busy
+    pictures' trims are their separate shapes (etsy_8: 260 shapes, 80 already joined by hidden travel): no safe win.
+  Batch 401/401 ok; VM: FITS 115/115 (every changed file); PE-DESIGN opened quilt stipple, square bold, heart appliqué,
+  mug rug, chevron patch, etsy_4 line drawing, ornament. Open: "Add words" once left focus on the page (not
+  reproduced); the appliqué tack-down now ends 1.4 mm from the edge walk's start (2 more short jumps across a pause).
 - The preview is the file: `setView` decodes `v.bytes` with `readEmbroidery` and draws/counts/fit-checks that, and
   thread labels come from the file's own PEC palette.
 
