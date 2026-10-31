@@ -1,3 +1,4 @@
+/*! Needleworks (c) 2026 4Gables. All rights reserved. Proprietary, see LICENSE. https://4gables.com/needleworks/ */
 // The app's own verdict on a file it hands out: tests/pe900_check.py's stitch-quality rules, run on the file as
 // written (decoded from its bytes, so the writer's splits and rounding count), so "Checked" means what the checker
 // means. Until 2026-10-30 the download dialog said "Checked: it opens on a Brother PE900" for files the checker
