@@ -119,27 +119,34 @@ function setView(v) {
   const inch = (mm) => (mm / 25.4).toFixed(1), over = (v, side) => (v > side - 2 * MARGIN && Math.round(v) <= side - 2 * MARGIN ? v.toFixed(1) : v.toFixed(0));
   const minutes = Math.max(1, Math.round(st.stitches / 550 + st.colorChanges * 0.5)), snips = shortJumps(v.file);
   $("fact-tip")?.remove();
+  const orient = turned() ? "turned" : state.mode === "open" && !square() ? "machine" : "";
   $("facts").innerHTML = [
     // (a size just over the field isn't rounded down to read as if it fits: 126.4 showed as 126 beside "fits 126")
+    // (which way round, where it can differ: a bookmark is 169 × 54 in the Design tab, hoop turned, and its file
+    // 54 × 169 in the Open tab, as the machine's screen shows it)
     `<span>${over(shown.widthMm, shownHoop().w)} × ${over(shown.heightMm, shownHoop().h)} mm · ${inch(shown.widthMm)} × ${inch(shown.heightMm)} in</span>`,
+    orient === "turned" ? `<span${tip(`The size across × down with the hoop turned sideways, as shown here. The machine's screen shows it on its side: ${st.widthMm.toFixed(0)} × ${st.heightMm.toFixed(0)} mm.`)}>Hoop turned</span>`
+      : orient ? `<span${tip("The size across × down with the hoop upright, as the machine's screen shows it. A design made with the hoop turned reads the other way round here.")}>As the machine shows it</span>` : "",
     `<span>${st.stitches.toLocaleString()} stitches</span>`,
-    // (on the Picture and Open tabs every pause is a change of thread: say so; the Design tab's can be fabric steps)
-    st.colorChanges ? (state.mode === "picture" || state.mode === "open" ? changesFact(v.file, st.colorChanges)
-      : `<span${tip(`The machine stops ${st.colorChanges === 1 ? "once" : `${st.colorChanges} times`} for you: to change the thread, or to lay fabric on. “How to stitch it” (or Sew along) says what to do at each stop.`)}>${st.colorChanges} ${st.colorChanges === 1 ? "pause" : "pauses"}</span>`) : "",
+    // (thread changes and pauses in the same thread, in the same words on every tab: the Design tab said "1 pause" for
+    // the stop the Open tab called "1 thread change")
+    st.colorChanges ? changesFact(v.file, st.colorChanges) : "",
     `<span>≈ ${minutes} min</span>`,
     v.split ? `<span>${v.split.length} hoopings</span>` : fits ? "" : `<span class="bad">Too big for the ${h.name}</span>`,
     offCentre(v, fits) ? `<span class="note">Off centre here: the machine centres it <button type="button" class="link" id="recentre">Centre it</button></span>` : "",
     snips ? `<span${tip("The machine only trims jumps longer than its “jump stitch not to trim” setting (5 mm at the lowest). The thread is locked at both ends, so these are safe to snip after stitching.")}>${snips} loose ${snips === 1 ? "thread" : "threads"} to snip after</span>` : "",
   ].join("");
   const seen = new Set(), mt = machineThreadList(v);
-  $("threads").innerHTML = v.cache.blocks.filter((b) => !(v.hide && v.hide.has(b.index)))
+  // (every thread in the order it's sewn, hidden placement lines too: an ornament's chips read Blue, Red while its
+  // steps and Have ready said Red, Blue, because its first red block is a placement line hidden in the preview)
+  $("threads").innerHTML = v.cache.blocks
     .map((b) => {
       const t = mt[b.index] || nearestBrotherThread(b.color), label = v.threadLabel ? v.threadLabel(b, t) : `Brother ${t.name}`;
       const k = b.color + label; if (seen.has(k)) return ""; seen.add(k);
       return `<li><i style="background:${b.color}"></i><span>${label}${spool(b.color) ? `<br><small>${spool(b.color)}</small>` : ""}</span></li>`;
     }).join("");
   v.facts = [`${st.widthMm.toFixed(0)} × ${st.heightMm.toFixed(0)} mm (${inch(st.widthMm)} × ${inch(st.heightMm)} in)`, `${st.stitches.toLocaleString()} stitches`,
-    `${st.colorChanges} ${st.colorChanges === 1 ? "pause" : "pauses"}`, `≈ ${minutes} min`, `${h.machineName} ${h.name}`];
+    st.colorChanges ? stopWords(...stopCounts(v.file, st.colorChanges)) : "no thread changes", `≈ ${minutes} min`, `${h.machineName} ${h.name}`];
   // (`block`: a design that can't be sewn as it is, such as words wrapped round into themselves: no file until it's fixed)
   $("download").disabled = !fits || !!v.block; $("share").disabled = !fits || !!v.split || !!v.block;
   $("sheet-print").disabled = $("along-open").disabled = !fits || !!v.split; $("cut-file").hidden = !v.sheet?.cut?.length; $("names-open").hidden = !!v.split || !namesFor();
@@ -165,10 +172,12 @@ function warnUI(v) {
 // thread changes, and pauses where the next block is in the same thread (an in-the-hoop bookmark's fabric steps: the
 // Open tab said "4 thread changes" for an all-red file)
 function changesFact(p, n) {
-  const same = Math.min(n, pauses(p)), ch = n - same;
+  const [ch, same] = stopCounts(p, n);
   return (ch ? `<span${tip("The machine stops for each one: thread the next colour and press Start.")}>${ch} thread ${ch === 1 ? "change" : "changes"}</span>` : "")
-    + (same ? `<span${tip("The machine stops but the thread stays the same: usually a fabric step (in-the-hoop or appliqué).")}>${same} ${same === 1 ? "pause" : "pauses"} in the same thread</span>` : "");
+    + (same ? `<span${tip("The machine stops but the thread stays the same: usually a fabric step (in-the-hoop or appliqué). Sew along says what to do at each stop.")}>${same} ${same === 1 ? "pause" : "pauses"} in the same thread</span>` : "");
 }
+// a design's stops: [thread changes, pauses in the same thread]
+function stopCounts(p, n = designStats(p).colorChanges) { const same = Math.min(n, pauses(p)); return [n - same, same]; }
 // the Picture tab's steps: what to have ready, then one thread per pause (it had none: "3 pauses" went unexplained).
 // The same words go to Sew along and the sew sheet (`v.sheet`: they said only "Thread the machine…")
 function picSteps(v, st) {
@@ -462,8 +471,8 @@ function downloaded(v, zipped, files = []) {
   // (a design in two hoopings: each hooping's size, not the whole design's 136 × 170 that the hoop can't take)
   const parts = v.split?.map((p) => designStats(turned() ? turnPattern(p.pattern, false) : p.pattern));
   const size = parts ? `in ${parts.length} hoopings, ${parts.map((q) => `${q.widthMm.toFixed(0)} × ${q.heightMm.toFixed(0)} mm`).join(" and ")}, each fitting the hoop` : s ? `${s.widthMm.toFixed(0)} × ${s.heightMm.toFixed(0)} mm` : "";
-  const cc = parts ? parts.reduce((a, q) => a + q.colorChanges, 0) : s?.colorChanges;
-  const what = `on a ${h.machineName} in the ${h.name}${s ? `, ${size}, ${cc ? (state.mode === "picture" || state.mode === "open" ? `${cc} thread ${cc === 1 ? "change" : "changes"}` : `${cc} ${cc === 1 ? "pause" : "pauses"}${parts ? " in all" : ""}`) : "no pauses"}` : ""}`;
+  const [ch, same] = (v.split ? v.split.map((q) => stopCounts(q.pattern)) : [stopCounts(v.file)]).reduce((a, b) => [a[0] + b[0], a[1] + b[1]]);
+  const what = `on a ${h.machineName} in the ${h.name}${s ? `, ${size}, ${ch + same ? `${stopWords(ch, same)}${parts ? " in all" : ""}` : "no thread changes"}` : ""}`;
   // ("Checked" only when the stitches pass too: it said so for files tests/pe900_check.py fails; and not for a file cut
   // short, which holds only part of the design)
   const part = state.mode === "open" && state.opened?.short;
@@ -633,6 +642,8 @@ $("names-open").onclick = () => {
   $("names-shrink-row").hidden = !!n.bookmark;   // (the bookmark shrinks a long name by itself)
   $("names-thumbs").innerHTML = ""; $("names-cancel").textContent = "Cancel";
   $("names").showModal();
+  // (last time's list, all selected: typing replaces it. The caret at its end glued "Ava" onto "Name35")
+  $("names-list").focus(); $("names-list").select();
 };
 // (the last run's result goes once the list is changed: it described names no longer there)
 $("names-list").addEventListener("input", () => {
@@ -686,6 +697,10 @@ $("names-make").onclick = async () => {
     + (bad.length ? `Couldn't make: ${bad.join(", ")}. ` : "")
     + (left.length ? `Left out (40 at a time): ${left.join(", ")}. Make them in a second batch.` : "")
     + (poor.length ? ` ${poor.length === 1 ? "One file" : `${poor.length} files`} may not sew well:` : "");
+  // (Make the files is disabled while they're made, which sent focus to the page: on to the result's first action,
+  // or back to the list when nothing was made)
+  if (!$("names").contains(document.activeElement) || document.activeElement === $("names-make"))
+    (files.length ? [...box.querySelectorAll("button, a[href]")].find((b) => b.offsetParent) || $("names-cancel") : $("names-list")).focus();
 };
 
 // ---------- thread brand ----------
@@ -827,6 +842,25 @@ function keepFocus(root, render) {
   const n = sel && root.querySelector(sel);
   if (n) { n.focus(); if (caret && "setSelectionRange" in n) try { n.setSelectionRange(...caret); } catch {} }
 }
+
+// A one-tap fix that redraws the part of the page it sat in ("Make it straight", "Move it below the zipper", "Centre
+// it") took keyboard focus with it, to the page: the next Tab started again from the top. After a press from the
+// keyboard (a click with no pointer: `detail` 0), focus that fell to the page goes to the first control still showing
+// in the nearest part of the page that's left (the edited piece's editor). Pointer taps are left alone: focusing the
+// words box would open a phone's keyboard. (Captured: the editor's own click handler stops the event.)
+const FOCUSABLE = "button:not([disabled]), input:not([disabled]):not([type=hidden]), select:not([disabled]), textarea:not([disabled]), a[href], [tabindex='0']";
+document.addEventListener("click", (e) => {
+  const b = e.target.closest?.("button, a, [role=button]"); if (!b || e.detail !== 0) return;
+  const up = []; for (let n = b.parentElement; n && n !== document.body; n = n.parentElement) up.push(n);
+  const shown = (n) => n.getClientRects().length > 0 && !n.closest("[hidden], [inert]");
+  const back = () => {
+    const a = document.activeElement; if (a && a !== document.body && a.isConnected) return;
+    if (b.isConnected && b.matches(FOCUSABLE) && shown(b)) return b.focus();
+    for (const n of up) if (n.isConnected && shown(n)) { const c = [...n.querySelectorAll(FOCUSABLE)].find(shown); if (c) return c.focus(); }
+  };
+  // (now, and again once a warning redrawn a moment later has settled)
+  requestAnimationFrame(back); setTimeout(back, 450);
+}, true);
 
 // ---------- bookmark ----------
 let bmTimer = 0, bmSeq = 0;
@@ -1374,7 +1408,7 @@ function sizeUI() {
   $("doc-fit").hidden = at;
   // (information in the hint's colour, the action a short link: the whole line as a red link read as an error)
   $("doc-fit-note").textContent = capped ? `${capped} mm is too big for the ${hoop().name}: ${big.mm} mm is the largest that fits.` : `Largest that fits the ${hoop().name}: ${big.pct} % (${big.mm} mm). `;
-  $("doc-fit").textContent = "Use this size"; $("doc-fit").setAttribute("aria-label", `Use the largest size that fits: ${big.pct} %`);
+  $("doc-fit").textContent = "Use this size"; $("doc-fit").setAttribute("aria-label", `Use this size: ${big.pct} %, the largest that fits`);   // (the visible words first, for voice control)
   // within 80-120 % the stitches are scaled as they are; past that they're re-stitched at the new size
   $("doc-scale-hint").textContent = o.scale >= 0.8 && o.scale <= 1.2 ? "Up to 20 % either way the stitches are scaled as they are (denser smaller, more open bigger), with the satin stitches spaced evenly again."
     : "Re-stitched at the new size: satins and fills keep the file's own density. Check it in the preview: lettering and fine detail can change.";
