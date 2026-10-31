@@ -7,7 +7,7 @@ import { DEFAULT_MACHINE, MACHINES, MARGIN, hoop as getHoop } from "./core/machi
 import { DENSITY, picturePlan } from "./core/digitize.js";
 import { hexToRgb, nearestBrotherThread, pecThread } from "./core/threads.js";
 import { CLOTHS, colorBlocks, draw } from "./render.js";
-import { FINISH, FIRST_STEP, cutSVG, nextThread, sewSheet } from "./sheet.js";
+import { FINISH, FIRST_STEP, cutSVG, nextThread, sewSheet, youHtml } from "./sheet.js";
 import { zip } from "./zip.js";
 import { blockThreads, checkup, fewerBlocks, fix, heat, landJumps, pauses, shortJumps, sortedChanges } from "./doctor.js";
 import { MAX_BLOCKS, denseWords, endsEarly, moves, stopWords, verdictOf } from "./quality.js";
@@ -117,17 +117,21 @@ function setView(v) {
   const fits = !!v.split || (st.widthMm <= h.w - 2 * MARGIN && st.heightMm <= h.h - 2 * MARGIN);
   v.whole = !!v.split || !fits;
   const inch = (mm) => (mm / 25.4).toFixed(1), over = (v, side) => (v > side - 2 * MARGIN && Math.round(v) <= side - 2 * MARGIN ? v.toFixed(1) : v.toFixed(0));
-  const minutes = Math.max(1, Math.round(st.stitches / 550 + st.colorChanges * 0.5)), snips = shortJumps(v.file);
+  // (two hoopings: the pauses the machine makes in the two files, as the steps and the done dialog count them; the whole
+  // design's colour changes said "1 pause" beside steps with none)
+  const stops = v.split ? v.split.reduce((a, p) => a + designStats(p.pattern).colorChanges, 0) : st.colorChanges;
+  const minutes = Math.max(1, Math.round(st.stitches / 550 + stops * 0.5)), snips = shortJumps(v.file);
   $("fact-tip")?.remove();
   $("facts").innerHTML = [
     // (a size just over the field isn't rounded down to read as if it fits: 126.4 showed as 126 beside "fits 126")
     `<span>${over(shown.widthMm, shownHoop().w)} × ${over(shown.heightMm, shownHoop().h)} mm · ${inch(shown.widthMm)} × ${inch(shown.heightMm)} in</span>`,
     `<span>${st.stitches.toLocaleString()} stitches</span>`,
     // (on the Picture and Open tabs every pause is a change of thread: say so; the Design tab's can be fabric steps)
-    st.colorChanges ? (state.mode === "picture" || state.mode === "open" ? changesFact(v.file, st.colorChanges)
-      : `<span${tip(`The machine stops ${st.colorChanges === 1 ? "once" : `${st.colorChanges} times`} for you: to change the thread, or to lay fabric on. “How to stitch it” (or Sew along) says what to do at each stop.`)}>${st.colorChanges} ${st.colorChanges === 1 ? "pause" : "pauses"}</span>`) : "",
+    stops ? (state.mode === "picture" || state.mode === "open" ? changesFact(v.file, stops)
+      : `<span${tip(`The machine stops ${stops === 1 ? "once" : `${stops} times`} for you: to change the thread, or to lay fabric on. “How to stitch it” (or Sew along) says what to do at each stop.`)}>${stops} ${stops === 1 ? "pause" : "pauses"}</span>`) : "",
     `<span>≈ ${minutes} min</span>`,
-    v.split ? `<span>${v.split.length} hoopings</span>` : fits ? "" : `<span class="bad">Too big for the ${h.name}</span>`,
+    // (the Design tab never said it fits, as the Open tab's file card does)
+    v.split ? `<span>${v.split.length} hoopings</span>` : fits ? (state.mode === "design" ? `<span>Fits ${escapeHtml(h.name.replace(/ hoop$/, ""))}</span>` : "") : `<span class="bad">Too big for the ${h.name}</span>`,
     offCentre(v, fits) ? `<span class="note">Off centre here: the machine centres it <button type="button" class="link" id="recentre">Centre it</button></span>` : "",
     snips ? `<span${tip("The machine only trims jumps longer than its “jump stitch not to trim” setting (5 mm at the lowest). The thread is locked at both ends, so these are safe to snip after stitching.")}>${snips} loose ${snips === 1 ? "thread" : "threads"} to snip after</span>` : "",
   ].join("");
@@ -139,7 +143,7 @@ function setView(v) {
       return `<li><i style="background:${b.color}"></i><span>${label}${spool(b.color) ? `<br><small>${spool(b.color)}</small>` : ""}</span></li>`;
     }).join("");
   v.facts = [`${st.widthMm.toFixed(0)} × ${st.heightMm.toFixed(0)} mm (${inch(st.widthMm)} × ${inch(st.heightMm)} in)`, `${st.stitches.toLocaleString()} stitches`,
-    `${st.colorChanges} ${st.colorChanges === 1 ? "pause" : "pauses"}`, `≈ ${minutes} min`, `${h.machineName} ${h.name}`];
+    `${stops} ${stops === 1 ? "pause" : "pauses"}`, `≈ ${minutes} min`, `${h.machineName} ${h.name}`];
   // (`block`: a design that can't be sewn as it is, such as words wrapped round into themselves: no file until it's fixed)
   $("download").disabled = !fits || !!v.block; $("share").disabled = !fits || !!v.split || !!v.block;
   $("sheet-print").disabled = $("along-open").disabled = !fits || !!v.split; $("cut-file").hidden = !v.sheet?.cut?.length; $("names-open").hidden = !!v.split || !namesFor();
@@ -358,13 +362,29 @@ function canShareFile() {
   catch { return false; }
 }
 $("share").hidden = !canShareFile();
+// what goes with a shared file: what to have ready and the steps, short and plain (it said only "Embroidery file for a
+// Brother PE900. Copy it to a USB stick"), cut at a line past ~1800 characters so a text message can carry it
+function shareText(v) {
+  const sheet = v.sheet || {}, blocks = v.cache?.blocks || [], mt = machineThreadList(v);
+  const steps = sheet.steps?.length ? sheet.steps : blocks.map((b, i) => ({ you: nextThread(blocks, i) }));
+  const lines = [`Embroidery file for a ${hoop().machineName} (${hoop().name}). Copy it to a USB stick, plug it into the machine and pick the design.`];
+  if (turnedFile()) lines.push("", $("done-turn").textContent);
+  if (sheet.ready?.length) lines.push("", "Have ready:", ...sheet.ready.map((r) => `- ${r}`));
+  lines.push("", "Steps:", ...steps.map((st, i) => `${i + 1}. ${mt[i] ? `Brother ${mt[i].name}: ` : ""}${st.you || "Press Start."}`));
+  if (sheet.after?.length) lines.push("", "When it's done: " + sheet.after.join(" "));
+  const out = [];
+  for (const l of lines) {
+    if (out.join("\n").length + l.length > 1800) { out.push("", "(The rest is on the sew sheet: Print a sew sheet in Needleworks.)"); break; }
+    out.push(l);
+  }
+  return out.join("\n");
+}
 $("share").onclick = async () => {
   const v = state.view; if (!v) return;
   const check = validatePES(v.bytes, v.verifyAgainst || null, hoop());
   if (!check.ok) { showError("Sending stopped: " + check.error); return; }
   try {
-    await navigator.share({ files: [pesFile(v)], title: v.filename,
-      text: `Embroidery file for a ${hoop().machineName} (${hoop().name}). Copy it to a USB stick to stitch it.` });
+    await navigator.share({ files: [pesFile(v)], title: v.filename, text: shareText(v) });
   } catch (err) {
     if (err && err.name !== "AbortError") showError("Couldn't open the share sheet. Use Download instead.");
   }
@@ -463,7 +483,7 @@ function downloaded(v, zipped, files = []) {
   const parts = v.split?.map((p) => designStats(turned() ? turnPattern(p.pattern, false) : p.pattern));
   const size = parts ? `in ${parts.length} hoopings, ${parts.map((q) => `${q.widthMm.toFixed(0)} × ${q.heightMm.toFixed(0)} mm`).join(" and ")}, each fitting the hoop` : s ? `${s.widthMm.toFixed(0)} × ${s.heightMm.toFixed(0)} mm` : "";
   const cc = parts ? parts.reduce((a, q) => a + q.colorChanges, 0) : s?.colorChanges;
-  const what = `on a ${h.machineName} in the ${h.name}${s ? `, ${size}, ${cc ? (state.mode === "picture" || state.mode === "open" ? `${cc} thread ${cc === 1 ? "change" : "changes"}` : `${cc} ${cc === 1 ? "pause" : "pauses"}${parts ? " in all" : ""}`) : "no pauses"}` : ""}`;
+  const what = `on a ${h.machineName} in the ${h.name}${s ? `, ${size}, ${cc ? (state.mode === "picture" || state.mode === "open" ? `${cc} thread ${cc === 1 ? "change" : "changes"}` : `${cc} ${cc === 1 ? "pause" : "pauses"}${parts ? " in all" : ""}`) : parts ? "no pauses in either" : "no pauses"}` : ""}`;
   // ("Checked" only when the stitches pass too: it said so for files tests/pe900_check.py fails; and not for a file cut
   // short, which holds only part of the design)
   const part = state.mode === "open" && state.opened?.short;
@@ -484,9 +504,11 @@ function downloaded(v, zipped, files = []) {
   $("done-warn").hidden = !warns.length && !note; $("done-warn").textContent = warns.length ? "Still to look at: " + warns.join(" ") : note || "";
   // (only the Design tab and the bookmark have “How to stitch it”)
   // (and a design with no pauses has none to follow)
-  $("done-sew").textContent = !s?.colorChanges ? "Pick the design and press Start."
+  // (two hoopings: which file first, and the rehooping between them; it said "Pick the design and press Start")
+  $("done-sew").textContent = parts ? `Sew ${v.split[0].filename} first${cc ? ", following “How to stitch it” at every pause" : ""}. Then hoop the fabric again as “How to stitch it” says (it lines up on the two crosses) and sew ${v.split[1].filename}.`
+    : !s?.colorChanges ? "Pick the design and press Start."
     : state.mode === "design" || state.mode === "bookmark" ? "Pick the design, then follow “How to stitch it” (or Sew along) at every pause."
-    : "Pick the design and press Start. At each pause, thread the next colour listed beside the preview (Sew along shows each one).";
+    : "Pick the design and press Start. At each pause, thread the next colour listed with the preview (Sew along shows each one).";
   $("done").showModal();
 }
 $("done-close").onclick = () => { if ($("done-never").checked) store.set("doneSeen", true); $("done").close(); };
@@ -581,7 +603,7 @@ function alongShow() {
   let look = { hide: v.hide, fabricShapeBlock: v.fabricShapeBlock };
   if (done) {
     $("along-title").textContent = "Finished";
-    $("along-you").textContent = (v.sheet?.after || []).join(" ") || FINISH;
+    $("along-you").innerHTML = youHtml((v.sheet?.after || []).join(" ") || FINISH, escapeHtml, "p");
     $("along-ready").hidden = $("along-turn").hidden = true;
     $("along-sews").textContent = ""; $("along-time").textContent = "";
   } else {
@@ -589,7 +611,7 @@ function alongShow() {
     $("along-title").innerHTML = `<i style="background:${s.block?.color || "#999"}"></i>${s.title ? escapeHtml(s.title) + " · " : ""}Brother ${escapeHtml(t?.name || "")}${sp ? ` <small>${escapeHtml(sp)}</small>` : ""}`;
     $("along-ready").hidden = !s.ready; $("along-ready").querySelector("ul").innerHTML = (s.ready || []).map((r) => `<li>${escapeHtml(r)}</li>`).join("");
     $("along-turn").hidden = !s.turn; $("along-turn").textContent = s.turn || "";
-    $("along-you").textContent = s.you || (i ? "" : FIRST_STEP);
+    $("along-you").innerHTML = s.you || !i ? youHtml(s.you || FIRST_STEP, escapeHtml, "p") : "";
     $("along-sews").textContent = s.sews || "";
     $("along-time").textContent = `About ${s.minutes} min of sewing.`;
     look = stepLook(v, i, s.block);
@@ -848,7 +870,7 @@ function drawBookmarkUI() {
   const steps = stepsFor(state.bm.blank), pauses = steps.length - 1;
   $("bm-steps-count").textContent = `· ${steps.length} steps, ${pauses} pauses`;
   $("bm-steps-lede").textContent = `Keep the same thread in the whole time. The machine pauses ${pauses} times. Each pause is a fabric step.`;
-  $("bm-steps").innerHTML = steps.map((s) => `<li><b>${s.title}</b><span>${s.you || s.machine}</span></li>`).join("");
+  $("bm-steps").innerHTML = steps.map((s) => `<li><b>${s.title}</b>${youHtml(s.you || s.machine, (t) => t)}</li>`).join("");
 }
 // stitched exactly as typed
 const stitchedName = () => state.bm.name.trim();

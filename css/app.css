@@ -231,6 +231,9 @@ canvas#view:active { cursor: grabbing; }
 }
 @media (min-width: 700px) and (min-height: 560px) and (max-height: 900px) {
   .lede, .panel > .field > .hint, #pic-sample-note, .tag { display: none; }
+  /* (but "Sewing on" is folded, so what the fabric and thread do is said when it's opened: on a laptop "Felt changes
+     nothing here" was only on the sew sheet) */
+  .panel > .field.sewn-on > .hint { display: block; }
   .panel { gap: 10px; }
   .fonts .sample { font-size: 20px; }
   .fonts .fname, .swatch-name { display: none; }
@@ -312,6 +315,9 @@ body[data-mode="design"] #view { cursor: grab; }
 .st-steps b i { width: 12px; height: 12px; border-radius: 50%; border: 1px solid rgba(0,0,0,.15); }
 /* what to do: plain ink (red read as a warning), what it sews muted under it */
 .st-steps .you { color: var(--ink); }
+/* a step of several actions: numbered sub-steps (the ornament's last step was one paragraph of six) */
+.steps ol.sub, ol.sub { margin: 2px 0 0; padding-left: 1.5em; display: grid; gap: 3px; list-style: decimal; font-size: 15px; }
+.steps ol.sub li::marker { color: var(--muted); }
 .st-steps .ready { margin: 0; padding-left: 18px; list-style: disc; color: var(--muted); font-size: 15px; display: grid; gap: 2px; }
 .edit .warn { color: var(--warn); font-weight: 700; }
 .cards canvas { width: 100%; height: 72px; display: block; margin-bottom: 2px; }
@@ -346,6 +352,8 @@ body[data-mode="design"] #view { cursor: grab; }
   .sheet .list li { margin: 0 0 3mm; break-inside: avoid; }
   .sheet .list p { margin: 0.5mm 0 0; }
   .sheet .list .you { font-weight: 600; }
+  .sheet .list ol.sub { margin: 0.5mm 0 0; padding-left: 5mm; display: block; }
+  .sheet .list ol.sub li { margin: 0; }
   .sheet .sw { display: inline-block; width: 4mm; height: 4mm; border: 0.2mm solid #666; border-radius: 1mm; margin-right: 2mm; vertical-align: -0.6mm; print-color-adjust: exact; -webkit-print-color-adjust: exact; }
   .sheet .tip { border-left: 1mm solid #bbb; padding-left: 3mm; margin: 3mm 0; }
 }
@@ -404,11 +412,12 @@ body[data-mode="design"] #view { cursor: grab; }
 .along-body h2 small { font-size: 15px; font-weight: 400; color: var(--muted); }
 .along-body p { font-size: 20px; line-height: 1.45; margin: 0 0 8px; }
 .along-body .you { font-weight: 700; }
+.along-body ol.sub { font-size: 20px; line-height: 1.45; margin: 0 0 8px; gap: 4px; }
 .along-ready { margin: 0 0 10px; padding: 8px 12px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; font-size: 17px; line-height: 1.4; }
 .along-ready h3 { margin: 0 0 2px; font-size: 15px; color: var(--muted); }
 .along-ready ul { margin: 0; padding-left: 20px; display: grid; gap: 2px; }
 .along-body p.along-turn { font-size: 17px; }
-@media (max-height: 700px) { .along-ready { font-size: 15px; } .along-body p { font-size: 18px; } }
+@media (max-height: 700px) { .along-ready { font-size: 15px; } .along-body p, .along-body ol.sub { font-size: 18px; } }
 .along-body .hint { font-size: 15px; }
 .along nav { display: flex; gap: 12px; padding: 12px max(18px, env(safe-area-inset-left)) max(18px, env(safe-area-inset-bottom)); max-width: 760px; width: 100%; margin: 0 auto; box-sizing: border-box; }
 .along nav button { flex: 1; min-height: 60px; font-size: 20px; }
@@ -435,6 +444,8 @@ details.sewn-on[open] { display: grid; gap: 10px; }
 .pieces .pick .nm { overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 .names .good { color: var(--good); }
 .done-steps { margin: 0; padding-left: 1.3em; display: grid; gap: 6px; }
+/* (the grid's gap spaces the done dialog; the paragraphs' own margins left a big gap under "Checked") */
+#done form > p { margin: 0; }
 .names-thumbs { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 8px; max-height: 40vh; overflow: auto; }
 .names-thumbs:empty { display: none; }
 .names-thumbs figure { margin: 0; text-align: center; font-size: 12px; }

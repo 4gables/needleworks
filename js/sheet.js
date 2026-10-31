@@ -10,6 +10,17 @@ export const FINISH = "Take the hoop off and snip any loose threads. Tear-away s
 // a file's own steps, block by block: a stop in the same thread is a pause, not a thread change (an appliqué's fabric steps)
 export const nextThread = (blocks, i) => (!i ? FIRST_STEP : blocks[i]?.color === blocks[i - 1]?.color ? "The machine pauses: keep the same thread on and press Start." : "Change to the next thread and press Start.");
 
+// A step's "what you do" as its actions, one per sentence ("Then take the hoop off" as "Take the hoop off"): the
+// ornament's last step was one paragraph of six things to do
+export function actions(text) {
+  return String(text ?? "").split(/(?<=[.!?])\s+(?=[A-Z“"(])/).map((a) => a.trim().replace(/^Then (\w)/, (_, c) => c.toUpperCase())).filter(Boolean);
+}
+// as HTML: three or more actions as numbered sub-steps, else one line (in `tag`, with the class `you`)
+export function youHtml(text, escape = esc, tag = "span") {
+  const a = actions(text);
+  return a.length >= 3 ? `<ol class="you sub">${a.map((x) => `<li>${escape(x)}</li>`).join("")}</ol>` : `<${tag} class="you">${escape(text)}</${tag}>`;
+}
+
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
 const f1 = (n) => (Math.round(n * 10) / 10).toString();
 // white and cream thread would vanish on paper
@@ -64,7 +75,7 @@ export function sewSheet({ pattern, filename, hoop, facts, threads, hide, sheet 
   const rows = steps.map((s, i) => {
     const b = blocks.find((x) => x.index === i), t = threads[i];
     return `<li><b><span class="sw" style="background:${b?.color || t?.color || "#999"}"></span>${s.title ? esc(s.title) + " · " : ""}Brother ${esc(t?.name || "")}${b && spool(b.color) ? ` <small>(${esc(spool(b.color))})</small>` : ""}</b>
-      ${s.you ? `<p class="you">${esc(s.you)}</p>` : ""}${s.sews ? `<p>${esc(s.sews)}</p>` : ""}</li>`;
+      ${s.you ? youHtml(s.you, esc, "p") : ""}${s.sews ? `<p>${esc(s.sews)}</p>` : ""}</li>`;
   }).join("");
   const cut = sheet.cut?.length ? sheet.cut : null;
   let shapes = "";

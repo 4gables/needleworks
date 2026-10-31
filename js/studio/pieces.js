@@ -801,7 +801,7 @@ function localStages(p, fab = "cotton") {
       stages = [
         { color: p.color, paths: [loop(run(edge, 2.5, true))], sews: `Sews the ${name} outline on the base fabric.`, fabric: true, solid: [edge] },
         { color: p.color, pause: true, paths: tack(edge),
-          you: `Lay the appliqué fabric over the ${name} outline, right side up, covering it by ½ in. Press Start. Then take the hoop off (leave everything hooped), trim the appliqué fabric close to the stitching, and put the hoop back.`,
+          you: `Lay the appliqué fabric over the ${name} outline, right side up, covering it by ½ in. Press Start. Then take the hoop off the machine (leave the fabric in the hoop), trim the appliqué fabric close to the stitching, and put the hoop back.`,
           sews: "Tacks the appliqué fabric down.", under: true },
         { color: p.color, pause: true, paths: satinBorder(edge), you: "Press Start.", sews: "Covers the raw edge with a satin border." },
       ];
@@ -835,13 +835,15 @@ function localStages(p, fab = "cotton") {
       const hang = p.hang ?? !QUILTED(p);
       stages = [
         { color: p.color, paths: [loop(run(edge, 2.5, true))], sews: `Sews the ${name} outline on the stabilizer.`, fabric: true, bare: true, solid: [edge],
-          before: `Fabric: front and back pieces, each ${cut(p.w, p.h)}${p.quilt ? `, thin batting the same size` : ""}, tear-away stabilizer and tape.` },
+          before: `Fabric: front and back pieces, each ${cut(p.w, p.h)}${p.quilt ? `, thin batting the same size` : ""}, tear-away stabilizer and tape${hang ? ", and a 6 in (15 cm) ribbon for the loop" : ""}.` },
         { color: p.color, pause: true, paths: tack(edge),
-          you: `Lay ${p.quilt ? "the batting, then " : ""}the front fabric over the ${name} outline, right side up, covering it by ½ in. Press Start. Then take the hoop off (leave everything hooped), trim the fabric${p.quilt ? " and batting" : ""} close to the stitching, and put the hoop back.`,
+          you: `Lay ${p.quilt ? "the batting, then " : ""}the front fabric over the ${name} outline, right side up, covering it by ½ in. Press Start. Then take the hoop off the machine (leave the fabric in the hoop), trim the fabric${p.quilt ? " and batting" : ""} close to the stitching, and put the hoop back.`,
           sews: "Tacks the front fabric down.", under: true },
         { color: p.color, pause: true, last: true,
           paths: [loop(run(edge, 2.0, true)), ...satinBorder(edge)],
-          you: `Take the hoop off and turn it over. Tape the backing fabric to the back, right side facing you (away from the stabilizer), covering the ${name} by ½ in.${hang ? " For a hanging loop, tape a folded ribbon at the top on the front, loop pointing in, ends ½ in past the outline." : ""} Put the hoop back and press Start.`,
+          // (one sentence per action: the steps show them numbered. "On the front" was read while the hoop was upside
+          // down, so the ribbon goes on once it's back on the machine, the embroidered side up)
+          you: `Take the hoop off the machine (leave the fabric in the hoop) and turn it upside down. Tape the backing fabric over the stabilizer, right side facing you, covering the ${name} by ½ in. Turn the hoop back over and put it back on the machine.${hang ? ` For the loop, fold the ribbon in half and tape it on the embroidered side at the top of the ${name}, loop pointing in toward the middle, ends ½ in past the outline.` : ""} Press Start.`,
           sews: "Tacks the backing on and covers the edge with satin through every layer.",
           after: `Take it out of the hoop, tear the stabilizer away and cut round the ${name} as close to the satin as you can without nicking it${hang ? " (keep the ribbon loop clear of the scissors). Flip the ribbon loop up." : "."}` },
       ];
@@ -883,8 +885,8 @@ function localStages(p, fab = "cotton") {
       if (kind(b) === "cut") s.sews = `Sews the cutting line (${b.name}).`;
       if (kind(b) === "tack") s.sews = `Tacks the appliqué fabric down (${b.name}).`;
       if (was === "place") s.you = "Lay the appliqué fabric over the placement line, right side up, covering it by ½ in. Press Start.";
-      else if (was === "tack") s.you = "Take the hoop off (leave everything hooped), trim the appliqué fabric close to the tack-down stitching, put the hoop back and press Start.";
-      else if (was === "cut") s.you = "If the design's own instructions say to cut here, cut along that line (leave everything hooped). Then press Start.";
+      else if (was === "tack") s.you = "Take the hoop off the machine (leave the fabric in the hoop), trim the appliqué fabric close to the tack-down stitching, put the hoop back and press Start.";
+      else if (was === "cut") s.you = "If the design's own instructions say to cut here, cut along that line (leave the fabric in the hoop). Then press Start.";
       if (s.you) s.pause = true;
     });
   }
@@ -944,7 +946,7 @@ function appliqued(loops, color, what, cover, trim, them = "it") {
   return [
     { color, paths: R.placement, cut: loops, solid: loops, sews: `Sews the outline of ${what} on the base fabric.`, fabric: true },
     { color, pause: true, paths: R.tack,
-      you: `Lay the appliqué fabric over ${cover}, right side up, covering ${them} by ½ in. Press Start. Then take the hoop off (leave everything hooped), trim the fabric close to the stitching ${trim}, and put the hoop back.`,
+      you: `Lay the appliqué fabric over ${cover}, right side up, covering ${them} by ½ in. Press Start. Then take the hoop off the machine (leave the fabric in the hoop), trim the fabric close to the stitching ${trim}, and put the hoop back.`,
       sews: "Tacks the appliqué fabric down.", under: true },
     { color, pause: true, paths: R.satin, you: "Press Start.", sews: "Covers the raw edges with satin." },
   ];
@@ -1456,7 +1458,7 @@ export const FABRICS = {
 // as thick as 40 (satins 15% more open, fills 0.05 mm); 60 wt ~0.75x (satins 12% closer; fills stay at 0.35 mm,
 // closer rows make the row links shorter than the PE900 check's 0.3 mm).
 export const THREADS = {
-  auto: { name: "Automatic", tip: "Standard 40 wt thread; small letters are sewn for 60 wt (the steps say when)." },
+  auto: { name: "Automatic", tip: "Standard 40 wt thread (the weight is printed on the spool: a bigger number is a finer thread); small letters are sewn for 60 wt (the steps say when)." },
   30: { name: "30 wt", satin: 0.45, tip: "30 wt is heavier and bolder: use a 90/14 topstitch needle and slow the machine down." },
   40: { name: "40 wt", satin: 0.38, tip: "40 wt is the standard machine embroidery thread: a 75/11 embroidery needle." },
   60: { name: "60 wt", satin: 0.34, tip: "60 wt is fine, for small letters and fine detail: a 65/9 or 70/10 needle and 60 wt bobbin thread." },
@@ -1623,6 +1625,12 @@ export function crossName(marks, turned = false) {
   const [a, b] = turned ? marks.map(([x, y]) => [-y, x]) : marks;
   return Math.abs(a[1] - b[1]) >= Math.abs(a[0] - b[0]) ? (a[1] < b[1] ? "top" : "bottom") : a[0] < b[0] ? "left" : "right";
 }
+// What to do before the second hooping sews its crosses. `which`: the cross named as the machine shows it (said by the
+// caller when the hoop is turned); `move`: how far to slide the fabric, from where the machine centres each half (the
+// caller knows both halves)
+export function crossStep({ pts, which, move }) {
+  return `${move || "Hoop the fabric again, as straight as you can, with both crosses from the first hooping inside the hoop."} Put the hoop on the machine. Use the machine's layout arrows to move the design until the needle sits over the centre of the ${which || crossName(pts) + " cross"} (turn the handwheel to lower it and check). Press Start: the crosses should sew right on top of the old ones. If they don't, stop, move the design and try again.`;
+}
 // basting crosses (long stitches, easy to pull out), each starting and ending at its centre
 const crosses = (marks) => marks.map(([x, y]) => [[x, y], [x + 5, y], [x - 5, y], [x, y], [x, y + 5], [x, y - 5], [x, y]]);
 
@@ -1672,8 +1680,7 @@ function build(pieces, hoop, opts) {
     const color = opts.marks.end ? order[order.length - 1].color : order[0].color, paths = crosses(opts.marks.pts);
     if (opts.marks.end) order.push({ color, paths, label: "Alignment crosses", sews: "Sews two alignment crosses where the next hooping lines up." });
     else order.unshift({ color, paths, label: "Alignment crosses", pause: true,
-      // (`which`: the cross named as the machine shows it, said by the caller when the hoop is turned)
-      you: `Hoop the fabric again, as straight as you can, with both crosses from the first hooping inside the hoop. Before you press Start, use the machine's layout arrows to move the design until the needle comes down on the centre of the ${opts.marks.which || crossName(opts.marks.pts) + " cross"} (turn the handwheel to check). Press Start: the crosses should sew right on top of the old ones. If they don't, stop, move the design and try again.`,
+      you: crossStep(opts.marks),
       sews: "Sews the alignment crosses again, on top of the first ones.", after: "Pull out the alignment crosses (they're long stitches; snip and pull)." });
   }
   if (opts.baste && order.length) {
