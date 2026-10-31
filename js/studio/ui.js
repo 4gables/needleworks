@@ -514,7 +514,8 @@ export function initStudio(api) {
       if (t.length > 3 || /^\p{Lu}\p{Ll}{2,}$/u.test(word))
         named = (t.length > 3 ? `A monogram has 3 initials at most, so only “${api.escapeHtml(t.slice(0, 3).join(""))}” would be sewn.`
           : `“${api.escapeHtml(word)}” looks like a name: a monogram sews initials (first, LAST, middle) with the middle one biggest, so it wouldn't read as “${api.escapeHtml(word)}”.`)
-          + ` <button type="button" class="link" data-as-text>Sew “${api.escapeHtml(p.letters.trim())}” as lettering</button>`;
+          + ((l) => (l.fits ? ` ${btn("data-as-text", `Sew “${api.escapeHtml(p.letters.trim())}” as lettering`, l)}`
+            : ` Sewn as lettering it would ${l.out ? "go outside" : l.hit ? `run into ${api.escapeHtml(label(l.hit))}` : "be too big for the hoop"}: make it smaller first.`))(landing(p, asLettering(p)));
     }
     // under a patch that sews after it (hidden), or sewn on a patch in nearly the same thread (it won't show)
     const cover = underPatch(p, pieces), base = p.kind !== "file" && underPatch(p, pieces, true);
@@ -534,8 +535,9 @@ export function initStudio(api) {
     w.innerHTML = [named, oneLine, under, same, kerned, small,
       gone.length ? `This font has no ${gone.map((c) => `“${api.escapeHtml(c)}”`).join(" ")}: ${gone.length === 1 ? "it" : "they"} would be stitched in a stand-in letter. Take ${gone.length === 1 ? "it" : "them"} out or try another font.` : "",
       size, arc, hit,
-      !m && !towel && fabric !== "towel" && fineLine(q) ? `At this size it sews as a thin line. <button type="button" class="link" data-seg-set="style:satin">Make it bold</button> (small loops may fill in).` : "",
-      !m && !towel && fabric !== "towel" && fills ? `At this size the small loops (the holes in letters like b and e) fill in. <button type="button" class="link" data-seg-set="style:line">Thin line</button> keeps them open${fillsAt?.fits ? `, or ${btn(`data-size="${fills}"`, `make it ${fills} mm`, fillsAt)}` : ""}.` : "",
+      // (a style change is checked too: bold is wider, and "Make it bold" ran “Emma” into the “Emma” beside it)
+      !m && !towel && fabric !== "towel" && fineLine(q) ? ((l) => `At this size it sews as a thin line.${l.fits ? ` ${btn(`data-seg-set="style:satin"`, "Make it bold", l)} (small loops may fill in).` : ` Bold, it would ${l.out ? "go outside" : l.hit ? `run into ${api.escapeHtml(label(l.hit))}` : "be too big for the hoop"}.`}`)(landing(p, { style: "satin" })) : "",
+      !m && !towel && fabric !== "towel" && fills ? ((l) => `At this size the small loops (the holes in letters like b and e) fill in.${l.fits ? ` ${btn(`data-seg-set="style:line"`, "Thin line", l)} keeps them open` : ""}${fillsAt?.fits ? `${l.fits ? ", or" : ""} ${btn(`data-size="${fills}"`, `${l.fits ? "make" : "Make"} it ${fills} mm`, fillsAt)}` : ""}${l.fits || fillsAt?.fits ? "." : ""}`)(landing(p, { style: "line" })) : "",
       // (too small, thin, or loops filling on one long line, as Fit to hoop leaves a long name: two lines may be much bigger)
       !fs && (m || fills || (fineLine(q) && fabric !== "towel")) ? ((c) => (c ? `On ${c.n === 2 ? "two" : "three"} lines${c.turn ? " with the hoop turned" : ""} it can be ${c.size} mm. ${btn(`data-lines="${c.size}" data-text="${encodeURIComponent(c.text)}"`, `Put it on ${c.n === 2 ? "two" : "three"} lines`, { fits: c.turn ? "turn" : "fits" })}` : ""))(lineChoice(p)) : "",
     ].filter(Boolean).map((t) => `<span>${t}</span>`).join(" <br>");   // (a space too: read aloud or copied, "lines.On two lines")
@@ -617,13 +619,19 @@ export function initStudio(api) {
     return { w, h, fits: w <= fw && h <= fh ? "fits" : w <= fh && h <= fw ? "turn" : null };
   }
   // a monogram that was given a name, made lettering: same font, thread and place, at the size that fits its frame
-  function asText() {
-    const p = current(); if (!p || p.kind !== "monogram") return;
-    remember(); fitted = false;
+  // (checked like any fix before it's offered: "ABCD" as lettering took the design past the hoop)
+  function asLettering(p) {
     const t = { id: p.id, x: p.x, y: p.y, color: p.color, kind: "text", text: p.letters.trim(), font: p.font, size: Math.min(60, p.size), shape: "straight", radius: 30,
       ...(p.rot ? { rot: p.rot } : {}), ...(p.flip ? { flip: true } : {}), ...(p.style && p.style !== "auto" ? { style: p.style } : {}) };
+    const fs = fittedSizes(pieces.map((o) => (o.id === p.id ? t : o))).get(t.id); if (fs) t.size = fs;
+    return { ...t, letters: undefined };
+  }
+  function asText(turn) {
+    const p = current(); if (!p || p.kind !== "monogram") return;
+    remember(); fitted = false;
+    const { letters, ...t } = asLettering(p);
     pieces[pieces.indexOf(p)] = t;
-    const fs = fittedSizes(pieces).get(t.id); if (fs) t.size = fs;
+    if (turn) { api.setTurn(!api.turned()); api.fit(); }
     save(); ui(); make();
   }
   // a piece the patch after it would cover goes just after that patch (`underPatch`)
@@ -1367,7 +1375,8 @@ export function initStudio(api) {
     if (ln) { change((p) => { p.text = ln.dataset.text ? decodeURIComponent(ln.dataset.text) : twoLines(p) || p.text; p.size = +ln.dataset.lines || p.size; }, true); turnToo(ln); editor(); return; }
     const fb = e.target.closest("[data-fab-set]");
     if (fb) { remember(); fabric = fb.dataset.fabSet; save(); sewnOn(); make(); warn(); return; }
-    if (e.target.closest("[data-as-text]")) { asText(); return; }
+    const at = e.target.closest("[data-as-text]");
+    if (at) { asText(at.hasAttribute("data-turn")); return; }
     const cs = e.target.closest("[data-color-set]");
     if (cs) { change((p) => (p.color = cs.dataset.colorSet), true, true); editor(); return; }
     const af = e.target.closest("[data-after]");
@@ -1580,6 +1589,15 @@ export function initStudio(api) {
   // frame beats outside it)
   const least = (p) => (p.size == null ? p.size : p.kind === "text" ? Math.max(5, Math.round(p.size) / 2) : p.kind === "monogram" ? Math.min(p.size, 15)
     : p.kind === "motif" ? Math.min(p.size, 20) : p.kind === "letters" ? Math.min(p.size, 30) : p.size);
+  // could p at `size` fit a w x h box at all? (its box at its own size scaled, with a little to spare: stitching each
+  // size of a 60 mm appliqué AB that couldn't fit held "+ Appliqué letters" up for 1.2 s)
+  function roughly(p) {
+    const b = p.size == null ? null : pieceBounds({ ...p, x: 0, y: 0 });
+    return (size, w, h) => !b || ((b[2] - b[0]) * size) / p.size <= w + 2 && ((b[3] - b[1]) * size) / p.size <= h + 2;
+  }
+  // made smaller to find it room, a piece must still stitch cleanly (and on a towel, keep its letters open): "Move it
+  // to the free space in the circle, 17 mm" closed a towel monogram up
+  const readable = (q) => !minSize(q) && !(fabric === "towel" && (q.kind === "text" || q.kind === "monogram") && towelMin(q) > q.size * 1.04);
   // x, y that put p in the middle of frame f's front (a zipper pouch's is below the zipper)
   function middleOf(f, p) {
     const fb = pieceBounds({ ...p, x: 0, y: 0 }), [t, b] = frontPanel(f);
@@ -1593,9 +1611,11 @@ export function initStudio(api) {
     const frames = others.filter((f) => f.kind === "frame" && !(f.rot || 0)).sort((a, b) => b.w * H(b) - a.w * H(a));
     if (!frames.length) return null;
     const sizes = p.size == null ? [p.size] : [...new Set(Array.from({ length: 10 }, (_, i) => Math.max(least(p), Math.round(p.size * (1 - i / 10) * 2) / 2)))];
+    const big = roughly(p);
     for (const size of sizes) {
+      if (!frames.some((f) => big(size, f.w, H(f)))) continue;
       const q0 = { ...p, size }, fb = pieceBounds({ ...q0, x: 0, y: 0 });
-      if (!fb || (size !== p.size && minSize(q0))) continue;
+      if (!fb || (size !== p.size && !readable(q0))) continue;
       const cx = (fb[0] + fb[2]) / 2, cy = (fb[1] + fb[3]) / 2;
       for (const f of frames) {
         // what's in it already (frames too: the quilt block's heart), and the spots round that
@@ -1635,11 +1655,12 @@ export function initStudio(api) {
     const L = Math.min(...all.map((b) => b[0])), T = Math.min(...all.map((b) => b[1])), R = Math.max(...all.map((b) => b[2])), B = Math.max(...all.map((b) => b[3]));
     const [ft, fb0] = ith ? frontPanel(ith) : [0, 0], prefer = ith ? [ith.x, (ft + fb0) / 2] : [(L + R) / 2, (T + B) / 2];
     const sizes = p.size == null || sameSize ? [p.size] : [...new Set(Array.from({ length: 10 }, (_, i) => Math.max(least(p), Math.round(p.size * (1 - i / 10) * 2) / 2)))];
+    const area = ith ? pieceBounds(ith) : [R - fw, B - fh, L + fw, T + fh], big = roughly(p);
     for (const size of sizes) {
+      if (!big(size, area[2] - area[0], area[3] - area[1])) continue;
       const q0 = { ...p, size }, fb = pieceBounds({ ...q0, x: 0, y: 0 });
-      if (!fb || (size !== p.size && minSize(q0))) continue;
+      if (!fb || (size !== p.size && !readable(q0))) continue;
       // where its box keeps the whole layout within the field (or within the project's front)
-      const area = ith ? pieceBounds(ith) : [R - fw, B - fh, L + fw, T + fh];
       const x0 = area[0] - fb[0], x1 = area[2] - fb[2], y0 = Math.max(area[1], ith ? ft + (ith.border === "zip" ? 3 : 0) : -Infinity) - fb[1], y1 = area[3] - fb[3];
       if (x0 > x1 || y0 > y1) continue;
       const spots = [];

@@ -138,7 +138,7 @@ function screen() {
 }
 // a warning's kind, from its words (numbers and names left out)
 const KINDS = [["small", /too small to stitch cleanly/], ["towel", /closes? (the |these )?letters up|leave the letters open|keeps them open\.$/], ["arch", /wrap most of the way round|too tight for letters/],
-  ["hit", /runs? into/], ["thin", /sews as a thin line/], ["loops", /small loops .*fill in/], ["lines", /^On (two|three) lines/], ["motif", /this small, the/],
+  ["hit", /^This runs into/], ["thin", /sews as a thin line/], ["loops", /small loops .*fill in/], ["lines", /^On (two|three) lines/], ["motif", /this small, the/],
   ["named", /looks like a name|has 3 initials at most/], ["oneline", /sews the words on one line/], ["under", /patch sews after this|sews before the patch/],
   ["same", /nearly the same thread/], ["kern", /pushed into each other/], ["missing", /has no /], ["framefit", /^Shrunk to fit inside the frame/]];
 const kindOf = (t) => (KINDS.find(([, re]) => re.test(t)) || [t.replace(/[\d.,]+|“[^”]*”/g, "#").slice(0, 40)])[0];
@@ -425,7 +425,8 @@ async function tryFix(b, undo) {
   if (sel1 === sel0) {
     const k1 = kinds(sc.edit);
     if (k && k1.has(k)) add("fix", `its warning is still there: “${sc.edit.find((t) => kindOf(t) === k)}”`);
-    const extra = [...k1].filter((x) => !k0.has(x));
+    // ("Make it bold (small loops may fill in)" says so on the button)
+    const extra = [...k1].filter((x) => !k0.has(x) && !(x === "loops" && /^Make it bold/.test(label)));
     if (extra.length) add("fix", `brought new warnings: ${extra.map((x) => `“${sc.edit.find((t) => kindOf(t) === x)}”`).join(" ")}`);
   }
   const g1 = kinds(sc.warn.split(/(?<=\.) /)), gx = [...g1].filter((x) => !g0.has(x));
