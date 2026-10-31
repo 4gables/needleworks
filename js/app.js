@@ -1118,10 +1118,14 @@ bindRange("pic-cross", "cross", (v) => `${v} mm`);
 // warn when parts of the picture are finer than thread can show (they'd close up or turn into a single line)
 // (lines under 1 mm aren't flagged: they're sewn as lines on purpose, and the warning fired on the sample flower;
 // gaps only past 1.5% of what's sewn: some always close in a detailed picture, and at 0.8 mm² it showed on every one)
+// (and a line too thin to keep at all, a logo's 1 px rule, over 5% of the picture across: left out without a word before)
 function fineUI(fine) {
-  const p = state.pic, gaps = fine?.narrowMm2 >= Math.max(2, 0.015 * (fine.inkMm2 || 0));
-  $("pic-fine").hidden = !gaps;
-  $("pic-fine").textContent = gaps ? `Some gaps (like inside or between small letters) are narrower than ½ mm and will close up. ${p.size < (p.max || 0) ? "A bigger Size keeps more of them open." : "This is as big as the hoop allows."}` : "";
+  const p = state.pic, gaps = fine?.narrowMm2 >= Math.max(2, 0.015 * (fine.inkMm2 || 0)), lost = fine?.lost >= 0.05;
+  $("pic-fine").hidden = !gaps && !lost;
+  $("pic-fine").textContent = [
+    gaps ? `Some gaps (like inside or between small letters) are narrower than ½ mm and will close up. ${p.size < (p.max || 0) ? "A bigger Size keeps more of them open." : "This is as big as the hoop allows."}` : "",
+    lost ? "A very thin line in the picture is finer than thread and is left out. Draw it thicker in the picture to have it sewn." : "",
+  ].filter(Boolean).join(" ");
 }
 const densityUI = () => document.querySelectorAll("#pic-density button").forEach((b) => b.setAttribute("aria-pressed", b.dataset.d === state.pic.density));
 densityUI();
@@ -1195,6 +1199,9 @@ function contentBox(bitmap) {
   const S = 256, k = Math.min(1, S / Math.max(bitmap.width, bitmap.height));
   const w = Math.max(1, Math.round(bitmap.width * k)), h = Math.max(1, Math.round(bitmap.height * k));
   const c = makeCanvas(w, h), ctx = c.getContext("2d", { willReadFrequently: true });
+  // (averaged, not sampled: a logo's 1 px rule fell between the samples, so the colours were learned without it and
+  // nothing could say it was left out)
+  ctx.imageSmoothingQuality = "high";
   ctx.drawImage(bitmap, 0, 0, w, h);
   const d = ctx.getImageData(0, 0, w, h).data;
   const border = [];
