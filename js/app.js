@@ -285,6 +285,15 @@ function factTip(el) {
 $("show-real").onchange = (e) => { state.real = e.target.checked; store.set("real", state.real); if (state.real && state.zoom < 3) { state.zoom = 3; } paint(); };
 $("show-hoop").checked = state.showHoop;
 $("show-hoop").onchange = (e) => { state.showHoop = e.target.checked; store.set("showHoop", state.showHoop); paint(); };
+// the View menu closes once something in it is chosen (it stayed open over the preview, hiding what changed), on a
+// click anywhere else and on Escape; focus goes back to View. (Capture, so "On my item" closes it before its dialog
+// opens and the dialog hands focus back to View, not to a button in a shut menu.)
+const views = document.querySelector(".views"), viewsBtn = views.querySelector("summary");
+const shutViews = (focus) => { if (!views.open) return; views.open = false; if (focus) viewsBtn.focus(); };
+views.querySelector(".views-menu").addEventListener("change", () => shutViews(true));
+views.querySelector(".views-menu").addEventListener("click", (e) => { if (e.target.closest("button")) shutViews(true); }, true);
+views.addEventListener("keydown", (e) => { if (e.key === "Escape" && views.open) { e.preventDefault(); shutViews(true); } });
+document.addEventListener("pointerdown", (e) => { if (!views.contains(e.target)) shutViews(false); });
 $("turn").onclick = () => {
   if (square()) return;
   if (state.mode === "design") studio.remember();   // (a turn is undone like any other change)

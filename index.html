@@ -218,6 +218,7 @@
           <button type="button" class="ghost" id="st-redo" disabled title="Redo (⇧⌘Z)"><span aria-hidden="true">↷</span> Redo</button>
         </div>
         <ul id="st-pieces" class="pieces"></ul>
+        <span class="sr" id="st-pieces-keys">Arrow keys go between the pieces and their buttons.</span>
         <div id="st-add" class="add">
           <button type="button" class="ghost" data-add="text">+ Lettering</button>
           <button type="button" class="ghost" data-add="monogram">+ Monogram</button>
@@ -290,7 +291,7 @@
       <li id="done-sew">Pick the design, then follow “How to stitch it” (or Sew along) at every pause.</li>
     </ol>
     <label class="check small"><input type="checkbox" id="done-never"> Don't show this again</label>
-    <div class="row"><button type="button" class="primary" id="done-close">Got it</button></div>
+    <div class="row"><button type="button" class="primary" id="done-close" autofocus>Got it</button></div>
   </form>
 </dialog>
 <dialog id="names" class="names" aria-labelledby="names-title">
