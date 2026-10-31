@@ -1,5 +1,5 @@
 /*! Needleworks (c) 2026 4Gables. All rights reserved. Proprietary, see LICENSE. https://4gables.com/needleworks/ */
-import { buildBookmark, hiddenBlocks, READY, RED, stepsFor } from "./core/bookmark.js";
+import { buildBookmark, DONE, hiddenBlocks, READY, RED, stepsFor } from "./core/bookmark.js";
 import { turnForMachine, turnPattern } from "./core/design.js";
 import { FONTS, fontOf, loadFont } from "./core/fonts.js";
 import { COLOR_CHANGE, STITCH, designStats, machineThreads, readEmbroidery, validatePES, writePES } from "./core/formats.js";
@@ -7,11 +7,11 @@ import { DEFAULT_MACHINE, MACHINES, MARGIN, hoop as getHoop } from "./core/machi
 import { DENSITY, picturePlan } from "./core/digitize.js";
 import { nearestBrotherThread, pecThread } from "./core/threads.js";
 import { CLOTHS, colorBlocks, draw } from "./render.js";
-import { cutSVG, sewSheet } from "./sheet.js";
+import { FINISH, FIRST_STEP, cutSVG, sewSheet } from "./sheet.js";
 import { zip } from "./zip.js";
 import { checkup, fix, heat, landJumps, pauses, shortJumps, sortedChanges } from "./doctor.js";
 import { endsEarly, verdictOf } from "./quality.js";
-import { BRANDS, nearestSpool, spools } from "./core/brands.js";
+import { BRANDS, exampleSpools, nearestSpool, spools } from "./core/brands.js";
 import { initStudio } from "./studio/ui.js";
 
 const $ = (id) => document.getElementById(id);
@@ -164,15 +164,21 @@ function changesFact(p, n) {
   return (ch ? `<span${tip("The machine stops for each one: thread the next colour and press Start.")}>${ch} thread ${ch === 1 ? "change" : "changes"}</span>` : "")
     + (same ? `<span${tip("The machine stops but the thread stays the same: usually a fabric step (in-the-hoop or appliqué).")}>${same} ${same === 1 ? "pause" : "pauses"} in the same thread</span>` : "");
 }
-// the Picture tab's steps: what to have ready, then one thread per pause (it had none: "3 pauses" went unexplained)
+// the Picture tab's steps: what to have ready, then one thread per pause (it had none: "3 pauses" went unexplained).
+// The same words go to Sew along and the sew sheet (`v.sheet`: they said only "Thread the machine…")
 function picSteps(v, st) {
-  const mt = machineThreadList(v), blocks = v.cache.blocks;
+  const mt = machineThreadList(v), blocks = v.cache.blocks, heavy = st.stitches > 8000;
+  const thread = (b) => ownSpool(b.color) ? `your ${ownSpool(b.color)}` : `Brother ${(mt[b.index] || nearestBrotherThread(b.color)).name}`;
+  const ready = `${heavy ? "Cut-away stabilizer (or two layers of tear-away on woven fabric): this is a lot of stitching." : "Tear-away stabilizer under woven fabric; cut-away under knits (T-shirts, sweatshirts), which stretch."} ${threadList(blocks.map((b) => b.color), (h) => state.pic.machineName?.get(h) || nearestBrotherThread(h).name)}`;
+  const steps = blocks.map((b, i) => ({ you: i ? "The machine stops: thread this colour and press Start." : `Hoop the fabric with the stabilizer under it, put on ${thread(b)} and press Start.`, sews: "" }));
+  const after = "Take the hoop off and snip any loose threads between parts. Tear-away stabilizer: tear it off gently, holding the stitches down with your thumb. Cut-away: trim it about ¼ in from the stitching (don't tear it: it keeps the design in shape).";
+  v.sheet = { ...v.sheet, ready: [ready], steps, after: [after] };
   $("pic-steps-count").textContent = `· ${blocks.length} ${blocks.length === 1 ? "thread" : "threads"}`;
   $("pic-steps").innerHTML = (turned() ? `<li class="after"><b>Hooping</b><span>${escapeHtml($("done-turn").textContent)}</span></li>` : "")
-    + `<li class="after"><b>Have ready</b><span>${st.stitches > 8000 ? "Cut-away stabilizer (or two layers of tear-away on woven fabric): this is a lot of stitching." : "Tear-away stabilizer under woven fabric; cut-away under knits (T-shirts, sweatshirts), which stretch."} The threads below, in this order.</span></li>`
+    + `<li class="after"><b>Have ready</b><span>${escapeHtml(ready)} The threads go in the order below.</span></li>`
     + blocks.map((b, i) => { const t = mt[b.index] || nearestBrotherThread(b.color);
-      return `<li><b><span class="n">${i + 1}</span><i style="background:${b.color}"></i>Brother ${escapeHtml(t.name)}${spool(b.color) ? ` <small>${escapeHtml(spool(b.color))}</small>` : ""}</b><span class="you">${i ? "The machine stops: thread this colour and press Start." : "Hoop the fabric with the stabilizer, thread this colour and press Start."}</span></li>`; }).join("")
-    + `<li class="after"><b>When it's done</b><span>Take the hoop off, snip any loose threads between parts, and tear or cut away the stabilizer.</span></li>`;
+      return `<li><b><span class="n">${i + 1}</span><i style="background:${b.color}"></i>Brother ${escapeHtml(t.name)}${spool(b.color) ? ` <small>${escapeHtml(spool(b.color))}</small>` : ""}</b><span class="you">${escapeHtml(steps[i].you)}</span></li>`; }).join("")
+    + `<li class="after"><b>When it's done</b><span>${escapeHtml(after)}</span></li>`;
 }
 // a Design-tab layout that fits the hoop but sits past its edge on screen (pieces dragged off to one side): the
 // machine centres the whole design, so it sews fine, but it looked like it would hit the hoop
@@ -492,7 +498,7 @@ $("item-done").onclick = () => {
 const along = { i: 0, lock: null };
 function alongSteps(v) {
   const blocks = v.cache.blocks;
-  const steps = [...(v.sheet?.steps?.length ? v.sheet.steps : blocks.map((b, i) => ({ you: i ? "Change to the next thread and press Start." : null, sews: "" })))];
+  const steps = [...(v.sheet?.steps?.length ? v.sheet.steps : blocks.map((b, i) => ({ you: i ? "Change to the next thread and press Start." : FIRST_STEP, sews: "" })))];
   // (the first screen says what to have by the machine)
   if (v.sheet?.ready?.length && steps.length) steps[0] = { ...steps[0], you: `Have ready: ${v.sheet.ready.join(" ")} ${steps[0].you || ""}`.trim() };
   if (turnedFile() && steps.length) steps[0] = { ...steps[0], you: `${$("done-turn").textContent} ${steps[0].you || ""}`.trim() };
@@ -511,12 +517,12 @@ function alongShow() {
   let look = { hide: v.hide, fabricShapeBlock: v.fabricShapeBlock };
   if (done) {
     $("along-title").textContent = "Finished";
-    $("along-you").textContent = (v.sheet?.after || []).join(" ") || "Take the hoop off, cut the jump threads, and tear or cut away the stabilizer.";
+    $("along-you").textContent = (v.sheet?.after || []).join(" ") || FINISH;
     $("along-sews").textContent = ""; $("along-time").textContent = "";
   } else {
     const s = steps[i], t = mt[i], sp = s.block && spool(s.block.color);
     $("along-title").innerHTML = `<i style="background:${s.block?.color || "#999"}"></i>${s.title ? escapeHtml(s.title) + " · " : ""}Brother ${escapeHtml(t?.name || "")}${sp ? ` <small>${escapeHtml(sp)}</small>` : ""}`;
-    $("along-you").textContent = s.you || (i ? "" : "Thread the machine, put the hoop on, and press Start.");
+    $("along-you").textContent = s.you || (i ? "" : FIRST_STEP);
     $("along-sews").textContent = s.sews || "";
     $("along-time").textContent = `About ${s.minutes} min of sewing.`;
     look = stepLook(v, i, s.block);
@@ -610,26 +616,38 @@ $("names-make").onclick = async () => {
 function spool(hex) {
   if (!state.brand) return "";
   const own = state.spools[state.brand], s = nearestSpool(state.brand, hex, own);
-  // (an owned spool far from the colour isn't a match: white showed as "your Isacord 5513", a green)
+  // (an owned spool far from the colour isn't a match: white showed as "your Isacord 5513", a green; `far` in brands.js)
   // (Brother's own spools match the machine's colours exactly: just the number)
-  return !s ? "" : !own?.length ? (state.brand === "brother" ? `spool ${s.num}` : `≈ ${s.label}`) : s.dE > 25 ? `nearest of yours, ${s.label}, is quite different` : `your ${s.label}`;
+  return !s ? "" : !own?.length ? (state.brand === "brother" ? `spool ${s.num}` : `≈ ${s.label}`) : s.far ? `nearest of yours, ${s.label}, is quite different` : `your ${s.label}`;
 }
 // the spool they own for a colour ("Isacord 0015 White"), for supply lists; "" when they haven't listed one close to it
 function ownSpool(hex) {
   const own = state.brand && state.spools[state.brand], s = own?.length && nearestSpool(state.brand, hex, own);
-  return s && s.dE <= 25 ? s.label : "";
+  return s && !s.far ? s.label : "";
+}
+// the threads for a supply list: by the spools they own when they've listed some, the rest as what to buy ("To buy:
+// Brother 007 Prussian Blue"; Have ready mixed owned and missing threads)
+function threadList(colors, machineName = (hex) => nearestBrotherThread(hex).name) {
+  const own = state.brand && state.spools[state.brand]?.length, name = (hex) => `Brother ${machineName(hex)}`;
+  if (!own) return `Thread: ${[...new Set(colors.map((h) => { const s = state.brand && nearestSpool(state.brand, h); return state.brand === "brother" && s ? s.label : name(h); }))].join(", ")}.`;
+  const mine = [...new Set(colors.map(ownSpool).filter(Boolean))];
+  const buy = [...new Set(colors.filter((h) => !ownSpool(h)).map((h) => { const s = nearestSpool(state.brand, h); return state.brand === "brother" ? s.label : `${s.label} (for ${name(h)})`; }))];
+  return [mine.length ? `Your threads: ${mine.join(", ")}.` : "", buy.length ? `To buy: ${buy.join(", ")}.` : ""].filter(Boolean).join(" ");
 }
 function brandUI() {
-  $("brand").innerHTML = `<option value="">Brother thread</option>` + Object.entries(BRANDS).map(([k, n]) => `<option value="${k}">${k === "brother" ? "Brother spool numbers" : n}</option>`).join("")
-    + `<option value="@mine">Threads I own…</option>`;
+  // (one choice per meaning: "Brother thread" and "Brother spool numbers" side by side read as the same thing. The
+  // machine's names are always shown; a brand adds its spool numbers)
+  $("brand").innerHTML = `<option value="">Thread names</option><optgroup label="Add spool numbers for">`
+    + Object.entries(BRANDS).map(([k, n]) => `<option value="${k}">${n}</option>`).join("") + `</optgroup><option value="@mine">Threads I own…</option>`;
   // (with spools listed, the brand reads "My Isacord": "Isacord (threads I own)" was cut off by the select)
   for (const o of $("brand").options) if (o.value && state.spools[o.value]?.length) o.textContent = `My ${BRANDS[o.value]}`;
   $("brand").value = state.brand;
-  $("brand").title = `${$("brand").selectedOptions[0]?.textContent || ""}: the spool numbers of the thread you use`;
+  $("brand").title = state.brand ? `The machine's thread names, with the ${BRANDS[state.brand]} spool numbers beside them` : "The machine's thread names. Pick a brand to see its spool numbers too.";
   const mine = state.brand && state.spools[state.brand]?.length;
   $("pic-mine-row").hidden = !mine; $("pic-mine").checked = !!mine && state.pic.mine;
 }
-function relabel() { if (state.view) setView(state.view); paletteUI(); if (state.mode === "design") studio.make(); }
+// (the Design tab's editor too: its thread hint kept the old label until a reload)
+function relabel() { if (state.view) setView(state.view); paletteUI(); if (state.mode === "design") studio.relabel(); }
 $("brand").onchange = (e) => {
   if (e.target.value === "@mine") { e.target.value = state.brand; openSpools(); return; }
   state.brand = e.target.value; store.set("brand", state.brand); brandUI(); relabel();
@@ -641,12 +659,15 @@ function openSpools() {
   $("spools-list").value = (state.spools[$("spools-brand").value] || []).join(" ");
   spoolsPreview(); $("spools").showModal();
 }
+// (examples in the brand's own numbers: Brother's showed Isacord-like "0020 1902 3541")
+const spoolsHint = () => { $("spools-list").placeholder = `The numbers on your spools, e.g. ${exampleSpools($("spools-brand").value)}`; };
 function spoolsPreview() {
   const b = $("spools-brand").value, typed = $("spools-list").value.split(/[\s,;]+/).filter(Boolean), got = spools(b, $("spools-list").value);
+  spoolsHint();
   const missing = typed.filter((t) => !spools(b, t).length);
   $("spools-note").textContent = (got.length ? `${got.length} ${BRANDS[b]} ${got.length === 1 ? "spool" : "spools"} found.` : "Type the numbers printed on your spools, separated by spaces.")
     + (missing.length ? ` Not in our ${BRANDS[b]} chart: ${missing.join(", ")}.` : "");
-  $("spools-chips").innerHTML = got.map((n) => { const s = nearestSpool(b, "#000000", [n]); return `<span><i style="background:${s.hex}"></i>${n}</span>`; }).join("");
+  $("spools-chips").innerHTML = got.map((n) => { const s = nearestSpool(b, "#000000", [n]); return `<span><i style="background:${s.hex}"></i>${n}${s.name ? ` ${escapeHtml(s.name)}` : ""}</span>`; }).join("");
 }
 $("spools-brand").onchange = () => { $("spools-list").value = (state.spools[$("spools-brand").value] || []).join(" "); spoolsPreview(); };
 $("spools-list").oninput = spoolsPreview;
@@ -784,7 +805,7 @@ async function makeBookmark() {
     if (seq !== bmSeq || state.mode !== "bookmark") { state.views.bookmark = null; return; }
     setView({ pattern, verifyAgainst: pattern, bytes: writePES(pattern), filename: blank ? "blank_bookmark.pes" : `${safeName(state.bm.name, "name")}_bookmark.pes`,
       fabricShapeBlock: 0, hide: hiddenBlocks(blank), fabric: state.bm.fabric,
-      sheet: { steps: stepsFor(blank).map((s) => ({ title: s.title, you: s.you, sews: s.machine })), cut: d.cut, ready: [READY] }, threadLabel: () => `Brother ${nearestBrotherThread(state.bm.color).name} · whole bookmark` });
+      sheet: { steps: stepsFor(blank).map((s) => ({ title: s.title, you: s.you, sews: s.machine })), cut: d.cut, ready: [READY], after: [DONE] }, threadLabel: () => `Brother ${nearestBrotherThread(state.bm.color).name} · whole bookmark` });
   } catch (err) {
     setView(null); $("empty").hidden = true;
     const big = Object.keys(MACHINES[state.machine].hoops).find((k) => { const h = getHoop(state.machine, k); return h.w >= 130 && h.h >= 180; });
@@ -831,6 +852,7 @@ function onPicture(e) {
   p.colorsInfo = [...r.summary.map((c) => byId.get(c.id)), ...p.skip.map((id) => byId.get(id))].filter(Boolean);
   // (asked for 4, got 3: say why, instead of a slider that looks ignored)
   state.pic.merged = r.merged || 0;
+  state.pic.owned = r.owned || null;
   const mt = machineThreads(r.pattern.threads);
   state.pic.machineName = new Map(r.pattern.threads.map((t, i) => [t.color, mt[i].name]));
   paletteUI();
@@ -858,8 +880,26 @@ function paletteUI() {
   const cols = state.pic.colorsInfo.filter((c) => !c.background && c.area > 0);
   $("pic-merged").hidden = !state.pic.merged;
   $("pic-merged").textContent = state.pic.merged ? `${state.pic.merged === 1 ? "One colour was" : `${state.pic.merged} colours were`} too close to another (or to the fabric) to need a thread of its own, so this picture uses ${cols.length} ${cols.length === 1 ? "thread" : "threads"}.` : "";
+  ownedNote();
   $("pic-palette").innerHTML = cols.map((c) => `<button type="button" data-id="${c.id}" aria-pressed="${!state.pic.skip.includes(c.id)}">
     <i style="background:${c.hex}"></i><span>Brother ${state.pic.machineName?.get(c.hex) || c.thread.name}${spool(c.hex) ? `<small>${spool(c.hex)}</small>` : ""}</span></button>`).join("");
+}
+// "Use only threads I own": say which of the picture's colours share one spool, and which have none close (the
+// Design tab says "quite different"; here yellow and pink sewed in one spool without a word)
+function ownedNote() {
+  const own = state.brand && state.spools[state.brand], groups = state.pic.mine && own?.length ? state.pic.owned || [] : [];
+  const name = (hex) => nearestBrotherThread(hex).name.toLowerCase(), list = (a) => a.length < 3 ? a.join(" and ") : `${a.slice(0, -1).join(", ")} and ${a.at(-1)}`;
+  const said = [];
+  for (const { hex, from } of groups) {
+    const s = nearestSpool(state.brand, hex, own); if (!s) continue;
+    const names = [...new Set(from.map(name))], far = from.some((c) => nearestSpool(state.brand, c, own)?.far);
+    if (names.length > 1) said.push(`${list(names)} ${names.length === 2 ? "both" : "all"} sew in your ${s.label}${far ? " (quite different for some)" : ""}.`);
+    else if (far) said.push(`${names[0]} sews in your ${s.label}, which is quite different.`);
+  }
+  const p = $("pic-owned") || Object.assign(document.createElement("p"), { id: "pic-owned", className: "hint" });
+  if (!p.isConnected) $("pic-merged").after(p);
+  p.hidden = !said.length;
+  p.textContent = said.length ? `With only your threads, the picture's ${said.join(" Its ")} Add a closer spool in Threads I own, or untick “Use only threads I own”.` : "";
 }
 $("pic-palette").onclick = (e) => {
   const b = e.target.closest("button"); if (!b) return;
@@ -1255,7 +1295,7 @@ function showStep(i) {
   state.step = i; document.dispatchEvent(new CustomEvent("nw:step", { detail: i })); paint();
 }
 const studio = initStudio({
-  hoop: designHoop, machineHoop: hoop, turned: designTurned, unturn: () => { if (state.turn.design) { state.turn.design = false; store.set("turn", state.turn); $("turn").setAttribute("aria-pressed", false); } }, fit: () => { state.zoom = 1; state.pan = [0, 0]; }, store, showError, busy, safeName, escapeHtml, saveFile, keepFocus, showStep, step: () => state.step, setMode, spool, ownSpool,
+  hoop: designHoop, machineHoop: hoop, turned: designTurned, unturn: () => { if (state.turn.design) { state.turn.design = false; store.set("turn", state.turn); $("turn").setAttribute("aria-pressed", false); } }, fit: () => { state.zoom = 1; state.pan = [0, 0]; }, store, showError, busy, safeName, escapeHtml, saveFile, keepFocus, showStep, step: () => state.step, setMode, spool, ownSpool, threadList,
   // (undo, redo and Open saved put the hoop's turn back as it was; the caller rebuilds)
   setTurn: (on) => { state.turn.design = !!on; store.set("turn", state.turn); $("turn").setAttribute("aria-pressed", designTurned()); },
   hoopId: () => hoop().id,

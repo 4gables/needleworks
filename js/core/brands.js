@@ -54,5 +54,15 @@ export function nearestSpool(brand, hex, owned = null) {
   const [L, A, B] = lab(hexToRgb(hex));
   let best = null, bd = Infinity;
   for (const s of c) { const d = (s.lab[0] - L) ** 2 + (s.lab[1] - A) ** 2 + (s.lab[2] - B) ** 2; if (d < bd) { bd = d; best = s; } }
-  return best && { ...best, dE: Math.sqrt(bd), brand: BRANDS[brand], label: `${BRANDS[brand]} ${best.num}${best.name ? ` ${best.name}` : ""}` };
+  if (!best) return null;
+  // `far`: not the same colour to the eye. Far off overall, or off in colour rather than lightness (a/b apart: white
+  // came out as "your Brother 017 Light Blue", dE 21, with no warning, while a darker or lighter shade of one colour
+  // still reads as that colour)
+  const ab = Math.hypot(best.lab[1] - A, best.lab[2] - B), C = Math.max(Math.hypot(A, B), Math.hypot(best.lab[1], best.lab[2]));
+  return { ...best, dE: Math.sqrt(bd), far: Math.sqrt(bd) > 25 || ab > Math.max(15, 0.25 * C), brand: BRANDS[brand], label: `${BRANDS[brand]} ${best.num}${best.name ? ` ${best.name}` : ""}` };
+}
+
+// example spool numbers for the "Threads I own" box, in the brand's own spelling: its white, red and black
+export function exampleSpools(brand) {
+  return chart(brand) ? ["#ffffff", "#e0201c", "#000000"].map((h) => nearestSpool(brand, h).num).join(" ") : "";
 }

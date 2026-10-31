@@ -610,9 +610,10 @@ function localStages(p, fab = "cotton") {
       const side = (dx, f) => motifStitches(motifOutlines(MOTIFS[p.deco].d, s), "fill").map((q) => q.map(([x, y]) => [f * x + dx, y + (y0 + y1) / 2]));
       paths = [...side(x0 - gap - s / 2, face < 0 ? -1 : 1), ...paths, ...side(x1 + gap + s / 2, face > 0 ? -1 : 1)];
     }
-    // (the motifs are named too: "Sews “Leo”." sewed two bunnies as well)
-    const words = `“${(p.text || "").replace(/\s*\n\s*/g, " / ").trim()}”` + (paths.length && MOTIFS[p.deco] ? ` with ${/^[aeiou]/i.test(MOTIFS[p.deco].name) ? "an" : "a"} ${MOTIFS[p.deco].name.toLowerCase()} either side` : "");
-    if (paths.length) stages = [{ color: p.color, paths, sews: fab === "towel" ? `Sews a light base to flatten the pile, then ${words} on it.` : `Sews ${words}.` }];
+    const words = (p.text || "").replace(/\s*\n\s*/g, " / ").trim();
+    // (a motif either side is said: "Sews “Leo”." sewed two bunnies as well)
+    const both = paths.length && MOTIFS[p.deco] ? ` with ${/^[aeiou]/i.test(MOTIFS[p.deco].name) ? "an" : "a"} ${MOTIFS[p.deco].name.toLowerCase()} either side` : "";
+    if (paths.length) stages = [{ color: p.color, paths, sews: fab === "towel" ? `Sews a light base to flatten the pile, then “${words}”${both} on it.` : `Sews “${words}”${both}.` }];
   } else if (p.kind === "monogram") {
     const paths = monogram(p, fab);
     if (paths.length) stages = [{ color: p.color, paths, sews: fab === "towel" ? `Sews a light base to flatten the pile, then the monogram ${p.letters}.` : `Sews the monogram ${p.letters}.` }];
@@ -633,7 +634,7 @@ function localStages(p, fab = "cotton") {
       const [, top, , bot] = bounds(edge), x = p.w / 2 + 5;
       const yz = top + Math.max(14, p.h * 0.2), line = (y) => run([[-x, y], [x, y]], 2.5), a = yz - top, b = bot - yz;
       stages = [
-        { color: p.color, paths: [line(yz)], sews: "Sews the zipper line on the stabilizer.", under: true,
+        { color: p.color, paths: [line(yz)], sews: "Sews the zipper line on the stabilizer.", under: true, bare: true,
           // (folded in half, each front piece has to reach from the zipper past the outline: twice that, plus spare)
           before: `Fabric: two front pieces, ${cut(p.w, 2 * (a + 15), 25)} for the top and ${cut(p.w, 2 * (b + 15), 25)} for the bottom (each folded in half along its length, wrong sides together), and the back, ${cut(p.w, p.h)}. Tear-away stabilizer, a #3 nylon coil zipper (it can be sewn and cut through) at least ${Math.ceil((p.w + 50) / 10)} cm (${((p.w + 50) / 25.4).toFixed(0)} in) long, and tape.` },
         { color: p.color, pause: true, paths: [line(yz - 5), line(yz + 5).reverse()], under: true,   // (±3.5 left 0.5 mm beside a coil's teeth)
@@ -655,7 +656,7 @@ function localStages(p, fab = "cotton") {
       // gets the ribbon loop
       const hang = p.hang ?? !QUILTED(p);
       stages = [
-        { color: p.color, paths: [loop(run(edge, 2.5, true))], sews: `Sews the ${name} outline on the stabilizer.`, fabric: true,
+        { color: p.color, paths: [loop(run(edge, 2.5, true))], sews: `Sews the ${name} outline on the stabilizer.`, fabric: true, bare: true,
           before: `Fabric: front and back pieces, each ${cut(p.w, p.h)}${p.quilt ? `, thin batting the same size` : ""}, tear-away stabilizer and tape.` },
         { color: p.color, pause: true, paths: tack(edge),
           you: `Lay ${p.quilt ? "the batting, then " : ""}the front fabric over the ${name} outline, right side up, covering it by ½ in. Press Start. Then take the hoop off (leave everything hooped), trim the fabric${p.quilt ? " and batting" : ""} close to the stitching, and put the hoop back.`,
@@ -671,7 +672,11 @@ function localStages(p, fab = "cotton") {
       // cuts the fill away under what's sewn on it (`carve`)
       // (the edge sews after what goes on the patch, `edge` in compose: it covers the pull of the lettering at the
       // border and the fill's row ends, as a digitizer would order it)
-      stages = [...patchFill(p, [inset(edge, 1.0)], fab), { color: p.color, edge: true, paths: satinBorder(edge), sews: `Sews the patch's satin edge.` }];
+      // (a patch is a separate piece: its fabric, a stabilizer firm enough for thousands of fill stitches, and how to
+      // cut it out and put it on; it listed only "Tear-away stabilizer")
+      const fill = patchFill(p, [inset(edge, 1.0)], fab);
+      stages = [...fill, { color: p.color, edge: true, paths: satinBorder(edge), sews: `Sews the patch's satin edge.`,
+        after: `Take it out of the hoop, trim or tear the stabilizer away and cut the patch out close to the satin edge without nicking it. To put it on, iron patch adhesive (or fusible web) on the back and press it on, or sew it on by hand or machine just inside the edge.` }];
     } else {
       const paths = p.border === "satin" ? [edgeWalk(edge, 3.0, true), zigzag(edge, 2.1, 2.0, true), satin(edge, 3.0, sd(0.4), 0.3, true)]
         : p.border === "bold" ? [run(edge, 2.0, true), run(edge.slice().reverse(), 2.0, true), run(edge, 2.0, true)]
@@ -712,9 +717,12 @@ function localStages(p, fab = "cotton") {
 // own (Hatch's colour blend, on one needle)
 function patchFill(p, loops, fab, name = shapeOf(p).name.toLowerCase()) {
   const base = { density: fd(fab === "knit" ? DENSITY.standard : DENSITY.solid), pattern: p.pattern || "tatami" }, color = p.fill || p.color;
-  if (!p.blend || p.blend === color) return [{ color, paths: fillPolygon(loops, base), sews: `Fills the ${name} patch.`, patchFill: true }];
-  return [{ color, paths: fillPolygon(loops, { ...base, share: (f) => 1 - f }), sews: `Fills the ${name} patch, fading out.`, patchFill: true },
-    { color: p.blend, paths: fillPolygon(loops, { ...base, underlay: false, share: (f) => f }), sews: `Blends the second colour in across the patch.`, patchFill: true }];
+  const st = !p.blend || p.blend === color ? [{ color, paths: fillPolygon(loops, base), sews: `Fills the ${name} patch.`, patchFill: true }]
+    : [{ color, paths: fillPolygon(loops, { ...base, share: (f) => 1 - f }), sews: `Fills the ${name} patch, fading out.`, patchFill: true },
+      { color: p.blend, paths: fillPolygon(loops, { ...base, underlay: false, share: (f) => f }), sews: `Blends the second colour in across the patch.`, patchFill: true }];
+  // what to hoop (`patch`: step 1 says so) and a stabilizer firm enough for a dense fill (thousands of stitches)
+  return st.map((f, i) => (i ? f : { ...f, patch: true,
+    before: "Patch fabric: felt or twill, big enough to hoop, and cut-away stabilizer (or two layers of heavy tear-away): a patch is thousands of stitches." }));
 }
 
 // a motif filled (tatami inside, then a narrow satin edge over the row ends) or as a satin outline
@@ -1229,14 +1237,21 @@ export function followFrame(p, pieces) {
 const ascii = (s) => (s || "").normalize("NFKD").replace(/[\u0300-\u036f]/g, "").replace(/[‘’]/g, "'").replace(/[“”]/g, "\"").replace(/[^\x20-\x7e]/g, "");
 
 // (`ready` is what "Have ready" lists and `tip` what "Sewing on" says: one place per fabric, so they agree)
+// (`hoop` starts step 1, `after` is "When it's done": knit said "tear or cut away" though cut-away must be trimmed)
 export const FABRICS = {
-  cotton: { name: "Cotton", ready: "Tear-away stabilizer.", tip: "On woven cotton, hoop it with tear-away stabilizer underneath. On a pillowcase or bag, hoop only the front layer (turn it inside out) so it isn't sewn shut." },
-  knit: { name: "Knit / T-shirt", ready: "Cut-away stabilizer (fusible no-show mesh is easiest) and a 75/11 ballpoint needle.", tip: "Knits stretch: hoop them with cut-away stabilizer (fusible no-show mesh is easiest) and use a 75/11 ballpoint needle. Don't stretch the fabric while hooping." },
+  cotton: { name: "Cotton", ready: "Tear-away stabilizer.", tip: "On woven cotton, hoop it with tear-away stabilizer underneath. On a pillowcase or bag, hoop only the front layer (turn it inside out) so it isn't sewn shut.",
+    hoop: "Hoop the fabric with tear-away stabilizer under it", after: "Take the hoop off, snip any loose threads and tear the stabilizer away gently, holding the stitches down with your thumb." },
+  knit: { name: "Knit / T-shirt", ready: "Cut-away stabilizer (fusible no-show mesh is easiest) and a 75/11 ballpoint needle.", tip: "Knits stretch: hoop them with cut-away stabilizer (fusible no-show mesh is easiest) and use a 75/11 ballpoint needle. Don't stretch the fabric while hooping.",
+    hoop: "Hoop the knit with the cut-away stabilizer under it, without stretching it", after: "Take the hoop off and snip any loose threads. Trim the cut-away stabilizer on the back about ¼ in from the stitching, rounding the corners. Don't tear it: it stops the design stretching out of shape in the wash." },
   towel: { name: "Towel / fleece", tip: "Lay a water-soluble topper on the towel or fleece and hoop tear-away (or cut-away) stabilizer under it. The light base sewn under the letters flattens the pile; tear the topper off afterwards.",
-    ready: "A water-soluble topper (like Solvy) and tear-away or cut-away stabilizer.", after: "Tear the topper away (a damp cloth melts the bits left in the letters) and tear or cut away the stabilizer." },
-  felt: { name: "Felt", ready: "Tear-away stabilizer and a sharp 75/11 needle.", tip: "Felt is firm: tear-away stabilizer is enough. Use a sharp 75/11 needle." },
-  denim: { name: "Denim", ready: "Cut-away or heavy tear-away stabilizer and a 75/11 sharp or 80/12 needle (90/14 for heavy denim).", tip: "On denim use a 75/11 sharp or 80/12 needle (90/14 only for heavy denim) and cut-away or heavy tear-away stabilizer." },
-  canvas: { name: "Canvas / tote", ready: "Medium tear-away stabilizer (cut-away if it'll be washed a lot) and a 90/14 sharp needle.", tip: "Canvas is firm: medium tear-away stabilizer underneath (cut-away if it'll be washed a lot) and a 90/14 sharp needle. On a tote, hoop only the front layer (turn it inside out)." },
+    ready: "A water-soluble topper (like Solvy) and tear-away or cut-away stabilizer.", hoop: "Hoop the towel with the stabilizer under it and lay the water-soluble topper on top",
+    after: "Take the hoop off and snip any loose threads. Tear the topper away (a damp cloth melts the bits left in the letters), then tear the stabilizer off the back (cut-away: trim it ¼ in from the stitching)." },
+  felt: { name: "Felt", ready: "Tear-away stabilizer and a sharp 75/11 needle.", tip: "Felt is firm: tear-away stabilizer is enough. Use a sharp 75/11 needle.",
+    hoop: "Hoop the felt with tear-away stabilizer under it", after: "Take the hoop off, snip any loose threads and tear the stabilizer away gently." },
+  denim: { name: "Denim", ready: "Cut-away or heavy tear-away stabilizer and a 75/11 sharp or 80/12 needle (90/14 for heavy denim).", tip: "On denim use a 75/11 sharp or 80/12 needle (90/14 only for heavy denim) and cut-away or heavy tear-away stabilizer.",
+    hoop: "Hoop the denim with the stabilizer under it", after: "Take the hoop off and snip any loose threads. Cut-away stabilizer: trim it ¼ in from the stitching (don't tear it). Heavy tear-away: tear it off gently." },
+  canvas: { name: "Canvas / tote", ready: "Medium tear-away stabilizer (cut-away if it'll be washed a lot) and a 90/14 sharp needle.", tip: "Canvas is firm: medium tear-away stabilizer underneath (cut-away if it'll be washed a lot) and a 90/14 sharp needle. On a tote, hoop only the front layer (turn it inside out).",
+    hoop: "Hoop the canvas (on a tote, only the front layer) with the stabilizer under it", after: "Take the hoop off, snip any loose threads and tear the stabilizer away gently (cut-away: trim it ¼ in from the stitching)." },
 };
 
 // thread weight (compose opts `thread`): satin and fill spacing follow the thread's thickness. Automatic is what the
@@ -1271,6 +1286,10 @@ function withQuilt(p, stages, obstacles, dragging = false) {
   lastQuilt.set(frame, paths); if (lastQuilt.size > 12) lastQuilt.delete(lastQuilt.keys().next().value);
   if (!paths.length) return stages;
   const q = { color: p.color, paths, sews: `Quilts the ${shapeOf(p).name.toLowerCase()} (${p.quilt}).`, label: label(p) };
+  // (an in-the-hoop frame lists its batting already; a quilt block's Have ready had none)
+  if (p.border !== "ith") Object.assign(q, { sandwich: true,
+    before: "A quilt sandwich big enough to hoop: top fabric, thin batting and backing (too thick to hoop: float it on hooped tear-away stabilizer with basting spray).",
+    after: "Take it out of the hoop, snip any loose threads and tear away the stabilizer if you floated it on some." });
   const at = stages.findIndex((s) => s.last);
   return at < 0 ? [...stages, q] : [...stages.slice(0, at), q, ...stages.slice(at)];
 }
@@ -1476,5 +1495,8 @@ function build(pieces, hoop, opts) {
   if (!steps.length) throw Object.assign(new Error("Nothing to stitch yet: type some words, or pick a starting idea."), { empty: true });
   if (opts.baste) after.push("Unpick the basting box (snip every few stitches on the back, then pull it out from the front).");
   d.finish({ untiny: true });
-  return { design: d, steps, after, before, tip: FABRICS[fab].tip };
+  // step 1 starts with hooping: the bare stabilizer for in-the-hoop projects, the patch fabric for a patch
+  const first = order[0], hoopIt = first?.bare ? "Hoop tear-away stabilizer on its own (no fabric yet)" : first?.patch ? "Hoop the felt or twill with the stabilizer under it"
+    : order.some((s) => s.sandwich) ? "Hoop the quilt sandwich (or float it on hooped tear-away stabilizer)" : FABRICS[fab].hoop;
+  return { design: d, steps, after, before, hoop: hoopIt, tip: FABRICS[fab].tip };
 }

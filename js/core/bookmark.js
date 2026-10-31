@@ -21,6 +21,9 @@ export const STEPS = [
 // what to have by the machine before starting (on the steps, the sew sheet and the first Sew along screen)
 export const READY = "Tear-away stabilizer, cotton for the front and felt for the back (each about 3 × 8 in), tape, Fray Check and a ribbon.";
 
+// and when it's done (the Finished screen in Sew along and the sew sheet; the panel says it too)
+export const DONE = "Take it out of the hoop, tear away the stabilizer and snip any fuzz. Dab Fray Check inside the ribbon ring, let it dry, then cut out the hole and loop a ribbon through.";
+
 export const stepsFor = (blank) => STEPS.filter((s) => !(blank && s.title === "The name"));
 // blocks the preview leaves unstitched-looking (placement and tack-downs sit under the fabric/border)
 export const hiddenBlocks = (blank) => new Set(blank ? [0, 1, 2] : [0, 1, 3]);
