@@ -7,6 +7,7 @@ import { COLOR_CHANGE, JUMP, STITCH, STOP, TRIM, readEmbroidery } from "./core/f
 
 export const LIMIT = 24;       // needle hits per mm² per colour block (pe900_check MAX_PER_MM2)
 export const MAX_STITCH = 121; // 12.1 mm, the longest needle move (pe900_check MAX_STITCH)
+export const MAX_BLOCKS = 99;  // colour blocks the machine steps through (pe900_check MAX_BLOCKS): 98 thread changes
 const TINY = 3;                // stitches under 0.3 mm, bar tie-ins (the first 6 after a jump, trim or thread change)
 const TINY_SHARE = 0.02, SAME_SHARE = 0.01, SPARSE = 0.6;
 
@@ -84,12 +85,15 @@ export function moves(st) {
 // what's wrong with a pattern (decoded from the file's bytes), in plain words: [{ key, text }] (empty: it passes)
 export function verdict(pattern) {
   pattern = withStops(pattern);
+  let blocks = 1;
+  for (const s of pattern.stitches) if (s[2] === COLOR_CHANGE || s[2] === STOP) blocks++;
   const m = moves(pattern.stitches), { max, hot } = peak(pattern), gap = satinGap(pattern.stitches), out = [];
   if (hot) out.push({ key: "dense", text: `${hot} ${hot === 1 ? "spot is" : "spots are"} too dense (up to ${max} needle hits per mm²; 24 is the most sold designs have): the thread can break or nest there.` });
   if (m.longest > MAX_STITCH / 10) out.push({ key: "long", text: `${m.over} ${m.over === 1 ? "stitch is" : "stitches are"} longer than the 12 mm the machine sews in one stitch (up to ${m.longest.toFixed(1)} mm).` });
-  if (m.tiny > TINY_SHARE * m.stitches) out.push({ key: "tiny", text: `${m.tiny} stitches are shorter than 0.3 mm (${((100 * m.tiny) / m.stitches).toFixed(1)}%): they pile up thread and can break it.` });
-  if (m.same > SAME_SHARE * m.stitches) out.push({ key: "same", text: `${m.same} stitches go back into the hole the needle is already in.` });
-  if (gap != null && gap > SPARSE) out.push({ key: "sparse", text: `The satin stitches are far apart (${gap.toFixed(1)} mm on each edge; well-made designs 0.3–0.4 mm), so fabric may show through.` });
+  if (m.tiny > TINY_SHARE * m.stitches) out.push({ key: "tiny", text: `${m.tiny} ${m.tiny === 1 ? "stitch is" : "stitches are"} shorter than 0.3 mm (${((100 * m.tiny) / m.stitches).toFixed(1)}%): they pile up thread and can break it.` });
+  if (m.same > SAME_SHARE * m.stitches) out.push({ key: "same", text: `${m.same} ${m.same === 1 ? "stitch goes" : "stitches go"} back into the hole the needle is already in.` });
+  if (blocks > MAX_BLOCKS) out.push({ key: "blocks", text: `${blocks - 1} thread changes: the machine handles ${MAX_BLOCKS - 1} at most in one design.` });
+  if (gap != null && gap > SPARSE) out.push({ key: "sparse", text: `The satin stitches are far apart (${gap.toFixed(2)} mm on each edge; well-made designs 0.3–0.4 mm), so fabric may show through.` });
   return out;
 }
 
@@ -117,16 +121,19 @@ export function endsEarly(bytes, name = "") {
     if (!(pec > 0) || blk + 20 > bytes.length) return true;
     const end = blk + u24(blk + 2);
     if (end > bytes.length) return true;
-    // (the end marker, 0xFF, inside the block: walk the stitches as the reader does)
-    let i = blk + 20;
-    while (i < end) {
-      const v1 = bytes[i];
-      if (v1 === 0xff) return false;
-      if (v1 === 0xfe && bytes[i + 1] === 0xb0) { i += 3; continue; }
-      i += v1 & 0x80 ? 2 : 1;
-      i += bytes[i] & 0x80 ? 2 : 1;
-    }
-    return true;
+    // (the end marker, 0xFF, inside the block: walk the stitches as the reader does, from after the design box, or
+    // from the box itself when its bytes are the first stitches: a pyembroidery file starting at the origin)
+    const ends = (i) => {
+      while (i < end) {
+        const v1 = bytes[i];
+        if (v1 === 0xff) return true;
+        if (v1 === 0xfe && bytes[i + 1] === 0xb0) { i += 3; continue; }
+        i += v1 & 0x80 ? 2 : 1;
+        i += bytes[i] & 0x80 ? 2 : 1;
+      }
+      return false;
+    };
+    return !(ends(blk + 20) || (!(bytes[blk + 16] & 0x80 && bytes[blk + 18] & 0x80) && ends(blk + 16)));
   }
   if (/\.dst$/i.test(name)) {
     for (let i = 512; i + 3 <= bytes.length; i += 3) if ((bytes[i + 2] & 0xf3) === 0xf3) return false;

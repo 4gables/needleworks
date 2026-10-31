@@ -9,8 +9,8 @@ import { nearestBrotherThread, pecThread } from "./core/threads.js";
 import { CLOTHS, colorBlocks, draw } from "./render.js";
 import { cutSVG, sewSheet } from "./sheet.js";
 import { zip } from "./zip.js";
-import { checkup, fix, heat, landJumps, pauses, shortJumps, sortedChanges } from "./doctor.js";
-import { endsEarly, verdictOf } from "./quality.js";
+import { checkup, fewerBlocks, fix, heat, landJumps, pauses, shortJumps, sortedChanges } from "./doctor.js";
+import { MAX_BLOCKS, endsEarly, moves, verdictOf } from "./quality.js";
 import { BRANDS, nearestSpool, spools } from "./core/brands.js";
 import { initStudio } from "./studio/ui.js";
 
@@ -147,7 +147,7 @@ function setView(v) {
   clearTimeout(qTimer);
   if (fits && !v.split && !v.verdict) qTimer = setTimeout(() => { if (state.view === v) { v.verdict = verdictOf(v.bytes); warnUI(v); } }, 250);
   if (state.mode === "open" && state.opened) openInfo(v, st, fits);
-  $("download").textContent = v.split ? `Download ${v.split.length} files (.zip)` : !fits ? "Too big for this hoop" : v.block ? "Fix the lettering first" : v.action || `Download ${v.filename}`;
+  $("download").textContent = v.split ? `Download ${v.split.length} files (.zip)` : !fits ? "Too big for this hoop" : v.block ? v.blockLabel || "Fix the lettering first" : v.action || `Download ${v.filename}`;
   paint();
 }
 let qTimer = 0;
@@ -345,16 +345,26 @@ $("download").onclick = () => {
   downloaded(v, false, [{ name: v.filename, bytes: v.bytes, problems: v.verdict || (v.verdict = verdictOf(v.bytes)) }]);
 };
 // A copy of a file that fails the quality check, fixed by the design doctor (thin to 24 hits/mm², drop tiny and
-// same-hole stitches, even out sparse satins; long stitches are always split), or null when that doesn't make it
-// pass. Same blocks and pauses, so "How to stitch it" still holds.
+// same-hole stitches, even out sparse satins; long stitches are always split), judged again, or null when that doesn't
+// make it pass. Each try adds what the last still failed (splitting long15.pes's stitches showed a same-hole stitch of
+// its own), the last every fix. Same blocks and pauses, so "How to stitch it" still holds.
 function fixedCopy(bytes, problems) {
   const k = new Set(problems.map((p) => p.key));
   try {
-    const p = fix(readEmbroidery(bytes, "x.pes"), { thin: k.has("dense"), tiny: k.has("tiny") || k.has("same"), satin: k.has("sparse") }), out = writePES(p);
-    return validatePES(out, p, hoop()).ok && !verdictOf(out).length ? out : null;
-  } catch { return null; }
+    for (let pass = 0; pass < 3; pass++) {
+      const opts = pass === 2 ? { thin: true, tiny: true, satin: true } : { thin: k.has("dense"), tiny: k.has("tiny") || k.has("same"), satin: k.has("sparse") };
+      // (more thread changes than the machine handles: each thread's parts sewn together, if that's enough)
+      let src = readEmbroidery(bytes, "x.pes");
+      if (k.has("blocks") && !(src = fewerBlocks(src))) return null;
+      const p = fix(src, opts), out = writePES(p), left = verdictOf(out);
+      if (validatePES(out, p, hoop()).ok && !left.length) return out;
+      for (const q of left) k.add(q.key);
+    }
+  } catch {}
+  return null;
 }
-const fixedName = (name) => name.replace(/(\.\w+)$/, "_fixed$1");
+// (never "_fixed_fixed": "_fixed" once, at the end, whatever the name had: peace_fixed_80pct.pes -> peace_80pct_fixed.pes)
+const fixedName = (name) => name.replace(/_fixed(?=[_.])/g, "").replace(/(\.\w+)$/, "_fixed$1");
 // files [{ name, bytes, problems }] that fail, with their fixed copies: the fixes and what's still wrong, in words
 function badFiles(files) {
   return files.filter((f) => f.problems.length).map((f) => ({ ...f, fixed: fixedCopy(f.bytes, f.problems) }));
@@ -380,7 +390,9 @@ function badReport(el, files, zipName) {
     keys.has("long") && "splits the long stitches", (keys.has("tiny") || keys.has("same")) && "drops the tiny stitches", keys.has("sparse") && "evens out the satin stitches"].filter(Boolean);
   const fixable = bad.every((b) => b.fixed), p = document.createElement("p");
   p.textContent = fixable ? `A fixed copy ${does.join(", ").replace(/, ([^,]*)$/, " and $1")}, without changing the design. Use ${many ? "the fixed files" : "it"} instead.`
-    : "This couldn't be fixed here without changing the design. Open it in “Open a design” to see where (Thickness), or make it a little bigger.";
+    : keys.has("blocks") ? "It has too many thread changes for the machine, and sewing each thread's parts together doesn't bring it under. Ask where it came from for a version with fewer colours."
+    : state.mode === "open" ? "This couldn't be fixed here without changing the design. Try another size under Checkup, or ask where it came from for a better file."
+    : `This couldn't be fixed here without changing the design. Open the saved file in “Open a design” to see where (Thickness under the preview)${keys.has("dense") && !keys.has("long") ? ", or make the design a little bigger" : ""}.`;
   el.append(ul, p);
   if (fixable) {
     const btn = document.createElement("button"); btn.type = "button"; btn.className = "primary";
@@ -1010,7 +1022,7 @@ async function openDesign(file) {
   try {
     const bytes = new Uint8Array(await file.arrayBuffer());
     // (jumps landed on their first stitch: a DST converted here, or a fixed copy, would gain a hole where each ended)
-    const d = landJumps(readEmbroidery(bytes, file.name));
+    let d = landJumps(readEmbroidery(bytes, file.name));
     if (!d.stitches.some((s) => s[2] === STITCH)) throw Object.assign(new Error(`${file.name} has no stitches in it. It may be damaged or not an embroidery file: try downloading it again.`), { plain: true });
     // (a file cut short still decodes, as the part that's there: peace.pes cut in half opened as 2,658 stitches, "Fits")
     const short = endsEarly(bytes, file.name);
@@ -1019,12 +1031,25 @@ async function openDesign(file) {
     if (colourless) d.threads = Array.from({ length: blocks }, (_, i) => d.threads[i] || brother(DST_COLOURS[i % DST_COLOURS.length]));
     const repair = d.format === "pes" && (d.misplaced || short);
     const isPes = d.format === "pes" && !repair;
-    const out = isPes ? bytes : writePES(d);
+    // More colour blocks than the machine steps through (99; the PES writer refuses over 127: colors150.pes has 150,
+    // and was called damaged): each thread's parts sewn together if that brings it under (`fewer`), else it's shown
+    // but not written again (`stuck`). A PES of its own still saves as it is; its fixes start from `fewer`, or there
+    // are none (`noFix`).
+    const tooMany = blocks > MAX_BLOCKS, fewer = tooMany ? fewerBlocks(d) : null, stuck = tooMany && !fewer && !isPes;
+    let merged = null;
+    if (tooMany && fewer && !isPes) { merged = [blocks - 1, fewer.threads.length - 1]; d = { ...fewer, format: d.format, version: d.version }; }
+    const out = isPes ? bytes : stuck ? null : writePES(d);
+    // (the checkup reads the file as it will be saved: the original bytes, or the copy written here)
+    const check = checkup(out ? readEmbroidery(out, "x.pes") : d);
+    // A file that's written again here anyway (a misplaced or cut-short PES, a DST) is written fixed: what it fails
+    // is ticked. dense_k.pes was saved as "_fixed" with only its box mended, still 40 hits/mm².
+    const need = new Set(isPes || stuck ? [] : check.verdict.map((q) => q.key));
     const base = safeName(file.name.replace(/\.[^.]+$/, ""), "design"), st = designStats(d);
-    state.opened = { d, bytes, out, isPes, repair, short, colourless, name: file.name, base, opts: { scale: 1, tiny: false, thin: false, sort: false, split: false, satin: false }, sorted: sortedChanges(d),
-      // (the checkup reads the file as it will be saved: the original bytes, or the copy written here)
-      check: checkup(readEmbroidery(out, "x.pes")), longer: Math.max(st.widthMm, st.heightMm), size: [st.widthMm, st.heightMm], auto: false };
-    $("doctor-fix").innerHTML = ""; setMode("open"); openView();
+    state.opened = { d, bytes, out, isPes, repair, short, colourless, name: file.name, base, tooMany, blocks, merged, stuck, noFix: stuck || (tooMany && !fewer), fixBase: isPes && fewer ? fewer : null,
+      opts: { scale: 1, tiny: need.has("tiny") || need.has("same"), thin: need.has("dense"), sort: false, split: need.has("long"), satin: need.has("sparse") },
+      sorted: tooMany ? null : sortedChanges(d, colourless), needed: need.size ? check.verdict : null, pick: 0, srcLong: moves(d.stitches),
+      check, longer: Math.max(st.widthMm, st.heightMm), size: [st.widthMm, st.heightMm], auto: false };
+    $("doctor-fix").innerHTML = ""; $("doctor-fix").hidden = state.opened.noFix; setMode("open"); openView();
   } catch (err) {
     // (nothing from an earlier file stays on screen to be saved by mistake)
     if (!err.plain) console.error(err); state.opened = null; state.views.open = null; setMode("open"); setView(null);
@@ -1061,19 +1086,26 @@ function openView() {
   // (a quick fix shows no spinner; re-stitching says so)
   const id = docSeq;
   docBusy = setTimeout(() => id === docSeq && busy(true, scale < 0.8 || scale > 1.2 ? "Re-stitching…" : "Working…"), 150);
-  docJob({ id, d: o.d, opts: { ...o.opts } });
+  docJob({ id, d: o.fixBase || o.d, opts: { ...o.opts, join: o.colourless } });
 }
 function showOpened(p, bytes, check, changed) {
-  const o = state.opened, { scale, tiny, thin, sort, split, satin } = o.opts, fixed = o.repair || tiny || thin || sort || split || satin;
-  const v = { pattern: p, verifyAgainst: changed || !o.isPes ? p : null, bytes,
+  const o = state.opened, { scale, tiny, thin, sort, split, satin } = o.opts;
+  // ("fixed" only when it passes the check: never a "_fixed" file that fails, nor "_fixed_fixed" from the dialog)
+  const fixed = (o.repair || !!o.merged || tiny || thin || sort || split || satin) && !check.verdict.length;
+  // (too many thread changes to write as PES: shown from its own bytes, no download)
+  if (o.stuck) bytes = o.bytes;
+  const v = { pattern: p, verifyAgainst: o.stuck ? null : changed || !o.isPes ? p : null, bytes,
     // (a fixed copy has a name of its own: the plain and fixed copies of rosacea.dst were both rosacea.pes)
-    filename: `${o.base}${scale !== 1 ? `_${Math.round(scale * 100)}pct` : ""}${fixed ? "_fixed" : ""}.pes`, fabric: "linen", source: changed || !o.isPes ? null : o.bytes,
+    filename: `${o.base}${scale !== 1 ? `_${Math.round(scale * 100)}pct` : ""}.pes`, fabric: "linen", source: o.stuck ? o.bytes : changed || !o.isPes ? null : o.bytes,
+    block: o.stuck ? `It changes thread ${o.blocks - 1} times, and the machine handles ${MAX_BLOCKS - 1} at most, so it can't be saved for it here.` : "", blockLabel: "Too many thread changes",
     // (a file she already has: say what the button gives her)
-    action: fixed ? "Save fixed copy" : changed ? "Save resized copy" : o.isPes ? "Save a copy" : "Save as PES",
+    action: fixed ? "Save fixed copy" : scale !== 1 ? "Save resized copy" : o.d.format === "pes" ? "Save a copy" : "Save as PES",
     // (the checkup read the file as it will be saved: the same verdict beside Download)
-    verdict: check.verdict, warn: o.short ? "This file ends early: only part of the design is in it." : "",
+    // (a file too full of thread changes to save already says so: not twice)
+    verdict: o.stuck ? check.verdict.filter((q) => q.key !== "blocks") : check.verdict, warn: o.short ? "This file ends early: only part of the design is in it." : "",
     // (the machine's name first: a design made here names its threads after its pieces, "peace", "“Sunny”")
     threadLabel: (b, t) => `Brother ${t.name}${b.name && b.name !== t.name ? " · " + escapeHtml(b.name) : ""}` };
+  if (fixed) v.filename = fixedName(v.filename);
   state.views.open = v; setView(v); doctorUI(p, check);
 }
 // the file card: what the file is, and whether it fits as it now stands (resized past the hoop it still said "Fits"
@@ -1087,32 +1119,45 @@ function openInfo(v, st, fits) {
     ${fits ? `<span class="good">Fits the ${h.machineName} ${h.name}.</span>`
       : `<span class="warn">Too big for the ${h.name}: it's ${st.widthMm.toFixed(0)} × ${st.heightMm.toFixed(0)} mm. ${big.scale >= 0.5 ? `<button type="button" class="link" id="doc-largest">Make it the largest that fits (${big.pct} %)</button>` : "Even at half size it won't fit this hoop."}</span>`}
     ${o.short ? `<span class="warn">This file ends early: it may be damaged (cut short when it was downloaded or copied), so only part of the design is here. Download it again from where it came from if you can. A copy saved here is complete for the part that's left.</span>` : ""}
-    ${o.repair && !o.short ? `<span class="warn">As it is, this file would load cut off on a Brother machine (shifted, about half shown). The download here is fixed.</span>`
+    ${o.stuck ? `<span class="warn">This design changes thread ${o.blocks - 1} times. Brother machines handle ${MAX_BLOCKS - 1} thread changes at most in one design, and sewing each thread's parts together doesn't bring it under, so it can't be saved for your machine here${o.repair ? " (as it is, this file would also load cut off on a Brother machine)" : ""}. Ask where it came from for a version with fewer colours.</span>` : ""}
+    ${o.merged ? `<span>It changed thread ${o.merged[0]} times, more than the machine handles (${MAX_BLOCKS - 1}). The copy here sews each thread's parts together where nothing in between is in the way: ${o.merged[1]} thread changes, and it looks the same.</span>` : ""}
+    ${o.stuck ? "" : o.repair && !o.short ? `<span class="warn">As it is, this file would load cut off on a Brother machine (shifted, about half shown). The download here is fixed.</span>`
       : o.isPes || o.short ? "" : `<span>You can download it as a PES file for your machine.</span>`}`;
 }
 // the largest size that fits the hoop (field less the margin), as a scale and a whole percent, a little under so the
 // re-stitched copy's rounding can't take it over
 function largest() {
   const h = hoop(), [w, ht] = state.opened.size;
-  const scale = Math.floor(Math.min((h.w - 2 * MARGIN) / w, (h.h - 2 * MARGIN) / ht, 2.5) * 1000 - 2) / 1000;
+  // (250 % is as big as it goes: when that fits it's 250, not "249.8 %")
+  const fit = Math.min((h.w - 2 * MARGIN) / w, (h.h - 2 * MARGIN) / ht), scale = fit >= 2.5 ? 2.5 : Math.floor(fit * 1000 - 2) / 1000;
   return { scale, pct: Math.floor(scale * 1000) / 10, mm: Math.round(state.opened.longer * scale) };
 }
+// what a file failed as it came, for "As it came, this file ..."
+const NEED = { dense: "was too dense in places", long: "had stitches over 12 mm", tiny: "had too many tiny stitches", same: "had stitches into the hole the needle was already in", sparse: "had satin stitches too far apart" };
 // what might go wrong at the machine, in plain words, with the fixes that are safe on a finished design
 function doctorUI(p, check) {
   const c = check || checkup(p), o = state.opened.opts, items = [], src = state.opened.check;
   const say = (ok, text) => items.push(`<li class="${ok ? "good" : "warn"}">${text}</li>`);
+  // (a file written again here is written fixed: say what it failed as it came, or the list reads as if all was well)
+  const need = state.opened.needed, failedNow = !!(c.verdict || []).length;
+  if (need && !failedNow) say(true, `As it came, this file ${need.map((q) => NEED[q.key]).filter(Boolean).join(", ").replace(/, ([^,]*)$/, " and $1")}. The fixes below are ticked, so the copy saved here passes the check.`);
+  if (state.opened.fixBase) say(false, `It changes thread ${state.opened.blocks - 1} times, more than the machine handles (${MAX_BLOCKS - 1}): a fixed or resized copy sews each thread's parts together (${state.opened.fixBase.threads.length - 1} thread changes), and looks the same.`);
+  if (state.opened.noFix && !state.opened.stuck) say(false, `It changes thread ${state.opened.blocks - 1} times, more than the machine handles (${MAX_BLOCKS - 1}), and sewing each thread's parts together doesn't bring it under, so it can't be fixed or resized here. Ask where it came from for a version with fewer colours.`);
   say(!c.hot, c.hot ? `${c.hot} ${c.hot === 1 ? "spot is" : "spots are"} very dense (up to ${c.max} needle hits per mm²; sold designs stay under 25): thread can break or the fabric pucker there. Turn on <b>Thickness</b> under the preview to see ${c.hot === 1 ? "it" : "them"}, and tick <b>Thin the densest spots</b> below.`
     : `Thickness is fine: the densest spot has ${c.max} needle hits per mm².`);
   // (a few are normal in sold designs; only many are worth a worry, and always as many as pe900_check fails: 2 %)
   const failed = new Set((c.verdict || []).map((q) => q.key));
-  if (c.tiny > Math.max(50, c.stitches * 0.01) || failed.has("tiny")) say(false, `${c.tiny} stitches are shorter than 0.3 mm. They pile up thread and can break it. Tick <b>Remove tiny stitches</b> below.`);
+  if (c.tiny > Math.max(50, c.stitches * 0.01) || failed.has("tiny")) say(false, `${c.tiny} ${c.tiny === 1 ? "stitch is" : "stitches are"} shorter than 0.3 mm. They pile up thread and can break it. Tick <b>Remove tiny stitches</b> below.`);
   if (failed.has("same")) say(false, (c.verdict.find((q) => q.key === "same").text) + " Tick <b>Remove tiny stitches</b> below.");
-  if (c.satinGap && c.satinGap > 0.6) say(false, `The satin stitches are far apart (${c.satinGap.toFixed(1)} mm on each edge; well-made designs 0.3–0.4 mm), so fabric may show through. Tick <b>Even out the satin stitches</b> below.`);
+  if (c.satinGap && c.satinGap > 0.6) say(false, `The satin stitches are far apart (${c.satinGap.toFixed(2)} mm on each edge; well-made designs 0.3–0.4 mm), so fabric may show through. Tick <b>Even out the satin stitches</b> below.`);
   // (packed tighter than sold designs: stiff, and the needle can deflect or the thread shred; gnome.pes at 80 %: 0.22)
   if (c.satinGap && c.satinGap < 0.25) say(false, `The satin stitches are packed very close (${c.satinGap.toFixed(2)} mm on each edge; well-made designs 0.3–0.4 mm): stiff, and thread can shred or the needle break. Tick <b>Even out the satin stitches</b> below.`);
   // (the PE900 sews 12.1 mm at most: pe900_check.py fails a file with a longer one; every fixed copy splits them)
   if (c.over) say(false, `${c.over} ${c.over === 1 ? "stitch is" : "stitches are"} longer than 12 mm (up to ${c.longest.toFixed(1)} mm), more than the machine sews in one stitch. Tick <b>Split long stitches</b> below.`);
   else if (c.long) say(true, `${c.long} ${c.long === 1 ? "stitch is" : "stitches are"} longer than 10 mm. Fine on a wall hanging; on clothes they can snag.`);
+  // (a copy written here has its stitches over 7 mm split by the writer: the ones over the machine's 12 mm said so)
+  const srcLong = state.opened.srcLong;
+  if (!c.over && srcLong?.over && !state.opened.isPes && !state.opened.stuck) say(true, `${srcLong.over} ${srcLong.over === 1 ? "stitch was" : "stitches were"} longer than 12 mm (up to ${srcLong.longest.toFixed(1)} mm), more than the machine sews in one stitch: the copy saved here splits ${srcLong.over === 1 ? "it" : "them"}.`);
   // (shrinking brings jumps under the machine's 5 mm trim setting: they stay as thread to snip)
   const loose = shortJumps(state.views.open?.file || p) - shortJumps(state.opened.d);
   if (o.scale < 1 && loose > 0) say(false, `Shrinking brings ${loose} ${loose === 1 ? "jump" : "jumps"} under 5 mm, too short for the machine to trim: ${loose === 1 ? "it stays" : "they stay"} as loose thread to snip after stitching.`);
@@ -1124,18 +1169,28 @@ function doctorUI(p, check) {
   // (satins out of 0.3-0.5 mm on each edge in the file as it came: offered at full size, done by any resize)
   const uneven = src.satinGap && (src.satinGap < 0.3 || src.satinGap > 0.5);
   // (a file with no colours of its own, DST: a colour per block, to change)
-  const colours = state.opened.colourless ? `<div class="doc-colours" role="group" aria-label="Thread colours"><span>Thread colours</span>${state.opened.d.threads.map((t, i) => `<label title="Colour ${i + 1}: Brother ${escapeHtml(t.name)}"><input type="color" data-blk="${i}" value="${t.color}" aria-label="Colour ${i + 1}"><small>${i + 1}</small></label>`).join("")}</div>
-    <p class="hint">The file doesn't say which threads to use. Pick each colour; the saved PES carries the nearest Brother thread.</p>` : "";
+  const colours = state.opened.colourless ? `<div id="doc-colours-box"></div>` : "";
   if (!$("doc-scale")) $("doctor-fix").innerHTML = `${colours}<label class="range"><span>Size</span><input type="range" id="doc-scale" min="50" max="250" step="5" value="100"><output>100 %</output></label>
     <label class="size-mm">Longer side <input type="number" id="doc-mm" inputmode="decimal" min="${Math.ceil(state.opened.longer * 0.5)}" max="${Math.floor(state.opened.longer * 2.5)}" step="1"> mm</label>
     <p class="hint" id="doc-fit-row"><span id="doc-fit-note"></span><button type="button" class="link" id="doc-fit"></button></p>
     <p class="hint" id="doc-scale-hint"></p>
-    ${sorted != null ? `<label class="check small"><input type="checkbox" id="doc-sort"> Fewer thread changes (${changes} → ${sorted}): sews each thread's parts together where nothing in between is in the way</label>` : ""}
+    <div id="doc-sort-row"></div>
     ${uneven ? `<label class="check small"><input type="checkbox" id="doc-satin"> Even out the satin stitches (${src.satinGap.toFixed(2)} mm apart on each edge; 0.3–0.5 mm is right)</label>` : ""}
     <label class="check small"><input type="checkbox" id="doc-tiny"> Remove tiny stitches</label>
     ${src.over ? `<label class="check small"><input type="checkbox" id="doc-split"> Split long stitches</label>` : ""}
     <label class="check small"><input type="checkbox" id="doc-thin"> Thin the densest spots to 24 hits per mm²</label>`;
-  sizeUI();
+  sizeUI(); coloursUI();
+  // (colour sort follows the colours: picking one thread for two parts can make it worth doing; and says so when the
+  // order is already as short as it gets, rather than nothing)
+  const repeats = new Set(state.opened.d.threads.map((t) => (t.color || "").toLowerCase())).size <= changes;
+  const why = sorted != null || !changes || state.opened.tooMany ? "" : !state.opened.colourless && !repeats ? ""
+    : state.opened.colourless && !repeats ? "Give two parts the same thread and they may be sewn together, with one thread change fewer."
+    : pauses(state.opened.d) && !state.opened.colourless
+    ? "The thread changes stay in the file's order: some are pauses in the same thread (fabric steps), which sorting would lose."
+    : `Already the fewest thread changes${state.opened.colourless ? " for these colours" : ""}: each thread's parts can't be sewn together without going over something sewn in between.`;
+  const sortHtml = sorted != null ? `<label class="check small"><input type="checkbox" id="doc-sort"> Fewer thread changes (${changes} → ${sorted}): sews each thread's parts together where nothing in between is in the way</label>` : why ? `<p class="hint">${why}</p>` : "";
+  const row = $("doc-sort-row");
+  if (row.dataset.html !== sortHtml) { keepFocus(row, () => { row.innerHTML = sortHtml; }); row.dataset.html = sortHtml; }
   $("doc-tiny").checked = o.tiny; $("doc-thin").checked = o.thin; if ($("doc-sort")) $("doc-sort").checked = o.sort;
   // (any resize splits long stitches and evens out satins itself: shown ticked)
   const resized = o.scale !== 1;
@@ -1187,14 +1242,7 @@ $("doctor-fix").addEventListener("change", (e) => {
     s.capped = Math.round(mm) > big.mm && big.scale >= 0.5 ? Math.round(mm) : null;
     setScale(Math.min(big.scale, Math.round(want * 1000) / 1000));
   }
-  else if (e.target.dataset.blk != null) {
-    // a colour for one block of a file without colours: the copy is written again in it
-    const o2 = state.opened, i = +e.target.dataset.blk;
-    o2.d.threads[i] = brother(e.target.value);
-    o2.out = writePES(o2.d); o2.check = checkup(readEmbroidery(o2.out, "x.pes")); o2.sorted = sortedChanges(o2.d);
-    e.target.parentElement.title = `Colour ${i + 1}: Brother ${o2.d.threads[i].name}`;
-    openView(); return;
-  }
+  else if (e.target.dataset.any != null) { blockColour(e.target.value); return; }
   else {
     if (e.target.id === "doc-tiny") { o.tiny = e.target.checked; s.auto = false; }
     if (e.target.id === "doc-thin") { o.thin = e.target.checked; s.auto = false; }
@@ -1208,10 +1256,36 @@ $("doctor-fix").addEventListener("change", (e) => {
 let docTimer = 0;
 // "Largest that fits" (beside the size, and in the file card when it's too big)
 const toLargest = () => { const b = largest(); if (b.scale < 0.5) return; state.opened.capped = null; setScale(b.scale); clearTimeout(docTimer); openView(); };
-$("doctor-fix").addEventListener("click", (e) => { if (e.target.id === "doc-fit") toLargest(); });
+$("doctor-fix").addEventListener("click", (e) => {
+  if (e.target.id === "doc-fit") toLargest();
+  const b = e.target.closest("[data-pick], [data-swatch]");
+  if (b?.dataset.pick != null) { state.opened.pick = +b.dataset.pick; coloursUI(); }
+  else if (b) blockColour(b.dataset.swatch);
+});
+// DST threads: the block buttons pick a part, the swatches (exact Brother threads, as the Design tab has them) or
+// Any colour give it a thread. The hobbyist had only the system colour wheel.
+function coloursUI() {
+  const o = state.opened, box = $("doc-colours-box");
+  if (!box) return;
+  const i = Math.min(o.pick, o.d.threads.length - 1), t = o.d.threads[i], hex = t.color.toLowerCase();
+  keepFocus(box, () => {
+    box.innerHTML = `<div class="doc-colours" role="group" aria-label="Thread colours"><span>Thread colours</span>${o.d.threads.map((b, k) => `<button type="button" class="doc-blk" data-pick="${k}" aria-pressed="${k === i}" title="Colour ${k + 1}: Brother ${escapeHtml(b.name)}"><i style="background:${b.color}"></i>${k + 1}</button>`).join("")}</div>
+      <div class="swatches" role="group" aria-label="Thread for colour ${i + 1}">${DST_SWATCHES.map((c) => `<button type="button" data-swatch="${c}" style="background:${c}" aria-pressed="${c === hex}" title="Brother ${nearestBrotherThread(c).name}" aria-label="Brother ${nearestBrotherThread(c).name}"></button>`).join("")}<span class="custom" title="Any colour"><input type="color" data-any value="${hex}" aria-label="Any colour"></span></div>
+      <p class="hint">Colour ${i + 1}: Brother ${escapeHtml(t.name)}. The file doesn't say which threads to use: pick a part's number, then its thread. The saved PES carries the nearest Brother thread.</p>`;
+  });
+}
+// a thread for the picked block of a file without colours: the copy is written again in it
+function blockColour(hex) {
+  const o = state.opened, i = o.pick;
+  o.d.threads[i] = brother(hex.toLowerCase());
+  o.out = writePES(o.d); o.check = checkup(readEmbroidery(o.out, "x.pes")); o.sorted = sortedChanges(o.d, true);
+  if (o.sorted == null) o.opts.sort = false;
+  coloursUI(); openView();
+}
 $("open-info").addEventListener("click", (e) => { if (e.target.id === "doc-largest") toLargest(); });
 // colours for files that carry none (DST): distinct exact Brother threads, then round again
 const DST_COLOURS = ["#0e1f7c", "#ed171f", "#00673e", "#e8a900", "#770176", "#f64a8a", "#000000", "#c70156"];
+const DST_SWATCHES = [...DST_COLOURS, "#f0f0f0", "#2584bb", "#b27624", "#66ba49"];
 const brother = (hex) => { const t = nearestBrotherThread(hex); return { color: hex, name: t.name, brand: "Brother" }; };
 $("open-file").onchange = (e) => e.target.files[0] && openDesign(e.target.files[0]);
 
