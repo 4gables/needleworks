@@ -158,6 +158,7 @@ for (const k of which) {
   catch (e) {
     if (e.overBy || /too big|doesn't fit|fit the hoop|bigger than/i.test(e.message)) note("toobig");
     else if (e.empty || e.skip || /nothing to stitch/i.test(e.message)) note("empty");
+    else if (e.code) note("said");   // (a picture the app explains in words: too small, nothing to cross-stitch...)
     else note("error", `${e.constructor.name}: ${e.message} ${(e.stack || "").split("\n")[1]?.trim() || ""}`);
     continue;
   }
