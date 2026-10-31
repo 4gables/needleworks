@@ -168,7 +168,9 @@ Embroidery-file tools for home machines. Two implementations of the same engine:
   `last` stage) in the frame's thread. A visible stage that joins a tack-down block un-hides that block in the
   preview (the quilting, or same-thread lettering on an ITH frame, was hidden with the tack line). Starters: Mug rug,
   Coaster, Quilt block.
-- Motifs (`js/studio/motifs.js`: 29 filled icons from Phosphor Icons, MIT; `kind: "motif"`, `motif`, `size` mm across
+- Motifs (`js/studio/motifs.js`: 29 filled icons, our own drawings (2026-10-30, replacing Phosphor Icons; built
+  from circles, ellipses, rounded polygons and brush strokes, nonzero, holes and parts >= 26 of 256 units; contact sheets:
+  `tests/browser/motifs.html` ?sheet=shapes|stitch); `kind: "motif"`, `motif`, `size` mm across
   the longer side, `style` fill | outline | applique): the SVG path is filled on a canvas and traced like appliqué
   letters (`motifOutlines` in outline.js, holes included). Fill = `fillPolygon(loops, { inset: 0.6 })` (it now takes
   several loops, even-odd) plus a 1.4 mm satin edge; outline = `edgeSatin` (narrower round small holes); appliqué =
@@ -465,9 +467,8 @@ Embroidery-file tools for home machines. Two implementations of the same engine:
 ## Gotchas
 - **Proprietary, not open source** (2026-10-30): `LICENSE` is all rights reserved to 4Gables (a trade name: no
   personal name anywhere on the site or in the code). Every shipped file (js, css, sw.js) starts with a `/*! Needleworks (c)
-  2026 4Gables ... */` line (third-party ports name their licence there too); new files get it as well. The page has a
-  comment, `meta copyright`, `rel=license` and one footer line. Third-party parts stay under their own licences in
-  `THIRD_PARTY_NOTICES.md`. The repo stays public (GitHub Free can't serve Pages from a private repo, and the served JS
+  2026 4Gables ... */` line; new files get it as well. The page has a
+  comment, `meta copyright`, `rel=license` and one footer line. Only the fonts are third-party (`THIRD_PARTY_NOTICES.md`). The repo stays public (GitHub Free can't serve Pages from a private repo, and the served JS
   is readable anyway).
 - **No one else's code or data gets committed: clean room only** (project rule, 2026-10-30). Nothing written by
   someone else (code, ported code, icon/SVG paths, data tables, images) is committed, whatever its licence. Learning

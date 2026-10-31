@@ -19,9 +19,8 @@ Without prior written permission from 4Gables, you may not:
 Viewing the source to learn from it, and forking it on GitHub solely as GitHub's Terms of Service
 allow, are permitted; any other use of such a fork is not.
 
-Third-party components keep their own licences, listed in THIRD_PARTY_NOTICES.md (pyembroidery,
-Phosphor Icons, Embroidermodder thread charts, and the fonts in fonts/). Nothing in this licence
-restricts what those licences allow for those components.
+The fonts in fonts/ keep their own licences, listed in THIRD_PARTY_NOTICES.md. Nothing in this licence
+restricts what those licences allow for those fonts.
 
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED. IN NO EVENT SHALL
 4GABLES BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY ARISING FROM THE USE OF THE SOFTWARE OR OF
