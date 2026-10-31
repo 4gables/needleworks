@@ -12,7 +12,7 @@ import { draw } from "../render.js";
 import { youHtml } from "../sheet.js";
 import { QUILTS } from "./quilt.js";
 import { MOTIFS } from "./motifs.js";
-import { BORDERS, FABRICS, THREADS, SHAPES, TEXT_SHAPES, splitPieces, archFit, archStart, frontPanel, inkHeight, monoSize, archRoom, archShrink, archTight, cleanPiece, clearSize, collision, collisions, inFrame, letterMetrics, underPatch, crossName, crossStep, layoutSize, touching, touchingAll, towelMin, fineLine, loopsFill, compose, fileBlocks, fittedSizes, followFrame, label, minSize, pieceBounds, previewLook, smallText } from "./pieces.js";
+import { BORDERS, FABRICS, THREADS, SHAPES, TEXT_SHAPES, splitPieces, archFit, archStart, frontPanel, inkHeight, monoSize, archRoom, archShrink, archTight, cleanPiece, clearSize, collision, collisions, inFrame, letterMetrics, underPatch, crossName, crossStep, layoutSize, touching, touchingAll, towelMin, fineLine, loopsFill, compose, fileBlocks, fittedSizes, followFrame, label, minSize, pieceBounds, previewLook, smallText, bulkReady } from "./pieces.js";
 
 const SCRIPT = "NW Great Vibes", PRINT = "NW Josefin Sans", ROUND = "NW Quicksand";
 // exact Brother PEC thread colours, so the name on screen is the one the machine shows
@@ -285,7 +285,12 @@ export function initStudio(api) {
   // satin and fine line, said plainly: bold columns or a thin outline of the letter
   const STITCHES = { auto: "Automatic", satin: "Bold", line: "Thin line" };
   // the automatic chip says what it'll do here ("Stitch: automatic" was lit while the note said it sews as a thin line)
-  const autoName = (p) => { const fs = fittedSizes(pieces).get(p.id); return fabric === "towel" || !fineLine({ ...p, size: fs ?? p.size, style: "auto" }) ? "Automatic: bold" : "Automatic: thin line"; };
+  // (said once the lettering is worked out: a font change waited 0.8 s for it before the menu let go; warn() fills it in)
+  const autoName = (p) => {
+    if (fabric === "towel") return "Automatic: bold";
+    if (!bulkReady(p)) return "Automatic";
+    const fs = fittedSizes(pieces).get(p.id); return !fineLine({ ...p, size: fs ?? p.size, style: "auto" }) ? "Automatic: bold" : "Automatic: thin line";
+  };
   const stitchSeg = (p) => seg("style", { ...STITCHES, auto: autoName(p) }, p.style || "auto");
   let moreOpen = false;
   $("st-edit").addEventListener("toggle", (e) => { if (e.target.matches("details.more")) moreOpen = e.target.open; }, true);
@@ -367,9 +372,16 @@ export function initStudio(api) {
     if (p.kind !== "frame") h += `<p class="hint warn" data-warn aria-live="polite" hidden></p>`;
     h += range("rot", "Turn", -180, 180, p.rot || 0, "°", 5);
     if (p.kind !== "file") h += `<div class="field"><span>Thread</span><div class="swatches">${swatches(p)}</div><p class="hint">Brother ${nearestBrotherThread(p.color).name}${api.spool(p.color) ? ` · ${api.escapeHtml(api.spool(p.color))}` : ""}</p></div>`;
-    $("st-edit").innerHTML = h;
-    warn();
+    const old = drawnId === p.id && $("st-edit").querySelector("[data-warn]");
+    $("st-edit").innerHTML = h; drawnId = p.id;
+    // (lettering not worked out yet, after a font change: the warnings a moment later, after the preview, the last ones
+    // kept up meanwhile; worked out here the menu held for 0.8 s)
+    const w = $("st-edit").querySelector("[data-warn]");
+    if (bulkReady(p) || !w) { warn(); return; }
+    if (old) { w.innerHTML = old.innerHTML; w.hidden = old.hidden; }
+    clearTimeout(warnTimer); warnTimer = setTimeout(warn, 300);
   }
+  let drawnId = null;
   function ui() { api.keepFocus($("panel-design"), () => { list(); editor(); sewnOn(); }); }
   function sewnOn() {
     $("st-fabric").innerHTML = Object.entries(FABRICS).map(([k, f]) => `<button type="button" data-fab="${k}" aria-pressed="${k === fabric}">${f.name}</button>`).join("");
@@ -649,9 +661,10 @@ export function initStudio(api) {
       }
       if (s !== seq) return;
       refitted = false;
-      const { design, steps, done, ready, small } = stepsOf(composed);
+      const { design, steps, done, ready, small, later } = stepsOf(composed, true);
       stepsUI(steps, done, small, ready);
       const look = previewLook(steps);
+      const notes = [api.turned() ? TURNED : "", $("st-tip").hidden ? "" : $("st-tip").textContent, fabricTip(), threadTip(small)];
       // pieces sewn into each other, at the sizes they're sewn (checked when the design settles, not on every drag
       // frame); lettering wrapped round into itself can't be sewn, so Download waits for it
       const hits = dragging ? [] : collisions(pieces), wrap = dragging ? null : pieces.find((p) => archRoom(p)?.full);
@@ -669,7 +682,13 @@ export function initStudio(api) {
         block: wrap ? `${label(wrap)} runs into itself round the curve: select it to widen the curve or make the letters smaller.` : "",
         fabric: look.fabricShapeBlock != null ? "pink" : "linen", steps: steps.length,
         sheet: { steps: steps.map((st) => ({ you: st.you, sews: st.sews.join(" ") })), after: done, ready, cut: steps.filter((st) => st.cut).map((st) => st.cut),
-          notes: [api.turned() ? TURNED : "", $("st-tip").hidden ? "" : $("st-tip").textContent, fabricTip(), threadTip(small)] } });
+          notes } });
+      // (whether the letters are small, when the lettering wasn't worked out yet: said a moment later, after the preview)
+      if (later) setTimeout(() => {
+        if (s !== seq) return;
+        const now = smallNow(); if (now === small) return;
+        stepsUI(steps, done, now, ready); notes.splice(1, 3, $("st-tip").hidden ? "" : $("st-tip").textContent, fabricTip(), threadTip(now));
+      }, 350);
     } catch (err) {
       if (s !== seq) return;
       api.setView(null);
@@ -682,8 +701,12 @@ export function initStudio(api) {
     }
   }
   // the steps as shown and printed: what to have ready, what's done after, and whether the letters are small
-  function stepsOf({ design, steps, after, before, hoop }) {
-    const fit = fittedSizes(pieces), small = thread !== "60" && pieces.some((p) => smallText(fit.has(p.id) ? { ...p, size: fit.get(p.id) } : p));
+  // (`lazy`: lettering not worked out yet (a long text drawn again as one line, 0.3-0.7 s) is taken as small as it last
+  // was, and `later` says to check: typing waited for it before the preview changed)
+  let lastSmall = false;
+  const smallNow = () => { const fit = fittedSizes(pieces); return (lastSmall = thread !== "60" && pieces.some((p) => smallText(fit.has(p.id) ? { ...p, size: fit.get(p.id) } : p))); };
+  function stepsOf({ design, steps, after, before, hoop }, lazy = false) {
+    const later = lazy && thread !== "60" && !pieces.every(bulkReady), small = later ? lastSmall : smallNow();
     // (what the fabric needs goes first: a towel's topper was only in the folded "Sewing on"; the threads by the
     // spools they own when they've listed them, not the Brother names)
     // (the fabric's own stabilizer and finishing are left out when a project's own list already says (in-the-hoop,
@@ -693,7 +716,7 @@ export function initStudio(api) {
     const ready = [own(before) ? "" : FABRICS[fabric].ready, ...before,
       appliqued() ? "A piece of fabric for each appliqué shape, 1 in bigger than its outline, and small curved scissors (iron-on fusible web on the back stops cotton fraying)." : "",
       api.threadList(steps.map((st) => st.color))].filter(Boolean), done = [own(after) ? "" : FABRICS[fabric].after, ...after].filter(Boolean);
-    return { design, steps: firstStep(sameSpool(steps), hoop), done, ready, small };
+    return { design, steps: firstStep(sameSpool(steps), hoop), done, ready, small, later };
   }
   // step 1 says what to do too: hoop it, put the thread on, Start (a one-step design said only "Sews “Leo”.")
   function firstStep(steps, hoop) {
