@@ -685,6 +685,44 @@ Embroidery-file tools for home machines. Two implementations of the same engine:
   VM: FITS 24/24; PE-DESIGN opened the blend patch, arched Quicksand, JKM coaster, Max patch, quilt label, dense_k and
   long15 fixed copies. Skipped (owner's rule): 1 px source lines in Filled pictures, On my item photo kept across
   starters, undo history across reloads. Open: on the unchanged Patch starter + Lettering still lands below JD.
+- Round 6 persona tests (2026-10-30, new tasks: stocking cuff, bandana, napkin initials, an emailed PES, owned
+  spools on a phone; blanket arch + appliqué, turned tea-towel names, 4x4 pouch monogram, colour sort, etsy line/fill,
+  two-appliqué quilt block; hostile files, print/script audits, layout stress, hostile names). Scores 8/7/7, no P0, 6 P1:
+  - Design tab: new pieces go through `spotIn` (ui.js): the biggest unturned frame's front (`frontPanel`: a zip pouch's
+    front is below its topstitch, zip line + 7 mm), middle first, then below/above/beside what's in it, shrinking to
+    `least(p)`; an in-the-hoop frame never gets a piece outside it (a 4x4 pouch monogram split the design in two). A
+    piece on a patch gets a contrasting thread wherever it lands. Turned names batches turn every file like the design
+    (they were upright while the steps said turned). Names are drawn at the design's letter scale (`inkHeight`: "emma"
+    with no capital came out twice "Emma"); fewer monogram initials keep the monogram's width (`monoSize`); `safeName`
+    suffixes Windows device names (CON_.pes); names past 40 are listed as left out. Script arched up: x-height <= 0.24 x
+    radius; first bend `archStart` (~30 % round). Wave/Bridge/arches say they join lines.
+  - Layout: a piece drag holds the view's fit (`state.hold` <- `draw`'s `tf.base`, passed back as `opts.base`) until
+    release (the view refitted mid-drag and the piece ran 2-3x faster than the pointer). A design reaching past 204.8 mm
+    from its centre overflows the PEC box's 12 bits and reads back shifted (too-big preview only): `unwrap()`. Escape or a
+    tap on empty preview deselects. `draw(..., { corner })` keeps the hoop clear of the zoom pad.
+  - Open tab: `designBlockAgrees` (reader) flags a v6 PES whose design block isn't its PEC block: threads from the PEC
+    palette, saved as the machine sews, plain warning. quality.js fails a PEC thread count that isn't the block count
+    ("colours") and a disagreeing design block ("block"); the download dialog judges the saved bytes. `blockThreads`
+    keeps one thread per block (the writer lists every thread in the PEC header). `landJumps`: a first stitch followed by
+    one over 12.1 mm away becomes a jump. A resize alone is "Save resized copy". Chips: machine name, then "the file
+    calls it X" (not a number, same name, or > ΔE 70 off).
+  - Guide: a same-thread pause says "Keep the same thread on"; Sew along step 1 has its own Have ready list
+    (`#along-ready`); `fabricTip()` says when the fabric changes nothing (patch, ITH, quilted: `ownBase()`); step
+    instructions use `--ink` (red is for warnings); the sew sheet hatches the appliqué fabric outlines.
+  - Stitches (39 studio files, +0.4 % stitches, trims level): print corners are the ink width minus (stroke - satin) /
+    cos(angle), stopping at 0.4 mm (round 5's shrink by satin/stroke plus a 0.8 mm stop double-shortened points);
+    loose ends are `decurl`ed and cut onto the font's own end line (`endShape`/`endCut`, `geom.satin` `shape`); each
+    side stays within 0.15 mm of the ink (`sideClip`); `untangle` won't merge junctions over 2.4 knot lengths apart.
+    Josefin "AVWMNK vwmxyz" points > 0.8 mm outside the ink: 133 -> 0 at 40 mm; all print fonts < 0.75 mm. Snowflake
+    redrawn (reads from ~15 mm). Quicksand's rounded V/M bottoms still stop short (one bent stroke, no corner).
+  - Pictures (20 files: trims 1798 -> 1701, stitches -12 %, peak <= 24): a group's colour is its solid pixels' own mean
+    (cluster means took in blends: etsy_1's pinks went grey); thread snapping charges grey threads x(1 + 0.08(C - 4))
+    for colours over chroma 4 and other hues from 35° to 90° off (sage -> Leaf Green, dusty blue -> Sky Blue, not Gray);
+    merging hues over 45° apart costs up to 30 % more; a taken thread can move the taker once; design colours skip the
+    background's thread unless within SAME. Picture fills stop travelling through a 0.5 mm cell crossed 20 times
+    (`WORN`; etsy_8 hit 72 hits/mm² in a neck). Line drawing has a thread picker (`opts.line`, Auto = darkest).
+  Not done: combining same-thread appliqué stages (6 pauses could be 3), owned spools as swatches, dusty pinks
+  (chroma ~6) still Warm Gray, the etsy_5 4-colour lesson doesn't hold (grass and yellow merge).
 - The preview is the file: `setView` decodes `v.bytes` with `readEmbroidery` and draws/counts/fit-checks that, and
   thread labels come from the file's own PEC palette.
 
