@@ -1,534 +1,477 @@
-/*! Needleworks (c) 2026 4Gables. All rights reserved. Proprietary, see LICENSE. https://4gables.com/needleworks/ Portions ported from pyembroidery (MIT), see THIRD_PARTY_NOTICES.md. */
-// Embroidery file formats: write PES (v6: header + CEmbOne/CSewSeg blocks + PEC) and read PES / PEC / DST.
-// Ported from pyembroidery so files match what it writes, byte for byte.
-// Units are pyembroidery's: 0.1 mm, y down.
+/*! Needleworks (c) 2026 4Gables. All rights reserved. Proprietary, see LICENSE. https://4gables.com/needleworks/ */
+// Embroidery files: the PES writer (v6 with a Brother-style PEC block), PES/PEC/DST readers, stats and a self-check.
+// Stitch lists are [x, y, command] in 0.1 mm, y down.
 import { MARGIN } from "./machines.js";
-import { PEC_MATCH, PEC_THREADS, PEC_BLANK_ICON, hexToRgb, nearestIndex, pecThread, pyRound, rgbToHex } from "./threads.js";
+import { PEC_BLANK_ICON, PEC_MATCH, PEC_THREADS, hexToRgb, nearestIndex, pecThread, pyRound, rgbToHex } from "./threads.js";
 
 export const STITCH = 0, JUMP = 1, TRIM = 2, STOP = 3, END = 4, COLOR_CHANGE = 5;
 
-const MAX_STITCH = 70;   // 7 mm; longer stitches are split
-const MAX_JUMP = 1210;
+const utf8 = new TextEncoder();
 
-// ---------- byte helpers ----------
-class Writer {
-  constructor() { this.buf = new Uint8Array(1 << 16); this.pos = 0; }
-  ensure(n) {
-    if (this.pos + n <= this.buf.length) return;
-    const b = new Uint8Array(Math.max(this.buf.length * 2, this.pos + n));
-    b.set(this.buf); this.buf = b;
-  }
-  u8(v) { this.ensure(1); this.buf[this.pos++] = v & 0xff; }
-  bytes(arr) { this.ensure(arr.length); this.buf.set(arr, this.pos); this.pos += arr.length; }
-  u16(v) { this.u8(v); this.u8(v >> 8); }
-  u24(v) { this.u8(v); this.u8(v >> 8); this.u8(v >> 16); }
-  u32(v) { this.u16(v & 0xffff); this.u16((v >>> 16) & 0xffff); }
-  f32(v) { const b = new Uint8Array(new Float32Array([v]).buffer); this.bytes(b); }
-  ascii(s) { this.bytes(new TextEncoder().encode(s)); }
-  pesString(s) {
-    if (s == null) { this.u8(0); return; }
-    const b = new TextEncoder().encode(s).slice(0, 255);
-    this.u8(b.length); this.bytes(b);
-  }
-  at(pos, fn) { const p = this.pos; this.pos = pos; fn(); this.pos = p; }
-  result() { return this.buf.slice(0, this.pos); }
+// Bytes to text the way the WHATWG "latin1" label does it (windows-1252). Done by hand: Node's TextDecoder gives
+// ISO-8859-1 for that label, which would make Node and the browser disagree on 0x80-0x9F.
+const HIGH = [0x20ac, 0x81, 0x201a, 0x192, 0x201e, 0x2026, 0x2020, 0x2021, 0x2c6, 0x2030, 0x160, 0x2039, 0x152, 0x8d,
+  0x17d, 0x8f, 0x90, 0x2018, 0x2019, 0x201c, 0x201d, 0x2022, 0x2013, 0x2014, 0x2dc, 0x2122, 0x161, 0x203a, 0x153, 0x9d,
+  0x17e, 0x178];
+function text(bytes) {
+  let s = "";
+  for (const b of bytes) s += String.fromCharCode(b >= 0x80 && b < 0xa0 ? HIGH[b - 0x80] : b);
+  return s;
 }
 
-class Reader {
-  constructor(bytes) { this.b = bytes; this.pos = 0; }
-  u8() { return this.pos < this.b.length ? this.b[this.pos++] : null; }
-  u16() { const a = this.u8(), b = this.u8(); return a | (b << 8); }
-  u24() { const a = this.u8(), b = this.u8(), c = this.u8(); return a | (b << 8) | (c << 16); }
-  u24be() { const a = this.u8(), b = this.u8(), c = this.u8(); return (a << 16) | (b << 8) | c; }
-  u32() { return (this.u16() | (this.u16() << 16)) >>> 0; }
-  str(n) { const s = this.b.slice(this.pos, this.pos + n); this.pos += n; return new TextDecoder("latin1").decode(s); }
-  pesString() { const n = this.u8(); return n ? this.str(n) : null; }
-  skip(n) { this.pos += n; }
+// [minX, minY, maxX, maxY] over the entries that pass `keep` (loops: spreading big lists overflows the stack)
+function extents(list, keep = () => true) {
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+  for (const e of list) {
+    if (!keep(e)) continue;
+    if (e[0] < x0) x0 = e[0];
+    if (e[0] > x1) x1 = e[0];
+    if (e[1] < y0) y0 = e[1];
+    if (e[1] > y1) y1 = e[1];
+  }
+  return [x0, y0, x1, y1];
 }
 
-// ---------- normalise: absolute 0.1mm stitches -> rounded, long stitches split ----------
+const count = (list, cmd) => { let n = 0; for (const e of list) if (e[2] === cmd) n++; return n; };
+
+// Colour blocks that hold at least one stitch.
+function blockCount(st) {
+  let n = 0, fresh = true;
+  for (const [, , c] of st) {
+    if (c === STITCH) { if (fresh) n++; fresh = false; }
+    else if (c === COLOR_CHANGE) fresh = true;
+  }
+  return n;
+}
+
+// Whole-number coordinates, stitches split to 7 mm and jumps to 121 mm (on the longer axis), commands at the needle,
+// END at the end. The first stitch or jump is never split.
 export function normalize(pattern) {
   const out = [];
   let nx = 0, ny = 0, started = false;
   for (const [x, y, c] of pattern.stitches) {
-    if (c === STITCH || c === JUMP) {
-      const rx = pyRound(x), ry = pyRound(y);
-      const lim = c === STITCH ? MAX_STITCH : MAX_JUMP;
-      if (started) {
-        const dx = rx - nx, dy = ry - ny, n = Math.ceil(Math.max(Math.abs(dx), Math.abs(dy)) / lim);
-        for (let i = 1; i < n; i++) out.push([nx + pyRound((dx * i) / n), ny + pyRound((dy * i) / n), c]);
-      }
-      out.push([rx, ry, c]); nx = rx; ny = ry; started = true;
-    } else {
-      out.push([nx, ny, c]);  // commands sit at the needle position
+    if (c !== STITCH && c !== JUMP) { out.push([nx, ny, c]); continue; }
+    const rx = pyRound(x), ry = pyRound(y);
+    if (started) {
+      const dx = rx - nx, dy = ry - ny, n = Math.ceil(Math.max(Math.abs(dx), Math.abs(dy)) / (c === STITCH ? 70 : 1210));
+      for (let i = 1; i < n; i++) out.push([nx + pyRound((dx * i) / n), ny + pyRound((dy * i) / n), c]);
     }
+    out.push([rx, ry, c]);
+    nx = rx; ny = ry; started = true;
   }
   if (!out.length || out[out.length - 1][2] !== END) out.push([nx, ny, END]);
   return out;
 }
 
-function bounds(st) {
-  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
-  for (const [x, y] of st) { if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
-  return [x0, y0, x1, y1];
-}
-
-function colorBlockCount(st) {
-  let n = 0, init = true;
-  for (const [, , c] of st) {
-    if (c === STITCH) { if (init) { n++; init = false; } } else if (c === COLOR_CHANGE) init = true;
-  }
-  return n;
-}
-
-// ---------- PES writer ----------
-// pattern: { stitches: [[x, y, cmd]] (0.1mm), threads: [{ color: "#rrggbb", description }] }
-// Full v6 (pyembroidery write_pes version 6): PES header + CEmbOne/CSewSeg design blocks + PEC. The PE900 sizes and
-// places the design from the PES blocks; a truncated file (PEC only) loaded half-size and off-centre on Ashley's machine.
-export function writePES(pattern) {
-  const st = normalize(pattern);
-  if (!st.some((s) => s[2] === STITCH)) throw new Error("There's nothing to stitch.");
-  if (st.filter((s) => s[2] === COLOR_CHANGE).length > 250) throw new Error("Too many colour changes for a PES file (250 max).");
-  const threads = pattern.threads.slice();
-  while (threads.length < colorBlockCount(st)) threads.push(threads[threads.length - 1] || { color: "#000000" });
-  const w = new Writer();
-  w.ascii("#PES0060");
-  const pecPtr = w.pos; w.u32(0);
-  w.u16(0x01); w.ascii("02");
-  for (let i = 0; i < 5; i++) w.pesString(null);   // name, category, author, keywords, comments
-  for (const v of [0, 0, 0x64, 0x64, 0, 0xc8, 0xc8, 0x64, 0x64, 0x64, 0x07, 0x13, 1, 1, 0, 100, 1, 0]) w.u16(v);
-  w.u8(0);
-  for (const v of [1, 0, 0, 1, 0, 0]) w.f32(v);
-  w.u16(0); w.u16(0); w.u16(0);
-  w.u16(threads.length);
-  for (const t of threads) {
-    const [r, g, b] = hexToRgb(t.color);
-    w.pesString(t.catalog ?? null); w.u8(r); w.u8(g); w.u8(b); w.u8(0); w.u32(0xa);
-    w.pesString(t.description ?? t.name ?? null); w.pesString(t.brand ?? null); w.pesString(null);
-  }
-  w.u16(1);                     // one design block
-  w.u16(0xffff); w.u16(0);
-  const log = writePESBlocks(w, st, threads);
-  w.u32(0); w.u32(0);           // v6 node list
-  log.forEach((_, i) => { w.u32(i); w.u32(0); });
-  const pos = w.pos;
-  w.at(pecPtr, () => w.u32(pos));
-  const idx = writePEC(w, st, threads);
-  // addendum: PEC colour list (with its count byte), then the thread colours
-  w.u8(idx.length - 1); w.bytes(idx); w.bytes(new Uint8Array(127 - idx.length).fill(0x20));
-  w.bytes(new Uint8Array(0x90 * threads.length));
-  for (const t of threads) { const [r, g, b] = hexToRgb(t.color); w.u24((r << 16) | (g << 8) | b); }
-  w.u16(0);
-  return w.result();
-}
-
-function pesString16(w, s) { w.u16(s.length); w.ascii(s); }
-
-// CEmbOne header + one CSewSeg holding every stitch run and jump, in coordinates from the design's bottom-left
-function writePESBlocks(w, st, threads) {
-  const [x0, y0, x1, y1] = bounds(st);
-  const width = x1 - x0, height = y1 - y0;
-  pesString16(w, "CEmbOne");
-  for (let i = 0; i < 8; i++) w.u16(0);
-  for (const v of [1, 0, 0, 1, 350 + 650 - width / 2, 100 + height + 900 - height / 2]) w.f32(v);  // 130x180 hoop
-  w.u16(1); w.u16(0); w.u16(0); w.u16(Math.trunc(width)); w.u16(Math.trunc(height));
-  w.bytes(new Uint8Array(8));
-  const sectionsAt = w.pos; w.u16(0);
-  w.u16(0xffff); w.u16(0);
-  pesString16(w, "CSewSeg");
-  const chart = threads.map((t) => [null, ...hexToRgb(t.color)]);
-  const code = (i) => nearestIndex(hexToRgb((threads[i] || threads[threads.length - 1]).color), chart);
-  let colorIndex = 0, colorCode = code(colorIndex++), sx = 0, sy = 0;
-  let section = 0, flag = -1, previous = -1;
-  const log = [];
-  const emit = (pts, f) => {
-    if (flag !== -1) w.u16(0x8003);
-    flag = f;
-    if (previous !== colorCode) { log.push([section, colorCode]); previous = colorCode; }
-    w.u16(f); w.u16(colorCode); w.u16(pts.length);
-    for (const [x, y] of pts) { w.u16(Math.trunc(x - x0)); w.u16(Math.trunc(y - y1)); }
-    section++;
-  };
-  for (let i = 0; i < st.length;) {
-    const c = st[i][2];
-    let j = i; while (j < st.length && st[j][2] === c) j++;
-    const run = st.slice(i, j); i = j;
-    if (c === JUMP) emit([[sx, sy], run[run.length - 1]], 1);
-    else if (c === COLOR_CHANGE) colorCode = code(colorIndex++);
-    else if (c === STITCH) { [sx, sy] = run[run.length - 1]; emit(run, 0); }
-  }
-  w.u16(log.length);
-  for (const [s, c] of log) { w.u16(s); w.u16(c); }
-  w.at(sectionsAt, () => w.u16(section));
-  w.u16(0); w.u16(0);
-  return log;
-}
-
-function uniquePalette(threads) {
-  const palette = PEC_MATCH.slice(), chart = new Array(palette.length).fill(null);
-  const seen = new Set();
+// PEC palette index per thread: each distinct colour string claims its nearest free Brother thread (so no two share
+// one), then every thread takes the nearest claimed one.
+function pecIndices(threads) {
+  const free = PEC_MATCH.slice(), claimed = new Array(65).fill(null), seen = new Set();
   for (const t of threads) {
     if (seen.has(t.color)) continue;
     seen.add(t.color);
-    const rgb = hexToRgb(t.color);
-    const i = nearestIndex(rgb, palette);
-    if (i == null) break;
-    palette[i] = null;
-    chart[i] = [t.color, ...rgb];
+    const rgb = hexToRgb(t.color), i = nearestIndex(rgb, free);
+    if (i === null) break;
+    free[i] = null;
+    claimed[i] = [null, ...rgb];
   }
-  return threads.map((t) => nearestIndex(hexToRgb(t.color), chart));
+  return threads.map((t) => nearestIndex(hexToRgb(t.color), claimed));
 }
 
-// The Brother thread the machine will show for each colour block: what writePES puts in the PEC palette.
-// Two colours never share a thread there, so the second one to want a thread gets its next-closest.
-export function machineThreads(threads) { return uniquePalette(threads).map(pecThread); }
+export const machineThreads = (threads) => pecIndices(threads).map(pecThread);
 
-function writePEC(w, st, threads) {
-  const ext = bounds(st);
-  w.ascii("LA:" + "Untitled".padEnd(16, " ") + "\r");
-  w.bytes([0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0xff, 0x00]);
-  w.u8(6); w.u8(38);  // icon byte stride, icon height
-  const idx = uniquePalette(threads);
-  w.bytes(new Uint8Array(12).fill(0x20));
-  w.u8(idx.length - 1); w.bytes(idx);
-  w.bytes(new Uint8Array(463 - idx.length).fill(0x20));
-  // stitch block
-  const start = w.pos;
-  w.u8(0); w.u8(0); w.u24(0); w.bytes([0x31, 0xff, 0xf0]);
-  w.u16(Math.round(ext[2] - ext[0])); w.u16(Math.round(ext[3] - ext[1]));
-  w.u16(0x1e0); w.u16(0x1b0);
-  // Brother machines read these two fields as the design box's top-left relative to the stitch origin and start
-  // decoding after them. pyembroidery puts the opening jump here instead, so the machine dropped that jump and
-  // showed Ashley's designs shifted and clipped to half size.
-  for (const v of [-ext[0], -ext[1]]) { const b = 0x9000 | (v & 0xfff); w.u8(b >> 8); w.u8(b); }
-  pecEncode(w, st);
-  const len = w.pos - start;
-  w.at(start + 2, () => w.u24(len));
-  // icons: whole design, then one per colour block
-  let icon = PEC_BLANK_ICON.slice();
-  let block = [];
-  for (const s of st) {
-    if (s[2] === STITCH) block.push(s);
-    else { drawIcon(ext, block, icon, 4); block = []; }
+// Little-endian byte sink; values are cut to their low bits (NaN writes 0).
+class Out {
+  constructor() { this.b = []; }
+  get at() { return this.b.length; }
+  u8(v) { this.b.push(v & 0xff); }
+  u16(v) { this.u8(v); this.u8(v >> 8); }
+  u24(v) { this.u16(v); this.u8(v >> 16); }
+  u32(v) { this.u16(v); this.u16(v >> 16); }
+  be16(v) { this.u8(v >> 8); this.u8(v); }
+  fill(n, v = 0) { for (let i = 0; i < n; i++) this.b.push(v); }
+  bytes(a) { for (const v of a) this.u8(v); }
+  ascii(s) { for (let i = 0; i < s.length; i++) this.b.push(s.charCodeAt(i)); }
+  f32(v) { const d = new DataView(new ArrayBuffer(4)); d.setFloat32(0, v, true); this.bytes(new Uint8Array(d.buffer)); }
+  // PES string: a length byte and up to 255 bytes of UTF-8; missing or empty is one 0x00
+  str(v) {
+    if (v == null) return this.u8(0);
+    const e = utf8.encode(String(v)).subarray(0, 255);
+    this.u8(e.length); this.bytes(e);
   }
-  drawIcon(ext, block, icon, 4);
-  w.bytes(icon);
-  block = [];
-  for (const s of st) {
-    if (s[2] === STITCH) block.push(s);
-    if (s[2] === COLOR_CHANGE) { icon = PEC_BLANK_ICON.slice(); drawIcon(ext, block, icon, 5); w.bytes(icon); block = []; }
-  }
-  icon = PEC_BLANK_ICON.slice(); drawIcon(ext, block, icon, 5); w.bytes(icon);
-  return idx;
+  set(at, v, n) { for (let i = 0; i < n; i++) this.b[at + i] = (v >> (8 * i)) & 0xff; }
 }
 
-function drawIcon(ext, pts, g, buffer) {
-  const stride = 6, gw = stride * 8, gh = g.length / stride;
-  const dw = ext[2] - ext[0] || 1, dh = ext[3] - ext[1] || 1;
-  const scale = Math.min((gw - buffer) / dw, (gh - buffer) / dh);
-  const tx = -((ext[2] + ext[0]) / 2) * scale + gw / 2, ty = -((ext[3] + ext[1]) / 2) * scale + gh / 2;
-  for (const [x, y] of pts) {
-    const px = Math.floor(x * scale + tx), py = Math.floor(y * scale + ty);
-    let i = py * stride + Math.trunc(px / 8);
-    if (i < 0) i += g.length;           // python negative indexing
-    if (i < 0 || i >= g.length) continue;
-    g[i] |= 1 << (((px % 8) + 8) % 8);
+export function writePES(pattern) {
+  const st = normalize(pattern);
+  if (!st.some((e) => e[2] === STITCH)) throw new Error("There's nothing to stitch.");
+  if (count(st, COLOR_CHANGE) > 250) throw new Error("Too many colour changes for a PES file (250 max).");
+  const T = pattern.threads.slice(), blocks = blockCount(st);
+  while (T.length < blocks) T.push(T.length ? T[T.length - 1] : { color: "#000000" });
+  const N = T.length;
+  if (N > 127) throw new Error("Too many threads for a PES file (127 max).");
+  const rgbs = T.map((t) => hexToRgb(t.color));
+  const [minX, minY, maxX, maxY] = extents(st), W = maxX - minX, H = maxY - minY;
+  const o = new Out();
+
+  // header
+  o.ascii("#PES0060"); o.u32(0); o.u16(1); o.ascii("02"); o.fill(5);
+  for (const v of [0, 0, 0x64, 0x64, 0, 0xc8, 0xc8, 0x64, 0x64, 0x64, 0x07, 0x13, 1, 1, 0, 100, 1, 0]) o.u16(v);
+  o.u8(0);
+  for (const v of [1, 0, 0, 1, 0, 0]) o.f32(v);
+  o.fill(6);
+
+  // thread chart
+  o.u16(N);
+  T.forEach((t, i) => {
+    o.str(t.catalog); o.bytes(rgbs[i]); o.u8(0); o.u32(0x0a);
+    o.str(t.description != null ? t.description : t.name); o.str(t.brand); o.u8(0);
+  });
+
+  // design block: CEmbOne (size and placement in a 130 x 180 mm hoop), then CSewSeg (the stitches by section,
+  // relative to the bottom-left, with their thread-list colour codes)
+  o.u16(1); o.u16(0xffff); o.u16(0); o.u16(7); o.ascii("CEmbOne"); o.fill(16);
+  for (const v of [1, 0, 0, 1, 350 + 650 - W / 2, 100 + H + 900 - H / 2]) o.f32(v);
+  o.u16(1); o.u16(0); o.u16(0); o.u16(W); o.u16(H); o.fill(8);
+  const sAt = o.at;
+  o.u16(0); o.u16(0xffff); o.u16(0); o.u16(7); o.ascii("CSewSeg");
+
+  const code = (k) => nearestIndex(rgbs[Math.min(k, N - 1)], rgbs.map((c) => [null, ...c]));
+  let cur = code(0), block = 1, lastEnd = [0, 0], sections = 0, logged;
+  const log = [];
+  const section = (flag, pts) => {
+    if (sections) o.u16(0x8003);
+    if (cur !== logged) { log.push([sections, cur]); logged = cur; }
+    o.u16(flag); o.u16(cur); o.u16(pts.length);
+    for (const [x, y] of pts) { o.u16(x - minX); o.u16(y - maxY); }
+    sections++;
+  };
+  for (let i = 0; i < st.length;) {
+    const c = st[i][2];
+    let j = i;
+    while (j + 1 < st.length && st[j + 1][2] === c) j++;
+    if (c === JUMP) section(1, [lastEnd, st[j]]);
+    else if (c === STITCH) { lastEnd = st[j]; section(0, st.slice(i, j + 1)); }
+    else if (c === COLOR_CHANGE) cur = code(block++);
+    i = j + 1;
   }
-}
+  o.set(sAt, sections, 2);
+  o.u16(log.length);
+  for (const [s, c] of log) { o.u16(s); o.u16(c); }
+  o.u16(0); o.u16(0); o.u32(0); o.u32(0);
+  log.forEach((_, i) => { o.u32(i); o.u32(0); });
 
-function pecValue(w, v, long, flag = 0) {
-  if (!long && v > -64 && v < 63) { w.u8(v & 0x7f); return; }
-  v = (v & 0x0fff) | 0x8000 | (flag << 8);
-  w.u8(v >> 8); w.u8(v);
-}
+  // PEC header
+  const P = o.at, idx = pecIndices(T);
+  o.set(8, P, 4);
+  o.ascii("LA:Untitled        \r"); o.fill(12, 0x20); o.bytes([0xff, 0x00, 0x06, 0x26]); o.fill(12, 0x20);
+  o.u8(N - 1); o.bytes(idx); o.fill(463 - N, 0x20);
 
-function pecEncode(w, st) {
-  let colorTwo = true, jumping = true, init = true, xx = 0, yy = 0;
-  for (const [x, y, c] of st) {
-    const dx = pyRound(x - xx), dy = pyRound(y - yy);
+  // PEC stitches, after the design box Brother machines read at B+16
+  const B = o.at;
+  o.fill(2); o.u24(0); o.bytes([0x31, 0xff, 0xf0]); o.u16(W); o.u16(H); o.u16(0x1e0); o.u16(0x1b0);
+  o.be16(0x9000 | (-minX & 0xfff)); o.be16(0x9000 | (-minY & 0xfff));
+  const long = (v, flag) => o.be16((v & 0xfff) | 0x8000 | (flag << 8));
+  const short = (v) => (v > -64 && v < 63 ? o.u8(v & 0x7f) : long(v, 0));
+  let xx = 0, yy = 0, toggle = 2, jumping = true;
+  for (let i = 0; i < st.length; i++) {
+    const [x, y, c] = st[i], dx = pyRound(x - xx), dy = pyRound(y - yy);
     xx += dx; yy += dy;
     if (c === STITCH) {
-      if (jumping) { if (dx !== 0 && dy !== 0) { pecValue(w, 0); pecValue(w, 0); } jumping = false; }
-      pecValue(w, dx); pecValue(w, dy);
+      if (jumping) { if (dx !== 0 && dy !== 0) o.fill(2); jumping = false; }
+      short(dx); short(dy);
     } else if (c === JUMP) {
       jumping = true;
-      const flag = init ? 0x10 : 0x20;
-      pecValue(w, dx, true, flag); pecValue(w, dy, true, flag);
+      const flag = i === 0 ? 0x10 : 0x20;
+      long(dx, flag); long(dy, flag);
     } else if (c === COLOR_CHANGE) {
-      if (jumping) { pecValue(w, 0); pecValue(w, 0); jumping = false; }
-      w.bytes([0xfe, 0xb0, colorTwo ? 2 : 1]); colorTwo = !colorTwo;
-    } else if (c === END) { w.u8(0xff); break; }
-    init = false;
+      if (jumping) { o.fill(2); jumping = false; }
+      o.bytes([0xfe, 0xb0, toggle]); toggle = toggle === 2 ? 1 : 2;
+    } else if (c === END) { o.u8(0xff); break; }
+  }
+  o.set(B + 2, o.at - B, 3);
+
+  // thumbnails: the whole design, then one per colour section
+  const dw = W || 1, dh = H || 1;
+  const icon = (pts, border) => {
+    const img = PEC_BLANK_ICON.slice(), s = Math.min((48 - border) / dw, (38 - border) / dh);
+    const tx = 24 - ((maxX + minX) / 2) * s, ty = 19 - ((maxY + minY) / 2) * s;
+    for (const [x, y] of pts) {
+      const px = Math.floor(x * s + tx), py = Math.floor(y * s + ty);
+      let i = py * 6 + Math.trunc(px / 8);
+      if (i < 0) i += 228;
+      if (i < 0 || i > 227) continue;
+      img[i] |= 1 << (((px % 8) + 8) % 8);
+    }
+    o.bytes(img);
+  };
+  icon(st.filter((e) => e[2] === STITCH), 4);
+  let part = [];
+  for (const e of st) {
+    if (e[2] === STITCH) part.push(e);
+    else if (e[2] === COLOR_CHANGE) { icon(part, 5); part = []; }
+  }
+  icon(part, 5);
+
+  // colour addendum
+  o.u8(N - 1); o.bytes(idx); o.fill(127 - N, 0x20); o.fill(144 * N);
+  for (const [r, g, b] of rgbs) o.u24(r * 65536 + g * 256 + b);
+  o.u16(0);
+  return new Uint8Array(o.b);
+}
+
+// Reader over bytes [0, end): past the end a byte is null and a wider integer counts the missing bytes as 0.
+class In {
+  constructor(bytes, end = bytes.length) { this.b = bytes; this.end = end; this.p = 0; }
+  byte() { const v = this.p < this.end ? this.b[this.p] : null; this.p++; return v; }
+  u8z() { return this.byte() ?? 0; }
+  u16() { return this.u8z() | (this.u8z() << 8); }
+  u24() { return this.u16() | (this.u8z() << 16); }
+  u32() { return (this.u24() | (this.u8z() << 24)) >>> 0; }
+  be16() { return (this.u8z() << 8) | this.u8z(); }
+  skip(n) { this.p += n; }
+  str() {
+    const n = this.byte();
+    if (!n) return null;
+    const s = text(this.b.subarray(this.p, Math.min(this.p + n, this.end)));
+    this.p += n;
+    return s;
   }
 }
 
-// ---------- readers ----------
-// Returns { stitches: [[x, y, cmd]], threads: [{ color, name }], format, version }
+const s7 = (v) => (v > 63 ? v - 128 : v);
+const s12 = (v) => { v &= 0xfff; return v > 0x7ff ? v - 4096 : v; };
+const s16 = (v) => (v > 0x7fff ? v - 0x10000 : v);
+
+// Where each PES version keeps its thread chart, after "skip 4, five strings" at offset 12:
+// [skip, string, skip, (string, skip)]
+const CHART = {
+  "#PES0050": [24, 24], "#PES0055": [24, 24], "#PES0056": [24, 24], "#PES0060": [36, 24], "#PES0070": [36, 24],
+  "#PES0080": [38, 26], "#PES0090": [14, 30, 34], "#PES0100": [14, 38, 34],
+};
+
+function readChart(r, sig) {
+  const gaps = CHART[sig];
+  if (!gaps) return [];
+  r.p = 12; r.skip(4);
+  for (let i = 0; i < 5; i++) r.str();
+  gaps.forEach((g, i) => { r.skip(g); if (i < gaps.length - 1) r.str(); });
+  for (let i = 0; i < 3; i++) if (r.u16() !== 0) return [];   // fills, motifs, feathers: not read
+  const n = r.u16(), out = [];
+  for (let i = 0; i < n; i++) {
+    const catalog = r.str(), rgb = [r.u8z(), r.u8z(), r.u8z()];
+    r.skip(5);
+    const name = r.str(), brand = r.str();
+    r.str();
+    out.push({ color: rgbToHex(rgb), name: name ?? "", brand, catalog });
+  }
+  return out;
+}
+
+function brotherThread(b) {
+  const t = PEC_THREADS[b % 65];
+  return t ? { color: rgbToHex(t.slice(1)), name: t[0], brand: "Brother" } : { color: "#000000", name: "Unknown" };
+}
+
+function readPES(bytes) {
+  const r = new In(bytes), sig = text(bytes.subarray(0, 8)), version = sig.slice(4, 8);
+  let pecAt = 8, chart = [];
+  if (sig !== "#PEC0001") {
+    r.p = 8; pecAt = r.u32();
+    try { chart = readChart(r, sig); } catch { chart = []; }
+  }
+
+  // PEC header: colour count at +48, then the palette bytes
+  r.p = pecAt + 48;
+  const c = r.byte() ?? 0, pec = [...bytes.subarray(r.p, Math.min(r.p + c + 1, bytes.length))];
+  let threads;
+  if (!chart.length) threads = pec.map(brotherThread);
+  else if (chart.length >= pec.length) threads = chart;
+  else {
+    const byKey = new Map();
+    let next = 0;
+    threads = pec.map((b) => {
+      const k = b % 65;
+      if (!byKey.has(k)) byKey.set(k, next < chart.length ? chart[next++] : brotherThread(b));
+      return byKey.get(k);
+    });
+  }
+
+  // stitch block, read as the machine does: the four bytes after 0x1E0, 0x1B0 are the design box, not a stitch
+  r.p = pecAt + 514;
+  r.u24(); r.skip(3);
+  const w = r.u16(), h = r.u16();
+  r.skip(4);
+  const bx = s12(r.be16()), by = s12(r.be16());
+  const st = [], toggles = [];
+  let x = 0, y = 0;
+  for (;;) {
+    const v1 = r.byte();
+    let v2 = r.byte();
+    if (v2 == null || (v1 === 0xff && v2 === 0)) break;
+    if (v1 === 0xfe && v2 === 0xb0) { toggles.push(r.byte()); st.push([x, y, COLOR_CHANGE]); continue; }
+    let jump = false, trim = false, dx, dy;
+    if (v1 & 0x80) {
+      trim = !!(v1 & 0x20); jump = !!(v1 & 0x10);
+      dx = s12((v1 << 8) | v2);
+      v2 = r.byte();
+      if (v2 == null) break;
+    } else dx = s7(v1);
+    if (v2 & 0x80) {
+      trim ||= !!(v2 & 0x20); jump ||= !!(v2 & 0x10);
+      const v3 = r.byte();
+      if (v3 == null) break;
+      dy = s12((v2 << 8) | v3);
+    } else dy = s7(v2);
+    if (!jump && trim) st.push([x, y, TRIM]);
+    x += dx; y += dy;
+    st.push([x, y, jump || trim ? JUMP : STITCH]);
+  }
+  st.push([x, y, END]);
+
+  // A file whose stitches leave its box was written pyembroidery's way: the "box" is really an opening jump.
+  const x0 = -bx, y0 = -by;
+  const misplaced = st.some(([sx, sy, sc]) => (sc === STITCH || sc === JUMP) &&
+    (sx < x0 - 1 || sx > x0 + w + 1 || sy < y0 - 1 || sy > y0 + h + 1));
+  const stitches = misplaced ? [[bx, by, JUMP], ...st.map(([sx, sy, sc]) => [sx + bx, sy + by, sc])] : st;
+  return { stitches, threads, format: "pes", version, toggles, pec, misplaced };
+}
+
+// DST: three jumps in a row mean a trim (DST has none); jump runs that come back to where they started go.
+function interpolateTrims(list) {
+  const s = list.slice();
+  let px = 0, py = 0, jumping = false, trimmed = true, start = 0, n = 0, jdx = 0, jdy = 0;
+  for (let i = 0; i < s.length; i++) {
+    const [x, y, c] = s[i], dx = x - px, dy = y - py;
+    px = x; py = y;
+    if (c === STITCH) { trimmed = false; jumping = false; }
+    else if (c === COLOR_CHANGE || c === TRIM) { trimmed = true; jumping = false; }
+    if (c !== JUMP) continue;
+    if (!jumping) { start = i; n = 0; jdx = 0; jdy = 0; jumping = true; }
+    n++; jdx += dx; jdy += dy;
+    if (!trimmed && n === 3) { s.splice(start, 0, [0, 0, TRIM]); start++; i++; trimmed = true; }
+    if (jdx === 0 && jdy === 0) { s.splice(start, i - start + 1); i = start - 1; }
+  }
+  return s;
+}
+
+function readDST(bytes) {
+  const threads = [];
+  for (const line of text(bytes.subarray(0, 512)).split(/[\r\n]/)) {
+    if (!line.startsWith("TC") || line.length <= 3) continue;
+    const [color, name] = line.slice(3).split(",").map((p) => p.trim());
+    threads.push({ color: color.startsWith("#") ? color : "#" + color, name: name || "" });
+  }
+  const bit = (v, k) => (v >> k) & 1, st = [];
+  let x = 0, y = 0;
+  for (let p = 512; p + 3 <= bytes.length; p += 3) {
+    const b0 = bytes[p], b1 = bytes[p + 1], b2 = bytes[p + 2];
+    const dx = 81 * (bit(b2, 2) - bit(b2, 3)) + 27 * (bit(b1, 2) - bit(b1, 3)) + 9 * (bit(b0, 2) - bit(b0, 3)) +
+      3 * (bit(b1, 0) - bit(b1, 1)) + (bit(b0, 0) - bit(b0, 1));
+    const dy = -(81 * (bit(b2, 5) - bit(b2, 4)) + 27 * (bit(b1, 5) - bit(b1, 4)) + 9 * (bit(b0, 5) - bit(b0, 4)) +
+      3 * (bit(b1, 7) - bit(b1, 6)) + (bit(b0, 7) - bit(b0, 6)));
+    if ((b2 & 0xf3) === 0xf3) break;
+    x += dx; y += dy;
+    if ((b2 & 0xc3) === 0xc3) st.push([x, y, COLOR_CHANGE]);
+    else if ((b2 & 0x43) === 0x43) continue;   // sequin mode: the needle moves, nothing sewn
+    else st.push([x, y, (b2 & 0x83) === 0x83 ? JUMP : STITCH]);
+  }
+  st.push([x, y, END]);
+  return { stitches: interpolateTrims(st), threads, format: "dst", version: "" };
+}
+
 export function readEmbroidery(bytes, filename = "design.pes") {
-  const ext = (filename.split(".").pop() || "").toLowerCase();
-  const head = new TextDecoder("latin1").decode(bytes.slice(0, 8));
-  if (head.startsWith("#PES") || head.startsWith("#PEC")) return readPES(bytes);
+  const ext = filename.slice(filename.lastIndexOf(".") + 1).toLowerCase();
+  const sig = text(bytes.subarray(0, 8));
+  if (sig.startsWith("#PES") || sig.startsWith("#PEC")) return readPES(bytes);
   if (ext === "dst") return readDST(bytes);
   if (ext === "pes" || ext === "pec") return readPES(bytes);
   throw new Error(`Can't open .${ext} files yet. Try a PES, PEC or DST file.`);
 }
 
-function makeOut() {
-  const o = { stitches: [], threads: [], x: 0, y: 0 };
-  o.stitch = (dx, dy) => { o.x += dx; o.y += dy; o.stitches.push([o.x, o.y, STITCH]); };
-  o.move = (dx, dy) => { o.x += dx; o.y += dy; o.stitches.push([o.x, o.y, JUMP]); };
-  o.cmd = (c) => o.stitches.push([o.x, o.y, c]);
-  return o;
+export function designStats(design) {
+  const s = design.stitches, [x0, y0, x1, y1] = extents(s, (e) => e[2] === STITCH);
+  let longest = 0;
+  for (let i = 1; i < s.length; i++) {
+    if (s[i][2] === STITCH && s[i - 1][2] === STITCH) longest = Math.max(longest, Math.hypot(s[i][0] - s[i - 1][0], s[i][1] - s[i - 1][1]));
+  }
+  return {
+    stitches: count(s, STITCH), jumps: count(s, JUMP), trims: count(s, TRIM), colorChanges: count(s, COLOR_CHANGE),
+    bounds: [x0, y0, x1, y1], widthMm: (x1 - x0) / 10, heightMm: (y1 - y0) / 10, longestMm: longest / 10,
+  };
 }
 
-function readPES(bytes) {
-  const r = new Reader(bytes), out = makeOut();
-  const sig = r.str(8);
-  const chart = [];
-  let version = sig.slice(4);
-  if (sig === "#PEC0001") {
-    readPEC(r, out, chart);
-  } else {
-    const pecPos = r.u32();
-    const skips = { "#PES0060": [36, 24], "#PES0050": [24, 24], "#PES0055": [24, 24], "#PES0056": [24, 24],
-      "#PES0070": [36, 24], "#PES0080": [38, 26] };
-    try {
-      if (skips[sig]) {
-        r.skip(4); for (let i = 0; i < 5; i++) r.pesString();
-        r.skip(skips[sig][0]); r.pesString(); r.skip(skips[sig][1]);
-        readThreadChart(r, chart);
-      } else if (sig === "#PES0090" || sig === "#PES0100") {
-        r.skip(4); for (let i = 0; i < 5; i++) r.pesString();
-        r.skip(14); r.pesString(); r.skip(sig === "#PES0090" ? 30 : 38); r.pesString(); r.skip(34);
-        readThreadChart(r, chart);
-      }
-    } catch { chart.length = 0; }
-    r.pos = pecPos;
-    readPEC(r, out, chart);
-  }
-  return { stitches: out.stitches, threads: out.threads, format: "pes", version, toggles: out.toggles || [], pec: out.pec,
-    misplaced: out.misplaced };
-}
+// Stitches that move the needle (PEC's zero-length anchors after jumps left out).
+const moves = (list) => list.filter((e, i) => e[2] === STITCH && (i === 0 || list[i - 1][0] !== e[0] || list[i - 1][1] !== e[1]));
 
-function readThreadChart(r, chart) {
-  if (r.u16() !== 0 || r.u16() !== 0 || r.u16() !== 0) return;  // fills / motifs / feathers: give up
-  const n = r.u16();
-  for (let i = 0; i < n; i++) {
-    const catalog = r.pesString();
-    const rgb = r.u24be(); r.skip(5);
-    const name = r.pesString(), brand = r.pesString(); r.pesString();
-    chart.push({ color: rgbToHex([(rgb >> 16) & 255, (rgb >> 8) & 255, rgb & 255]), name: name || "", brand, catalog });
-  }
-}
-
-function readPEC(r, out, chart) {
-  r.skip(3); r.str(16); r.skip(0xf);
-  r.u8(); r.u8();             // icon stride, height
-  r.skip(0xc);
-  const changes = r.u8(), count = changes + 1;
-  const colorBytes = Array.from(r.b.slice(r.pos, r.pos + count)); r.skip(count);
-  out.pec = colorBytes;   // what the machine itself shows for each block
-  const pec = (i) => { const t = PEC_THREADS[i % PEC_THREADS.length]; return t ? { color: rgbToHex([t[1], t[2], t[3]]), name: t[0], brand: "Brother" } : { color: "#000000", name: "Unknown" }; };
-  if (!chart.length) colorBytes.forEach((b) => out.threads.push(pec(b)));
-  else if (chart.length >= colorBytes.length) chart.forEach((t) => out.threads.push(t));
-  else {
-    const map = new Map(), pool = chart.slice();
-    for (const b of colorBytes) {
-      const k = b % PEC_THREADS.length;
-      if (!map.has(k)) map.set(k, pool.length ? pool.shift() : pec(k));
-      out.threads.push(map.get(k));
-    }
-  }
-  r.skip(0x1d0 - changes);
-  const blockEnd = r.u24() - 5 + r.pos;
-  r.skip(3);
-  const w = r.u16(), h = r.u16();
-  r.skip(4);                  // 0x1e0, 0x1b0
-  const s12 = (v) => { v &= 0xfff; return v > 0x7ff ? v - 0x1000 : v; };
-  // design box offset (-left, -top), read the way Brother machines read it: not a stitch
-  const px = s12((r.u8() << 8) | r.u8()), py = s12((r.u8() << 8) | r.u8());
-  const s7 = (v) => (v > 63 ? v - 128 : v);
-  for (;;) {
-    let v1 = r.u8(), v2 = r.u8();
-    if (v2 == null || (v1 === 0xff && v2 === 0x00)) break;
-    if (v1 === 0xfe && v2 === 0xb0) { (out.toggles ||= []).push(r.u8()); out.cmd(COLOR_CHANGE); continue; }
-    let jump = false, trim = false, x, y;
-    if (v1 & 0x80) {
-      if (v1 & 0x20) trim = true;
-      if (v1 & 0x10) jump = true;
-      x = s12((v1 << 8) | v2);
-      v2 = r.u8(); if (v2 == null) break;
-    } else x = s7(v1);
-    if (v2 & 0x80) {
-      if (v2 & 0x20) trim = true;
-      if (v2 & 0x10) jump = true;
-      const v3 = r.u8(); if (v3 == null) break;
-      y = s12((v2 << 8) | v3);
-    } else y = s7(v2);
-    if (jump) out.move(x, y);
-    else if (trim) { out.cmd(TRIM); out.move(x, y); }
-    else out.stitch(x, y);
-  }
-  out.cmd(END);
-  r.pos = blockEnd;
-  // stitches outside the box: a pyembroidery-style file whose box fields are really its opening jump. The machine
-  // loads it shifted and clipped; what was meant is that jump followed by the rest.
-  const x0 = -px, y0 = -py;
-  out.misplaced = out.stitches.some(([x, y, c]) => (c === STITCH || c === JUMP) &&
-    (x < x0 - 1 || x > x0 + w + 1 || y < y0 - 1 || y > y0 + h + 1));
-  if (out.misplaced) out.stitches = [[px, py, JUMP], ...out.stitches.map(([x, y, c]) => [x + px, y + py, c])];
-}
-
-function readDST(bytes) {
-  const out = makeOut();
-  const header = new TextDecoder("latin1").decode(bytes.slice(0, 512));
-  for (const line of header.split(/[\r\n]/)) {
-    if (line.startsWith("TC") && line.length > 3) {
-      const [hex, desc] = line.slice(3).split(",").map((s) => s.trim());
-      out.threads.push({ color: hex.startsWith("#") ? hex : "#" + hex, name: desc || "" });
-    }
-  }
-  const bit = (b, p) => (b >> p) & 1;
-  let sequin = false;
-  for (let i = 512; i + 3 <= bytes.length; i += 3) {
-    const [b0, b1, b2] = [bytes[i], bytes[i + 1], bytes[i + 2]];
-    const dx = bit(b2, 2) * 81 - bit(b2, 3) * 81 + bit(b1, 2) * 27 - bit(b1, 3) * 27 + bit(b0, 2) * 9 - bit(b0, 3) * 9
-      + bit(b1, 0) * 3 - bit(b1, 1) * 3 + bit(b0, 0) - bit(b0, 1);
-    const dy = -(bit(b2, 5) * 81 - bit(b2, 4) * 81 + bit(b1, 5) * 27 - bit(b1, 4) * 27 + bit(b0, 5) * 9 - bit(b0, 4) * 9
-      + bit(b1, 7) * 3 - bit(b1, 6) * 3 + bit(b0, 7) - bit(b0, 6));
-    if ((b2 & 0xf3) === 0xf3) break;
-    else if ((b2 & 0xc3) === 0xc3) { out.x += dx; out.y += dy; out.cmd(COLOR_CHANGE); }
-    else if ((b2 & 0x43) === 0x43) { out.x += dx; out.y += dy; sequin = !sequin; }
-    else if ((b2 & 0x83) === 0x83) out.move(dx, dy);
-    else out.stitch(dx, dy);
-  }
-  out.cmd(END);
-  return { stitches: interpolateTrims(out.stitches), threads: out.threads, format: "dst", version: "" };
-}
-
-// DST has no trim command: 3 jumps in a row mean "trim here" (pyembroidery's interpolate_trims),
-// and jump runs that go nowhere are dropped.
-function interpolateTrims(st, need = 3) {
-  st = st.slice();
-  let i = -1, ie = st.length - 1, x = 0, y = 0;
-  let count = 0, start = 0, jdx = 0, jdy = 0, jumping = false, trimmed = true;
-  while (i < ie) {
-    i++;
-    const s = st[i], dx = s[0] - x, dy = s[1] - y;
-    x = s[0]; y = s[1];
-    const c = s[2];
-    if (c === STITCH) { trimmed = false; jumping = false; }
-    else if (c === COLOR_CHANGE || c === TRIM) { trimmed = true; jumping = false; }
-    if (c === JUMP) {
-      if (!jumping) { jdx = 0; jdy = 0; count = 0; start = i; jumping = true; }
-      count++; jdx += dx; jdy += dy;
-      if (!trimmed && count === need) {
-        st.splice(start, 0, [0, 0, TRIM]);
-        start++; i++; ie++; trimmed = true;
-      }
-      if (jdx === 0 && jdy === 0) {
-        st.splice(start, i + 1 - start);
-        i = start - 1; ie = st.length - 1;
-      }
-    }
-  }
-  return st;
-}
-
-// ---------- shared helpers ----------
-export function designStats(d) {
-  const st = d.stitches;
-  let n = 0, jumps = 0, trims = 0, changes = 0, longest = 0;
-  const b = bounds(st.filter((s) => s[2] === STITCH));
-  for (let i = 0; i < st.length; i++) {
-    const c = st[i][2];
-    if (c === STITCH) {
-      n++;
-      if (i && st[i - 1][2] === STITCH) longest = Math.max(longest, Math.hypot(st[i][0] - st[i - 1][0], st[i][1] - st[i - 1][1]));
-    } else if (c === JUMP) jumps++;
-    else if (c === TRIM) trims++;
-    else if (c === COLOR_CHANGE) changes++;
-  }
-  return { stitches: n, jumps, trims, colorChanges: changes, bounds: b,
-    widthMm: (b[2] - b[0]) / 10, heightMm: (b[3] - b[1]) / 10, longestMm: longest / 10 };
-}
-
-function findAscii(bytes, name, from, end) {
-  const pat = new TextEncoder().encode(name);
-  outer: for (let i = from; i + pat.length <= end; i++) {
-    for (let k = 0; k < pat.length; k++) if (bytes[i + k] !== pat[k]) continue outer;
+function find(bytes, word, from, end) {
+  outer: for (let i = from; i + word.length <= end; i++) {
+    for (let k = 0; k < word.length; k++) if (bytes[i + k] !== word.charCodeAt(k)) continue outer;
     return i;
   }
   return -1;
 }
 
-// The PES section's design block: { w, h, stitches: [[x, y, cmd]] } in its own coordinates (from the design's
-// bottom-left), or null when the file has none (truncated PES).
-function readSewSeg(bytes, end) {
-  const one = findAscii(bytes, "CEmbOne", 12, end), seg = one < 0 ? -1 : findAscii(bytes, "CSewSeg", one, end);
+// The PES design block (what PE-Design opens) as w, h and stitches relative to the bottom-left; null if missing.
+function readDesignBlock(bytes, end) {
+  const one = find(bytes, "CEmbOne", 12, end), seg = one < 0 ? -1 : find(bytes, "CSewSeg", one, end);
   if (seg < 0) return null;
-  const r = new Reader(bytes.subarray(0, end)), s16 = (v) => (v > 0x7fff ? v - 0x10000 : v);
-  r.pos = one + 7 + 46; const w = r.u16(), h = r.u16();
-  r.pos = seg + 7;
-  const stitches = [];
-  for (;;) {
-    const flag = r.u16(); r.u16(); const n = r.u16();
-    if (n == null || r.pos + n * 4 > end) return null;
+  const r = new In(bytes, end);
+  r.p = one + 53;
+  const w = r.u16(), h = r.u16(), stitches = [];
+  r.p = seg + 7;
+  do {
+    const flag = r.u16();
+    r.u16();
+    const n = r.u16();
+    if (r.p + 4 * n > end) return null;
     const pts = [];
     for (let i = 0; i < n; i++) pts.push([s16(r.u16()), s16(r.u16())]);
-    if (flag === 1) stitches.push([...pts[pts.length - 1], JUMP]);
-    else pts.forEach(([x, y]) => stitches.push([x, y, STITCH]));
-    if (r.u16() !== 0x8003) break;
-  }
+    if (flag === 1) { const [x, y] = pts[n - 1]; stitches.push([x, y, JUMP]); }
+    else for (const [x, y] of pts) stitches.push([x, y, STITCH]);
+  } while (r.u16() === 0x8003);
   return { w, h, stitches };
 }
 
-// ---------- validation ----------
-// Re-read a PES we're about to hand out and prove it decodes to exactly the stitches we meant.
-// Returns { ok, error, decoded }. `source` (a pattern) is optional; without it the file only has to parse sanely.
+// Checks a PES file before it's handed out: it must read back as `source` (when given) and fit `hoop` (mm).
 export function validatePES(bytes, source = null, hoop = null) {
-  const fail = (error) => ({ ok: false, error });
-  if (!bytes || bytes.length < 0x200) return fail("The file is too short to be a PES file.");
-  const sig = new TextDecoder("latin1").decode(bytes.slice(0, 8));
-  if (!/^#PES\d{4}$/.test(sig)) return fail("The file doesn't start with a PES signature.");
+  const no = (error) => ({ ok: false, error });
+  if (!bytes || bytes.length < 512) return no("The file is too short to be a PES file.");
+  if (!/^#PES[0-9]{4}$/.test(text(bytes.subarray(0, 8)))) return no("The file doesn't start with a PES signature.");
   const pecAt = bytes[8] | (bytes[9] << 8) | (bytes[10] << 16) | (bytes[11] << 24);
-  if (pecAt < 12 || pecAt >= bytes.length) return fail("The PES file points to a missing stitch section.");
-  if (new TextDecoder("latin1").decode(bytes.slice(pecAt, pecAt + 3)) !== "LA:") return fail("The stitch section is damaged.");
+  if (pecAt < 12 || pecAt >= bytes.length) return no("The PES file points to a missing stitch section.");
+  if (text(bytes.subarray(pecAt, pecAt + 3)) !== "LA:") return no("The stitch section is damaged.");
   let d;
-  try { d = readEmbroidery(bytes, "check.pes"); } catch (e) { return fail("The file couldn't be read back: " + e.message); }
-  const got = d.stitches.filter((s) => s[2] === STITCH);
-  if (!got.length) return fail("The file has no stitches.");
-  if (d.misplaced) return fail("This file would load cut off on Brother machines (its design box doesn't match its stitches).");
-  if (d.stitches[d.stitches.length - 1][2] !== END) return fail("The file has no end marker.");
-  const blocks = d.stitches.filter((s) => s[2] === COLOR_CHANGE).length + 1;
-  if (d.toggles.some((t, i) => t !== (i % 2 === 0 ? 2 : 1))) return fail("A colour-change marker in the file is damaged.");
-  if (d.threads.length < blocks) return fail("The file has fewer thread colours than colour changes.");
+  try { d = readEmbroidery(bytes, "check.pes"); } catch (e) { return no("The file couldn't be read back: " + e.message); }
+  const st = d.stitches;
+  if (!st.some((e) => e[2] === STITCH)) return no("The file has no stitches.");
+  if (d.misplaced) return no("This file would load cut off on Brother machines (its design box doesn't match its stitches).");
+  if (st[st.length - 1][2] !== END) return no("The file has no end marker.");
+  if (!d.toggles.every((t, i) => t === (i % 2 ? 1 : 2))) return no("A colour-change marker in the file is damaged.");
+  const blocks = count(st, COLOR_CHANGE) + 1;
+  if (d.threads.length < blocks) return no("The file has fewer thread colours than colour changes.");
+
   if (source) {
-    // compare needle movements; PEC adds zero-length anchor stitches after jumps, which don't move the needle
-    const moves = (arr) => arr.filter((s, i) => s[2] === STITCH && !(i > 0 && arr[i - 1][0] === s[0] && arr[i - 1][1] === s[1]));
-    const want = moves(normalize(source)), gotMoves = moves(d.stitches);
-    if (want.length !== gotMoves.length) return fail(`Stitch count changed in the file (${gotMoves.length} vs ${want.length}).`);
+    const norm = normalize(source), want = moves(norm), got = moves(st);
+    if (want.length !== got.length) return no(`Stitch count changed in the file (${got.length} vs ${want.length}).`);
     for (let i = 0; i < want.length; i++) {
-      if (want[i][0] !== gotMoves[i][0] || want[i][1] !== gotMoves[i][1]) return fail(`Stitch ${i + 1} moved when written to the file.`);
+      if (want[i][0] !== got[i][0] || want[i][1] !== got[i][1]) return no(`Stitch ${i + 1} moved when written to the file.`);
     }
-    const wantBlocks = source.stitches.filter((s) => s[2] === COLOR_CHANGE).length + 1;
-    if (wantBlocks !== blocks) return fail("Colour changes were lost when writing the file.");
-    // the PES design block (what the PE900 sizes and places the design from) must hold the same stitches
-    const seg = readSewSeg(bytes, pecAt);
-    if (!seg) return fail("The file is missing its PES design block.");
-    const segMoves = moves(seg.stitches);
-    if (segMoves.length !== gotMoves.length) return fail("The PES design block doesn't match the stitches.");
-    const ox = gotMoves[0][0] - segMoves[0][0], oy = gotMoves[0][1] - segMoves[0][1];
-    if (segMoves.some((s, i) => s[0] + ox !== gotMoves[i][0] || s[1] + oy !== gotMoves[i][1]))
-      return fail("The PES design block doesn't match the stitches.");
-    const b = bounds(normalize(source));
-    if (seg.w !== b[2] - b[0] || seg.h !== b[3] - b[1] || ox !== b[0] || oy !== b[3])
-      return fail("The PES design block has the wrong size or position.");
+    if (count(source.stitches, COLOR_CHANGE) + 1 !== blocks) return no("Colour changes were lost when writing the file.");
+    const block = readDesignBlock(bytes, pecAt);
+    if (!block) return no("The file is missing its PES design block.");
+    const seg = moves(block.stitches), bad = "The PES design block doesn't match the stitches.";
+    if (seg.length !== got.length) return no(bad);
+    const ox = got[0][0] - seg[0][0], oy = got[0][1] - seg[0][1];
+    for (let i = 0; i < seg.length; i++) if (seg[i][0] + ox !== got[i][0] || seg[i][1] + oy !== got[i][1]) return no(bad);
+    const [x0, y0, x1, y1] = extents(norm);
+    if (block.w !== x1 - x0 || block.h !== y1 - y0 || ox !== x0 || oy !== y1) return no("The PES design block has the wrong size or position.");
   }
+
   if (hoop) {
-    // the same field every other check uses: the hoop less a 2 mm margin all round
-    const b = bounds(got), w = (b[2] - b[0]) / 10, h = (b[3] - b[1]) / 10, lw = hoop.w - 2 * MARGIN, lh = hoop.h - 2 * MARGIN;
-    if (w > lw || h > lh) return fail(`The design is ${w.toFixed(0)} × ${h.toFixed(0)} mm, but the ${hoop.name} fits ${lw} × ${lh} mm.`);
+    const [x0, y0, x1, y1] = extents(st, (e) => e[2] === STITCH), w = (x1 - x0) / 10, h = (y1 - y0) / 10;
+    const lw = hoop.w - 2 * MARGIN, lh = hoop.h - 2 * MARGIN;
+    if (w > lw || h > lh) return no(`The design is ${w.toFixed(0)} × ${h.toFixed(0)} mm, but the ${hoop.name} fits ${lw} × ${lh} mm.`);
   }
   return { ok: true, decoded: d };
 }
