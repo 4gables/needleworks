@@ -1,18 +1,21 @@
 /*! Needleworks (c) 2026 4Gables. All rights reserved. Proprietary, see LICENSE. https://4gables.com/needleworks/ */
 // Bookmark lettering fonts: CSS @font-face families in css/app.css. Print fonts get dashes instead of swashes.
+// `min`: the smallest x-height (mm) whose stitched "Abbie bee" still reads, sewn as a thin line (4 when not given;
+// looked at stitched, 2026-10-30): Allura's and Meow Script's e and b loops close under 6, Yellowtail's "ie" reads
+// "le" under 6, Ms Madi's bb runs together under 5.5. The Design tab says "too small" below it.
 export const FONTS = [
   { family: "NW Sacramento", name: "Sacramento", note: "flowing, joined" },
-  { family: "NW Allura", name: "Allura" },
-  { family: "NW Parisienne", name: "Parisienne" },
+  { family: "NW Allura", name: "Allura", min: 6 },
+  { family: "NW Parisienne", name: "Parisienne", min: 4.5 },
   { family: "NW Corinthia", name: "Corinthia" },
-  { family: "NW Ephesis", name: "Ephesis" },
-  { family: "NW Meow Script", name: "Meow Script" },
+  { family: "NW Ephesis", name: "Ephesis", min: 4.5 },
+  { family: "NW Meow Script", name: "Meow Script", min: 6 },
   { family: "NW Great Vibes", name: "Great Vibes", note: "like Cinderella" },
-  { family: "NW Alex Brush", name: "Alex Brush", note: "like Birds of Paradise" },
-  { family: "NW Ms Madi", name: "Ms Madi", note: "like Southampton" },
+  { family: "NW Alex Brush", name: "Alex Brush", note: "like Birds of Paradise", min: 5 },
+  { family: "NW Ms Madi", name: "Ms Madi", note: "like Southampton", min: 5.5 },
   { family: "NW Satisfy", name: "Satisfy", note: "like Amarillo" },
   { family: "NW Cookie", name: "Cookie", note: "like Cream Candy" },
-  { family: "NW Yellowtail", name: "Yellowtail", note: "like Moon Time" },
+  { family: "NW Yellowtail", name: "Yellowtail", note: "like Moon Time", min: 6 },
   { family: "NW Rouge Script", name: "Rouge Script", note: "like Chopin Script" },
   { family: "NW Italianno", name: "Italianno", note: "like Bickley Script" },
   { family: "NW Quicksand", name: "Quicksand", note: "print", print: true },
