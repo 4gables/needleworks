@@ -659,7 +659,7 @@ export function initStudio(api) {
   // two colours in a row that are the same spool of theirs ("Threads I own"): keep it on, not "change to the next thread"
   function sameSpool(steps) {
     return steps.map((st, i) => {
-      const a = i && st.you && st.color !== steps[i - 1].color && api.ownSpool?.(steps[i - 1].color);
+      const a = i && st.you && !st.rehoop && !steps[i - 1].rehoop && st.color !== steps[i - 1].color && api.ownSpool?.(steps[i - 1].color);
       if (!a || a !== api.ownSpool(st.color)) return st;
       const keep = `Keep the same thread on (both colours are your ${a})`;
       return { ...st, you: st.you.replace(/^Change to the next thread and press Start\.$/, `${keep} and press Start.`).replace(/^Change to the next thread\. /, `${keep}. `) };
