@@ -170,6 +170,19 @@ const SAME = 7;
 const HUED = 4, HUE = 35;
 // degrees between two Lab colours' hues
 const hueOff = (p, q) => { const d = (Math.abs(Math.atan2(p[2], p[1]) - Math.atan2(q[2], q[1])) * 180) / Math.PI; return d > 180 ? 360 - d : d; };
+// Hue families (Lab hue angles where Brother's own thread names change): red/pink, orange/brown, yellow (to Lemon
+// Yellow at 108), green (from Fresh Green at 110), blue, purple. Colour science puts a pale sage (hue 115) as near
+// Cream Brown (107) or Beige (96) as Mint Green (131), but it reads green and they read yellow and tan.
+const FAMILY = [40, 85, 109, 170, 290, 345];
+const hueAt = (p) => ((Math.atan2(p[2], p[1]) * 180) / Math.PI + 360) % 360;
+const familyOf = (h) => { const i = FAMILY.findIndex((e) => h < e); return i < 0 ? 0 : i; };
+// 0 when q is in p's family, else how far p's hue is inside its own family (in full 4 degrees from the edge)
+const across = (p, q) => {
+  const h = hueAt(p), f = familyOf(h);
+  if (f === familyOf(hueAt(q))) return 0;
+  const d = (e) => { const t = Math.abs(h - e) % 360; return t > 180 ? 360 - t : t; };
+  return Math.min(1, Math.min(d(FAMILY[(f + 5) % 6]), d(FAMILY[f])) / 4);
+};
 
 // Lab of every opaque pixel (-1: see-through)
 function pixels(img) {
@@ -258,13 +271,21 @@ export function learnColours(img, opts = {}) {
   // flower, a yellow bird) outlasts the shades of one dark outline. The difference weighs hue more (kH 0.6), so
   // distinct hues beat light and dark shades of one, and dark colours' hue fades out below L 30 (thread that dark
   // reads as black: etsy_5's outline took Dark Gray, Dark Brown, Black and Dark Olive).
-  // Two colours of different hue families (over 45 degrees apart, both with a hue) cost up to 30% more to merge: at 5
+  // Two colours of different hues (over 45 degrees apart, both with a hue) cost up to 30% more to merge: at 5
   // colours etsy_1's pale pink flowers joined the lilac ones (one grey-mauve thread) rather than two blues or two greens.
+  // Two of different hue families cost 70% more (ΔE weighs a vivid yellow against a pale sage as little as a pink
+  // against a red: etsy_2's daffodils and tansy were sage green to 6 colours), and a colour with a hue against a
+  // grey, white or black one 50% more (it would lose the hue: etsy_5's lawn joined the black outline, not Woodstock).
+  // A big colour (a tenth of the design) costs up to 50% more to merge than a small one: etsy_8's red and pink roses
+  // were one Amber Red at 6 colours while its teal and blue flowers had a thread each.
   const dim = ([L, a, b]) => { const f = Math.min(1, L / 30); return [L, a * f, b * f]; };
   const apart = (p, q) => {
-    const P = dim(p), Q = dim(q), v = deltaE2000(P, Q, 1, 0.6), c = Math.min(Math.hypot(P[1], P[2]), Math.hypot(Q[1], Q[2]));
-    if (c <= HUED) return v;
-    return v * (1 + 0.3 * Math.min(1, c / 8) * Math.min(1, Math.max(0, hueOff(P, Q) - 45) / 45));
+    const P = dim(p), Q = dim(q), v = deltaE2000(P, Q, 1, 0.6), cp = Math.hypot(P[1], P[2]), cq = Math.hypot(Q[1], Q[2]);
+    const lo = Math.min(cp, cq), hi = Math.max(cp, cq);
+    if (hi <= HUED) return v;
+    const grey = Math.min(1, Math.max(0, (10 - lo) / 6)), hue = lo <= HUED ? 0 : Math.min(1, lo / 8) *
+      Math.max(0.3 * Math.min(1, Math.max(0, hueOff(P, Q) - 45) / 45), 0.7 * Math.max(across(P, Q), across(Q, P)));
+    return v * (1 + grey * 0.5 * Math.min(1, (hi - HUED) / 8) + (1 - grey) * hue);
   };
   const ink = [];
   for (let j = 0; j < K; j++) if (area[j] && !isBg(j)) ink.push(j);
@@ -289,7 +310,7 @@ export function learnColours(img, opts = {}) {
   };
   let groups = ink.map((j) => ({ lab: C[j].slice(), area: area[j], members: [j] }));
   for (const g of groups) g.eff = effOf(g);
-  const weight = (g) => Math.min(1, Math.sqrt(g.eff / (0.005 * A))), bgLab = bg >= 0 ? C[bg] : null;
+  const weight = (g) => Math.min(1, Math.sqrt(g.eff / (0.005 * A))) * (1 + 0.5 * Math.min(1, g.eff / (0.1 * A))), bgLab = bg >= 0 ? C[bg] : null;
   const join = (a, b) => {   // b into a
     const t = a.area + b.area;
     a.lab = a.lab.map((v, q) => (v * a.area + b.lab[q] * b.area) / t);
@@ -325,15 +346,31 @@ export function learnColours(img, opts = {}) {
     return s.map((v) => Math.round(v / Math.max(1, k)));
   };
   // A colour with a hue keeps it: a grey thread counts as further away the more colourful the colour is (x1.9 at
-  // chroma 15), and so, gradually, does a thread of another hue (over HUE degrees off, in full from 90). Brother's
+  // chroma 15; threads under chroma 10 count as grey in part: Warm Gray is 5), and so, gradually, does a thread of
+  // another hue (over HUE degrees off, in full from 90), and half that for one of another hue family. Brother's
   // threads have no sage or dusty blue: nearest by difference alone, etsy_1's sage leaves were "Gray" and its blue
-  // flowers "Silver", so the picture sewed as grey silhouettes.
+  // flowers "Silver", so the picture sewed as grey silhouettes; etsy_2's sage stems were Beige.
   const cost = (lab, q) => {
     const v = deltaE2000(lab, q), c = Math.hypot(lab[1], lab[2]) * Math.min(1, lab[0] / 30);
     if (c <= HUED) return v;
-    const k = 0.08 * (c - HUED);
-    return v * (1 + (Math.hypot(q[1], q[2]) < HUED ? k : k * Math.min(1, Math.max(0, hueOff(lab, q) - HUE) / 55)));
+    const k = 0.08 * (c - HUED), grey = Math.min(1, Math.max(0, (10 - Math.hypot(q[1], q[2])) / 6));
+    const off = Math.max(Math.min(1, Math.max(0, hueOff(lab, q) - HUE) / 55), 0.5 * across(lab, q));
+    return v * (1 + k * (grey + (1 - grey) * off));
   };
+  // A colour made of several (merged at a low count) takes the thread that suits most of its solid parts best, each
+  // part's difference capped at FAR: the thread nearest their mean suited none of them (etsy_5's grass and Woodstock
+  // were Russet Brown, etsy_3's yellow and tan flowers Khaki, etsy_8's red roses and black outline Dark Fuchsia).
+  const FAR = 20;
+  const partsOf = (g) => {
+    const gm = g.members.reduce((t, v) => (t | (1 << v)) >>> 0, 0), sum = new Map();
+    for (const [m, c] of sets) if (!(Math.floor(m / 32) & ~gm)) {
+      const j = m % 32, t = tone.get(m), u = sum.get(j) || sum.set(j, [0, 0, 0, 0]).get(j);
+      u[0] += t[0]; u[1] += t[1]; u[2] += t[2]; u[3] += c;
+    }
+    const parts = [...sum.values()].map((u) => ({ lab: srgbToLab(u[0] / u[3], u[1] / u[3], u[2] / u[3]), w: u[3] }));
+    return parts.length ? parts : g.members.map((j) => ({ lab: C[j], w: area[j] }));
+  };
+  const fit = (parts, q) => { let s = 0, t = 0; for (const p of parts) { s += p.w * Math.min(FAR, cost(p.lab, q)); t += p.w; } return s / t; };
   // (nor the background's thread, unless it's that colour: etsy_7's pale grey lines on white were "White")
   const bgHex = bg >= 0 ? rgbToHex(rgb[bg].map((v) => Math.round(v / Math.max(1, area[bg])))) : null;
   const bgThread = bgHex ? nearestBrotherThread(bgHex).index : -1;
@@ -342,12 +379,11 @@ export function learnColours(img, opts = {}) {
     const taken = new Map();
     let worse = null;
     for (const g of groups) {
-      g.picture = rgbToHex(pictureOf(g));
-      const lab = srgbToLab(...hexToRgb(g.picture));
+      g.picture = rgbToHex(pictureOf(g)); g.parts = partsOf(g);
       let best = -1, bd = Infinity, own = -1, od = Infinity;
       pec.forEach((q, i) => {
         if (!q) return;
-        const v = cost(lab, q);
+        const v = fit(g.parts, q);
         if (i === bgThread && v > SAME) return;
         if (v < od) { od = v; own = i; }
         if (!taken.has(i) && i !== g.ban && v < bd) { bd = v; best = i; }
@@ -362,8 +398,7 @@ export function learnColours(img, opts = {}) {
     // lilac took Lavender and its blue flowers, closer to Lavender, had none left at 6 colours)
     const [g, by, own] = worse;
     if (by.ban === undefined && by.got <= Math.max(15, by.own + 10) && g.ban === undefined) {
-      const lab = srgbToLab(...hexToRgb(by.picture));
-      const alt = Math.min(...pec.map((q, i) => (q && i !== own && !taken.has(i) && (i !== bgThread || cost(lab, q) <= SAME) ? cost(lab, q) : Infinity)));
+      const alt = Math.min(...pec.map((q, i) => (q && i !== own && !taken.has(i) && (i !== bgThread || fit(by.parts, q) <= SAME) ? fit(by.parts, q) : Infinity)));
       if (alt <= Math.max(15, by.own + 10)) { by.ban = own; continue; }
     }
     join(by, g); groups.splice(groups.indexOf(g), 1);
@@ -804,7 +839,9 @@ function build(img, analysis, opts) {
   const used = colors.filter((c) => !c.background && c.area > 0 && !(o.skip || []).includes(c.id))
     .sort((a, b) => b.lightness - a.lightness);   // light first, dark details on top
   const summary = [], stitched = new Set(used.map((c) => c.id));
-  const fine = { narrowMm2: 0, hairlines: 0 };   // details too small to stitch cleanly (shown as a hint)
+  const fine = { narrowMm2: 0, hairlines: 0, inkMm2: 0 };   // details too small to stitch cleanly (shown as a hint)
+  for (let i = 0; i < w * h; i++) if (stitched.has(labels[i])) fine.inkMm2++;
+  fine.inkMm2 /= res * res;
   // ignore specks: under 1.5 mm², or under 4 mm² and under 2.5 mm across (a dot, not a stem: each speck left was a
   // trim, two locks and often a loose thread; 4 mm² for all erased the thin stems of a line-art bouquet)
   const minPx = 1.5 * res * res, dotPx = 4 * res * res, dotW = 2.5 * res;
@@ -1393,14 +1430,16 @@ function crossStitch(img, analysis, opts) {
 // picture could never fill the hoop. box: the part of the picture whose colours were learned ({ sx, sy, sw, sh },
 // picture px); boxes: the extent of each colour to be sewn, fractions of box ([x0, y0, x1, y1], from learnColours).
 // Returns where to cut the picture (`crop`, picture px, and `frac`, fractions of box), the working size in px to draw
-// it at, and `max`: the largest longer side (mm) that fits the hoop field.
-export function picturePlan(box, boxes, sizeMm, hoop, res = DEFAULTS.res) {
+// it at, and `max`: the largest longer side (mm) that fits the hoop field. `fit`: how much bigger to draw it than its
+// colours' extent says, learned from the last time it was sewn (the edges' blend pixels and specks aren't sewn: 100 mm
+// came out 99 x 88).
+export function picturePlan(box, boxes, sizeMm, hoop, res = DEFAULTS.res, fit = 1) {
   let x0 = 1, y0 = 1, x1 = 0, y1 = 0;
   for (const b of boxes) if (b[2] > b[0] && b[3] > b[1]) { x0 = Math.min(x0, b[0]); y0 = Math.min(y0, b[1]); x1 = Math.max(x1, b[2]); y1 = Math.max(y1, b[3]); }
   if (x1 <= x0 || y1 <= y0) { x0 = y0 = 0; x1 = y1 = 1; }
   const cw = (x1 - x0) * box.sw, ch = (y1 - y0) * box.sh, L = Math.max(cw, ch);
   const maxW = hoop.w - 2 * MARGIN - 2, maxH = hoop.h - 2 * MARGIN - 2, max = L * Math.min(maxW / cw, maxH / ch);
-  const s = Math.min(sizeMm, max) / L;   // mm per picture px
+  const s = (Math.min(sizeMm, max) * fit) / L;   // mm per picture px
   // (a little room round it: 2% and 3 working px)
   const m = 0.02 * L + 3 / (s * res);
   const sx = Math.max(box.sx, box.sx + x0 * box.sw - m), sy = Math.max(box.sy, box.sy + y0 * box.sh - m);
