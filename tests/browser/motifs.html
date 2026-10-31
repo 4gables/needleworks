@@ -1,13 +1,13 @@
 <!doctype html><meta charset="utf-8"><title>Motifs</title>
 <style>body{margin:0;padding:8px;font:12px sans-serif;background:#fff} .g{display:grid;gap:6px} .c{text-align:center} canvas{display:block;border:1px solid #ddd;background:#fff} </style>
 <!-- Contact sheets of js/studio/motifs.js. ?sheet=shapes (each shape filled; red = parts thinner than 26 units, blue =
-     gaps narrower than 26, i.e. 2.5 mm at 25 mm) or ?sheet=stitch&from=0&to=10 (fill / outline / appliqué at 25 and
-     50 mm, stitched with the Design tab's own code). Title reads DONE when drawn. -->
+     gaps narrower than 26, i.e. 2.5 mm at 25 mm; &gap=N / &thin=N for other widths) or ?sheet=stitch&from=0&to=10 (fill / outline / appliqué at 25 and
+     50 mm, stitched with the Design tab's own code). &only=heart,star picks motifs. Title reads DONE when drawn. -->
 <div id="g" class="g"></div>
 <script type="module">
 const q = new URLSearchParams(location.search), v = q.get("v") || "1";
 const { MOTIFS } = await import(`../../js/studio/motifs.js?v=${v}`);
-const keys = Object.keys(MOTIFS), g = document.getElementById("g");
+const keys = q.get("only") ? q.get("only").split(",") : Object.keys(MOTIFS), g = document.getElementById("g");
 const cell = (label, w, h) => { const d = document.createElement("div"); d.className = "c"; const c = document.createElement("canvas"); c.width = w; c.height = h; c.style.width = w + "px"; c.style.height = h + "px"; d.append(c, label); g.append(d); return c; };
 
 // squared distance transform (Felzenszwalb) of a 0/1 grid: distance to the nearest 1
@@ -33,17 +33,17 @@ function edt(f, W, H) {
 
 if ((q.get("sheet") || "shapes") === "shapes") {
   g.style.gridTemplateColumns = "repeat(6, 262px)";
-  const R = 13, R2 = R * R;
+  const R2 = (+(q.get("gap") || 26) / 2) ** 2, T2 = (+(q.get("thin") || 26) / 2) ** 2;
   for (const k of keys) {
     const c = cell(k, 256, 256), ctx = c.getContext("2d");
     ctx.fillStyle = "#222"; ctx.fill(new Path2D(MOTIFS[k].d));
     const img = ctx.getImageData(0, 0, 256, 256), ink = new Uint8Array(256 * 256), bg = new Uint8Array(256 * 256);
     for (let i = 0; i < ink.length; i++) { ink[i] = img.data[i * 4 + 3] > 127 ? 1 : 0; bg[i] = 1 - ink[i]; }
-    const dBg = edt(bg, 256, 256), eroded = dBg.map((x) => (x > R2 ? 1 : 0)), dEr = edt(eroded, 256, 256);
+    const dBg = edt(bg, 256, 256), eroded = dBg.map((x) => (x > T2 ? 1 : 0)), dEr = edt(eroded, 256, 256);
     const dInk = edt(ink, 256, 256), notDil = dInk.map((x) => (x > R2 ? 1 : 0)), dNd = edt(notDil, 256, 256);
     let thin = 0, gap = 0;
     for (let i = 0; i < ink.length; i++) {
-      if (ink[i] && dEr[i] > R2) { img.data.set([230, 40, 40, 255], i * 4); thin++; }
+      if (ink[i] && dEr[i] > T2) { img.data.set([230, 40, 40, 255], i * 4); thin++; }
       else if (!ink[i] && dNd[i] > R2) { img.data.set([40, 110, 230, 255], i * 4); gap++; }
     }
     ctx.putImageData(img, 0, 0);
