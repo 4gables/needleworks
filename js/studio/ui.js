@@ -481,7 +481,8 @@ export function initStudio(api) {
       // (the frame it's on: the nearest earlier one whose box holds its middle)
       const host = pieces.slice(0, pieces.indexOf(p)).reverse().find((f) => f.kind === "frame" && Math.abs(p.x - f.x) < f.w / 2 && Math.abs(p.y - f.y) < (f.shape === "circle" ? f.w : f.h) / 2);
       const inside = host && host.id === near.id, frameName = host && api.escapeHtml(label(host).toLowerCase());
-      const cs = lettering || p.kind === "motif" ? clearSize(p, pieces, near) : 0;
+      // (checked like every other fix: clear of the frame at 19 mm, a monogram ran into the R beside it instead)
+      const cs = ((c) => (c && landing(p, { size: c }).fits === "fits" && !touchingAll({ ...q, size: fittedSizes(pieces.map((o) => (o.id === p.id ? { ...p, size: c } : o))).get(p.id) ?? c }, pieces).length ? c : 0))(lettering || p.kind === "motif" ? clearSize(p, pieces, near) : 0);
       // (no size clears it: a spot in the frame that does, at a size that fits there, else no advice that can't work;
       // "Make it smaller." with no button sat under a monogram across a pouch's zipper)
       const to = host && !cs ? spotIn(p) : null, zip = host?.border === "zip";
@@ -526,7 +527,9 @@ export function initStudio(api) {
     // lines typed into a curved shape (they're joined into one line: a 3-line text on a wave came out 203 mm long
     // with nothing said)
     const rows = p.kind === "text" ? p.text.split("\n").filter((l) => l.trim()).length : 0;
-    const oneLine = rows > 1 && p.shape !== "straight" ? `${TEXT_SHAPES[p.shape]} sews the words on one line, so the ${rows} lines are joined into one. ${btn(`data-seg-set="shape:straight"`, "Make it straight")} to keep the lines.` : "";
+    // (offered where the lines then land: straight, "Lily / Rose" on two lines ran into the "Emma" under it)
+    const straight = rows > 1 && p.shape !== "straight" ? landing(p, { shape: "straight" }) : null;
+    const oneLine = straight ? `${TEXT_SHAPES[p.shape]} sews the words on one line, so the ${rows} lines are joined into one. ${straight.fits ? `${btn(`data-seg-set="shape:straight"`, "Make it straight", straight)} to keep the lines.` : `Straight, the lines would ${straight.out ? "go outside" : straight.hit ? `run into ${api.escapeHtml(label(straight.hit))}` : "be too big for the hoop"}: give it more room first.`}` : "";
     // (said plainly, with a one-tap fix where there is one)
     w.innerHTML = [named, oneLine, under, same, kerned, small,
       gone.length ? `This font has no ${gone.map((c) => `“${api.escapeHtml(c)}”`).join(" ")}: ${gone.length === 1 ? "it" : "they"} would be stitched in a stand-in letter. Take ${gone.length === 1 ? "it" : "them"} out or try another font.` : "",
@@ -1350,13 +1353,13 @@ export function initStudio(api) {
     const bl = e.target.closest("button[data-blend]");
     if (bl) { change((p) => (p.blend = bl.dataset.blend), true, true); editor(); return; }
     if (e.target.closest("[data-kern-reset]")) { change((p) => delete p.kern, true); editor(); return; }
-    const ss = e.target.closest("[data-seg-set]");
-    if (ss) { const [k, v] = ss.dataset.segSet.split(":"); change((p) => (p[k] = v), true, true); editor(); return; }
-    const sz = e.target.closest("[data-size]");
-    // (an arched word made bigger gets the curve it then needs too, so the size it was told reads)
     // (`data-turn`: the fix only fits with the hoop turned, so it turns it too)
     // (part of the same change, one Undo for both: the Turn button made it a second step)
     const turnToo = (b) => { if (b.hasAttribute("data-turn")) { api.setTurn(!api.turned()); api.fit(); clearTimeout(timer); make(); } };
+    const ss = e.target.closest("[data-seg-set]");
+    if (ss) { const [k, v] = ss.dataset.segSet.split(":"); change((p) => (p[k] = v), true, true); turnToo(ss); editor(); return; }
+    const sz = e.target.closest("[data-size]");
+    // (an arched word made bigger gets the curve it then needs too, so the size it was told reads)
     if (sz) { change((p) => Object.assign(p, sizeChange(p, +sz.dataset.size)), true); turnToo(sz); editor(); return; }
     const rm = e.target.closest("[data-room]");
     if (rm) { change((p) => { Object.assign(p, archRoom(p) || {}); Object.assign(p, archFit(p) || {}); }, true); turnToo(rm); editor(); return; }

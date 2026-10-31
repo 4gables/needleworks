@@ -12,6 +12,7 @@
 //   key NAME [mods]        Enter, Tab, Backspace, ArrowLeft, Escape, a ... ; mods: shift,ctrl,meta,alt (comma list)
 //   upload CSS FILE...     set files on an <input type=file>
 //   eval JS                evaluate (awaits promises), prints JSON
+//   profile JS             eval under the CPU profiler: the 25 functions with the most self time
 //   text                   document.body.innerText
 //   els                    visible buttons/inputs/links with centre coords
 //   dark on|off            emulate prefers-color-scheme
@@ -154,6 +155,14 @@ async function run(cmd, args) {
       await sleep(1500); out.push("uploaded"); break;
     }
     case "eval": out.push(JSON.stringify(await ev(args.join(" ")), null, 1)); break;
+    case "profile": {   // profile JS: run JS under the CPU profiler, print the 25 functions with the most self time (ms)
+      await s.send("Profiler.enable"); await s.send("Profiler.setSamplingInterval", { interval: 200 }); await s.send("Profiler.start");
+      const r = await ev(args.join(" ")); const { profile: pr } = await s.send("Profiler.stop");
+      const dt = new Map(pr.nodes.map((n) => [n.id, 0])); pr.samples.forEach((id, i) => dt.set(id, dt.get(id) + (pr.timeDeltas[i] || 0) / 1000));
+      const self = new Map();
+      for (const n of pr.nodes) { const f = n.callFrame, k = `${f.functionName || "(anon)"} ${f.url.split("/").pop()}:${f.lineNumber + 1}`; self.set(k, (self.get(k) || 0) + dt.get(n.id)); }
+      out.push(JSON.stringify(r), ...[...self].sort((a, b) => b[1] - a[1]).slice(0, 25).map(([k, v]) => `${v.toFixed(0).padStart(6)} ${k}`)); break;
+    }
     case "text": out.push(await ev("document.body.innerText")); break;
     case "els": {
       out.push(await ev(`[...document.querySelectorAll('button,a,input,select,textarea,label,summary,[role=button],[tabindex]')]

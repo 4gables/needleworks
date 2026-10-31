@@ -390,7 +390,7 @@ async function exec(d) {
       act.done = true; break;
     }
     case "bigfix": {
-      const bs = all("#st-big button"); if (!bs.length) return { ...act, skipped: true };
+      const bs = $("st-big").hidden ? [] : all("#st-big button"); if (!bs.length) return { ...act, skipped: true };   // (its old buttons stay in it, hidden)
       const b = at(bs, d.a); act.what = b.textContent.trim(); if (/two hoopings/.test(act.what)) { chose2 = true; act.allowBig = true; }
       act.extra.push(...(await tryFix(b, false))); act.done = true; break;
     }

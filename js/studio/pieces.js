@@ -1389,7 +1389,7 @@ const pick = (v, ok, d) => (ok.includes(v) ? v : d);
 const BIG = 180;
 // (as small as Fit to hoop makes things, so a saved design opens as it was: a fitted 6.5 mm monogram reopened at 10;
 // the editor warns about sizes too small to stitch)
-const MIN = 2;
+const MIN = 0.5;
 export function cleanPiece(p) {
   if (!p || typeof p !== "object" || Array.isArray(p)) return null;
   // (a place far past any hoop is taken as the middle, not the hoop's edge: x 1e9 made a 1072 mm design)
