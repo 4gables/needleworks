@@ -361,7 +361,7 @@ export function initStudio(api) {
       // shrink with the words added to it (it could only be moved and turned: Fit to hoop shrank just the words)
       const pct = Math.round((p.scale || 1) * 100);
       h += `<label class="range"><span>Size</span><input type="range" data-file-scale min="${FILE_SCALE[0] * 100}" max="${FILE_SCALE[1] * 100}" step="1" value="${pct}"><output>${fileSize(p, pct / 100)}</output></label>`;
-      h += `<p class="hint">${api.escapeHtml(p.name)}: ${p.pending ? "re-stitching it at this size…" : pct === 100 ? "its stitches exactly as they are in the file." : "re-stitched at this size, with the stitches spaced as the file had them."}</p>`;
+      h += `<p class="hint">${api.escapeHtml(p.name)}: ${p.pending ? "re-stitching it at this size…" : pct === 100 ? "its stitches exactly as they are in the file." : `made ${pct < 100 ? "smaller" : "bigger"} from its own stitches, spaced as closely as the file had them.`}</p>`;
     }
     if (p.kind === "text" || p.kind === "monogram") h += `<p class="hint" data-fit hidden></p>`;
     if (p.kind !== "frame") h += `<p class="hint warn" data-warn aria-live="polite" hidden></p>`;
