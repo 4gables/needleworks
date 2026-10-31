@@ -5,6 +5,8 @@ import { followRun, resample, smooth } from "../core/geom.js";
 import { distanceTransform } from "../core/raster.js";
 
 const RES = 4;
+// one frame's quilting (`withQuilt` in pieces.js, and js/quilt-worker.js off the page: the same code, the same stitches)
+export const quiltOf = ({ kind, edge, obstacles, opts }) => (kind === "echo" ? echo : stipple)(edge, obstacles, opts);
 
 // free space: inside `edge` (closed polygon) by `inset` mm, at least `clear` mm from every point of `obstacles` and
 // from every filled shape in `solids` (each a list of closed loops, even-odd: an appliqué's fabric, a patch, a filled
