@@ -484,7 +484,9 @@ Embroidery-file tools for home machines. Two implementations of the same engine:
     another project's table.
   - Drawings are drawn here, without looking at other icon sets.
   - The spirit: if we can build it ourselves, we build it ourselves. Using someone else's code or asset needs a good
-    reason, i.e. we couldn't make it to the same standard ourselves (a hand-designed typeface is the example).
+    reason:
+    - it's clearly better for our customers (a hand-designed typeface beats one we'd draw), or
+    - it's the industry standard (people expect that exact thing, and our own version would be a worse copy).
   - Exception, only with such a reason: free assets under a permissive licence (OFL, MIT, Apache). They may be
     committed as is, each with its licence text beside it and a line in `THIRD_PARTY_NOTICES.md` saying why we didn't
     make our own. Today that's the bundled fonts. Code, ported code and data tables never fall under this exception.
