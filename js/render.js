@@ -61,7 +61,8 @@ export const CLOTHS = {
 };
 
 // opts: { fabric (CLOTHS key), fabricShapeBlock, hide: Set, upto, ghost (stitches after upto drawn faint), heat (Map "cx,cy" -> hits per mm²), backdrop ({ bmp, unit, center }: a photo under it), hoop: {w,h} (mm), showHoop, zoom, pan: [x,y], center: [x,y] (0.1 mm),
-//         pad, padTop, padBottom (px kept clear), cache (colorBlocks result), showNeedle (a needle at upto), fieldColor (fill inside the hoop), real (thread twist when zoomed in) }
+//         pad, padTop, padBottom (px kept clear), cache (colorBlocks result), showNeedle (a needle at upto), fieldColor (fill inside the hoop), real (thread twist when zoomed in),
+//         boxes ([[x0, y0, x1, y1]] mm: each hooping of a split design) }
 export function draw(canvas, design, opts = {}) {
   const dpr = window.devicePixelRatio || 1;
   const W = canvas.clientWidth, H = canvas.clientHeight;
@@ -74,7 +75,9 @@ export function draw(canvas, design, opts = {}) {
   // (nothing to stitch yet still shows the hoop it would go in)
   if (!design && !(opts.hoop && opts.showHoop !== false)) return null;
   const { blocks, total } = design ? opts.cache || colorBlocks(design) : { blocks: [], total: 0 };
-  const [x0, y0, x1, y1] = bbox(blocks);
+  let [x0, y0, x1, y1] = bbox(blocks);
+  // (outlines drawn over it, mm: each hooping of a split design; the view takes them in)
+  for (const [a, b, c, d] of opts.boxes || []) { x0 = Math.min(x0, a * 10); y0 = Math.min(y0, b * 10); x1 = Math.max(x1, c * 10); y1 = Math.max(y1, d * 10); }
   // centred on the design, or on a fixed point (the Design tab keeps the hoop centre still while pieces move)
   const cxd = opts.center ? opts.center[0] : (x0 + x1) / 2, cyd = opts.center ? opts.center[1] : (y0 + y1) / 2;
   const hoop = opts.hoop && opts.showHoop !== false ? opts.hoop : null;
@@ -101,6 +104,15 @@ export function draw(canvas, design, opts = {}) {
     roundRect(ctx, hx - 8, hy - 8, hw + 16, hh + 16, r + 6); ctx.stroke();
     ctx.setLineDash([4, 5]); ctx.lineWidth = 1; ctx.strokeStyle = opts.fieldLine || "rgba(120,100,90,0.45)";
     roundRect(ctx, hx, hy, hw, hh, r * 0.6); ctx.stroke();
+    ctx.restore();
+  }
+  if (opts.boxes) {   // each hooping's field, dashed and numbered
+    ctx.save(); ctx.setLineDash([7, 5]); ctx.lineWidth = 1.5; ctx.font = "600 12px system-ui, sans-serif";
+    opts.boxes.forEach(([a, b, c, d], i) => {
+      ctx.strokeStyle = ctx.fillStyle = i ? "rgba(176,72,32,0.9)" : "rgba(28,92,160,0.9)";
+      ctx.strokeRect(X(a * 10), Y(b * 10), (c - a) * 10 * s, (d - b) * 10 * s);
+      ctx.fillText(`Hooping ${i + 1}`, X(a * 10) + 6, i ? Y(d * 10) - 6 : Y(b * 10) + 16);
+    });
     ctx.restore();
   }
 

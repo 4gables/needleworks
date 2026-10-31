@@ -46,13 +46,16 @@ const state = {
 };
 if (!MACHINES[state.machine]) state.machine = DEFAULT_MACHINE;
 const hoop = () => getHoop(state.machine, state.hoopId);
-const turned = () => !!state.turn[state.mode];
+// (a square hoop turned is the same hoop: the turn is off there, or a 4x4 file came out sideways with a turn note)
+const square = () => { const h = hoop(); return h.w === h.h; };
+const turned = () => !!state.turn[state.mode] && !square();
 // the hoop as it looks on screen
 const shownHoop = () => { const h = hoop(); return turned() ? { ...h, w: h.h, h: h.w } : h; };
 // the Design tab lays pieces out in the hoop as it's shown (turned: the long side across), and its files are turned
 // clockwise into the machine's orientation, as a turned picture is
-const designHoop = () => { const h = hoop(); return state.turn.design ? { ...h, w: h.h, h: h.w } : h; };
-const toMachine = (p) => (state.turn.design ? turnForMachine(p) : p);
+const designTurned = () => !!state.turn.design && !square();
+const designHoop = () => { const h = hoop(); return designTurned() ? { ...h, w: h.h, h: h.w } : h; };
+const toMachine = (p) => (designTurned() ? turnForMachine(p) : p);
 const turnCut = (loops) => loops.map((l) => l.map(([x, y]) => [-y, x]));
 
 // ---------- preview ----------
@@ -80,7 +83,7 @@ function paint() {
     cache: v.cache, fabric: v.fabric, ...look,
     heat: state.heat ? (v.heat ||= heat(v.shown)) : null, backdrop: state.backdrop,
     ...field, zoom: state.zoom, pan: state.pan, showNeedle: state.upto != null,
-    real: state.real, ...room,
+    real: state.real, boxes: v.hoopings, ...room,
   });
 }
 new ResizeObserver(() => paint()).observe(canvas);
@@ -92,6 +95,7 @@ function setView(v) {
   state.view = v; state.views[state.mode] = v; state.upto = null; $("progress").value = 1000;
   if (state.step != null && !(v?.steps > state.step)) showStep(null);   // the design changed under a step view
   $("turn").setAttribute("aria-pressed", turned());
+  $("turn").disabled = square(); $("turn").title = square() ? "A square hoop is the same either way round." : "Turn the hoop sideways, so a long design can use the hoop's long side.";
   if (!v) { $("dl-warn").hidden = true; $("facts").innerHTML = ""; $("threads").innerHTML = ""; $("download").disabled = true; $("download").textContent = "Download PES"; $("share").disabled = true; $("sheet-print").disabled = $("along-open").disabled = true; $("cut-file").hidden = true; $("names-open").hidden = true; paint(); return; }
   // the preview is the file: decode the PES bytes and draw those, not the design they were made from
   if (!v.file) {
@@ -104,11 +108,12 @@ function setView(v) {
   // (a split design is checked part by part when it's downloaded)
   const fits = !!v.split || (st.widthMm <= h.w - 2 * MARGIN && st.heightMm <= h.h - 2 * MARGIN);
   v.whole = !!v.split || !fits;
-  const inch = (mm) => (mm / 25.4).toFixed(1);
+  const inch = (mm) => (mm / 25.4).toFixed(1), over = (v, side) => (v > side - 2 * MARGIN && Math.round(v) <= side - 2 * MARGIN ? v.toFixed(1) : v.toFixed(0));
   const minutes = Math.max(1, Math.round(st.stitches / 550 + st.colorChanges * 0.5)), snips = shortJumps(v.file);
   $("fact-tip")?.remove();
   $("facts").innerHTML = [
-    `<span>${shown.widthMm.toFixed(0)} × ${shown.heightMm.toFixed(0)} mm · ${inch(shown.widthMm)} × ${inch(shown.heightMm)} in</span>`,
+    // (a size just over the field isn't rounded down to read as if it fits: 126.4 showed as 126 beside "fits 126")
+    `<span>${over(shown.widthMm, shownHoop().w)} × ${over(shown.heightMm, shownHoop().h)} mm · ${inch(shown.widthMm)} × ${inch(shown.heightMm)} in</span>`,
     `<span>${st.stitches.toLocaleString()} stitches</span>`,
     // (on the Picture and Open tabs every pause is a change of thread: say so; the Design tab's can be fabric steps)
     st.colorChanges ? (state.mode === "picture" || state.mode === "open" ? changesFact(v.file, st.colorChanges)
@@ -127,8 +132,11 @@ function setView(v) {
     }).join("");
   v.facts = [`${st.widthMm.toFixed(0)} × ${st.heightMm.toFixed(0)} mm (${inch(st.widthMm)} × ${inch(st.heightMm)} in)`, `${st.stitches.toLocaleString()} stitches`,
     `${st.colorChanges} ${st.colorChanges === 1 ? "pause" : "pauses"}`, `≈ ${minutes} min`, `${h.machineName} ${h.name}`];
-  $("download").disabled = !fits; $("share").disabled = !fits || !!v.split;
+  // (`block`: a design that can't be sewn as it is, such as words wrapped round into themselves: no file until it's fixed)
+  $("download").disabled = !fits || !!v.block; $("share").disabled = !fits || !!v.split || !!v.block;
   $("sheet-print").disabled = $("along-open").disabled = !fits || !!v.split; $("cut-file").hidden = !v.sheet?.cut?.length; $("names-open").hidden = !!v.split || !namesFor();
+  // (one per name from a design that doesn't fit yet made a zip of names that didn't fit either)
+  $("names-open").disabled = !fits; $("names-open").title = fits ? "" : "Make the design fit the hoop first.";
   if (state.mode === "picture") picSteps(v, st);
   // (pieces running into each other said beside Download, before the file is saved, not only in the editor)
   warnUI(v);
@@ -136,14 +144,14 @@ function setView(v) {
   clearTimeout(qTimer);
   if (fits && !v.split && !v.verdict) qTimer = setTimeout(() => { if (state.view === v) { v.verdict = verdictOf(v.bytes); warnUI(v); } }, 250);
   if (state.mode === "open" && state.opened) openInfo(v, st, fits);
-  $("download").textContent = v.split ? `Download ${v.split.length} files (.zip)` : !fits ? "Too big for this hoop" : v.action || `Download ${v.filename}`;
+  $("download").textContent = v.split ? `Download ${v.split.length} files (.zip)` : !fits ? "Too big for this hoop" : v.block ? "Fix the lettering first" : v.action || `Download ${v.filename}`;
   paint();
 }
 let qTimer = 0;
 // beside Download: the view's own warning, then what's wrong with the file itself
 function warnUI(v) {
   const bad = v.verdict?.length ? `This file may not sew well: ${v.verdict.map((p) => p.text).join(" ")}${state.mode === "open" ? "" : " Download it and the next screen offers a fixed copy."}` : "";
-  const t = [v.warn, bad].filter(Boolean).join(" ");
+  const t = [v.block || v.warn, bad].filter(Boolean).join(" ");
   $("dl-warn").textContent = t; $("dl-warn").hidden = !t;
 }
 // thread changes, and pauses where the next block is in the same thread (an in-the-hoop bookmark's fabric steps: the
@@ -274,14 +282,18 @@ $("show-real").onchange = (e) => { state.real = e.target.checked; store.set("rea
 $("show-hoop").checked = state.showHoop;
 $("show-hoop").onchange = (e) => { state.showHoop = e.target.checked; store.set("showHoop", state.showHoop); paint(); };
 $("turn").onclick = () => {
+  if (square()) return;
+  if (state.mode === "design") studio.remember();   // (a turn is undone like any other change)
   state.turn[state.mode] = !turned(); store.set("turn", state.turn);
   state.zoom = 1; state.pan = [0, 0];
   if (state.mode === "picture") makePicture(); else if (state.mode === "design") studio.make(); else setView(state.view);
 };
 
-// USB file names the machine can show: plain ASCII (José -> Jose), nothing else, never empty
+// USB file names the machine can show: plain ASCII (José -> Jose, Łukasz -> Lukasz, Søren -> Soren), nothing else,
+// never empty (letters with no accent to strip were dropped: "Zoe_ukasz", "S_ren")
+const LATIN = { Ł: "L", ł: "l", Ø: "O", ø: "o", ß: "ss", Æ: "AE", æ: "ae", Œ: "OE", œ: "oe", Đ: "D", đ: "d", Ð: "D", ð: "d", Þ: "Th", þ: "th", ı: "i", Ħ: "H", ħ: "h", Ŧ: "T", ŧ: "t", Ŋ: "N", ŋ: "n", ĸ: "k" };
 function safeName(s, fallback) {
-  const t = s.normalize("NFKD").replace(/[\u0300-\u036f]/g, "").replace(/[^A-Za-z0-9_-]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 40);
+  const t = s.replace(/[ŁłØøßÆæŒœĐđÐðÞþıĦħŦŧŊŋĸ]/g, (c) => LATIN[c]).normalize("NFKD").replace(/[\u0300-\u036f]/g, "").replace(/[^A-Za-z0-9_-]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 40);
   return t || fallback;
 }
 // a file handed to the browser's downloads
@@ -393,7 +405,7 @@ function downloaded(v, zipped, files = []) {
   $("done-phone").textContent = /Android/i.test(navigator.userAgent)
     ? " On a phone: plug a USB-C stick (or an adapter for a USB stick) into it, then in the Files app move the file from Downloads to the stick. Or email the file to yourself and copy it on a computer."
     : " On a phone: plug a USB-C (or Lightning) stick into it, then in the Files app move the file from Downloads to the stick. Or email the file to yourself and copy it on a computer.";
-  $("done-turn").hidden = !(state.mode === "design" && state.turn.design);
+  $("done-turn").hidden = !(state.mode === "design" && designTurned());
   // (Design-tab warnings still showing: "Checked" shouldn't read as "all good")
   const warns = state.mode === "design" ? [...document.querySelectorAll("#st-edit [data-warn]:not([hidden])")].map((w) => w.textContent.trim()) : [];
   $("done-warn").hidden = !warns.length; $("done-warn").textContent = warns.length ? "Still to look at: " + warns.join(" ") : "";
@@ -479,7 +491,7 @@ function alongSteps(v) {
   const steps = [...(v.sheet?.steps?.length ? v.sheet.steps : blocks.map((b, i) => ({ you: i ? "Change to the next thread and press Start." : null, sews: "" })))];
   // (the first screen says what to have by the machine)
   if (v.sheet?.ready?.length && steps.length) steps[0] = { ...steps[0], you: `Have ready: ${v.sheet.ready.join(" ")} ${steps[0].you || ""}`.trim() };
-  if (state.mode === "design" && state.turn.design && steps.length) steps[0] = { ...steps[0], you: `${$("done-turn").textContent} ${steps[0].you || ""}`.trim() };
+  if (state.mode === "design" && designTurned() && steps.length) steps[0] = { ...steps[0], you: `${$("done-turn").textContent} ${steps[0].you || ""}`.trim() };
   return steps.map((s, i) => {
     const b = blocks.find((x) => x.index === i), n = b ? b.segs.reduce((a, sg) => a + sg.length, 0) : 0;
     return { ...s, block: b, minutes: Math.max(1, Math.round(n / 550)) };
@@ -525,7 +537,8 @@ new ResizeObserver(() => { if ($("along").open) alongShow(); }).observe($("along
 // one file per name, in a zip: the Design tab swaps its lettering, the bookmark its name
 function namesFor() {
   if (state.mode === "design") {   // (studio is set up further down)
-    try { const n = studio.forNames(); return n && { ...n, build: (...a) => { const m = n.build(...a); return { ...m, pattern: toMachine(m.pattern), shown: m.pattern }; } }; }
+    // (only the names that need the turned hoop are turned into the machine's orientation)
+    try { const n = studio.forNames(); return n && { ...n, build: (...a) => { const m = n.build(...a); return { ...m, pattern: m.turned ? turnForMachine(m.pattern) : m.pattern, shown: m.pattern }; } }; }
     catch { return null; }
   }
   if (state.mode !== "bookmark" || state.bm.blank) return null;
@@ -551,18 +564,19 @@ $("names-make").onclick = async () => {
   for (const name of list) {
     await new Promise((r) => setTimeout(r, 0));
     try {
-      const { pattern, shown, smaller, thin } = n.build(name, $("names-shrink").checked), bytes = writePES(pattern), check = validatePES(bytes, pattern, hoop());
+      const { pattern, shown, smaller, thin, turned: sideways, runs } = n.build(name, $("names-shrink").checked), bytes = writePES(pattern), check = validatePES(bytes, pattern, hoop());
       if (!check.ok) throw new Error(check.error);
       let base = safeName(name, "name") + (n.bookmark ? "_bookmark" : ""), f = base, k = 2;
       while (used.has(f)) f = `${base}_${k++}`;
-      used.add(f); files.push({ name: f + ".pes", bytes, problems: verdictOf(bytes) }); made.push({ name, pattern, shown, smaller, thin });
+      used.add(f); files.push({ name: f + ".pes", bytes, problems: verdictOf(bytes) }); made.push({ name, file: f + ".pes", pattern, shown, smaller, thin, sideways, runs });
     } catch (err) { bad.push(`${name} (${/hoop fits|too big/i.test(err.message) ? "too long for the hoop" : err.message})`); }
   }
   $("names-make").disabled = false;
-  // every name as it'll sew, to look over (is one crowded?)
-  $("names-thumbs").innerHTML = made.map((m, i) => `<figure><canvas data-i="${i}"></canvas><figcaption>${escapeHtml(m.name)}${m.thin ? " (smaller, thin line)" : m.smaller ? " (smaller)" : ""}</figcaption></figure>`).join("");
+  // every name as it'll sew, to look over (is one crowded?), with what's different about it
+  const notes = (m) => [m.thin ? "smaller, thin line" : m.smaller ? "smaller" : "", m.sideways ? "hoop turned" : "", m.runs ? `runs into ${m.runs}` : ""].filter(Boolean).join(", ");
+  $("names-thumbs").innerHTML = made.map((m, i) => `<figure><canvas data-i="${i}"></canvas><figcaption>${escapeHtml(m.name)}${notes(m) ? ` (${escapeHtml(notes(m))})` : ""}</figcaption></figure>`).join("");
   for (const c of $("names-thumbs").querySelectorAll("canvas")) {
-    const m = made[+c.dataset.i]; draw(c, m.shown || (n.bookmark ? turnPattern(m.pattern, false) : m.pattern), { pad: 3, fabric: "white" });
+    const m = made[+c.dataset.i]; draw(c, m.shown || (n.bookmark ? turnPattern(m.pattern, false) : m.pattern), { pad: 6, fabric: "white" });   // (3 px: an arched name's top sat on the edge)
   }
   const zipName = `${n.bookmark ? "bookmarks" : "names"}_${files.length}.zip`;
   if (files.length) {
@@ -573,8 +587,14 @@ $("names-make").onclick = async () => {
   const box = $("names-bad") || Object.assign(document.createElement("div"), { id: "names-bad", className: "warn" });
   if (!box.isConnected) $("names-note").after(box);
   const poor = files.length ? badReport(box, files, zipName) : (box.hidden = true, []);
-  $("names-note").classList.toggle("warn", bad.length > 0 || poor.length > 0);
-  $("names-note").textContent = `${files.length ? `Made ${files.length} ${files.length === 1 ? "file" : "files"}, saved as one .zip (open it and copy the .pes files to the USB stick). ` : ""}${bad.length ? `Couldn't make: ${bad.join(", ")}.` : ""}${poor.length ? ` ${poor.length === 1 ? "One file" : `${poor.length} files`} may not sew well:` : ""}`;
+  // (a turned file needs the fabric hooped a quarter turn round: said per file, since only the long names are)
+  const side = made.filter((m) => m.sideways), runs = made.filter((m) => m.runs);
+  $("names-note").classList.toggle("warn", bad.length > 0 || runs.length > 0 || poor.length > 0);
+  $("names-note").textContent = `${files.length ? `Made ${files.length} ${files.length === 1 ? "file" : "files"}, saved as one .zip (open it and copy the .pes files to the USB stick). ` : ""}`
+    + (side.length ? `Hoop the fabric a quarter turn round for ${side.map((m) => m.file).join(", ")}: the machine shows ${side.length === 1 ? "it" : "them"} on ${side.length === 1 ? "its" : "their"} side, with the top of the name toward the right of the hoop. ` : "")
+    + (runs.length ? `Runs into another piece: ${runs.map((m) => m.name).join(", ")} (${$("names-shrink").checked ? "even at half size: shorten" : `tick "Make long names smaller", or shorten`} ${runs.length === 1 ? "it" : "them"}). ` : "")
+    + (bad.length ? `Couldn't make: ${bad.join(", ")}.` : "")
+    + (poor.length ? ` ${poor.length === 1 ? "One file" : `${poor.length} files`} may not sew well:` : "");
 };
 
 // ---------- thread brand ----------
@@ -1194,12 +1214,16 @@ function showStep(i) {
   state.step = i; document.dispatchEvent(new CustomEvent("nw:step", { detail: i })); paint();
 }
 const studio = initStudio({
-  hoop: designHoop, turned: () => !!state.turn.design, unturn: () => { if (state.turn.design) { state.turn.design = false; store.set("turn", state.turn); $("turn").setAttribute("aria-pressed", false); } }, fit: () => { state.zoom = 1; state.pan = [0, 0]; }, store, showError, busy, safeName, escapeHtml, saveFile, keepFocus, showStep, step: () => state.step, setMode, spool, ownSpool,
+  hoop: designHoop, machineHoop: hoop, turned: designTurned, unturn: () => { if (state.turn.design) { state.turn.design = false; store.set("turn", state.turn); $("turn").setAttribute("aria-pressed", false); } }, fit: () => { state.zoom = 1; state.pan = [0, 0]; }, store, showError, busy, safeName, escapeHtml, saveFile, keepFocus, showStep, step: () => state.step, setMode, spool, ownSpool,
+  // (undo, redo and Open saved put the hoop's turn back as it was; the caller rebuilds)
+  setTurn: (on) => { state.turn.design = !!on; store.set("turn", state.turn); $("turn").setAttribute("aria-pressed", designTurned()); },
+  hoopId: () => hoop().id,
+  setHoop: (id) => { if (MACHINES[state.machine].hoops[id] && hoop().id !== id) { state.hoopId = id; store.set("hoop", id); hoopChanged(); } },
   setView(pattern, filename, look = {}) {
     if (!pattern) { state.views.design = null; if (state.mode === "design") setView(null); return; }
     pattern = toMachine(pattern);
     if (look.split) look = { ...look, split: look.split.map((p) => ({ ...p, pattern: toMachine(p.pattern) })) };
-    if (state.turn.design && look.sheet?.cut) look = { ...look, sheet: { ...look.sheet, cut: look.sheet.cut.map((c) => turnCut(c)) } };
+    if (designTurned() && look.sheet?.cut) look = { ...look, sheet: { ...look.sheet, cut: look.sheet.cut.map((c) => turnCut(c)) } };
     const v = { pattern, verifyAgainst: pattern, bytes: writePES(pattern), filename, fabric: "linen", ...look };
     state.views.design = v;
     if (state.mode === "design") { const keep = [state.zoom, state.pan]; setView(v); [state.zoom, state.pan] = keep; paint(); }

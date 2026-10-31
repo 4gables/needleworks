@@ -521,6 +521,40 @@ Embroidery-file tools for home machines. Two implementations of the same engine:
     guide counts as seen after a starter or an added piece, a Book motif.
   - Headless Chrome with `nocache` sometimes doesn't start app.js after `goto` (4 in 14 loads, baseline code too):
     check `document.body.dataset.mode` and navigate again.
+  Re-run fixes (2026-10-30): Design tab layout (stream 4; studio batch: only the 4 split files changed, crosses moved;
+  pe900 batch byte-identical; 400/400 ok):
+  - `touching` measures needle points every 0.5 mm along the stitch lines (`cloud`/`near`), at fitted sizes, flagging
+    under `CLEAR` 1.5 mm (~1 mm of fabric between threads). The old whole-mm cells flagged up to ~2.8 mm: a key fob R
+    the app had just fitted, 2 mm clear, "ran into" its frame. A bib name at 1.0 mm looked sewn in; 2.5 mm reads clear.
+  - `fittedSizes` then shrinks a fitted piece 0.5 mm at a time (to 60 %) until it clears its frame's stitches by CLEAR
+    (`clearOf`, cached): the room is the outline, so a scallop's valleys met a Great Vibes JMK after Circle -> Scallop.
+    No batch file changed (no fitted piece was that close).
+  - Every one-tap fix is checked before it's offered (`landing` in ui.js: fits as is, fits turned -> the button
+    "... and turn the hoop" does both, else none; nor if it runs into something new or leaves the frame it sat in).
+    Too small and towel need one size (5 mm on towel: "Make it 24 mm", not 9 then 24); a size the frame fit would shrink
+    back offers two lines at a size that clears everything (ornament "Our First Christmas": 7 mm -> 11.5 mm on two
+    lines), never "Make it 10 mm" again; towel sizes past the hoop even turned say so, with fewer/shorter lines, a bolder
+    font or "Sew it as Cotton" (flat-weave tea towels); within 4 % of the towel minimum isn't warned (The Smiths 32 vs 33).
+    Arches: "Widen the curve" or "Make the letters N mm" (`archShrink`), whichever lands. A piece running into the frame
+    around it gets "Make it N mm" (`clearSize`), not "drag it apart".
+  - Words wrapped right round into themselves block Download ("Fix the lettering first", `block` on the view).
+  - Split: crosses on a line between the halves, each 1.5 mm clear of every stitch, near 1/4 and 3/4 across and at
+    least 20 mm apart when the hoop allows (`crossSpots`; a 27 mm-tall name had them 13 mm apart, one on the "e");
+    named where they are as the machine shows it (`crossName`: top/bottom/left/right; turned, the preview's too). The
+    preview draws the crosses and each hooping's field (`boxes` in `draw`).
+  - Turn: off and disabled on a square hoop (`square()` in app.js); Save design stores `hoop` and `turned`, Open saved
+    restores them; undo/redo snapshots carry the turn and Turn hoop is an undo step. A turned names batch lays out
+    upright any name that fits upright; turned files are listed in the dialog and captioned.
+  - Thread weight resets per starter like fabric; a weight picked by hand gets its own tip (small letters: "60 wt sews
+    them crisper"), Automatic keeps the small-letters tip. Steps stay current while Too big ("Waiting for a fit").
+    Two colours in a row on the same owned spool: "Keep the same thread on".
+  - Names batch: off while Too big; a name with a missing glyph is refused; one that runs into another piece shrinks
+    with "Make long names smaller" or is captioned; filenames transliterate Ł ø ß æ œ đ þ (Lukasz, Soren).
+  - Smaller: "+ Motif" starts at 1.25 x the biggest lettering (25-40 mm); Fit to hoop recentres and keeps the design
+    fitted through font/style changes (`fitted`); too-big sizes never round down to look as if they fit; a 4th Enter
+    becomes a space with a note; a line "... for Lily" names the file; a layout dragged or nudged past the field is
+    recentred on release (`settle`), the machine centres it anyway. Harness: the Python test server sometimes drops a
+    module request under load (`fonts.js` status 0) and the page never starts; reload.
 - The preview is the file: `setView` decodes `v.bytes` with `readEmbroidery` and draws/counts/fit-checks that, and
   thread labels come from the file's own PEC palette.
 
