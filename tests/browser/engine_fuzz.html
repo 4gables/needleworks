@@ -14,7 +14,9 @@ POSTed to <code>/save/fz_*.pes</code> with the cases in <code>fz_log.json</code>
 to stitch are counted, not problems.</p>
 <p>Serve with <code>tests/batch_server.py OUT PORT</code>, open
 <code>tests/browser/engine_fuzz.html?seed=1&amp;n=300</code> (<code>&amp;only=K</code> rebuilds case K alone;
-<code>&amp;engine=lettering</code> runs one engine; <code>&amp;save=0</code> saves nothing). Title: <code>DONE n problems</code>.</p>
+<code>&amp;engine=lettering</code> runs one engine; <code>&amp;save=0</code> saves nothing). Title: <code>DONE n problems</code>. A title still "Engine fuzz" with nothing
+in <code>window.fuzzAt</code> after a minute means a module or font request was dropped (the Python server or
+headless Chrome, now and then): load the page again.</p>
 <pre id="log"></pre>
 <script type="module">
 import { hoop as getHoop } from "../../js/core/machines.js";
@@ -155,6 +157,7 @@ let n = 0;
 for (const k of which) {
   const s = cases[k], tag = `fz_${SEED}_${String(k).padStart(4, "0")}_${s.engine}`, t0 = performance.now();
   const note = (kind, msg) => { counts[kind] = (counts[kind] || 0) + 1; if (msg) (s.engine === "picture" ? picBad : bad).push({ k, tag, kind, msg, spec: s }); if (msg) log(`${kind.toUpperCase()} ${tag}: ${msg}`); };
+  window.fuzzAt = k;   // (progress, for the runner: a dropped request leaves it unset)
   if (ONLY != null) log(JSON.stringify(s));
   await new Promise((res) => setTimeout(res, 0));
   let built;
