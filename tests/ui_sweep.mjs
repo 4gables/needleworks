@@ -351,7 +351,9 @@ async function key(t, name, shift = false) {
 // where focus is: a path to find the element again, and whether it can be seen with a ring
 const FOCUS = String.raw`(() => {
   const e = document.activeElement; const W = innerWidth, H = innerHeight;
-  if (!e || e === document.body || e === document.documentElement) return { none: true };
+  const sy = [document.scrollingElement.scrollTop, ...[...document.querySelectorAll('.controls, dialog[open], .along-body')].map((n) => n.scrollTop)];
+  const where = { dialog: document.querySelector('dialog[open]')?.id || '', mode: document.body.dataset.mode, pieces: document.querySelectorAll('#st-pieces > li').length, hash: location.hash };
+  if (!e || e === document.body || e === document.documentElement) return { none: true, sy, ...where };
   const path = (n) => { if (n.id) return '#' + CSS.escape(n.id); const d = [...n.attributes].filter((a) => a.name.startsWith('data-')).map((a) => '[' + a.name + '="' + CSS.escape(a.value) + '"]').join('');
     if (d && document.querySelectorAll(n.tagName.toLowerCase() + d).length === 1) return n.tagName.toLowerCase() + d;
     const p = n.parentElement; const i = [...p.children].filter((c) => c.tagName === n.tagName).indexOf(n) + 1; return path(p) + ' > ' + n.tagName.toLowerCase() + ':nth-of-type(' + i + ')'; };
@@ -369,9 +371,7 @@ const FOCUS = String.raw`(() => {
   const lab = hit && hit.closest('label');
   const covered = seen && hit && e.id !== 'view' && !(hit === show || show.contains(hit) || hit.contains(show) || (lab && (lab === show || lab.control === e)));
   const ring = (s.outlineStyle !== 'none' && parseFloat(s.outlineWidth) >= 1.5) || (s.boxShadow !== 'none' && /\d+px \d+px 0px [1-9]/.test(s.boxShadow.replace(/rgba?\([^)]*\)/g, '')));
-  const sy = [document.scrollingElement.scrollTop, ...[...document.querySelectorAll('.controls, dialog[open], .along-body')].map((n) => n.scrollTop)];
-  return { path: path(e), desc: d, tag: e.tagName, type: e.type || '', role: e.getAttribute('role') || '', href: e.getAttribute('href') || '', visible, seen, covered: covered ? (hit.id ? hit.tagName.toLowerCase() + '#' + hit.id : hit.tagName.toLowerCase() + '.' + [...hit.classList].join('.')) : '', ring, sy,
-    dialog: document.querySelector('dialog[open]')?.id || '', mode: document.body.dataset.mode, pieces: document.querySelectorAll('#st-pieces > li').length, hash: location.hash };
+  return { path: path(e), desc: d, tag: e.tagName, type: e.type || '', role: e.getAttribute('role') || '', href: e.getAttribute('href') || '', visible, seen, covered: covered ? (hit.id ? hit.tagName.toLowerCase() + '#' + hit.id : hit.tagName.toLowerCase() + '.' + [...hit.classList].join('.')) : '', ring, sy, ...where };
 })()`;
 
 async function keyboard(t, vp, st, problems) {
@@ -469,8 +469,10 @@ const workers = await Promise.all(Array.from({ length: +arg("workers", 4) }, () 
 await Promise.all(workers.map(async (t) => {
   for (let j; (j = jobs.shift());) {
     await t.setViewport(j.vp);
-    if (j.keys) { await t.scheme("light"); pressed += await keyboard(t, j.vp, j.st, problems); }
-    else await look(t, j.vp, j.st);
+    try {
+      if (j.keys) { await t.scheme("light"); pressed += await keyboard(t, j.vp, j.st, problems); }
+      else await look(t, j.vp, j.st);
+    } catch (e) { problems.push({ vp: j.vp.id, scheme: "light", state: j.st.id, kind: "state", el: j.st.id, detail: "sweep: " + e.message }); }
     process.stdout.write(`\r${++done} ${j.keys ? "keys " : ""}${j.vp.id} ${j.st.id}                    `);
   }
 }));
