@@ -70,9 +70,9 @@ function letters(text, family, size, style = "auto", spacing = 0, kern = null) {
     if (!t) return null;
     const same = p[0][0] === t.start[0] && p[0][1] === t.start[1], q = same ? p : p.slice().reverse(), w = t.w;
     // (q and w now run the edge's own way; its point is at the end when t.atEnd)
-    const order = t.atEnd ? q.map((_, i) => q.length - 1 - i) : q.map((_, i) => i), prof = [];
+    const idx = t.atEnd ? q.map((_, i) => q.length - 1 - i) : q.map((_, i) => i), prof = [];
     let d = 0;
-    order.forEach((i, m) => { if (m) d += Math.hypot(q[i][0] - q[order[m - 1]][0], q[i][1] - q[order[m - 1]][1]) * s; prof.push([d, w[i] * s]); });
+    idx.forEach((i, m) => { if (m) d += Math.hypot(q[i][0] - q[idx[m - 1]][0], q[i][1] - q[idx[m - 1]][1]) * s; prof.push([d, w[i] * s]); });
     // (k: the column's width over the font's: a corner of a word sewn thinner than its font is that much shorter)
     return { atEnd: same ? t.atEnd : !t.atEnd, prof, k: satinW ? Math.min(1, satinW / stroke) : 1 };
   };
