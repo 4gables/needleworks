@@ -364,10 +364,27 @@ export function initStudio(api) {
   function ui() { api.keepFocus($("panel-design"), () => { list(); editor(); sewnOn(); }); }
   function sewnOn() {
     $("st-fabric").innerHTML = Object.entries(FABRICS).map(([k, f]) => `<button type="button" data-fab="${k}" aria-pressed="${k === fabric}">${f.name}</button>`).join("");
-    $("st-baste").checked = baste; $("st-fabric-tip").textContent = FABRICS[fabric].tip; $("st-fabric-name").textContent = FABRICS[fabric].name + (baste ? ", basted" : "");
+    $("st-baste").checked = baste; $("st-fabric-tip").textContent = fabricTip(); $("st-fabric-name").textContent = FABRICS[fabric].name + (baste ? ", basted" : "");
     // (numeric keys come first in an object, so the order is spelled out)
     $("st-thread").innerHTML = `<span class="chips-label">Thread</span>` + ["auto", "30", "40", "60"].map((k) => `<button type="button" data-thread="${k}" aria-pressed="${k === thread}">${THREADS[k].name}</button>`).join("");
     $("st-thread-tip").textContent = THREADS[thread].tip; $("st-thread-name").textContent = thread === "auto" ? "" : `, ${THREADS[thread].name} thread`;
+  }
+  // a project that brings its own fabric (a patch's felt, an in-the-hoop project's pieces, a quilt sandwich): "Sewing on"
+  // says what the choice still changes, not that fabric's stabilizer advice (Knit on a quilt block changed no stitch
+  // and still said to hoop cut-away). Knit and towel change only lettering and a patch's fill; the rest only advice.
+  function ownBase() {
+    const f = pieces.filter((p) => p.kind === "frame");
+    if (f.some((p) => p.border === "patch")) return "A patch is sewn on its own felt or twill (see Have ready)";
+    if (f.some((p) => p.border === "ith" || p.border === "zip")) return "An in-the-hoop project is sewn on the fabric in its Have ready list";
+    if (f.some((p) => p.quilt === "stipple" || p.quilt === "echo")) return "Quilting is sewn through a quilt sandwich (see Have ready)";
+    return "";
+  }
+  const lettered = () => pieces.some((p) => p.kind === "text" || p.kind === "monogram");
+  function fabricTip() {
+    const base = ownBase(); if (!base) return FABRICS[fabric].tip;
+    const what = [(fabric === "knit" || fabric === "towel") && lettered() ? "the lettering" : "", fabric === "knit" && pieces.some((p) => p.kind === "frame" && p.border === "patch") ? "the patch's fill" : ""].filter(Boolean);
+    return what.length ? `${base}, so ${FABRICS[fabric].name} only changes how ${what.join(" and ")} ${what.length > 1 ? "are" : "is"} sewn${fabric === "towel" ? " (bold, on a light base)" : " (to suit a knit)"}.`
+      : `${base}, so the fabric chosen here doesn't change the stitches.`;
   }
   $("st-fabric").onclick = (e) => { const b = e.target.closest("[data-fab]"); if (!b || b.dataset.fab === fabric) return; remember(); fabric = b.dataset.fab; save(); sewnOn(); make(); warn(); };
   $("st-thread").onclick = (e) => { const b = e.target.closest("[data-thread]"); if (!b || b.dataset.thread === thread) return; remember(); thread = b.dataset.thread; save(); sewnOn(); make(); };
@@ -591,7 +608,7 @@ export function initStudio(api) {
         block: wrap ? `${label(wrap)} runs into itself round the curve: select it to widen the curve or make the letters smaller.` : "",
         fabric: look.fabricShapeBlock != null ? "pink" : "linen", steps: steps.length,
         sheet: { steps: steps.map((st) => ({ you: st.you, sews: st.sews.join(" ") })), after: done, ready, cut: steps.filter((st) => st.cut).map((st) => st.cut),
-          notes: [api.turned() ? TURNED : "", $("st-tip").hidden ? "" : $("st-tip").textContent, composed.tip, threadTip(small)] } });
+          notes: [api.turned() ? TURNED : "", $("st-tip").hidden ? "" : $("st-tip").textContent, fabricTip(), threadTip(small)] } });
     } catch (err) {
       if (s !== seq) return;
       api.setView(null);
@@ -610,7 +627,8 @@ export function initStudio(api) {
     // spools they own when they've listed them, not the Brother names)
     // (the fabric's own stabilizer and finishing are left out when a project's own list already says (in-the-hoop,
     // patch, quilt sandwich), bar a towel's topper)
-    const own = (list) => fabric !== "towel" && list.some((b) => /stabilizer/i.test(b));
+    // (a towel's topper only where there's lettering to sew under it)
+    const own = (list) => !(fabric === "towel" && lettered()) && list.some((b) => /stabilizer/i.test(b));
     const ready = [own(before) ? "" : FABRICS[fabric].ready, ...before,
       appliqued() ? "A piece of fabric for each appliqué shape, 1 in bigger than its outline, and small curved scissors (iron-on fusible web on the back stops cotton fraying)." : "",
       api.threadList(steps.map((st) => st.color))].filter(Boolean), done = [own(after) ? "" : FABRICS[fabric].after, ...after].filter(Boolean);
@@ -694,7 +712,7 @@ export function initStudio(api) {
     $("st-steps-count").textContent = !steps.length ? "" : `· ${steps.length} ${steps.length === 1 ? "step" : "steps"}, ${pauses} ${pauses === 1 ? "pause" : "pauses"}`;
     // each step is a button: the preview shows the design as it is after that step, what's still to come faint
     $("st-steps").innerHTML = (waiting ? `<li class="after"><b>Waiting for a fit</b><span>${api.escapeHtml(waiting)}</span></li>` : "")
-      + (api.turned() ? `<li class="after"><b>Hooping</b><span>${TURNED}</span></li>` : "") + (before.length ? `<li class="after"><b>Have ready</b><span>${api.escapeHtml(before.join(" "))}</span></li>` : "") + steps.map((st, i) => `<li><button type="button" data-step="${i}" aria-pressed="${api.step() === i}">
+      + (api.turned() ? `<li class="after"><b>Hooping</b><span>${TURNED}</span></li>` : "") + (before.length ? `<li class="after"><b>Have ready</b><ul class="ready">${before.map((r) => `<li>${api.escapeHtml(r)}</li>`).join("")}</ul></li>` : "") + steps.map((st, i) => `<li><button type="button" data-step="${i}" aria-pressed="${api.step() === i}">
       <b><span class="n">${i + 1}</span><i style="background:${st.color}"></i>Brother ${nearestBrotherThread(st.color).name}${api.spool(st.color) ? ` <small>${api.escapeHtml(api.spool(st.color))}</small>` : ""}</b>
       ${st.you ? `<span class="you">${api.escapeHtml(st.you)}</span>` : ""}<span>${api.escapeHtml(st.sews.join(" "))}</span>
       ${st.early ? `<small>Sewn early, with the other ${api.escapeHtml(nearestBrotherThread(st.color).name)} parts, to save a thread change.</small>` : ""}</button></li>`).join("")

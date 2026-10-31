@@ -770,7 +770,7 @@ function patchFill(p, loops, fab, name = shapeOf(p).name.toLowerCase()) {
       { color: p.blend, paths: fillPolygon(loops, { ...base, underlay: false, share: (f) => f }), sews: `Blends the second colour in across the patch.`, patchFill: true }];
   // what to hoop (`patch`: step 1 says so) and a stabilizer firm enough for a dense fill (thousands of stitches)
   return st.map((f, i) => (i ? f : { ...f, patch: true,
-    before: "Patch fabric: felt or twill, big enough to hoop, and cut-away stabilizer (or two layers of heavy tear-away): a patch is thousands of stitches." }));
+    before: "Patch fabric: felt or twill, big enough to hoop, and cut-away stabilizer (or two layers of heavy tear-away): a patch is thousands of stitches. Optional: patch adhesive or fusible web, to iron it on." }));
 }
 
 // a motif filled (tatami inside, then a narrow satin edge over the row ends) or as a satin outline
@@ -1550,7 +1550,8 @@ function build(pieces, hoop, opts) {
       const change = steps.length && st.color !== thread;
       // (the thread's description in the file in plain ASCII: “Noah” in UTF-8 came back as â€œNoahâ€ in readers)
       d.color(st.color, ascii(st.label)); thread = st.color;
-      steps.push({ color: st.color, sews: [], you: st.you ? (change ? `Change to the next thread. ${st.you}` : st.you) : steps.length ? "Change to the next thread and press Start." : null,
+      // (a pause in the same thread says so: two red appliqués read "Change to the next thread" from red to red)
+      steps.push({ color: st.color, sews: [], you: st.you ? (change ? `Change to the next thread. ${st.you}` : st.you) : steps.length ? (change ? "Change to the next thread and press Start." : "Keep the same thread on and press Start.") : null,
         fabric: !!st.fabric, under: !!st.under || !!st.fabric, early: false, cut: st.fabric && !st.nocut ? st.cut || st.paths : null });
     }
     steps[steps.length - 1].sews.push(st.sews);

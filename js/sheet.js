@@ -7,6 +7,9 @@ import { colorBlocks } from "./render.js";
 export const FIRST_STEP = "Hoop the fabric with stabilizer under it, put on the first thread and press Start.";
 export const FINISH = "Take the hoop off and snip any loose threads. Tear-away stabilizer: tear it off gently, holding the stitches down with your thumb. Cut-away: trim it about ¼ in from the stitching (don't tear it).";
 
+// a file's own steps, block by block: a stop in the same thread is a pause, not a thread change (an appliqué's fabric steps)
+export const nextThread = (blocks, i) => (!i ? FIRST_STEP : blocks[i]?.color === blocks[i - 1]?.color ? "The machine pauses: keep the same thread on and press Start." : "Change to the next thread and press Start.");
+
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
 const f1 = (n) => (Math.round(n * 10) / 10).toString();
 // white and cream thread would vanish on paper
@@ -21,15 +24,19 @@ function box(pts) {
 }
 
 // the hoop field at 1:1 with the design centred in it and a crosshair through the centre (in mm)
-function template(pattern, hoop, hide) {
+// `cut` (mm, as the design): where appliqué fabric goes, hatched under the stitches (a bare outline didn't read as appliqué)
+function template(pattern, hoop, hide, cut) {
   const { blocks } = colorBlocks(pattern);
   const [x0, y0, x1, y1] = box(blocks.flatMap((b) => b.segs.flat()));
   const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2, W = hoop.w, H = hoop.h;
+  const fabric = (cut || []).map((g) => `<path d="${g.map((l) => "M" + l.map(([x, y]) => `${f1(x - cx / 10 + W / 2)},${f1(y - cy / 10 + H / 2)}`).join("L") + "Z").join("")}"/>`).join("");
   const lines = blocks.filter((b) => !hide?.has(b.index)).map((b) => `<g stroke="${ink(b.color)}">${b.segs.map((s) =>
     `<polyline points="${s.map(([x, y]) => `${f1((x - cx) / 10 + W / 2)},${f1((y - cy) / 10 + H / 2)}`).join(" ")}"/>`).join("")}</g>`).join("");
   const r = Math.min(W, H) * 0.07;
   return `<svg class="tpl" width="${W}mm" height="${H}mm" viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">
     <rect x="0.2" y="0.2" width="${W - 0.4}" height="${H - 0.4}" rx="${r}" fill="none" stroke="#999" stroke-width="0.3" stroke-dasharray="2 1.5"/>
+    ${fabric ? `<defs><pattern id="fab" width="1.4" height="1.4" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="1.4" stroke="#a0a0a0" stroke-width="0.3"/></pattern></defs>
+    <g fill="url(#fab)" fill-rule="evenodd" stroke="none">${fabric}</g>` : ""}
     <g fill="none" stroke-width="0.35" stroke-linecap="round" stroke-linejoin="round">${lines}</g>
     <g stroke="#000" stroke-width="0.25"><line x1="${W / 2}" y1="0" x2="${W / 2}" y2="${H}" stroke-dasharray="3 2"/><line x1="0" y1="${H / 2}" x2="${W}" y2="${H / 2}" stroke-dasharray="3 2"/></g>
     <text x="${W / 2}" y="4" font-size="3" text-anchor="middle">▲ Top of the hoop</text>
@@ -52,7 +59,7 @@ ${groups.map((g, i) => `  <g id="fabric-${i + 1}"><path d="${path(g)}" fill="non
 // sheet: { steps: [{ title?, you?, sews? }], ready: [] (one "Have ready" list), after: [], notes: [], cut: [[loop...]...] }, thread names as the machine shows them
 export function sewSheet({ pattern, filename, hoop, facts, threads, hide, sheet = {}, spool = () => "" }) {
   const { blocks } = colorBlocks(pattern);
-  const steps = sheet.steps?.length ? sheet.steps : blocks.map((b, i) => ({ you: i ? "Change to the next thread and press Start." : FIRST_STEP }));
+  const steps = sheet.steps?.length ? sheet.steps : blocks.map((b, i) => ({ you: nextThread(blocks, i) }));
   const after = sheet.after?.length ? sheet.after : [FINISH];
   const rows = steps.map((s, i) => {
     const b = blocks.find((x) => x.index === i), t = threads[i];
@@ -71,8 +78,8 @@ export function sewSheet({ pattern, filename, hoop, facts, threads, hide, sheet 
   return `<section class="pg">
     <header><h1>${esc(filename)}</h1><p>${facts.map(esc).join(" · ")}</p></header>
     <p class="note">Print at 100% ("Actual size"), not "Fit to page". Check: this bar is 5 cm long.<span class="bar"></span></p>
-    ${template(pattern, hoop, hide)}
-    <p class="note">The machine stitches the design centred in the hoop, where the dashed lines cross. Pin this sheet on the fabric where you want the design and line the crosshair up with the hoop's grid sheet.</p>
+    ${template(pattern, hoop, hide, sheet.cut)}
+    <p class="note">${sheet.cut?.length ? "Hatched: where the fabric pieces go. " : ""}The machine stitches the design centred in the hoop, where the dashed lines cross. Pin this sheet on the fabric where you want the design and line the crosshair up with the hoop's grid sheet.</p>
   </section>
   <section class="pg"><h2>How to stitch it</h2>
     ${(sheet.ready || []).length ? `<h3>Have ready</h3><ul class="ready">${sheet.ready.map((r) => `<li>${esc(r)}</li>`).join("")}</ul>` : ""}

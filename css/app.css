@@ -309,7 +309,9 @@ body[data-mode="design"] #view { cursor: grab; }
 .st-steps .after { display: grid; gap: 2px; padding: 6px 8px; }
 .st-steps b { display: flex; align-items: center; gap: 6px; }
 .st-steps b i { width: 12px; height: 12px; border-radius: 50%; border: 1px solid rgba(0,0,0,.15); }
-.st-steps .you { color: var(--accent); }
+/* what to do: plain ink (red read as a warning), what it sews muted under it */
+.st-steps .you { color: var(--ink); }
+.st-steps .ready { margin: 0; padding-left: 18px; list-style: disc; color: var(--muted); font-size: 15px; display: grid; gap: 2px; }
 .edit .warn { color: var(--warn); font-weight: 700; }
 .cards canvas { width: 100%; height: 72px; display: block; margin-bottom: 2px; }
 .st-load { display: inline-flex; align-items: center; cursor: pointer; font-weight: 400; color: var(--ink); }
@@ -390,15 +392,21 @@ body[data-mode="design"] #view { cursor: grab; }
 }
 /* sew along: one step per screen, big enough to read from the machine */
 .along { border: 0; padding: 0; width: 100vw; height: 100dvh; max-width: none; max-height: none; margin: 0; background: var(--bg); color: var(--ink); }
-.along[open] { display: grid; grid-template-rows: auto minmax(0, 1fr) auto auto; }
+/* (the preview keeps some room and the words scroll: step 1's Have ready pushed Next off an iPhone SE) */
+.along[open] { display: grid; grid-template-rows: auto minmax(110px, 1fr) minmax(0, auto) auto; }
 .along header { display: flex; justify-content: space-between; align-items: center; padding: 14px max(18px, env(safe-area-inset-left)); font-weight: 700; color: var(--muted); }
 .along canvas { width: 100%; height: 100%; min-height: 0; }
-.along-body { padding: 4px max(20px, env(safe-area-inset-left)); max-width: 760px; width: 100%; margin: 0 auto; box-sizing: border-box; }
+.along-body { padding: 4px max(20px, env(safe-area-inset-left)); max-width: 760px; width: 100%; margin: 0 auto; box-sizing: border-box; overflow-y: auto; min-height: 0; }
 .along-body h2 { display: flex; align-items: center; gap: 10px; font-size: 24px; margin: 0 0 8px; flex-wrap: wrap; }
 .along-body h2 i { width: 26px; height: 26px; border-radius: 7px; border: 1px solid rgba(0,0,0,.15); }
 .along-body h2 small { font-size: 15px; font-weight: 400; color: var(--muted); }
 .along-body p { font-size: 20px; line-height: 1.45; margin: 0 0 8px; }
 .along-body .you { font-weight: 700; }
+.along-ready { margin: 0 0 10px; padding: 8px 12px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; font-size: 17px; line-height: 1.4; }
+.along-ready h3 { margin: 0 0 2px; font-size: 15px; color: var(--muted); }
+.along-ready ul { margin: 0; padding-left: 20px; display: grid; gap: 2px; }
+.along-body p.along-turn { font-size: 17px; }
+@media (max-height: 700px) { .along-ready { font-size: 15px; } .along-body p { font-size: 18px; } }
 .along-body .hint { font-size: 15px; }
 .along nav { display: flex; gap: 12px; padding: 12px max(18px, env(safe-area-inset-left)) max(18px, env(safe-area-inset-bottom)); max-width: 760px; width: 100%; margin: 0 auto; box-sizing: border-box; }
 .along nav button { flex: 1; min-height: 60px; font-size: 20px; }

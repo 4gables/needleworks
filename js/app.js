@@ -7,7 +7,7 @@ import { DEFAULT_MACHINE, MACHINES, MARGIN, hoop as getHoop } from "./core/machi
 import { DENSITY, picturePlan } from "./core/digitize.js";
 import { nearestBrotherThread, pecThread } from "./core/threads.js";
 import { CLOTHS, colorBlocks, draw } from "./render.js";
-import { FINISH, FIRST_STEP, cutSVG, sewSheet } from "./sheet.js";
+import { FINISH, FIRST_STEP, cutSVG, nextThread, sewSheet } from "./sheet.js";
 import { zip } from "./zip.js";
 import { checkup, fewerBlocks, fix, heat, landJumps, pauses, shortJumps, sortedChanges } from "./doctor.js";
 import { MAX_BLOCKS, endsEarly, moves, verdictOf } from "./quality.js";
@@ -169,13 +169,14 @@ function changesFact(p, n) {
 function picSteps(v, st) {
   const mt = machineThreadList(v), blocks = v.cache.blocks, heavy = st.stitches > 8000;
   const thread = (b) => ownSpool(b.color) ? `your ${ownSpool(b.color)}` : `Brother ${(mt[b.index] || nearestBrotherThread(b.color)).name}`;
-  const ready = `${heavy ? "Cut-away stabilizer (or two layers of tear-away on woven fabric): this is a lot of stitching." : "Tear-away stabilizer under woven fabric; cut-away under knits (T-shirts, sweatshirts), which stretch."} ${threadList(blocks.map((b) => b.color), (h) => state.pic.machineName?.get(h) || nearestBrotherThread(h).name)}`;
+  const ready = [heavy ? "Cut-away stabilizer (or two layers of tear-away on woven fabric): this is a lot of stitching." : "Tear-away stabilizer under woven fabric; cut-away under knits (T-shirts, sweatshirts), which stretch.",
+    `${threadList(blocks.map((b) => b.color), (h) => state.pic.machineName?.get(h) || nearestBrotherThread(h).name)} They are sewn in this order.`];
   const steps = blocks.map((b, i) => ({ you: i ? "The machine stops: thread this colour and press Start." : `Hoop the fabric with the stabilizer under it, put on ${thread(b)} and press Start.`, sews: "" }));
   const after = "Take the hoop off and snip any loose threads between parts. Tear-away stabilizer: tear it off gently, holding the stitches down with your thumb. Cut-away: trim it about ¼ in from the stitching (don't tear it: it keeps the design in shape).";
-  v.sheet = { ...v.sheet, ready: [ready], steps, after: [after] };
+  v.sheet = { ...v.sheet, ready, steps, after: [after] };
   $("pic-steps-count").textContent = `· ${blocks.length} ${blocks.length === 1 ? "thread" : "threads"}`;
   $("pic-steps").innerHTML = (turned() ? `<li class="after"><b>Hooping</b><span>${escapeHtml($("done-turn").textContent)}</span></li>` : "")
-    + `<li class="after"><b>Have ready</b><span>${escapeHtml(ready)} The threads go in the order below.</span></li>`
+    + `<li class="after"><b>Have ready</b><ul class="ready">${ready.map((r) => `<li>${escapeHtml(r)}</li>`).join("")}</ul></li>`
     + blocks.map((b, i) => { const t = mt[b.index] || nearestBrotherThread(b.color);
       return `<li><b><span class="n">${i + 1}</span><i style="background:${b.color}"></i>Brother ${escapeHtml(t.name)}${spool(b.color) ? ` <small>${escapeHtml(spool(b.color))}</small>` : ""}</b><span class="you">${escapeHtml(steps[i].you)}</span></li>`; }).join("")
     + `<li class="after"><b>When it's done</b><span>${escapeHtml(after)}</span></li>`;
@@ -519,10 +520,11 @@ $("item-done").onclick = () => {
 const along = { i: 0, lock: null };
 function alongSteps(v) {
   const blocks = v.cache.blocks;
-  const steps = [...(v.sheet?.steps?.length ? v.sheet.steps : blocks.map((b, i) => ({ you: i ? "Change to the next thread and press Start." : FIRST_STEP, sews: "" })))];
-  // (the first screen says what to have by the machine)
-  if (v.sheet?.ready?.length && steps.length) steps[0] = { ...steps[0], you: `Have ready: ${v.sheet.ready.join(" ")} ${steps[0].you || ""}`.trim() };
-  if (turnedFile() && steps.length) steps[0] = { ...steps[0], you: `${$("done-turn").textContent} ${steps[0].you || ""}`.trim() };
+  const steps = [...(v.sheet?.steps?.length ? v.sheet.steps : blocks.map((b, i) => ({ you: nextThread(blocks, i), sews: "" })))];
+  // (the first screen says what to have by the machine and how to hoop it, each on its own: they ran together as one
+  // bold paragraph with the action at the end)
+  if (v.sheet?.ready?.length && steps.length) steps[0] = { ...steps[0], ready: v.sheet.ready };
+  if (turnedFile() && steps.length) steps[0] = { ...steps[0], turn: $("done-turn").textContent };
   return steps.map((s, i) => {
     const b = blocks.find((x) => x.index === i), n = b ? b.segs.reduce((a, sg) => a + sg.length, 0) : 0;
     return { ...s, block: b, minutes: Math.max(1, Math.round(n / 550)) };
@@ -539,10 +541,13 @@ function alongShow() {
   if (done) {
     $("along-title").textContent = "Finished";
     $("along-you").textContent = (v.sheet?.after || []).join(" ") || FINISH;
+    $("along-ready").hidden = $("along-turn").hidden = true;
     $("along-sews").textContent = ""; $("along-time").textContent = "";
   } else {
     const s = steps[i], t = mt[i], sp = s.block && spool(s.block.color);
     $("along-title").innerHTML = `<i style="background:${s.block?.color || "#999"}"></i>${s.title ? escapeHtml(s.title) + " · " : ""}Brother ${escapeHtml(t?.name || "")}${sp ? ` <small>${escapeHtml(sp)}</small>` : ""}`;
+    $("along-ready").hidden = !s.ready; $("along-ready").querySelector("ul").innerHTML = (s.ready || []).map((r) => `<li>${escapeHtml(r)}</li>`).join("");
+    $("along-turn").hidden = !s.turn; $("along-turn").textContent = s.turn || "";
     $("along-you").textContent = s.you || (i ? "" : FIRST_STEP);
     $("along-sews").textContent = s.sews || "";
     $("along-time").textContent = `About ${s.minutes} min of sewing.`;
