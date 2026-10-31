@@ -9,7 +9,7 @@ import { FILL_PATTERNS } from "../core/digitize.js";
 import { draw } from "../render.js";
 import { QUILTS } from "./quilt.js";
 import { MOTIFS } from "./motifs.js";
-import { BORDERS, FABRICS, THREADS, SHAPES, TEXT_SHAPES, splitPieces, archFit, archRoom, archTight, touching, towelMin, fineLine, compose, fileBlocks, fittedSizes, followFrame, label, minSize, pieceBounds, previewLook, smallText } from "./pieces.js";
+import { BORDERS, FABRICS, THREADS, SHAPES, TEXT_SHAPES, splitPieces, archFit, archRoom, archTight, touching, towelMin, fineLine, loopsFill, compose, fileBlocks, fittedSizes, followFrame, label, minSize, pieceBounds, previewLook, smallText } from "./pieces.js";
 
 const SCRIPT = "NW Great Vibes", PRINT = "NW Josefin Sans", ROUND = "NW Quicksand";
 // exact Brother PEC thread colours, so the name on screen is the one the machine shows
@@ -77,7 +77,7 @@ export const STARTERS = [
     tip: "Hoop the quilt sandwich (top, batting, backing) or float it on tear-away stabilizer. Stitch the blocks, then sew them together." },
   { id: "pouch", name: "Zipper pouch", note: "sewn in the hoop, turned through the zipper", make: () => [
     frame({ shape: "square", w: 110, h: 90, border: "zip", color: NAVY }),
-    text({ text: "Makeup", size: 16, y: 14, color: RED })],
+    text({ text: "Makeup", size: 20, y: 14, color: RED })],   // (at 16 its a and e loops filled in)
     tip: "Medium-weight cotton or canvas works best. Use a nylon coil zipper (the needle can't hit metal teeth, so keep the zipper tab past the side while it sews)." },
   { id: "keyfob", name: "Key fob", note: "two-sided, with a ribbon loop", make: () => [
     frame({ shape: "square", w: 44, h: 80, border: "ith", hang: true, color: RED }),
@@ -322,7 +322,7 @@ export function initStudio(api) {
     const fit = $("st-edit").querySelector("[data-fit]"), fs = fittedSizes(pieces).get(p.id);
     if (fit) { fit.hidden = !fs; fit.textContent = fs ? `Shrunk to ${fs} mm so it fits inside the frame.` : ""; }
     const q = fs ? { ...p, size: fs } : p, m = minSize(q), room = archRoom(p), near = touching(q, pieces);
-    const towel = fabric === "towel" && !m && (p.kind === "text" || p.kind === "monogram") ? towelMin(q) : 0, gone = missing(p.text ?? p.letters ?? "", p.font);
+    const towel = fabric === "towel" && !m && (p.kind === "text" || p.kind === "monogram") ? towelMin(q) : 0, fills = loopsFill(q), gone = missing(p.text ?? p.letters ?? "", p.font);
     // (said plainly, with a one-tap fix where there is one)
     w.innerHTML = [
       gone.length ? `This font has no ${gone.map((c) => `“${api.escapeHtml(c)}”`).join(" ")}: ${gone.length === 1 ? "it" : "they"} would be stitched in a stand-in letter. Take ${gone.length === 1 ? "it" : "them"} out or try another font.` : "",
@@ -333,6 +333,7 @@ export function initStudio(api) {
       !room && archTight(p) ? `The curve is too tight for letters this tall: they'd bunch up. ${archFit(p) ? `<button type="button" class="link" data-room>Widen the curve</button> or make the letters smaller.` : "Make the curve bigger or the letters smaller."}` : "",
       near ? `This runs into ${api.escapeHtml(label(near))}. Drag it apart or make it smaller.` : "",
       !m && !towel && fabric !== "towel" && fineLine(q) ? `At this size it sews as a thin line. <button type="button" class="link" data-seg-set="style:satin">Make it bold</button> (small loops may fill in).` : "",
+      !m && !towel && fabric !== "towel" && fills ? `At this size the small loops (a b's or e's) fill in. <button type="button" class="link" data-seg-set="style:line">Thin line</button> keeps them open${fills <= 3 * q.size ? `, or <button type="button" class="link" data-size="${fills}">make it ${fills} mm</button>` : ""}.` : "",
     ].filter(Boolean).map((t) => `<span>${t}</span>`).join("<br>");
     w.hidden = !w.innerHTML;
   }

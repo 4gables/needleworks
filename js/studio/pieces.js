@@ -22,11 +22,12 @@ function letterStrokes(text, family, spacing = 0, kern = null) {
   const key = family + "\n" + text + "\n" + spacing + (kern ? "\n" + kern.join() : "");
   if (lettering.has(key)) return lettering.get(key);
   const print = !!fontOf(family).print;
-  const { edges, info } = strokes(text, family, { ...(print ? { deco: "dash", join: false } : { tongues: true }), ...(spacing ? { spacing } : {}), ...(kern ? { kern } : {}) });
+  // (knots: junctions joined by a stroke shorter than 0.75 of its width become one; `skeletonEdges`)
+  const { edges, info } = strokes(text, family, { knots: 0.75, ...(print ? { deco: "dash", join: false } : { tongues: true }), ...(spacing ? { spacing } : {}), ...(kern ? { kern } : {}) });
   // (each counter with the strokes round its widest spot: the ones within a pixel and a half of that circle)
   const lines = edges.map((e) => e[2]), near = (p, [x, y]) => Math.min(...p.map((q) => Math.hypot(q[0] - x, q[1] - y)));
   const counters = counterPockets(info.mask, lines, info.stroke).map((c) => ({ ...c, edges: lines.flatMap((p, i) => (near(p, c.at) <= c.peak + 1.5 ? [i] : [])) }));
-  const out = { comps: order(edges), info, counters };
+  const out = { comps: order(edges), info, counters, notches: notches(edges, info.stroke) };
   if (fontReady(family)) {
     lettering.set(key, out);
     if (lettering.size > 60) lettering.delete(lettering.keys().next().value);
@@ -39,7 +40,7 @@ function letterStrokes(text, family, spacing = 0, kern = null) {
 function letters(text, family, size, style = "auto", spacing = 0, kern = null) {
   text = (text || "").replace(/\s*\n\s*/g, " ").trim();
   if (!text) return { parts: [], satinW: 0 };
-  const { comps, info, counters } = letterStrokes(text, family, spacing, kern && kern.some((v) => v) ? kern : null);
+  const { comps, info, counters, notches } = letterStrokes(text, family, spacing, kern && kern.some((v) => v) ? kern : null);
   const all = comps.flatMap((c) => c.flatMap(([p]) => p));
   if (!all.length) return { parts: [], satinW: 0 };
   // (sized by the strokes before their loose ends reached out to the ink's edge, so a word keeps its size)
@@ -58,7 +59,7 @@ function letters(text, family, size, style = "auto", spacing = 0, kern = null) {
   const satinW = style === "line" ? 0 : style === "satin" ? Math.max(1.0, w) : w >= 0.8 ? w : 0;
   // Strokes round a counter are narrowed so it stays open (`counterCaps`; not when satin is asked for: "Make it bold"
   // says small loops may fill). The fourth entry is that stroke's column, or 0 for the word's.
-  const caps = style === "satin" || !satinW ? new Map() : counterCaps(counters, s, satinW);
+  const caps = style === "satin" || !satinW ? new Map() : notchCaps(notches, s, satinW, counterCaps(counters, s, satinW));
   const parts = comps.flatMap((c, k) => c.map(([p, mode, e], j) => [p.map(([x, y]) => [(x - cx) * s, (y - info.baseline) * s]), mode, print && k > 0 && j === 0, caps.get(e) || 0]));
   const open = Math.min(satinW || Infinity, ...caps.values());
   const pockets = counters.map((c) => ({ peak: c.peak * s, saddle: c.saddle * s }));
@@ -79,6 +80,33 @@ function counterCaps(counters, s, w) {
     const r = Math.max(saddle - 0.2, peak - OPEN / 2);   // the column's half-width it allows, pull included
     const cap = Math.max(0.8, 2 * r - 0.3 >= 1.5 ? 2 * r - 0.3 : Math.min(1.49, 2 * r - 0.1));   // (never under satin's 0.8: as open as it can be)
     if (cap < w) for (const e of c.edges) caps.set(e, Math.min(caps.get(e) ?? w, cap));
+  }
+  return caps;
+}
+// Short loose strokes (under 3 stroke widths: an e's tongue, a flick) and how close their centre line comes to any
+// other stroke (px) away from the junction they leave: the notch between them (Yellowtail's e is a c with a tongue
+// curled in under its top; sewn full width, the eye between them was a 0.3-0.5 mm sliver and the e read as c)
+function notches(edges, stroke) {
+  const deg = new Map();
+  for (const [a, b] of edges) { deg.set(a, (deg.get(a) || 0) + 1); deg.set(b, (deg.get(b) || 0) + 1); }
+  const out = [];
+  edges.forEach(([a, b, p], i) => {
+    if (a === b || p.length < 2) return;
+    const free = deg.get(a) === 1 ? a : deg.get(b) === 1 ? b : null, len = p.reduce((t, q, k) => (k ? t + Math.hypot(q[0] - p[k - 1][0], q[1] - p[k - 1][1]) : 0), 0);
+    if (free === null || deg.get(free === a ? b : a) < 3 || len > 3 * stroke) return;
+    const j = free === a ? p[p.length - 1] : p[0], away = (q) => Math.hypot(q[0] - j[0], q[1] - j[1]) > stroke;
+    let d = Infinity;
+    for (const q of p) if (away(q)) for (const [, , r] of edges) if (r !== p) for (const t of r) if (away(t)) d = Math.min(d, Math.hypot(q[0] - t[0], q[1] - t[1]));
+    if (d < Infinity) out.push({ edge: i, d });
+  });
+  return out;
+}
+// A loose stroke that would close its notch (under 0.8 mm between the needle points, pull included) sews narrower,
+// down to 0.8 mm: the rest of the letter keeps its weight
+function notchCaps(notches, s, w, caps) {
+  for (const { edge, d } of notches) {
+    const cap = Math.max(0.8, 2 * (d * s - w / 2 - 0.3 - OPEN));
+    if (cap < w) caps.set(edge, Math.min(caps.get(edge) ?? w, cap));
   }
   return caps;
 }
@@ -296,6 +324,17 @@ export function towelMin(p) {
   if (ok(p.size)) return 0;
   for (let size = Math.ceil(p.size) + 1; size <= 150; size++) if (ok(size)) return size;
   return 151;
+}
+
+// Automatic satin lettering whose own loops (a tenth of the x-height or more to their middle: a b's bowl, an e's eye)
+// close even round the narrowest column (0.8 mm, `counterCaps`): the height at which they stay open, or 0 when they
+// do. Said with "Thin line" as the other fix (Alex Brush "Abbie" at 12 mm sewed as "Avvie", with no word).
+export function loopsFill(p) {
+  if ((p.style || "auto") !== "auto") return 0;
+  const l = bulk(p);
+  if (!l || !l.parts.length || !l.satinW) return 0;
+  const shut = l.pockets.filter((c) => c.peak >= Math.max(0.45, 0.1 * l.xh) && Math.max(c.saddle - 0.2, c.peak - OPEN / 2) < 0.45);
+  return shut.length ? Math.ceil((p.size * 0.86) / Math.min(...shut.map((c) => c.peak))) : 0;
 }
 
 // Lettering under ~6 mm (x-height, or caps) stitches cleanest with thinner thread and needle (Ink/Stitch's small
@@ -651,9 +690,14 @@ function appliqued(loops, color, what, cover, trim, them = "it") {
 // Otherwise it trims. Satin covers 1.0 mm inside the placement line and 1.8 outside (it sits 0.4 mm out, 2.8 wide);
 // a move counts as hidden 0.3 mm short of that. Outlines go nearest first, a piece's holes before the next piece.
 // Until 2026-10-30 only the placement line linked a letter's holes (straight across it), so "BABY" took 19 trims.
+// A small hole (inscribed radius under 3 mm: an A's counter) gets a satin that leaves 1.6 mm of it open, down to 1.6 mm
+// wide, 0.2 mm out from its placement line: Lilita One's A at 34 mm (a 4 x 5.6 mm triangle, 2 mm to its middle) closed
+// to a 1 mm slot under a 2 mm satin 0.4 mm out.
 function applRoutes(loops) {
-  const n = loops.length, out = outward(loops, 0.4);
-  const width = out.map((l) => { const [x0, y0, x1, y1] = bounds(l); return Math.max(2.0, Math.min(2.8, Math.min(x1 - x0, y1 - y0) / 3.5)); });
+  const n = loops.length, big = Math.sign(area(loops.reduce((a, l) => (Math.abs(area(l)) > Math.abs(area(a)) ? l : a)))), r = loops.map((l) => (Math.sign(area(l)) !== big ? holeRadius(l) : Infinity));
+  const sh = r.map((v) => (v < 3 ? 0.2 : 0.4)), o4 = outward(loops, 0.4), o2 = r.some((v) => v < 3) ? outward(loops, 0.2) : o4;
+  const out = loops.map((_, i) => (sh[i] === 0.4 ? o4[i] : o2[i]));
+  const width = out.map((l, i) => { const [x0, y0, x1, y1] = bounds(l); const w = Math.max(2.0, Math.min(2.8, Math.min(x1 - x0, y1 - y0) / 3.5)); return r[i] < 3 ? Math.max(1.6, Math.min(w, 2 * (r[i] - 0.8 - sh[i]) - 0.2)) : w; });
   const ink = ([x, y]) => {
     let k = false;
     for (const l of loops) for (let i = 0, j = l.length - 1; i < l.length; j = i++)
@@ -673,7 +717,7 @@ function applRoutes(loops) {
     return d;
   };
   // under outline j's satin
-  const covers = (j, p) => dist(j, p) <= (width[j] + (width[j] > 2 ? 0.3 : 0.2)) / 2 + (ink(p) ? -0.4 : 0.4) - 0.15;
+  const covers = (j, p) => dist(j, p) <= (width[j] + (width[j] > 2 ? 0.3 : 0.2)) / 2 + (ink(p) ? -sh[j] : sh[j]) - 0.15;
   const hidden = (a, b, ok, skip = 0) => {
     const L = Math.hypot(b[0] - a[0], b[1] - a[1]);
     for (let s = skip; s <= L; s += 0.25) { const t = L ? s / L : 0; if (!ok([a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t])) return false; }
@@ -752,7 +796,7 @@ function applRoutes(loops) {
           }
           // satin: sewn from this spot round (either way), it ends on one edge; the move goes from there
           for (const rev of [false, true]) {
-            const sat = edgeSatin(from(out[i], i, c.si, rev), 2.8, 2.0), e = sat[sat.length - 1][sat[sat.length - 1].length - 1], b = nearestOn(out[j], e);
+            const sat = edgeSatin(from(out[i], i, c.si, rev), width[i], Math.min(2.0, width[i])), e = sat[sat.length - 1][sat[sat.length - 1].length - 1], b = nearestOn(out[j], e);
             if (hidden(e, b, ok, 0.3)) return { j, s: c.si, sat, bridge: [e, b], sj: arcOf(out[j], j, b) };
           }
         }
@@ -791,7 +835,7 @@ function applRoutes(loops) {
       if (kind === "satin") {
         const s = exit ? exit.s : arrive ?? T * (2 / 3);   // (a lone outline starts two thirds round: the stages' seams apart)
         if (arrive != null && Math.abs(arrive - s) > 0.05) path.push(...run(along(out[cur], cur, arrive, s), 2.5).slice(path.length ? 1 : 0));
-        const sat = exit ? exit.sat : edgeSatin(from(out[cur], cur, s), 2.8, 2.0);
+        const sat = exit ? exit.sat : edgeSatin(from(out[cur], cur, s), width[cur], Math.min(2.0, width[cur]));
         if (path.length) paths.push(path);
         paths.push(...sat.slice(0, -1)); path = sat[sat.length - 1].slice();
       } else {
@@ -834,6 +878,23 @@ function applRoutes(loops) {
   return { placement, tack, satin: stage("satin", tack.at(-1).at(-1)) };
 }
 const area = (l) => l.reduce((a, p, i) => { const q = l[(i + 1) % l.length]; return a + p[0] * q[1] - q[0] * p[1]; }, 0) / 2;
+// the radius of the biggest circle inside a closed outline (mm, on a 0.1 mm grid), or Infinity when it's over 10 mm across
+function holeRadius(l) {
+  const [x0, y0, x1, y1] = bounds(l);
+  if (Math.min(x1 - x0, y1 - y0) > 10) return Infinity;
+  let best = 0;
+  for (let x = x0; x <= x1; x += 0.1) for (let y = y0; y <= y1; y += 0.1) {
+    let k = false, d = Infinity;
+    for (let i = 0, j = l.length - 1; i < l.length; j = i++) {
+      const a = l[j], b = l[i];
+      if ((b[1] > y) !== (a[1] > y) && x < ((a[0] - b[0]) * (y - b[1])) / (a[1] - b[1]) + b[0]) k = !k;
+      const dx = b[0] - a[0], dy = b[1] - a[1], L = dx * dx + dy * dy, t = L ? Math.max(0, Math.min(1, ((x - a[0]) * dx + (y - a[1]) * dy) / L)) : 0;
+      d = Math.min(d, Math.hypot(x - a[0] - dx * t, y - a[1] - dy * t));
+    }
+    if (k && d > best) best = d;
+  }
+  return best;
+}
 
 // shrink a closed outline toward its centre by d mm (fine for the convex-ish frame shapes)
 function inset(pts, d) {
@@ -1182,6 +1243,6 @@ function build(pieces, hoop, opts) {
   }
   if (!steps.length) throw Object.assign(new Error("Nothing to stitch yet: type some words, or pick a starting idea."), { empty: true });
   if (opts.baste) after.push("Unpick the basting box (snip every few stitches on the back, then pull it out from the front).");
-  d.finish();
+  d.finish({ untiny: true });
   return { design: d, steps, after, before, tip: FABRICS[fab].tip };
 }

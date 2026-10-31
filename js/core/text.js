@@ -65,7 +65,9 @@ function swash(p0, d, length, xh, ybase, s) {
 export function renderWord(text, family, { leadIn = 0, tail = 0, join = true, deco = "swash", spacing = 0, kern = null } = {}) {
   const probe = canvas(10, 10).getContext("2d");
   const font = `${PX}px "${family}"`;
-  probe.font = font;
+  // the font's own kerning (its GPOS/kern pairs: AV, To): Chrome's canvas applies it by default ("auto"), other
+  // browsers may not, so it's asked for
+  probe.font = font; probe.fontKerning = "normal";
   if (spacing) probe.letterSpacing = `${spacing * PX}px`;
   const m = probe.measureText(text), mx = probe.measureText("x");
   const shift = [0];
@@ -80,7 +82,7 @@ export function renderWord(text, family, { leadIn = 0, tail = 0, join = true, de
   const w = Math.ceil(inkR - inkL + hi - lo + 2 * pad), h = Math.ceil(asc + desc + PX);
   const ox = pad - inkL - lo, baseline = PX / 2 + asc;
   const c = canvas(w, h), ctx = c.getContext("2d", { willReadFrequently: true });
-  ctx.font = font; ctx.fillStyle = "#000"; ctx.textBaseline = "alphabetic";
+  ctx.font = font; ctx.fontKerning = "normal"; ctx.fillStyle = "#000"; ctx.textBaseline = "alphabetic";
   if (spacing) ctx.letterSpacing = probe.letterSpacing;
   if (!kerned) ctx.fillText(text, ox, baseline);
   else for (let i = 0; i < text.length; i++)   // (where letter i starts in the whole word, so the font's kerning stays)
@@ -166,12 +168,13 @@ export function renderWord(text, family, { leadIn = 0, tail = 0, join = true, de
 
 // opts.tongues: keep short dead ends that reach well out of their stroke, a fifth of the x-height or more (`skeletonEdges`;
 // thin scripts kept every flick, and a fine line sewn three times over each piled up where it joined)
+// opts.knots: junctions closer than this many stroke widths become one (`skeletonEdges`)
 export function strokes(text, family, opts) {
   const { sk, ...r } = renderWord(text, family, opts);
   // print letters have real short strokes (t's crossbar, a's stem) that script-sized pruning would cut (print fonts are
   // the ones drawn with dash decorations: both callers pass deco "dash" for them)
   // and their loose ends reach out to the ink's edge (an a's stem past its bowl); `sized` are the points to size the
   // lettering by: the strokes as they were before that, so words keep their size
-  const edges = skeletonEdges(r.mask, r.stroke, { spur: opts?.deco === "dash" ? 0.45 : 1.3, dots: true, sk, reach: opts?.deco === "dash", tongues: opts?.tongues ? r.mid * 0.2 : 0 });
+  const edges = skeletonEdges(r.mask, r.stroke, { spur: opts?.deco === "dash" ? 0.45 : 1.3, dots: true, sk, reach: opts?.deco === "dash", tongues: opts?.tongues ? r.mid * 0.2 : 0, knots: opts?.knots ? r.stroke * opts.knots : 0 });
   return { edges, info: { ...r, firstX: r.span[0], lastX: r.span[1], sized: (edges.before || edges.map((e) => e[2])).flat() } };
 }
