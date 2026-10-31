@@ -28,6 +28,7 @@ const FILES = [
   "fonts/Satisfy-Regular.woff2",
   "fonts/Yellowtail-Regular.woff2",
   "js/app.js",
+  "js/words.js",
   "js/core/bookmark.js",
   "js/core/brandcharts.js",
   "js/core/brands.js",

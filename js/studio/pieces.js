@@ -8,7 +8,7 @@ import { DENSITY, FILL_PATTERNS, fillPolygon } from "../core/digitize.js";
 import { APPLIQUE_FONTS, FONTS, fontOf } from "../core/fonts.js";
 import { machineThreads } from "../core/formats.js";
 import { MARGIN } from "../core/machines.js";
-import { bounds, edgeWalk, filletPolygon, followRun, normals, run, satin, zigzag } from "../core/geom.js";
+import { back, bounds, edgeWalk, enter, filletPolygon, followRun, loop, moveCost, normals, rings, run, satin, zigzag } from "../core/geom.js";
 import { counterPockets, distanceTransform, order } from "../core/raster.js";
 import { strokes } from "../core/text.js";
 import { PEC_MATCH, pecThread } from "../core/threads.js";
@@ -40,7 +40,7 @@ function letterStrokes(text, family, spacing = 0, kern = null) {
   // (how the ink ends round a loose end, px: `endShape` in raster.js)
   const ends = edges.map((e) => (e[5] ? { start: e[2][0], ...e[5] } : null));
   const sides = edges.map((e) => (e[6] ? { start: e[2][0], w: e[6], path: e[2] } : null));
-  const out = { comps: order(edges), info, counters, notches: notches(edges, info.stroke), tapers, ends, sides };
+  const out = { edges, comps: order(edges), info, counters, notches: notches(edges, info.stroke), tapers, ends, sides };
   if (fontReady(family)) {
     lettering.set(key, out);
     if (lettering.size > 60) lettering.delete(lettering.keys().next().value);
@@ -50,10 +50,11 @@ function letterStrokes(text, family, spacing = 0, kern = null) {
 
 // Letters as [pts, "run"|"satin"] in mm: `size` is the height of the lettering, baseline at y = 0, centred across.
 // `kern`: room after each letter (fractions of the size), for the text as given (one line, already trimmed)
-function letters(text, family, size, style = "auto", spacing = 0, kern = null) {
+function letters(text, family, size, style = "auto", spacing = 0, kern = null, chain = true) {
   text = (text || "").replace(/\s*\n\s*/g, " ").trim();
   if (!text) return { parts: [], satinW: 0 };
-  const { comps, info, counters, notches, tapers, ends, sides } = letterStrokes(text, family, spacing, kern && kern.some((v) => v) ? kern : null);
+  const { edges, info, counters, notches, tapers, ends, sides, ...ls } = letterStrokes(text, family, spacing, kern && kern.some((v) => v) ? kern : null);
+  let comps = ls.comps;
   const all = comps.flatMap((c) => c.flatMap(([p]) => p));
   if (!all.length) return { parts: [], satinW: 0 };
   // (sized by the strokes before their loose ends reached out to the ink's edge, so a word keeps its size)
@@ -70,6 +71,13 @@ function letters(text, family, size, style = "auto", spacing = 0, kern = null) {
   const stroke = info.stroke * s, xh = info.mid * s;
   const w = Math.min(3.5, xh * 0.2, Math.max(stroke, xh * 0.12, Math.min(xh * 0.15, 1.2)));
   const satinW = style === "line" ? 0 : style === "satin" ? Math.max(1.0, w) : w >= 0.8 ? w : 0;
+  // script pieces (a capital the font leaves apart, separate words) start where the last one began, when that's close
+  // enough to stitch across rather than trim: each walk ends where it began, its last satin up to half a column (and
+  // pull) off its centre line, and Design.path stitches moves up to 2 mm (`order` near; print letters always jump),
+  // with half a mm to spare (a quarter left two 2.0-2.2 mm loose threads in 167 files). (Arches and waves stretch the
+  // gaps afterwards: `unbent` checks those.)
+  const reach = 1.5 - (satinW ? satinW / 2 + 0.3 : 0);
+  if (chain && !print && reach > 0.2) comps = order(edges, reach / s, 5 / s);
   // Strokes round a counter are narrowed so it stays open (`counterCaps`; not when satin is asked for: "Make it bold"
   // says small loops may fill). The fourth entry is that stroke's column, or 0 for the word's.
   const caps = style === "satin" || !satinW ? new Map() : notchCaps(notches, s, satinW, counterCaps(counters, s, satinW));
@@ -791,16 +799,16 @@ function textRows(p, fab = "cotton") {
   if (!lines.length) return [];
   const kerns = kept.map(([l, s]) => Array.from({ length: l.length }, (_, i) => (print && p.kern?.[s + i]) || 0).map((v) => v / 100));
   const joined = kerns.flatMap((k, i) => (i ? [0, ...k] : k));   // (lines joined by a space: none after it)
-  if (p.shape === "up" || p.shape === "down") {
-    const l = letters(lines.join(" "), p.font, p.size, style, sp, joined);
+  if (p.shape === "up" || p.shape === "down") return unbent((chain) => {
+    const l = letters(lines.join(" "), p.font, p.size, style, sp, joined, chain);
     return l.parts.length ? [{ parts: bend(l.parts, p.shape, Math.max(p.radius, 8), Math.max(p.ry ?? p.radius, 8)), satinW: l.satinW, xh: l.xh }] : [];
-  }
-  if (p.shape === "wave" || p.shape === "bridge") {
-    const l = letters(lines.join(" "), p.font, p.size, style, sp, joined);
+  });
+  if (p.shape === "wave" || p.shape === "bridge") return unbent((chain) => {
+    const l = letters(lines.join(" "), p.font, p.size, style, sp, joined, chain);
     if (!l.parts.length) return [];
     const mid = (l.top + l.bottom) / 2;   // (letters come with the baseline at y = 0)
     return [{ parts: p.shape === "wave" ? wave(l.parts.map(([q, ...r]) => [q.map(([x, y]) => [x, y - mid]), ...r]), p) : bridge(l.parts, p), satinW: l.satinW, xh: l.xh }];
-  }
+  });
   // straight: one size for every line (scaled to the first line's x-height), baselines `leading` x size apart
   let ls = lines.map((t, i) => letters(t, p.font, p.size, style, sp, kerns[i]));
   if (ls.length > 1) ls = ls.map((l, i) => (i && l.xh ? letters(lines[i], p.font, (p.size * ls[0].xh) / l.xh, style, sp, kerns[i]) : l));
@@ -813,6 +821,22 @@ function textRows(p, fab = "cotton") {
     const [a, b] = spans[i], dx = p.align === "left" ? -W / 2 - a : p.align === "right" ? W / 2 - b : -(a + b) / 2, dy = i * pitch - (top + bottom) / 2;
     return { parts: l.parts.map(([q, ...r]) => [q.map(([x, y]) => [x + dx, y + dy]), ...r]), satinW: l.satinW, xh: l.xh };
   });
+}
+// Bent lettering with its pieces chained (`letters` chain) unless that costs more moves once bent (`moveCost`): the
+// chaining reckons gaps before the bend, and an arch or wave stretches them (a 2 mm gap in a waved "Happy Birthday"
+// came out a loose thread).
+function unbent(make) {
+  const cost = (rows) => rows.reduce((c, { parts, satinW }) => {
+    for (let i = 1; i < parts.length; i++) {
+      const a = parts[i - 1][0], b = parts[i][0];
+      if (!a.length || !b.length) continue;
+      const d = Math.hypot(b[0][0] - a[a.length - 1][0], b[0][1] - a[a.length - 1][1]);
+      if (d > 0.01) c += moveCost(d + 0.25 + (satinW ? satinW / 2 + 0.3 : 0));
+    }
+    return c;
+  }, 0);
+  const a = make(true), b = make(false);
+  return cost(a) <= cost(b) ? a : b;
 }
 // along y = amp·sin(waves·2πx/W), letters spaced by arc length and turned with the curve
 function wave(parts, p) {
@@ -867,10 +891,7 @@ function lettersOn(laid, satinW, fab, xh = Infinity) {
   return out;
 }
 
-const loop = (q) => [...q, q[0]];
-// the outline the other way round from the same start (a plain reverse started at its last point: on a square that
-// was a whole side away, two trims and two 55-61 mm jumps in a bold frame)
-const back = (e) => [e[0], ...e.slice(1).reverse()];
+// (`loop`, `back`: geom.js, shared with the bookmark)
 // a tack-down: round the outline and back again
 const tack = (e) => [loop(run(e, 2.0, true)), loop(run(back(e), 2.0, true))];
 // the 3.6 mm satin border of appliqué, patch and in-the-hoop edges: edge walk, zigzag, satin
@@ -953,8 +974,8 @@ function localStages(p, fab = "cotton") {
           // (one sentence per action: the steps show them numbered. "On the front" was read while the hoop was upside
           // down, so the ribbon goes on once it's back on the machine, the embroidered side up)
           you: `Take the hoop off the machine (leave the fabric in the hoop) and turn it upside down. Tape the backing fabric over the stabilizer, right side facing you, covering the ${name} by ½ in. Turn the hoop back over and put it back on the machine.${hang ? ` For the loop, fold the ribbon in half and tape it on the embroidered side at the top of the ${name}, loop pointing in toward the middle, ends ½ in past the outline.` : ""} Press Start.`,
-          sews: "Tacks the backing on and covers the edge with satin through every layer.",
-          after: `Take it out of the hoop, tear the stabilizer away and cut round the ${name} as close to the satin as you can without nicking it${hang ? " (keep the ribbon loop clear of the scissors). Flip the ribbon loop up." : "."}` },
+          sews: "Tacks the backing on and covers the edge with satin stitch through every layer.",
+          after: `Take it out of the hoop, tear the stabilizer away and cut round the ${name} as close to the satin stitches as you can without nicking them${hang ? " (keep the ribbon loop clear of the scissors). Flip the ribbon loop up." : "."}` },
       ];
     } else if (p.border === "patch") {
       // solid tatami fill (inset so the satin edge covers its ragged ends), then the satin edge over it; `compose`
@@ -964,8 +985,8 @@ function localStages(p, fab = "cotton") {
       // (a patch is a separate piece: its fabric, a stabilizer firm enough for thousands of fill stitches, and how to
       // cut it out and put it on; it listed only "Tear-away stabilizer")
       const fill = patchFill(p, [inset(edge, 1.0)], fab);
-      stages = [...fill, { color: p.color, edge: true, solid: [edge], paths: satinBorder(edge), sews: `Sews the patch's satin edge.`,
-        after: `Take it out of the hoop, trim or tear the stabilizer away and cut the patch out close to the satin edge without nicking it. To put it on, iron patch adhesive (or fusible web) on the back and press it on, or sew it on by hand or machine just inside the edge.` }];
+      stages = [...fill, { color: p.color, edge: true, solid: [edge], paths: satinBorder(edge), sews: `Sews the patch's satin-stitch edge.`,
+        after: `Take it out of the hoop, trim or tear the stabilizer away and cut the patch out close to the satin-stitched edge without nicking it. To put it on, iron patch adhesive (or fusible web) on the back and press it on, or sew it on by hand or machine just inside the edge.` }];
     } else {
       stages = [{ color: p.color, paths: plainBorder(edge, p.border), sews: `Sews the ${name} frame.`, border: true }];
     }
@@ -1013,9 +1034,11 @@ function patchFill(p, loops, fab, name = shapeOf(p).name.toLowerCase()) {
 }
 
 // a motif filled (tatami inside, then a narrow satin edge over the row ends) or as a satin outline
+// (outline and holes nearest first, each from where the needle is: `rings`)
 function motifStitches(loops, style) {
-  if (style === "outline") return loops.flatMap((l) => edgeSatin(l, 2.2));
-  return [...fillPolygon(loops, { inset: 0.6, density: fd(DENSITY.solid) }), ...loops.flatMap((l) => [loop(run(l, 2.0, true)), loop(satin(l, 1.4, sd(0.4), 0.2, true))])];
+  if (style === "outline") return rings(loops, (l) => edgeSatin(l, 2.2));
+  const fill = fillPolygon(loops, { inset: 0.6, density: fd(DENSITY.solid) }), end = fill[fill.length - 1];
+  return [...fill, ...rings(loops, (l) => [loop(run(l, 2.0, true)), loop(satin(l, 1.4, sd(0.4), 0.2, true))], end && end[end.length - 1])];
 }
 
 // a satin edge round a closed outline: as wide as `max`, narrower round a small hole (a 2.8 mm satin in the top of an
@@ -1054,7 +1077,7 @@ function appliqued(loops, color, what, cover, trim, them = "it") {
     { color, pause: true, paths: R.tack,
       you: `Lay the appliqué fabric over ${cover}, right side up, covering ${them} by ½ in. Press Start: the machine tacks it down. Then take the hoop off the machine (leave the fabric in the hoop), trim the fabric close to the stitching ${trim}, and put the hoop back.`,
       sews: "", under: true },
-    { color, pause: true, paths: R.satin, you: "Press Start.", sews: "Covers the raw edges with satin." },
+    { color, pause: true, paths: R.satin, you: "Press Start.", sews: "Covers the raw edges with satin stitch." },
   ];
 }
 
@@ -1941,7 +1964,14 @@ function build(pieces, hoop, opts) {
     order[0] = { ...order[0], paths: [sides, ...order[0].paths], sews: "Sews a basting box to hold everything flat. " + order[0].sews };
   }
   const d = new Design(hoop), steps = [], after = [], before = [];
-  let thread = null;
+  // where the next part of the same block starts, past closed rings (a ring the needle has to jump to anyway starts
+  // there instead, so the move after it is a stitch; rings after it are entered where it ends: `enter`)
+  const items = [];
+  { let th = null, b = 0; for (const st of order) { if (st.color !== th || st.pause || st.fabric) { b++; th = st.color; } for (const q of st.paths) items.push([q, b]); } }
+  const ring = (q) => q.length > 3 && q[0][0] === q[q.length - 1][0] && q[0][1] === q[q.length - 1][1];
+  const ahead = items.map(() => null);
+  for (let i = items.length - 2; i >= 0; i--) { const [q, b] = items[i + 1]; ahead[i] = b !== items[i][1] || q.gap ? null : ring(q) ? ahead[i + 1] : q[0]; }
+  let k = 0, thread = null;
   for (const st of order) {
     if (st.after && !after.includes(st.after)) after.push(st.after);
     if (st.before && !before.includes(st.before)) before.push(st.before);
@@ -1960,7 +1990,18 @@ function build(pieces, hoop, opts) {
     // the tack line sits at the edge, under the satin that comes later
     const cur = steps[steps.length - 1];
     if (cur.under && !st.under && !st.fabric) cur.under = false;
-    for (const q of st.paths) d.path(q, true, !!q.gap, q.lockAt, q.reach);
+    // (a closed loop the needle is beside is entered there, not at its own start: `enter`)
+    for (const q of st.paths) {
+      const i = k++;
+      let r = q.gap ? q : enter(q, d.cur);
+      // (not at the start of an appliqué's stage: its seams are placed so they don't stack; and only where the moves in
+      // and out cost less, `moveCost`: a trim must not become a loose thread)
+      if (r === q && !q.gap && ahead[i] && (d.cur || (!st.pause && !st.fabric))) {
+        const t = enter(q, ahead[i]), c = (a) => (d.cur ? moveCost(Math.hypot(a[0][0] - d.cur[0], a[0][1] - d.cur[1])) : 0) + moveCost(Math.hypot(a[0][0] - ahead[i][0], a[0][1] - ahead[i][1]));
+        if (c(t) < c(q)) r = t;
+      }
+      d.path(r, true, !!q.gap, q.lockAt, r === q ? q.reach : 0);
+    }
   }
   if (!steps.length) throw Object.assign(new Error("Nothing to stitch yet: type some words, or pick a starting idea."), { empty: true });
   if (opts.baste) after.push("Unpick the basting box (snip every few stitches on the back, then pull it out from the front).");

@@ -301,6 +301,8 @@ canvas#view:active { cursor: grabbing; }
 /* one label column in the editor, so the sliders line up */
 .edit .range { display: grid; grid-template-columns: 6.6em 1fr auto; }
 .edit .range > span { white-space: nowrap; }
+/* (but a label longer than the column wraps: "Space in this pair" ran over its slider on a phone) */
+.edit .range > span { white-space: normal; }
 .range output { font-size: 14px; color: var(--muted); min-width: 52px; text-align: right; }
 .seg { display: flex; flex-wrap: wrap; gap: 6px; }
 .seg button { border: 1.5px solid var(--line); background: var(--panel); color: var(--ink); border-radius: 999px; padding: 6px 12px; cursor: pointer; font: inherit; font-size: 14px; }
@@ -324,6 +326,12 @@ body[data-mode="design"] #view { cursor: grab; }
 .steps ol.sub, ol.sub { margin: 2px 0 0; padding-left: 1.5em; display: grid; gap: 3px; list-style: decimal; font-size: 15px; }
 .steps ol.sub li::marker { color: var(--muted); }
 .st-steps .ready { margin: 0; padding-left: 18px; list-style: disc; color: var(--muted); font-size: 15px; display: grid; gap: 2px; }
+/* the design's problems (words.js): still to look at in the warning colour, good to know plain */
+ul.problems { margin: 0; padding-left: 18px; list-style: disc; display: grid; gap: 2px; font-size: 15px; }
+.look > b, .look ul.problems { color: var(--warn); }
+.along-look { display: grid; gap: 6px; }
+.along-look b { font-size: 15px; color: var(--muted); }
+.along-look .look > b { color: var(--warn); }
 .edit .warn { color: var(--warn); font-weight: 700; }
 .cards canvas { width: 100%; height: 72px; display: block; margin-bottom: 2px; }
 .st-load { display: inline-flex; align-items: center; cursor: pointer; font-weight: 400; color: var(--ink); }
@@ -361,12 +369,24 @@ body[data-mode="design"] #view { cursor: grab; }
   .sheet .list ol.sub li { margin: 0; }
   .sheet .sw { display: inline-block; width: 4mm; height: 4mm; border: 0.2mm solid #666; border-radius: 1mm; margin-right: 2mm; vertical-align: -0.6mm; print-color-adjust: exact; -webkit-print-color-adjust: exact; }
   .sheet .tip { border-left: 1mm solid #bbb; padding-left: 3mm; margin: 3mm 0; }
+  .sheet .probs { margin: 0 0 3mm; }
+  .sheet .probs ul.problems { padding-left: 6mm; font-size: 11pt; }
+  .sheet .look > b, .sheet .look ul.problems { color: #000; }
 }
 @media (min-width: 700px) and (min-height: 560px) {
-  .actions { display: grid; grid-auto-flow: column; justify-content: end; row-gap: 6px; }
+  .actions { display: grid; grid-auto-flow: column; justify-content: end; row-gap: 6px; min-width: 0; }
   .actions > * { grid-row: 1; }
   .actions > .extras { grid-row: 2; grid-column: 1 / span 2; margin: 0; }
 }
+/* narrow two-column screens (tablets upright): Send and Download one above the other (side by side, "Download
+   Ashley_bookmark.pes" ran off the screen at 768 x 1024) */
+@media (min-width: 700px) and (max-width: 960px) and (min-height: 560px) {
+  .actions { grid-auto-flow: row; justify-items: end; }
+  .actions > * { grid-row: auto; }
+  .actions > .extras { grid-row: auto; grid-column: auto; }
+}
+/* (a file name longer than the button ends in "…" rather than running out of it or making it three lines tall) */
+#download { max-width: min(100%, 24em); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .chips.plain button { padding: 6px 14px; }
 #st-thread { margin-top: 8px; }
 .chips .chips-label { align-self: center; font-size: 14px; color: var(--muted); margin-right: 2px; }
@@ -465,11 +485,6 @@ details.sewn-on[open] { display: grid; gap: 10px; }
 .names-thumbs .names-thin { color: var(--warn); }
 /* touch screens have no arrow keys */
 @media (pointer: coarse) { .keys { display: none; } }
-/* phones: Download stays in reach while scrolling the editor */
-@media (max-width: 600px) {
-  #download { position: fixed; left: 16px; right: 16px; bottom: 12px; z-index: 6; width: auto; box-shadow: 0 6px 20px rgba(0,0,0,.25); }
-  body { padding-bottom: 76px; }
-}
 
 /* file pickers: the input is there for the keyboard (a hidden one can't take focus); its label shows the focus */
 .sr-file { position: absolute; width: 1px; height: 1px; opacity: 0; overflow: hidden; }
@@ -513,10 +528,8 @@ label:has(> .sr-file:focus-visible), label:has(+ .sr-file:focus-visible) { outli
 .error .link { display: inline; white-space: nowrap; font-weight: 700; }
 /* dark colour dots (navy, black threads) need an edge on the dark page */
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .pieces .pick i, :root:not([data-theme="light"]) .threads i, :root:not([data-theme="light"]) .st-steps i { border-color: rgba(255,255,255,.45); } }
-/* phones: a disabled Download bar is still a solid bar (see-through, the buttons under it showed through), and the
-   size chips keep clear of the zoom buttons */
+/* phones: the size chips keep clear of the zoom buttons */
 @media (max-width: 600px) {
-  #download:disabled { opacity: 1; background: var(--panel); color: var(--muted); border: 1.5px solid var(--line); }
   .facts { max-width: calc(100% - 175px); }   /* (44 px zoom buttons on touch) */
 }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .fine-warn, :root:not([data-theme="light"]) .facts .bad { background: #3a2a1a; color: #f3c79a; } }
@@ -534,7 +547,7 @@ select, input[type="text"], .edit textarea, .cards button, .names textarea { bor
 /* chips with a spool line under the name are two lines tall: room for two whole rows (the second was cut in half);
    stacked layouts scroll the page, so nothing is cut there */
 .threads:has(small) { max-height: 120px; }
-@media (max-width: 600px) { .threads, .threads:has(small) { max-height: none; } }
+@media (max-width: 699px), (max-height: 559px) { .threads, .threads:has(small) { max-height: none; } }
 .facts .note { background: var(--panel); }
 /* the checkup's exact size: mm of the longer side */
 .field .size-mm { display: flex; justify-content: flex-start; align-items: center; gap: 8px; font-size: 14px; font-weight: 400; color: var(--muted); }
@@ -575,8 +588,8 @@ input[type="text"], .edit textarea { font: 400 20px/1.3 var(--body); }
 .toast .link { color: var(--bg); font-weight: 700; text-decoration: underline; }
 .toast.gone { opacity: 0; transition: opacity .2s; }
 .toast.gone .link { cursor: default; }
-/* phones: over the Download bar, not above it (it covered "+ Lettering" and "+ Appliqué letters" there) */
-@media (max-width: 600px) { .toast { left: 16px; right: 16px; transform: none; max-width: none; min-height: 56px; justify-content: space-between;
+/* stacked: over the Download bar, not above it (it covered "+ Lettering" and "+ Appliqué letters" there) */
+@media (max-width: 699px), (max-height: 559px) { .toast { left: 16px; right: 16px; transform: none; max-width: none; min-height: 56px; justify-content: space-between;
   bottom: calc(12px + env(safe-area-inset-bottom)); } .toast .link { min-height: 44px; padding: 0 4px; } }
 /* a fact chip that has more to say says it when tapped (touch screens have no tooltips) */
 .facts [data-tip] { cursor: help; text-decoration: underline dotted; text-underline-offset: 3px; }
@@ -587,16 +600,11 @@ input[type="text"], .edit textarea { font: 400 20px/1.3 var(--body); }
   .top { padding-top: 8px; }
   /* the sewing controls on one row under the slider, and a preview short enough that they show above the Download
      bar when the page opens (the bar covered Watch it sew and Turn hoop) */
-  #play { min-width: 0; flex: 1; }
+  #play { min-width: 0; flex: 1; white-space: normal; line-height: 1.2; }   /* (at 320 wide "Watch it sew" ran out of its button) */
   .sew .ghost { padding: 6px 10px; }
   .stage { grid-template-rows: minmax(300px, calc(100svh - 370px)) auto auto; }
   /* and room for a warning beside Download, so it shows above the bar too (a fleece name that closes up wasn't seen) */
-  .stage:has(.dl-warn:not([hidden])) { grid-template-rows: minmax(260px, calc(100svh - 440px)) auto auto; }
-  #download { bottom: calc(12px + env(safe-area-inset-bottom)); }
-  /* a solid strip behind the bar: the slider's red showed through at its rounded corners */
-  body::after { content: ""; position: fixed; left: 0; right: 0; bottom: 0; height: calc(76px + env(safe-area-inset-bottom)); z-index: 5;
-    background: var(--bg); box-shadow: 0 -1px 0 var(--line); }
-  body { padding-bottom: calc(80px + env(safe-area-inset-bottom)); }
+  .stage:has(.dl-warn:not([hidden])) { grid-template-rows: minmax(180px, calc(100svh - 440px)) auto auto; }
 }
 .pieces-box > legend { max-width: calc(100% - 160px); flex-wrap: wrap; justify-content: flex-start; column-gap: 6px; }
 /* narrow and short two-column screens (800 x 600, 1024 x 600, 1280 x 720): smaller chips and buttons so the preview keeps its height */
@@ -680,7 +688,7 @@ input[type="text"], .edit textarea { font: 400 20px/1.3 var(--body); }
 @media (max-width: 699px), (max-height: 559px) {
   .stage:has(#error:not([hidden])) { grid-template-rows: auto auto auto; }
   .canvas-wrap:has(> #error:not([hidden])) { display: flex; flex-direction: column; min-height: max(360px, 62vh); }
-  .canvas-wrap:has(> #error:not([hidden])) > .facts { position: static; align-self: flex-start; margin: 12px 0 200px 12px; }
+  .canvas-wrap:has(> #error:not([hidden])) > .facts { position: relative; z-index: 1; left: auto; top: auto; align-self: flex-start; margin: 12px 0 200px 12px; }
   .canvas-wrap > #error:not([hidden]) { position: relative; left: auto; bottom: auto; transform: none; margin: auto 12px 12px; width: auto; max-width: none; }
 }
 @media (max-width: 600px) {
@@ -708,3 +716,73 @@ details.sewn-on:not([open]) > summary::after { content: "Change"; margin-left: 1
 /* the spools they own, a row of their own under Brother's swatches */
 .swatches .own-swatches { display: flex; flex-wrap: wrap; gap: inherit; align-items: center; flex-basis: 100%; }
 .own-swatches .hint { font-size: 13px; margin: 0; }
+/* (tests/ui_sweep.mjs) Long words never widen the page: every column of the settings is one track the width of its
+   box, and a word longer than its box breaks (60 Ws in the steps widened the panel past the screen, so opening "How
+   to stitch it" jumped the page 990 px; the Download label ran out of its button) */
+body { overflow-wrap: break-word; }
+.panel, .settings, .edit, .field, .info, .names form, .steps ol, .st-steps button { grid-template-columns: minmax(0, 1fr); }
+/* Every stacked layout (phones, landscape phones, tablets in split view, a desktop at 200 %) keeps Download in reach: a
+   bar fixed at the bottom. (It was phones only: at 960 x 540 and 844 x 390 Download was below the fold.) */
+@media (max-width: 699px), (max-height: 559px) {
+  #download { position: fixed; left: max(16px, env(safe-area-inset-left)); right: max(16px, env(safe-area-inset-right)); bottom: calc(12px + env(safe-area-inset-bottom));
+    z-index: 6; width: auto; box-shadow: 0 6px 20px rgba(0,0,0,.25); }
+  /* a disabled Download bar is still a solid bar (see-through, the buttons under it showed through) */
+  #download:disabled { opacity: 1; background: var(--panel); color: var(--muted); border: 1.5px solid var(--line); }
+  /* a solid strip behind the bar: the slider's red showed through at its rounded corners */
+  body::after { content: ""; position: fixed; left: 0; right: 0; bottom: 0; height: calc(76px + env(safe-area-inset-bottom)); z-index: 5;
+    background: var(--bg); box-shadow: 0 -1px 0 var(--line); }
+  body { padding-bottom: calc(80px + env(safe-area-inset-bottom)); }
+  /* what keyboard focus scrolls to stops above the bar, not under it */
+  html { scroll-padding-bottom: calc(92px + env(safe-area-inset-bottom)); }
+  /* the tab's own way in (Choose a picture, Open a design file) shares the bar with Download (under the sewing
+     controls, it was below the fold on a phone) */
+  body[data-mode="picture"] #pick-picture, body[data-mode="open"] #pick-design { position: fixed; z-index: 6; left: max(16px, env(safe-area-inset-left));
+    bottom: calc(12px + env(safe-area-inset-bottom)); width: calc(42% - 22px); min-height: 52px; background: var(--panel); text-align: center; line-height: 1.2; }
+  body[data-mode="picture"] #download, body[data-mode="open"] #download { left: calc(42% + 2px); min-width: 0; }
+  .bottom .actions { order: -1; }
+  /* a warning before the file is saved goes right under the preview, above the sewing controls (under them, on a
+     small phone it was below the Download bar) */
+  .stage > .bottom { display: contents; }
+  .stage > .sew { order: 2; }
+  .stage > .bottom > * { order: 3; }
+  .stage > .bottom > .actions { order: 3; }
+  .stage > .bottom > .threads { order: 4; }
+  .stage > .bottom > .dl-warn { order: 1; }
+  body[data-mode="picture"] #pick-picture, body[data-mode="open"] #pick-design { white-space: normal; }
+  /* (nothing to zoom in an empty hoop: the buttons covered the "Open a file" note on a small phone) */
+  .canvas-wrap:has(> #empty:not([hidden])) > .zoom { display: none; }
+}
+/* wider than a phone, the bar is a button at the right */
+@media (min-width: 601px) and (max-height: 559px), (min-width: 601px) and (max-width: 699px) {
+  #download { left: auto; min-width: min(360px, calc(100% - 32px)); }
+}
+/* landscape phones and short windows: a slimmer header, and a preview that fits the screen above the Download bar
+   (at 844 x 390 the header took 210 px and the preview started below the fold) */
+@media (max-height: 559px) {
+  .top { padding-top: 6px; padding-bottom: 2px; gap: 6px 10px; }
+  .logo { font-size: 30px; }
+  .tag, .machine label:not(.sr) { display: none; }
+  .machine select { min-height: 36px; padding: 4px 8px; font-size: 15px; }
+  .tabs { order: 0; margin-top: 0; }
+  .tabs button { min-height: 36px; padding: 4px 12px; font-size: 15px; }
+  .work { padding-top: 8px; }
+  .stage { grid-template-rows: minmax(200px, calc(100svh - 170px)) auto auto; }
+  .facts { gap: 4px; }
+  .facts span { font-size: 11px; padding: 2px 7px; }
+}
+
+/* (a small phone on its side, 568 x 320: logo and tabs share the first row) */
+@media (max-height: 480px) and (max-width: 600px) {
+  .logo { font-size: 24px; }
+  .tabs { width: auto; flex: 1 0 auto; }
+  .tabs button { padding: 4px 8px; font-size: 13px; white-space: nowrap; }
+  .machine select { min-height: 32px; font-size: 13px; }
+  .stage, .stage:has(.dl-warn:not([hidden])) { grid-template-rows: minmax(190px, calc(100svh - 96px)) auto auto; }   /* (scrolled to, it fills the screen above the bar) */
+}
+/* narrow phones (320-400 wide): the zoom buttons one above the other and the size chips one row that scrolls
+   sideways, so the hoop keeps its height (five rows of chips left it 97 px tall, beside a warning) */
+@media (max-width: 400px) {
+  .zoom { flex-direction: column; }
+  .facts { max-width: calc(100% - 68px); flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; padding-bottom: 2px; }
+  .facts span { flex: none; }
+}
