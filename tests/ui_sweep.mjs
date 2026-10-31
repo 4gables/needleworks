@@ -12,7 +12,10 @@
 //   needs the site served:   .venv/bin/python tests/batch_server.py out/batch 8783
 //   usage: node tests/ui_sweep.mjs [--url http://127.0.0.1:8783/] [--port 9313] [--out out/ui_sweep]
 //          [--quick] [--vp 390x844m,1413x717] [--only design,open-file] [--no-keys] [--keys-only]
-// Prints "DONE <shots> <problems>" and exits 1 when there are problems. Full run ~15 min, --quick ~3 min.
+//          [--workers 4]   (tabs side by side, each in a browser context of its own)
+// Prints "DONE <shots> <problems>" and exits 1 when there are problems. Full run ~8 min (504 screens, ~200 key
+// presses), --quick ~2 min. Thresholds: the hoop gets at least 200 px of preview (160 under 700 px tall, 110 on a
+// phone, 100 on a phone on its side); text contrast WCAG AA; focus rings 1.5 px or more.
 import { spawn } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
