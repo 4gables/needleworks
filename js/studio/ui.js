@@ -102,7 +102,8 @@ export function initStudio(api) {
   if (!pieces.length) pieces = STARTERS.find((s) => s.make).make();
   if (new Set(pieces.map((p) => p.id)).size < pieces.length || !pieces.every((p) => Number.isInteger(p.id))) pieces.forEach((p, i) => (p.id = i + 1));
   nextId = Math.max(0, ...pieces.map((p) => p.id)) + 1;
-  let sel = saved?.sel ?? pieces[pieces.length - 1]?.id, seq = 0, timer = 0;
+  // (nothing selected stays so through a reload: `?? last` picked the last piece again)
+  let sel = saved?.sel === null ? null : saved?.sel ?? pieces[pieces.length - 1]?.id, seq = 0, timer = 0;
   // what it's sewn on (changes the stitches for knit and towel) and the basting box
   let fabric = FABRICS[saved?.fabric] ? saved.fabric : "cotton", baste = !!saved?.baste, thread = THREADS[saved?.thread] ? String(saved.thread) : "auto";
   // made to fit with Fit to hoop: a font or style change that then takes it past the hoop fits it again
@@ -893,6 +894,13 @@ export function initStudio(api) {
   }
   let dragFrame = 0;
   function end() { if (drag) { const moved = drag.moved; drag = null; if (moved) { fitted = false; settle(); } save(); if (moved) { make(); warn(); } } }
+  // nothing selected (Escape, or a tap on empty preview): copy then takes the whole design
+  function deselect() {
+    if (sel == null) return;
+    const lost = $("st-edit").contains(document.activeElement);
+    sel = null; save(); ui();
+    if (lost) roving()?.focus();   // (Escape from the editor: the keyboard stays in the list)
+  }
   function nudge(dx, dy) { change((p) => { p.x += dx; p.y += dy; settle(); }); }
   // A layout that fits but spills past the hoop's field (pieces dragged or nudged off to one side) goes back to the
   // middle when the piece is let go: the machine centres it anyway, and the preview drew stitches past the hoop and
@@ -967,6 +975,8 @@ export function initStudio(api) {
     if ((e.key === "Delete" || e.key === "Backspace") && (e.target === document.body || e.target.id === "view") && current()) {
       e.preventDefault(); $("st-pieces").querySelector(`[data-op="del"][data-id="${sel}"]`)?.click(); sel = null; ui(); return;
     }
+    // Escape unselects the piece (anywhere on the Design tab but a text box, a menu or a dialog)
+    if (e.key === "Escape" && !typing(e.target) && !document.querySelector("dialog[open]") && current()) { e.preventDefault(); deselect(); return; }
     const arrows = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] }[e.key];
     if (arrows && (e.target === document.body || e.target.id === "view")) { e.preventDefault(); nudge(arrows[0] * (e.shiftKey ? 5 : 1), arrows[1] * (e.shiftKey ? 5 : 1)); }
   });
@@ -1099,5 +1109,5 @@ export function initStudio(api) {
   }
 
   cards(); ui();
-  return { make, relabel: () => { ui(); make(); }, start, move, end, nudge, forNames, remember, recentre: () => { remember(); recentre(); save(); ui(); make(); } };
+  return { make, relabel: () => { ui(); make(); }, start, move, end, nudge, deselect, forNames, remember, recentre: () => { remember(); recentre(); save(); ui(); make(); } };
 }

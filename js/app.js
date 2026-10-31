@@ -74,7 +74,7 @@ function paint() {
   const v = state.view;
   $("empty").hidden = !!v || !$("error").hidden;   // (an error says what's wrong; "Nothing to stitch yet" under it misled)
   // (room kept clear for the chips at the top and a message at the bottom: the too-big note covered the hoop on phones)
-  const err = $("error"), room = { padTop: $("facts").offsetHeight + 16, padBottom: err.hidden ? undefined : err.offsetHeight + 28 };
+  const err = $("error"), room = { padTop: $("facts").offsetHeight + 16, padBottom: err.hidden ? undefined : err.offsetHeight + 28, corner: zoomCorner(), base: state.hold };
   const field = { hoop: shownHoop(), showHoop: state.showHoop && !state.backdrop, fieldColor: dark.matches && state.showHoop && !state.backdrop ? "#ece5da" : undefined };
   // (nothing to stitch yet: the hoop stays, so there's still something to put the first piece in)
   if (!v) { state.tf = draw(canvas, null, { ...field, ...room, zoom: state.zoom, pan: state.pan }); return; }
@@ -89,6 +89,11 @@ function paint() {
     real: state.real, boxes: v.hoopings, ...room,
   });
 }
+// the zoom pad's share of the preview's top-right corner ([w, h] px), kept clear by `draw`
+function zoomCorner() {
+  const c = canvas.getBoundingClientRect(), z = document.querySelector(".zoom").getBoundingClientRect();
+  return z.width ? [c.right - z.left, z.bottom - c.top] : undefined;
+}
 new ResizeObserver(() => paint()).observe(canvas);
 const dark = matchMedia("(prefers-color-scheme: dark)");
 dark.addEventListener("change", () => paint());
@@ -102,7 +107,7 @@ function setView(v) {
   if (!v) { $("dl-warn").hidden = true; $("facts").innerHTML = ""; $("threads").innerHTML = ""; $("download").disabled = true; $("download").textContent = "Download PES"; $("share").disabled = true; $("sheet-print").disabled = $("along-open").disabled = true; $("cut-file").hidden = true; $("names-open").hidden = true; paint(); return; }
   // the preview is the file: decode the PES bytes and draw those, not the design they were made from
   if (!v.file) {
-    try { v.file = v.source ? v.pattern : readEmbroidery(v.bytes, v.filename); }
+    try { v.file = v.source ? v.pattern : unwrap(readEmbroidery(v.bytes, v.filename), state.mode === "design" && v.pattern); }
     catch (err) { v.file = null; showError("This file didn't read back: " + err.message); $("download").disabled = true; $("share").disabled = true; return; }
   }
   v.shown = turned() ? turnPattern(v.file, false) : v.file; v.heat = null;
@@ -180,6 +185,15 @@ function picSteps(v, st) {
       return `<li><b><span class="n">${i + 1}</span><i style="background:${b.color}"></i>Brother ${escapeHtml(t.name)}${spool(b.color) ? ` <small>${escapeHtml(spool(b.color))}</small>` : ""}</b><span class="you">${escapeHtml(steps[i].you)}</span></li>`; }).join("")
     + `<li class="after"><b>When it's done</b><span>${escapeHtml(after)}</span></li>`;
 }
+// A design reaching past 204.8 mm from its centre (only a too-big or split design's whole view, never a file to sew)
+// overflows the PEC box's signed 12 bits and reads back shifted: put it back where it was made, or a piece dragged
+// past that point jumped across the preview and couldn't be picked up where it showed
+function unwrap(file, pattern) {
+  const lo = (p) => { let x = Infinity, y = Infinity; for (const s of p?.stitches || []) if (s[2] === STITCH) { if (s[0] < x) x = s[0]; if (s[1] < y) y = s[1]; } return [x, y]; };
+  const [ax, ay] = lo(file), [bx, by] = lo(pattern), dx = Math.round(bx - ax), dy = Math.round(by - ay);
+  if (isFinite(dx) && isFinite(dy) && (Math.abs(dx) > 2 || Math.abs(dy) > 2)) for (const s of file.stitches) { s[0] += dx; s[1] += dy; }
+  return file;
+}
 // a Design-tab layout that fits the hoop but sits past its edge on screen (pieces dragged off to one side): the
 // machine centres the whole design, so it sews fine, but it looked like it would hit the hoop
 function offCentre(v, fits) {
@@ -223,14 +237,21 @@ function toMm(e) {
   const sx = (e.clientX - r.left - tf.ox) / tf.scale / 10, sy = (e.clientY - r.top - tf.oy) / tf.scale / 10;
   return turned() && state.mode !== "design" ? [-sy, sx] : [sx, sy];
 }
-let dragging = false;
+// A piece drag holds the view's fit and centre (`state.hold`) until it's let go, then the view refits. A tap on empty
+// preview (not a pan) unselects the piece (there was no way to, so copying the whole design was out of reach).
+let dragging = false, tap = null;
 canvas.addEventListener("pointerdown", (e) => {
   canvas.setPointerCapture(e.pointerId);
-  if (state.mode === "design" && !pointers.size) { const mm = toMm(e); dragging = !!(mm && studio.start(mm)); }
+  tap = null;
+  if (state.mode === "design" && !pointers.size) {
+    const mm = toMm(e); dragging = !!(mm && studio.start(mm));
+    if (dragging) state.hold = state.tf?.base; else tap = [e.clientX, e.clientY];
+  }
   pointers.set(e.pointerId, [e.clientX, e.clientY]);
 });
 canvas.addEventListener("pointermove", (e) => {
   if (!pointers.has(e.pointerId)) return;
+  if (tap && Math.hypot(e.clientX - tap[0], e.clientY - tap[1]) > 6) tap = null;
   if (dragging && pointers.size === 1) { const mm = toMm(e); if (mm) studio.move(mm); return; }
   const prev = pointers.get(e.pointerId);
   if (pointers.size === 2) {
@@ -246,7 +267,13 @@ canvas.addEventListener("pointermove", (e) => {
   } else state.pan = [state.pan[0] + e.clientX - prev[0], state.pan[1] + e.clientY - prev[1]];
   pointers.set(e.pointerId, [e.clientX, e.clientY]); paintSoon();
 });
-const up = (e) => { pointers.delete(e.pointerId); if (dragging && !pointers.size) { dragging = false; studio.end(); } };
+const up = (e) => {
+  pointers.delete(e.pointerId);
+  if (pointers.size) { tap = null; return; }
+  if (dragging) { dragging = false; state.hold = null; studio.end(); paintSoon(); }
+  else if (tap && e.type === "pointerup" && state.mode === "design") studio.deselect();
+  tap = null;
+};
 canvas.addEventListener("pointerup", up); canvas.addEventListener("pointercancel", up);
 canvas.addEventListener("dblclick", () => $("zoom-fit").click());
 
