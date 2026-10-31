@@ -560,7 +560,11 @@ input[type="text"], .edit textarea { font: 400 20px/1.3 var(--body); }
 .toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); z-index: 8; background: var(--ink); color: var(--bg);
   border-radius: 12px; padding: 10px 16px; display: flex; gap: 14px; align-items: center; box-shadow: 0 8px 24px rgba(0,0,0,.25); max-width: calc(100vw - 32px); }
 .toast .link { color: var(--bg); font-weight: 700; text-decoration: underline; }
-@media (max-width: 600px) { .toast { bottom: calc(84px + env(safe-area-inset-bottom)); } }
+.toast.gone { opacity: 0; transition: opacity .2s; }
+.toast.gone .link { cursor: default; }
+/* phones: over the Download bar, not above it (it covered "+ Lettering" and "+ Appliqué letters" there) */
+@media (max-width: 600px) { .toast { left: 16px; right: 16px; transform: none; max-width: none; min-height: 56px; justify-content: space-between;
+  bottom: calc(12px + env(safe-area-inset-bottom)); } .toast .link { min-height: 44px; padding: 0 4px; } }
 /* a fact chip that has more to say says it when tapped (touch screens have no tooltips) */
 .facts [data-tip] { cursor: help; text-decoration: underline dotted; text-underline-offset: 3px; }
 .fact-tip { position: absolute; left: 12px; right: 12px; z-index: 4; margin: 0; background: var(--panel); border-radius: 10px; padding: 8px 12px;

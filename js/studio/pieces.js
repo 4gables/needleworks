@@ -6,10 +6,12 @@
 import { Design } from "../core/design.js";
 import { DENSITY, FILL_PATTERNS, fillPolygon } from "../core/digitize.js";
 import { APPLIQUE_FONTS, FONTS, fontOf } from "../core/fonts.js";
+import { machineThreads } from "../core/formats.js";
 import { MARGIN } from "../core/machines.js";
 import { bounds, edgeWalk, filletPolygon, followRun, normals, run, satin, zigzag } from "../core/geom.js";
 import { counterPockets, distanceTransform, order } from "../core/raster.js";
 import { strokes } from "../core/text.js";
+import { PEC_MATCH, pecThread } from "../core/threads.js";
 import { MOTIFS } from "./motifs.js";
 import { letterOutlines, motifOutlines } from "./outline.js";
 import { QUILTS, contours, echo, stipple } from "./quilt.js";
@@ -1336,16 +1338,21 @@ export function fileBlocks(design) {
   const blocks = [];
   let cur = null, run = [];
   const flush = () => { if (run.length > 1 && cur) cur.paths.push(run); run = []; };
+  // Each block keeps the machine thread the file's own PEC palette gives it: where the colour as written would be sewn
+  // as another thread, it takes that thread's colour (ufront.pes's #cc99ff is Lavender in its palette, but written from
+  // the hex it became Light Lilac: the Open tab and the Design tab named different threads)
+  const pec = design.pec, mine = pec ? machineThreads(design.threads) : [];
+  const color = (k, t) => (PEC_MATCH[pec?.[k]] && mine[k]?.index !== pec[k] ? pecThread(pec[k]).hex : t.color || "#000000");
   design.stitches.forEach(([x, y, c], i) => {
-    if (!cur) { cur = { color: design.threads[0]?.color || "#000000", name: design.threads[0]?.name || "", paths: [] }; blocks.push(cur); }
+    if (!cur) { cur = { color: color(0, design.threads[0] || {}), name: design.threads[0]?.name || "", paths: [] }; blocks.push(cur); }
     if (c === 0) run.push([x / 10, y / 10]);
     // (a run starts at its first stitch, not where the jump to it stopped: files' jumps often stop a few mm short, and
     // starting there sewed each one as a 2-5 mm stitch or loose thread: peace.pes had 31 to snip here, 3 opened alone)
     else if (c === 1 || c === 2) flush();
     else if (c === 5) {
       flush();
-      const t = design.threads[blocks.length] || design.threads[design.threads.length - 1] || {};
-      cur = { color: t.color || "#000000", name: t.name || "", paths: [] }; blocks.push(cur);
+      const k = design.threads[blocks.length] ? blocks.length : design.threads.length - 1, t = design.threads[k] || {};
+      cur = { color: color(k, t), name: t.name || "", paths: [] }; blocks.push(cur);
     }
   });
   flush();

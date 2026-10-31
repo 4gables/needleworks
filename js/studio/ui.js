@@ -6,6 +6,7 @@ import { APPLIQUE_FONTS, FONTS, loadFont } from "../core/fonts.js";
 import { hoop as getHoop } from "../core/machines.js";
 import { nearestBrotherThread } from "../core/threads.js";
 import { designStats, readEmbroidery } from "../core/formats.js";
+import { stopWords } from "../quality.js";
 import { FILL_PATTERNS } from "../core/digitize.js";
 import { draw } from "../render.js";
 import { youHtml } from "../sheet.js";
@@ -744,8 +745,12 @@ export function initStudio(api) {
   // pause: the steps said "2 pauses" where the download said "no pauses")
   function stepsUI(steps, after = [], small = false, before = [], waiting = "", first = "") {
     applGuide(steps);
-    const rehoops = steps.filter((st) => st.rehoop).length, count = steps.length - rehoops, pauses = count - 1 - rehoops;
-    $("st-steps-count").textContent = !steps.length ? "" : `· ${rehoops ? `${rehoops + 1} hoopings, ` : ""}${count} ${count === 1 ? "step" : "steps"}, ${pauses} ${pauses === 1 ? "pause" : "pauses"}`;
+    // (stops in the words the facts beside the preview use: "2 thread changes and 1 pause", not "3 pauses"; a split
+    // design's rehooping between its files is neither)
+    const rehoops = steps.filter((st) => st.rehoop).length, count = steps.length - rehoops;
+    let changes = 0, same = 0, prev = null;
+    for (const st of steps) { if (st.rehoop) { prev = null; continue; } if (prev) st.color === prev.color ? same++ : changes++; prev = st; }
+    $("st-steps-count").textContent = !steps.length ? "" : `· ${rehoops ? `${rehoops + 1} hoopings, ` : ""}${count} ${count === 1 ? "step" : "steps"}${changes + same ? `, ${stopWords(changes, same)}` : ""}`;
     let n = 0;
     // each step is a button: the preview shows the design as it is after that step, what's still to come faint
     $("st-steps").innerHTML = (waiting ? `<li class="after"><b>Waiting for a fit</b><span>${api.escapeHtml(waiting)}</span></li>` : "")
@@ -831,14 +836,20 @@ export function initStudio(api) {
   };
   let deleted = 0, toastTimer = 0, toastAt = 0;
   const note = Object.assign(document.createElement("div"), { id: "st-toast", className: "toast", hidden: true });
-  function hideToast() { if (note.querySelector("button")) note.hidden = true; }
+  function hideToast() { if (note.querySelector("button")) gone(); }
   note.setAttribute("role", "status"); document.body.append(note);
+  // Going, it fades and keeps catching taps for a moment before it's hidden: a late tap on Undo just after it went
+  // landed on "+ Appliqué letters" under it, and so did a second tap on Undo
+  function gone() {
+    if (note.hidden || note.classList.contains("gone")) return;
+    note.classList.add("gone"); clearTimeout(toastTimer); toastTimer = setTimeout(() => { note.hidden = true; note.classList.remove("gone"); }, 700);
+  }
   // a moment's note with a one-tap way back ("Removed Monogram aMs. Undo")
   // (10 s, or until the next change: 6 s went before a newcomer found Undo)
   function toast(msg, action, ms = action ? 10000 : 3000) {
     note.innerHTML = `<span>${api.escapeHtml(msg)}</span>${action ? `<button type="button" class="link">${action.label}</button>` : ""}`;
-    if (action) note.querySelector("button").onclick = () => { note.hidden = true; action.run(); };
-    note.hidden = false; toastAt = Date.now(); clearTimeout(toastTimer); toastTimer = setTimeout(() => (note.hidden = true), ms);
+    if (action) note.querySelector("button").onclick = () => { if (note.classList.contains("gone")) return; gone(); action.run(); };
+    note.classList.remove("gone"); note.hidden = false; toastAt = Date.now(); clearTimeout(toastTimer); toastTimer = setTimeout(gone, ms);
   }
   $("st-pieces").onclick = (e) => {
     const b = e.target.closest("button"); if (!b) return;
@@ -1168,7 +1179,7 @@ export function initStudio(api) {
     try {
       const d = readEmbroidery(new Uint8Array(await f.arrayBuffer()), f.name);
       remember();
-      const p = piece({ kind: "file", name: f.name.replace(/\.[^.]+$/, ""), blocks: fileBlocks(d), color: d.threads[0]?.color || BLACK });
+      const blocks = fileBlocks(d), p = piece({ kind: "file", name: f.name.replace(/\.[^.]+$/, ""), blocks, color: blocks[0].color });
       // in free space, above what's there (or below, if only that fits), not on top of it: centred, a bought design
       // landed on the lettering. It sews first, after any frames, so lettering added under it sews on top.
       freeSpot(p, "up");
