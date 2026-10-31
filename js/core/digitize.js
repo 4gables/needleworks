@@ -506,8 +506,8 @@ export function analyze(img, opts = {}) {
 export const FILL_PATTERNS = {
   tatami: { name: "Plain", off: (r) => (r % 4) / 4 },
   brick: { name: "Brick", off: (r) => (r % 2) / 2 },
-  chevron: { name: "Chevron", off: (r) => [0, 1, 2, 3, 2, 1][r % 6] / 4 },
-  wave: { name: "Wave", off: (r) => 0.5 + 0.5 * Math.sin((r * Math.PI) / 6) },
+  chevron: { name: "Chevron", off: (r) => Math.abs((r % 12) - 6) / 12 },
+  wave: { name: "Wave", off: (r) => 0.5 + 0.25 * Math.sin((r * Math.PI) / 8) },
 };
 // share(f): this layer's part of the full density at f, how far across the shape (0-1) the row lies: rows are
 // spaced spacing / share, none where the share is under 0.15 (a colour blend: two layers whose spacings change

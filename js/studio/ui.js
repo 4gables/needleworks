@@ -333,7 +333,6 @@ export function initStudio(api) {
       h += `<div class="field"><span>Motif</span><div class="motifs" role="group" aria-label="Motif">${Object.entries(MOTIFS).map(([k, m]) => `<button type="button" data-motif="${k}" aria-pressed="${k === p.motif}" title="${m.name}"><svg viewBox="0 0 256 256" aria-hidden="true"><path d="${m.d}"/></svg></button>`).join("")}</div></div>`;
       h += range("size", "Size", 10, 120, p.size);
       h += seg("style", { fill: "Filled", outline: "Outline", applique: "Appliqué" }, p.style || "fill");
-      if ((p.style || "fill") === "fill" && p.size < 25) h += `<p class="hint warn">Filled this small, the detail closes up. Make it 25 mm or more, or choose Outline.</p>`;
       if (p.style === "applique") h += `<p class="hint">Sews an outline, pauses for you to lay fabric on and trim it, then satins the edges. 50 mm or bigger cuts most easily.</p>`;
     } else if (p.kind === "letters") {
       h += `<label class="field"><span>Letters</span><input type="text" data-k="text" value="${api.escapeHtml(p.text)}" maxlength="12" autocomplete="off" spellcheck="false"></label>`;
@@ -468,6 +467,16 @@ export function initStudio(api) {
       hit = inside ? `This runs into the ${frameName} around it${zip ? " (the zipper and its stitching are across the top)" : ""}. ${cs ? btn(`data-size="${cs}"`, `Make it ${cs} mm`) : move || full}`
         : `This runs into ${api.escapeHtml(and(nears.map(label)))}. ${cs ? `${btn(`data-size="${cs}"`, `Make it ${cs} mm`)} or drag it apart.` : move ? `${move}, or drag it apart.` : full || "Drag it apart."}`;
     }
+    // a motif too small for its style: filled, the detail closes up under 25 mm; as an outline or appliqué the satin
+    // edges run together under 30 mm (a 15 mm butterfly's antennae merged, a house's window filled in, and the
+    // appliqué fabric piece was 7 mm across). Outline was offered as the way out for a small filled one: it's worse.
+    let small = "";
+    const style = p.style || "fill", least = p.kind === "motif" ? { fill: 25, outline: 30, applique: 30 }[style] || 0 : 0;
+    if (least && p.size < least) {
+      const l = landing(p, { size: least });
+      small = `${style === "fill" ? "Filled this small, the detail closes up." : style === "outline" ? "As an outline this small, the edges run together and the detail fills in." : "As appliqué this small, the fabric piece is tiny to cut and the edges run together."} `
+        + (l.fits ? btn(`data-size="${least}"`, `Make it ${least} mm`, l) : `Move it where there's room, then make it ${least} mm or more.`);
+    }
     // (a bigger size for loops that fill in is offered only when it lands, like every other fix)
     const fillsAt = fills && !m && !towel && fabric !== "towel" && fills <= 3 * q.size ? landing(p, sizeChange(p, fills)) : null;
     // a name typed as initials ("Max" sewed as a first/LAST/middle monogram, "MaX" with a big a): as lettering instead
@@ -492,7 +501,7 @@ export function initStudio(api) {
     const rows = p.kind === "text" ? p.text.split("\n").filter((l) => l.trim()).length : 0;
     const oneLine = rows > 1 && p.shape !== "straight" ? `${TEXT_SHAPES[p.shape]} sews the words on one line, so the ${rows} lines are joined into one. ${btn(`data-seg-set="shape:straight"`, "Make it straight")} to keep the lines.` : "";
     // (said plainly, with a one-tap fix where there is one)
-    w.innerHTML = [named, oneLine, under, same, kerned,
+    w.innerHTML = [named, oneLine, under, same, kerned, small,
       gone.length ? `This font has no ${gone.map((c) => `“${api.escapeHtml(c)}”`).join(" ")}: ${gone.length === 1 ? "it" : "they"} would be stitched in a stand-in letter. Take ${gone.length === 1 ? "it" : "them"} out or try another font.` : "",
       size, arc, hit,
       !m && !towel && fabric !== "towel" && fineLine(q) ? `At this size it sews as a thin line. <button type="button" class="link" data-seg-set="style:satin">Make it bold</button> (small loops may fill in).` : "",
