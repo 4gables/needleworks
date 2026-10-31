@@ -3,6 +3,7 @@
 import { buildBookmark, hiddenBlocks } from "../core/bookmark.js";
 import { turnPattern } from "../core/design.js";
 import { APPLIQUE_FONTS, FONTS, loadFont } from "../core/fonts.js";
+import { glyphs } from "../core/glyphs.js";
 import { hoop as getHoop } from "../core/machines.js";
 import { nearestBrotherThread } from "../core/threads.js";
 import { designStats, machineThreads, readEmbroidery } from "../core/formats.js";
@@ -12,7 +13,7 @@ import { draw } from "../render.js";
 import { TURN_PIC, youHtml } from "../sheet.js";
 import { QUILTS } from "./quilt.js";
 import { MOTIFS } from "./motifs.js";
-import { BORDERS, FABRICS, THREADS, SHAPES, TEXT_SHAPES, splitPieces, archFit, archStart, frontPanel, inkHeight, monoSize, archRoom, archShrink, archTight, cleanPiece, clearSize, collision, collisions, inFrame, letterMetrics, underPatch, crossName, crossStep, layoutSize, touching, touchingAll, towelMin, fineLine, loopsFill, compose, fileBlocks, fittedSizes, followFrame, label, minSize, pieceBounds, previewLook, smallText, bulkReady } from "./pieces.js";
+import { BORDERS, FABRICS, THREADS, SHAPES, TEXT_SHAPES, splitPieces, archFit, archStart, frontPanel, inkHeight, monoSize, archRoom, archShrink, archTight, cleanPiece, clearSize, collision, collisions, inFrame, letterMetrics, underPatch, crossName, crossStep, layoutSize, touching, touchingAll, towelMin, fineLine, loopsFill, compose, fileBlocks, blocksPattern, scaleBlocks, FILE_SCALE, fittedSizes, followFrame, label, minSize, pieceBounds, previewLook, smallText, bulkReady } from "./pieces.js";
 
 const SCRIPT = "NW Great Vibes", PRINT = "NW Josefin Sans", ROUND = "NW Quicksand";
 // exact Brother PEC thread colours, so the name on screen is the one the machine shows
@@ -261,20 +262,18 @@ export function initStudio(api) {
     for (const [k, v] of Object.entries(kern)) { const i = +k; if (i + 1 < a) out[i] = v; else if (i >= old.length - b) out[i + now.length - old.length] = v; }
     return Object.keys(out).length ? out : undefined;
   }
-  // characters the font doesn't have (the browser would draw them in a stand-in font). The fonts are Latin only, so
-  // anything past Latin Extended (emoji, CJK, Hebrew…) other than punctuation and currency is missing; a Latin letter
-  // is missing when the font doesn't change its width against either fallback. (Measuring alone misses CJK: the
-  // system's fallback chain changes with the font in front of it.)
+  // characters the font doesn't have (the browser would draw them in a stand-in font), from the font's own character
+  // map (glyphs.js). Guessing by code point (anything past Latin Extended) said Great Vibes had no ễ or А, which it has;
+  // measuring widths against fallbacks misses CJK (the system's fallback chain changes with the font in front of it).
   const probe = document.createElement("canvas").getContext("2d");
-  const width = (font, ch) => { probe.font = font; return probe.measureText(ch).width; };
   function missing(text, family) {
-    if (!family) return [];
+    const has = family && glyphs(family);
+    if (!has) return [];
     return [...new Set(text.replace(/\s/g, ""))].filter((ch) => {
       const cp = ch.codePointAt(0);
       // (invisible joiners and emoji variation selectors aren't letters: "❤️" listed U+FE0F as an empty “”)
       if ((cp >= 0xfe00 && cp <= 0xfe0f) || (cp >= 0x200b && cp <= 0x200d) || cp >= 0xe0000) return false;
-      if (cp > 0x24f && !(cp >= 0x2100 && cp <= 0x214f)) return !(cp >= 0x2000 && cp <= 0x20cf);
-      return width(`40px "${family}", monospace`, ch) === width("40px monospace", ch) && width(`40px "${family}", serif`, ch) === width("40px serif", ch);
+      return !has.has(cp);
     });
   }
   // mm with inches beside them (US sewists think in inches)
@@ -366,7 +365,11 @@ export function initStudio(api) {
       if (p.border === "ith") h += `<p class="hint">Two-sided, made in the hoop: an appliqué front, then the pieces below it in the list, then backing fabric under the hoop and a satin edge through everything. The steps are under “How to stitch it”.</p>`;
       if (p.border === "applique") h += `<p class="hint">Sews an outline, pauses for you to lay fabric on and trim it, then covers the edge in satin. The steps are under “How to stitch it”.</p>`;
     } else {
-      h += `<p class="hint">${api.escapeHtml(p.name)}: its stitches are used exactly as they are, so it can be moved and turned but not resized.</p>`;
+      // a design file is resized as Open a design resizes it: re-stitched at the new size (`resizeFile`), so it can
+      // shrink with the words added to it (it could only be moved and turned: Fit to hoop shrank just the words)
+      const pct = Math.round((p.scale || 1) * 100);
+      h += `<label class="range"><span>Size</span><input type="range" data-file-scale min="${FILE_SCALE[0] * 100}" max="${FILE_SCALE[1] * 100}" step="1" value="${pct}"><output>${fileSize(p, pct / 100)}</output></label>`;
+      h += `<p class="hint">${api.escapeHtml(p.name)}: ${p.pending ? "re-stitching it at this size…" : pct === 100 ? "its stitches exactly as they are in the file." : `made ${pct < 100 ? "smaller" : "bigger"} from its own stitches, spaced as closely as the file had them.`}</p>`;
     }
     if (p.kind === "text" || p.kind === "monogram") h += `<p class="hint" data-fit hidden></p>`;
     if (p.kind !== "frame") h += `<p class="hint warn" data-warn aria-live="polite" hidden></p>`;
@@ -444,7 +447,12 @@ export function initStudio(api) {
           if (minSize({ ...r, size: s2 }) || (onTowel && towelMin({ ...r, size: s2 }) > s2 * 1.04)) break;
           if (!touching({ ...r, size: s2 }, ps2)) at2 = t;
         }
-        size = `Shrunk to fit inside the frame, ${what[0].toLowerCase() + what.slice(1)} ${at2 ? `${btn(`data-lines="${at2}"`, "Put it on two lines")} or make the frame bigger.` : "Use fewer words, or make the frame bigger."}`;
+        // or the frame made bigger by as much, where that lands (a towel monogram's R filled in, with no way out but
+        // "make the frame bigger")
+        const host = !at2 && frameOf(p), grow = host ? frameFor(p, host, need) : null;
+        const bigger = grow ? btn(`data-frame-grow="${host.id}:${grow.w}:${grow.h}:${need}"`, `Make the frame ${grow.w} mm`, grow) : "";
+        size = `Shrunk to fit inside the frame, ${what[0].toLowerCase() + what.slice(1)} ${at2 ? `${btn(`data-lines="${at2}"`, "Put it on two lines")} or make the frame bigger.`
+          : bigger ? `${bigger}${p.kind === "monogram" ? "" : ", or use fewer words"}.` : p.kind === "monogram" ? "Make the frame bigger, or use a bolder font." : "Use fewer words, or make the frame bigger."}`;
       } else if (need > max) size = `${what} Use fewer or shorter words, or a bolder font.`;
       else {
         const l = landing(p, sizeChange(p, need));
@@ -476,8 +484,12 @@ export function initStudio(api) {
       const to = host && !cs ? spotIn(p) : null, zip = host?.border === "zip";
       const move = to ? btn("data-move", `Move it ${zip ? "below the zipper" : `to the free space in the ${frameName}`}${to.size !== (fs ?? p.size) ? `, ${to.size} mm` : ""}`) : "";
       const full = host ? `There's no free space for it in the ${frameName}: make the frame bigger, or take something out.` : "";
+      // (or, at the size it is, to free room beside what it runs into: a motif made bigger over the name under it had
+      // only "Drag it apart", as did a design file)
+      const away = !inside && !to ? moveAway(p, near) : null;
+      const go = away ? btn(`data-move-to="${away.x},${away.y}"`, `Move it ${away.where}`, away.l) : "";
       hit = inside ? `This runs into the ${frameName} around it${zip ? " (the zipper and its stitching are across the top)" : ""}. ${cs ? btn(`data-size="${cs}"`, `Make it ${cs} mm`) : move || full}`
-        : `This runs into ${api.escapeHtml(and(nears.map(label)))}. ${cs ? `${btn(`data-size="${cs}"`, `Make it ${cs} mm`)} or drag it apart.` : move ? `${move}, or drag it apart.` : full || "Drag it apart."}`;
+        : `This runs into ${api.escapeHtml(and(nears.map(label)))}. ${cs || go ? `${[cs ? btn(`data-size="${cs}"`, `Make it ${cs} mm`) : "", go].filter(Boolean).map((b, i) => (i ? b.replace(">Move", ">move") : b)).join(", ")} or drag it apart.` : move ? `${move}, or drag it apart.` : full || "Drag it apart."}`;
     }
     // a motif too small for its style: filled, the detail closes up under 25 mm; as an outline or appliqué the satin
     // edges run together under 30 mm (a 15 mm butterfly's antennae merged, a house's window filled in, and the
@@ -519,8 +531,8 @@ export function initStudio(api) {
       !m && !towel && fabric !== "towel" && fineLine(q) ? `At this size it sews as a thin line. <button type="button" class="link" data-seg-set="style:satin">Make it bold</button> (small loops may fill in).` : "",
       !m && !towel && fabric !== "towel" && fills ? `At this size the small loops (the holes in letters like b and e) fill in. <button type="button" class="link" data-seg-set="style:line">Thin line</button> keeps them open${fillsAt?.fits ? `, or ${btn(`data-size="${fills}"`, `make it ${fills} mm`, fillsAt)}` : ""}.` : "",
       // (too small, thin, or loops filling on one long line, as Fit to hoop leaves a long name: two lines may be much bigger)
-      !fs && (m || fills || (fineLine(q) && fabric !== "towel")) ? ((t) => (t ? `On two lines it can be ${t} mm. ${btn(`data-lines="${t}"`, "Put it on two lines")}` : ""))(twoLineSize(p)) : "",
-    ].filter(Boolean).map((t) => `<span>${t}</span>`).join("<br>");
+      !fs && (m || fills || (fineLine(q) && fabric !== "towel")) ? ((c) => (c ? `On ${c.n === 2 ? "two" : "three"} lines${c.turn ? " with the hoop turned" : ""} it can be ${c.size} mm. ${btn(`data-lines="${c.size}" data-text="${encodeURIComponent(c.text)}"`, `Put it on ${c.n === 2 ? "two" : "three"} lines`, { fits: c.turn ? "turn" : "fits" })}` : ""))(lineChoice(p)) : "",
+    ].filter(Boolean).map((t) => `<span>${t}</span>`).join(" <br>");   // (a space too: read aloud or copied, "lines.On two lines")
     w.hidden = !w.innerHTML;
     const auto = $("st-edit").querySelector('[data-seg="style"] [data-v="auto"]');
     if (auto) auto.textContent = autoName(p);
@@ -535,6 +547,48 @@ export function initStudio(api) {
     if (!ok(lo)) return 0;
     while (hi - lo > 0.5) { const m = (lo + hi) / 2; if (ok(m)) lo = m; else hi = m; }
     return Math.floor(lo * 2) / 2;
+  }
+  // frame f made big enough (up to half as big again) for p to be sewn at `need` inside it, the layout still in the
+  // hoop: { w, h, fits } (fits "fits" or "turn", as `landing`), or null
+  function frameFor(p, f, need) {
+    const hp = api.hoop(), fw = hp.w - 5, fh = hp.h - 5, H = f.shape === "circle" ? f.w : f.h;
+    for (let k = 1.02; k <= 1.5; k += 0.02) {
+      const g = { ...f, w: Math.ceil(f.w * k), h: Math.ceil(H * k) }, q = { ...p, size: Math.max(p.size, need) };
+      const ps = pieces.map((o) => (o.id === f.id ? g : o.id === p.id ? q : o));
+      if ((fittedSizes(ps).get(p.id) ?? q.size) < need) continue;
+      const [w, h] = layoutSize(ps), fits = w <= fw && h <= fh ? "fits" : w <= fh && h <= fw ? "turn" : null;
+      if (!fits || touching(q, ps)) return null;
+      return { w: g.w, h: g.h, fits };
+    }
+    return null;
+  }
+  // frame f (a circle) centred on everything there and just big enough to hold it all 6 mm inside its line (about
+  // 4 mm of fabric inside the border), as long as the hoop takes it; else as it was
+  function roundAll(f) {
+    const bs = pieces.map(pieceBounds).filter(Boolean); if (!bs.length) return;
+    const x = (Math.min(...bs.map((b) => b[0])) + Math.max(...bs.map((b) => b[2]))) / 2, y = (Math.min(...bs.map((b) => b[1])) + Math.max(...bs.map((b) => b[3]))) / 2;
+    const hp = api.hoop(), most = Math.min(hp.w, hp.h) - 8;
+    for (let w = 30; w <= most; w += 2) {
+      const g = { ...f, x: Math.round(x * 2) / 2, y: Math.round(y * 2) / 2, w, h: w };
+      if (pieces.every((o) => inFrame(o, g, 6))) { Object.assign(f, { x: g.x, y: g.y, w, h: w }); return; }
+    }
+  }
+  // the frame p sits in: the nearest earlier one whose box holds its middle
+  const frameOf = (p) => pieces.slice(0, pieces.indexOf(p)).reverse().find((f) => f.kind === "frame" && Math.abs(p.x - f.x) < f.w / 2 && Math.abs(p.y - f.y) < (f.shape === "circle" ? f.w : f.h) / 2);
+  // p at the size it is, moved to the nearest free room (`freeRoom`, with p itself out of the way) that runs into
+  // nothing and keeps one hooping; said by where it goes from `other`: { x, y, where, l } or null
+  function moveAway(p, other) {
+    const keep = pieces, fs = fittedSizes(pieces).get(p.id);
+    if (fs) return null;   // (sized by its frame: moving it out of the frame isn't the fix)
+    let r;
+    try { pieces = pieces.filter((o) => o.id !== p.id); r = freeRoom({ ...p }, null); } finally { pieces = keep; }
+    if (!r || (p.size != null && r.size !== p.size)) return null;
+    const l = landing(p, { x: r.x, y: r.y });
+    if (!l.fits) return null;
+    const a = pieceBounds({ ...p, x: r.x, y: r.y }), b = pieceBounds(other);
+    const nm = api.escapeHtml(other.kind === "motif" || other.kind === "frame" ? `the ${label(other).toLowerCase()}` : label(other));
+    const where = !a || !b ? "to free space" : a[1] >= b[3] - 1 ? `below ${nm}` : a[3] <= b[1] + 1 ? `above ${nm}` : `beside ${nm}`;
+    return { x: r.x, y: r.y, where, l };
   }
   const and = (xs) => (xs.length > 1 ? `${xs.slice(0, -1).join(", ")} and ${xs.at(-1)}` : xs[0] || "");
   // what a one-tap change to p would leave: { w, h, fits: "fits" (as the hoop is now), "turn" (only with the hoop
@@ -616,14 +670,38 @@ export function initStudio(api) {
   const sizeChange = (p, size) => { const s = Math.min(size, p.kind === "monogram" ? 90 : 60); return { size: s, ...(archFit({ ...p, size: s }) || {}) }; };
   // the biggest size (0.5 mm, up to 60) p fits the hoop at on two lines (`twoLines`), running into nothing new; 0 when
   // that isn't at least a quarter bigger than now (Fit to hoop made "Mrs. Lee" 17 mm on a 4x4, its loops filling in)
-  function twoLineSize(p) {
-    const two = twoLines(p); if (!two) return 0;
-    const hp = api.hoop(), fits = (t) => { const [w, h] = layoutSize(pieces.map((r) => (r.id === p.id ? { ...p, text: two, size: t } : r))); return w <= hp.w - 5 && h <= hp.h - 5; };
-    let lo = p.size * 1.25, hi = 60;
-    if (lo > hi || !fits(lo)) return 0;
-    while (hi - lo > 0.5) { const m = (lo + hi) / 2; if (fits(m)) lo = m; else hi = m; }
-    const t = Math.floor(lo * 2) / 2;
-    return landing(p, { text: two, size: t }).fits === "fits" ? t : 0;
+  // The biggest size p reaches on two or three lines, with the hoop as it is or turned: { n, text, size, turn }, or
+  // null when none is at least a quarter bigger. Three lines or the turn only when 10 % bigger again (a 60-letter
+  // name fitted to the hoop was offered two lines at 5 mm, when three lines turned gave it 9).
+  function lineChoice(p) {
+    const hp = api.hoop();
+    let best = null;
+    for (const n of [2, 3]) {
+      const text = n === 2 ? twoLines(p) : threeLines(p); if (!text) continue;
+      for (const turn of hp.w === hp.h ? [false] : [false, true]) {
+        const fw = (turn ? hp.h : hp.w) - 5, fh = (turn ? hp.w : hp.h) - 5;
+        const fits = (t) => { const [w, h] = layoutSize(pieces.map((r) => (r.id === p.id ? { ...p, text, size: t } : r))); return w <= fw && h <= fh; };
+        let lo = p.size * 1.25, hi = 60;
+        if (lo > hi || !fits(lo)) continue;
+        while (hi - lo > 0.5) { const m = (lo + hi) / 2; if (fits(m)) lo = m; else hi = m; }
+        const t = Math.floor(lo * 2) / 2;
+        if (landing(p, { text, size: t }).fits !== (turn ? "turn" : "fits")) continue;
+        if (!best || t >= best.size * 1.1) best = { n, text, size: t, turn };
+      }
+    }
+    return best;
+  }
+  // one line of three or more words split into three lines as even as they can be (the longest line shortest)
+  function threeLines(p) {
+    if (p.kind !== "text" || (p.shape && p.shape !== "straight") || p.text.includes("\n")) return null;
+    const w = p.text.trim().split(/ +/), line = (a, b) => w.slice(a, b).join(" ");
+    if (w.length < 3) return null;
+    let best = null;
+    for (let i = 1; i < w.length - 1; i++) for (let j = i + 1; j < w.length; j++) {
+      const worst = Math.max(line(0, i).length, line(i, j).length, line(j).length);
+      if (!best || worst < best[0]) best = [worst, [line(0, i), line(i, j), line(j)].join("\n")];
+    }
+    return best[1];
   }
   // one line of two or more words split into two, at the space nearest the middle; null when that's not possible
   function twoLines(p) {
@@ -650,6 +728,7 @@ export function initStudio(api) {
       const fonts = [...new Set(pieces.filter((p) => p.font).map((p) => p.font))];
       await Promise.all(fonts.map(loadFont));
       if (s !== seq) return;
+      if (!dragging) restitchFiles();
       let composed;
       try { composed = compose(pieces, api.hoop(), { fabric, baste, thread, dragging }); }
       catch (err) {
@@ -661,6 +740,8 @@ export function initStudio(api) {
       }
       if (s !== seq) return;
       refitted = false;
+      if (!dragging) roomier();
+      const resizing = !dragging && pieces.find((p) => p.kind === "file" && p.pending);
       const { design, steps, done, ready, small, later } = stepsOf(composed, true);
       stepsUI(steps, done, small, ready);
       const look = previewLook(steps);
@@ -688,7 +769,8 @@ export function initStudio(api) {
           covered ? `${label(covered)} sews before the patch that covers it: select it to sew it after.` : "",
           lost ? `${label(lost)} is nearly the same thread as the patch under it, so it won't show.` : "",
           unread.length ? `${unread.join("; ")}: select ${unread.length > 1 ? "each" : "it"} for a fix before you stitch.` : ""].filter(Boolean).join(" "),
-        block: wrap ? `${label(wrap)} runs into itself round the curve: select it to widen the curve or make the letters smaller.` : "",
+        block: wrap ? `${label(wrap)} runs into itself round the curve: select it to widen the curve or make the letters smaller.`
+          : resizing ? `Re-stitching ${resizing.name} at ${Math.round(resizing.scale * 100)} %…` : "", blockLabel: wrap ? "" : resizing ? "Re-stitching…" : "",
         fabric: look.fabricShapeBlock != null ? "pink" : "linen", steps: steps.length,
         sheet: { steps: steps.map((st) => ({ you: st.you, sews: st.sews.join(" ") })), after: done, ready, cut: steps.filter((st) => st.cut).map((st) => st.cut),
           notes } });
@@ -708,6 +790,76 @@ export function initStudio(api) {
       else if (err.font) { api.showError(err.message, { label: "Try again", run: () => make() }); $("empty").hidden = true; }
       else { console.error(err); api.showError(err.message); }
     }
+  }
+  // ---------- design files resized ----------
+  // A file piece keeps the stitches it was opened with (`orig`) and its size against them (`scale`); `blocks` are what
+  // it sews. A new size is the stitches scaled as a stand-in (`pending`, Download waits) while the doctor's `fix`
+  // re-stitches it in a worker, one at a time; results are kept for undo and redo.
+  const restitched = new Map();
+  const fileKey = (p, f) => `${p.name}|${p.orig.length}|${p.orig[0].paths.length}|${p.orig[0].paths[0][0]}|${f}`;
+  function resizeFile(p, f) {
+    f = Math.min(FILE_SCALE[1], Math.max(FILE_SCALE[0], Math.round(f * 100) / 100));
+    const orig = p.orig || p.blocks;
+    if (f === 1) { p.blocks = orig; delete p.orig; delete p.scale; delete p.pending; return; }
+    if (f === p.scale) return;
+    p.orig = orig; p.scale = f;
+    const hit = restitched.get(fileKey(p, f));
+    if (hit) { p.blocks = hit; delete p.pending; } else { p.blocks = scaleBlocks(orig, f); p.pending = true; }
+  }
+  // its size in words, at scale f: "62 % · 55 × 48 mm"
+  function fileSize(p, f) {
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    for (const b of p.orig || p.blocks) for (const q of b.paths) for (const [x, y] of q) { x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y); }
+    return `${Math.round(f * 100)} % · ${Math.round((x1 - x0) * f)} × ${Math.round((y1 - y0) * f)} mm`;
+  }
+  let fileWorker = null, fileJob = null;
+  function restitchFiles() {
+    if (fileJob) return;
+    const p = pieces.find((q) => q.kind === "file" && q.pending);
+    if (!p) return;
+    const hit = restitched.get(fileKey(p, p.scale));
+    if (hit) { p.blocks = hit; delete p.pending; save(); make(); return; }
+    if (!fileWorker) {
+      fileWorker = new Worker(new URL("../doctor-worker.js", import.meta.url), { type: "module" });
+      fileWorker.onmessage = (e) => {
+        const job = fileJob; fileJob = null;
+        const q = pieces.find((o) => o.id === job.id && o.kind === "file" && o.pending && o.scale === job.scale);
+        let blocks = null;
+        if (e.data.ok) try { blocks = fileBlocks(e.data.pattern); restitched.set(job.key, blocks); } catch (err) { e.data.error = err.message; }
+        if (q && blocks) { q.blocks = blocks; delete q.pending; }
+        // (it couldn't be re-stitched at that size: back to the size it came in, and said)
+        else if (q) { resizeFile(q, 1); api.showError(`${q.name} couldn't be resized: ${e.data.error}`); }
+        save(); if (q && current()?.id === q.id) editor(); make();
+      };
+    }
+    fileJob = { id: p.id, scale: p.scale, key: fileKey(p, p.scale) };
+    fileWorker.postMessage({ id: 0, d: blocksPattern(p.orig), opts: { scale: p.scale, tiny: p.scale < 1, thin: true } });
+  }
+  // A design opened on the Open tab, to add words to: a new design of the file and a line of lettering under it (the
+  // last design stays one Undo away). Fit to hoop then resizes both.
+  function addWords(d, name) {
+    const blocks = fileBlocks(d), had = pieces.length;
+    remember();
+    const f = piece({ kind: "file", name, blocks, color: blocks[0].color }), t = text({ text: "Your words", font: SCRIPT });
+    pieces = [f]; fitted = false; from = name;
+    freeSpot(t, "down"); pieces.push(t); sel = t.id; recentre();
+    api.setMode("design"); save(); ui(); make();
+    if (had) toast(`Started a new design with ${name}.`, { label: "Undo", run: undo });
+    // (straight into the words, selected, so typing replaces them)
+    const w = $("st-edit").querySelector('textarea[data-k="text"]');
+    if (w) { w.focus(); w.select(); }
+  }
+
+  // A bigger hoop picked for a design that fits: offered once, the design made as big as it allows (Fit to hoop). A
+  // 93 mm design moved from the 4x4 to the 5x7 stayed 93 mm with nothing said.
+  let lastHoop = null;
+  function roomier() {
+    const hp = api.hoop(), key = `${hp.machine}/${hp.id}/${hp.w}x${hp.h}`, was = lastHoop;
+    lastHoop = { key, area: hp.w * hp.h };
+    if (!was || was.key === key || hp.w * hp.h <= was.area || document.body.dataset.mode !== "design") return;
+    const [w, h] = layoutSize(pieces);
+    if (!w || !h || Math.min((hp.w - 10) / w, (hp.h - 10) / h) < 1.1) return;
+    toast(`The ${hp.name} has room to make this design bigger.`, { label: `Make it as big as the ${hp.name.replace(/ hoop$/, "")} allows`, run: () => { remember(); fitHoop(); } }, 12000);
   }
   // the steps as shown and printed: what to have ready, what's done after, and whether the letters are small
   // (`lazy`: lettering not worked out yet (a long text drawn again as one line, 0.3-0.7 s) is taken as small as it last
@@ -929,12 +1081,20 @@ export function initStudio(api) {
     }
     // (straight lettering first, it's the name: a coaster's 34 mm "A" pasted beside "Emma" made it A.pes; else a
     // monogram, which beats arched words: the ring with JKM in it downloaded as HANDMADE.pes)
-    const big = (ps) => ps.reduce((a, p) => (!a || p.size > a.size ? p : a), null);
-    const m = big(pieces.filter((p) => p.kind === "text" && (p.shape || "straight") === "straight")) || big(pieces.filter((p) => p.kind === "monogram")) || main(true);
+    // (words with letters in them before a date: the ring-bearer pillow's bigger "06.20.27" named it 06_20_27.pes, not
+    // after "Sam & Alex")
+    const big = (ps) => ps.reduce((a, p) => (!a || p.size > a.size ? p : a), null), lettered = (p) => /\p{L}/u.test(p.text ?? p.letters ?? "");
+    const pick = (ok) => big(pieces.filter((p) => ok(p) && p.kind === "text" && (p.shape || "straight") === "straight")) || big(pieces.filter((p) => ok(p) && p.kind === "monogram"))
+      || big(pieces.filter((p) => ok(p) && (p.kind === "text" || p.kind === "monogram" || p.kind === "letters")));
+    const m = pick(lettered) || pick(() => true);
     return (m?.kind === "monogram" ? m.letters : m?.text) || from || "design";   // (else the starter: a quilt block was design.pes)
   };
   // the design's main lettering: the biggest straight-or-arched words or monogram (`letters`: appliqué letters too)
-  const main = (letters = false) => pieces.filter((p) => p.kind === "text" || p.kind === "monogram" || (letters && p.kind === "letters")).reduce((a, p) => (!a || p.size > a.size ? p : a), null);
+  // (words with letters before a date: One for each name swapped each name in for the pillow's "06.20.27")
+  const main = (letters = false) => {
+    const all = pieces.filter((p) => p.kind === "text" || p.kind === "monogram" || (letters && p.kind === "letters")), named = all.filter((p) => /\p{L}/u.test(p.text ?? p.letters ?? ""));
+    return (named.length ? named : all).reduce((a, p) => (!a || p.size > a.size ? p : a), null);
+  };
 
   // ---------- events ----------
   $("st-cards").onclick = (e) => {
@@ -945,6 +1105,8 @@ export function initStudio(api) {
     if (s.mode) { api.setMode(s.mode); if (phone) $("view").scrollIntoView({ block: "start", behavior: "smooth" }); return; }
     api.fit();   // (a new design opens whole, not at the last one's zoom)
     api.unturn();   // (and upright: the last starter's turned hoop made a bib hoop sideways; too big offers the turn)
+    // (a design that was there is one Undo away, and said so: a 15-piece design went with one tap, no word)
+    const had = pieces.length && snap();
     remember(); pieces = s.make(); sel = pieces[pieces.length - 1].id;
     fabric = s.fabric || "cotton";   // (a towel left on made every later starter towel-heavy, +40-75 % stitches)
     baste = !!s.baste; fitted = false; from = s.name;
@@ -966,6 +1128,7 @@ export function initStudio(api) {
     }
     $("st-tip").hidden = !s.tip; $("st-tip").textContent = s.tip || "";
     save(); ui(); make();
+    if (had && !sameDesign(had, snap())) toast(`Replaced your design with “${s.name}”.`, { label: "Undo", run: undo });
     // phones: the preview is above the cards, so the change happened off-screen (scrolled to its top, so the sewing
     // controls under it stay above the Download bar)
     if (phone) $("view").scrollIntoView({ block: "start", behavior: "smooth" });
@@ -982,6 +1145,9 @@ export function initStudio(api) {
       : b.dataset.add === "motif" ? motif(tall ? { size: Math.min(40, Math.max(25, Math.round(tall * 1.25))) } : {}) : frame({ border: "line" });
     // on a frame when there's room inside it (made smaller to fit, down to `least`: a second 40 mm motif landed
     // outside the quilt block)
+    // the first frame goes round what's there, with room inside it (`roundAll`): an 80 mm circle came in 2 mm from
+    // the G of a 62 mm "Grandma"
+    if (p.kind === "frame" && pieces.length && !pieces.some((f) => f.kind === "frame")) roundAll(p);
     const at = p.kind !== "frame" && spotIn(p);
     if (at) Object.assign(p, { x: at.x, y: at.y, size: at.size });
     // Else in the nearest free space (`freeRoom`): on an in-the-hoop project's front (outside it would sew on the bare
@@ -1053,6 +1219,7 @@ export function initStudio(api) {
     if (t.matches("[data-blend-any]")) { change((p) => (p.blend = t.value)); return; }
     if (t.matches("[data-blend]")) { change((p) => (t.checked ? (p.blend = p.fill === RED ? NAVY : RED) : delete p.blend), true); editor(); return; }
     if (t.matches("[data-pair]")) { pairAt = +t.value; editor(); return; }
+    if (t.matches("[data-file-scale]")) { t.nextElementSibling.textContent = fileSize(current(), t.value / 100); return; }
     if (t.matches("[data-kern]")) {
       t.nextElementSibling.textContent = `${t.value} %`;
       change((p) => { p.kern = { ...p.kern, [pairAt]: +t.value }; if (!+t.value) delete p.kern[pairAt]; });
@@ -1101,7 +1268,10 @@ export function initStudio(api) {
     for (const el of [r, r2]) if (el) { el.max = Math.max(+el.max, radius); el.value = radius; el.nextElementSibling.textContent = shown(radius, "mm"); }
   }
   let warnTimer = 0;
-  edit.addEventListener("change", (e) => { if (e.target.dataset.k === "font" || e.target.dataset.k === "deco" || e.target.matches("[data-color-any], [data-fill-any], [data-blend-any]")) editor(); });
+  edit.addEventListener("change", (e) => {
+    // (re-stitched once the slider is let go: each step is a re-stitch)
+    if (e.target.matches("[data-file-scale]")) { const v = e.target.value / 100; change((p) => resizeFile(p, v), true); editor(); return; }
+    if (e.target.dataset.k === "font" || e.target.dataset.k === "deco" || e.target.matches("[data-color-any], [data-fill-any], [data-blend-any]")) editor(); });
   edit.addEventListener("click", (e) => {
     const c = e.target.closest("[data-color]");
     if (c) { change((p) => (p.color = c.dataset.color), true, true); editor(); return; }
@@ -1122,7 +1292,7 @@ export function initStudio(api) {
     const rm = e.target.closest("[data-room]");
     if (rm) { change((p) => { Object.assign(p, archRoom(p) || {}); Object.assign(p, archFit(p) || {}); }, true); turnToo(rm); editor(); return; }
     const ln = e.target.closest("[data-lines]");
-    if (ln) { change((p) => { p.text = twoLines(p) || p.text; p.size = +ln.dataset.lines || p.size; }, true); editor(); return; }
+    if (ln) { change((p) => { p.text = ln.dataset.text ? decodeURIComponent(ln.dataset.text) : twoLines(p) || p.text; p.size = +ln.dataset.lines || p.size; }, true); turnToo(ln); editor(); return; }
     const fb = e.target.closest("[data-fab-set]");
     if (fb) { remember(); fabric = fb.dataset.fabSet; save(); sewnOn(); make(); warn(); return; }
     if (e.target.closest("[data-as-text]")) { asText(); return; }
@@ -1134,6 +1304,14 @@ export function initStudio(api) {
     if (kr) { change((p) => { delete p.kern[kr.dataset.kernOff]; if (!Object.keys(p.kern).length) delete p.kern; }, true); editor(); return; }
     const ru = e.target.closest("[data-run-up]");
     if (ru) { change((p) => Object.assign(p, { rot: -90, size: +ru.dataset.runUp }), true); editor(); return; }
+    const fg = e.target.closest("[data-frame-grow]");
+    if (fg) {
+      const [id, w, h, size] = fg.dataset.frameGrow.split(":").map(Number), f = pieces.find((o) => o.id === id), p = current();
+      if (f && p) { remember(); fitted = false; f.w = w; f.h = h; p.size = Math.max(p.size, size); turnToo(fg); save(); ui(); make(); }
+      return;
+    }
+    const mt = e.target.closest("[data-move-to]");
+    if (mt) { const [x, y] = mt.dataset.moveTo.split(",").map(Number); change((p) => { Object.assign(p, { x, y }); recentre(); }, true); turnToo(mt); editor(); return; }
     if (e.target.closest("[data-move]")) { const to = spotIn(current()); if (to) change((p) => Object.assign(p, { x: to.x, y: to.y, size: to.size }), true); editor(); return; }
     if (e.target.closest("[data-follow]")) { change((p) => Object.assign(p, followFrame(p, pieces)), true); editor(); return; }
     const s = e.target.closest("[data-seg] button");
@@ -1220,7 +1398,8 @@ export function initStudio(api) {
     fitted = true;
     const scale = (f) => { for (const p of pieces) {
       p.x *= f; p.y *= f;
-      if (p.kind !== "file") for (const k of ["size", "radius", "ry", "w", "h"]) if (p[k] != null) p[k] = Math.round(p[k] * f * 2) / 2;
+      if (p.kind === "file") resizeFile(p, (p.scale || 1) * f);
+      else for (const k of ["size", "radius", "ry", "w", "h"]) if (p[k] != null) p[k] = Math.round(p[k] * f * 2) / 2;
     } };
     scale(Math.min((hp.w - 10) / w, (hp.h - 10) / h));
     recentre();   // (in the middle, as the machine sews it: a fitted layout said "Off centre here")
@@ -1394,6 +1573,9 @@ export function initStudio(api) {
         const q = { ...q0, x: Math.round(x * 2) / 2, y: Math.round(y * 2) / 2 };
         if (ith && !inFrame(q, ith, 4)) continue;
         if (p.kind !== "frame" && touching(q, pieces)) continue;
+        // (rounded to the half mm, a spot on the field's edge could take the layout 0.08 mm past it: the design then
+        // counted as two hoopings already, and every later piece went below it, out of the hoop)
+        if (!ith && !fitsWith(q)) continue;
         // (at the size a frame it lands in then sews it, as `spotIn` does)
         return { x: q.x, y: q.y, ...(p.size == null ? {} : { size: fittedSizes([...pieces, q]).get(p.id) ?? size }) };
       }
@@ -1432,7 +1614,9 @@ export function initStudio(api) {
     const all = pieces.map(pieceBounds).filter(Boolean);
     if (!all.length) return;
     const cx = (Math.min(...all.map((b) => b[0])) + Math.max(...all.map((b) => b[2]))) / 2, cy = (Math.min(...all.map((b) => b[1])) + Math.max(...all.map((b) => b[3]))) / 2;
-    for (const q of pieces) { q.x = Math.round((q.x - cx) * 2) / 2; q.y = Math.round((q.y - cy) * 2) / 2; }
+    // (one shift for all, in half mm: rounding each piece on its own moved them up to half a mm apart)
+    const sx = Math.round(cx * 2) / 2, sy = Math.round(cy * 2) / 2;
+    for (const q of pieces) { q.x = Math.round((q.x - sx) * 2) / 2; q.y = Math.round((q.y - sy) * 2) / 2; }
   }
   // add an opened design (PES/PEC/DST) as a piece, to combine a motif with lettering
   $("st-file").onchange = async (e) => {
@@ -1504,7 +1688,8 @@ export function initStudio(api) {
               if (!thin) lastBold = size;
               f -= 0.1; size = step(size0 * f); continue;
             }
-            return { pattern, name, turned, runs: hit ? label(hit) : "", smaller: now < ref - 0.25, thin: fabric !== "towel" && fineLine({ ...q, size: now }) && !fineLine({ ...p, size: was }) };
+            return { pattern, name, turned, runs: hit ? label(hit) : "", smaller: now < ref * 0.95,   // (said from 5 % smaller: "Ben (smaller)" stood beside an Ava the same height)
+             thin: fabric !== "towel" && fineLine({ ...q, size: now }) && !fineLine({ ...p, size: was }) };
           }
           catch (err) { if (!shrink || !err.overBy || f < 0.55) throw err; f -= 0.1; size = step(size0 * f); floor = 0; }
         }
@@ -1513,5 +1698,5 @@ export function initStudio(api) {
   }
 
   cards(); ui();
-  return { make, relabel: () => { ui(); make(); }, start, move, end, nudge, deselect, forNames, remember, recentre: () => { remember(); recentre(); save(); ui(); make(); } };
+  return { make, addWords, relabel: () => { ui(); make(); }, start, move, end, nudge, deselect, forNames, remember, recentre: () => { remember(); recentre(); save(); ui(); make(); } };
 }

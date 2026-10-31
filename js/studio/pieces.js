@@ -611,6 +611,7 @@ export function minSize(p) {
 // open under that column, or 0 when it already does. Arched down, the counters close up by the bend at mid x-height.
 // (Until 2026-10-30 only the 8 mm x-height: "Oliver" in Great Vibes at the suggested 17 mm was unreadable.)
 export function towelMin(p) {
+  if (p.kind === "monogram") return eachInitial(p, towelMin);
   const l = bulk(p);
   if (!l || !l.parts.length) return 0;
   const ok = (size) => {
@@ -630,11 +631,22 @@ export function towelMin(p) {
 // do. Said with "Thin line" as the other fix (Alex Brush "Abbie" at 12 mm sewed as "Avvie", with no word).
 // (Bold chosen by hand too: Allura and Meow Script in Bold at their smallest size sewed as blobs with no word)
 export function loopsFill(p) {
+  if (p.kind === "monogram") return eachInitial(p, loopsFill);
   if ((p.style || "auto") === "line") return 0;
   const l = bulk(p);
   if (!l || !l.parts.length || !l.satinW) return 0;
   const shut = l.pockets.filter((c) => c.peak >= Math.max(0.45, 0.1 * l.xh) && Math.max(c.saddle - 0.2, c.peak - OPEN / 2) < 0.45);
   return shut.length ? Math.ceil((p.size * 0.86) / Math.min(...shut.map((c) => c.peak))) : 0;
+}
+
+// A monogram's size where every initial passes `test` (each sewn at its own size, as `monogram` sews it): the middle
+// letter alone was measured, so RMK's M said nothing while the R's bowl filled in on a towel. 0 when they all pass.
+function eachInitial(p, test) {
+  const chars = [...(p.letters || "").replace(/\s+/g, "")].slice(0, 3), f = (i) => (chars.length === 3 && i !== 1 ? 0.68 : 1);
+  return chars.reduce((need, c, i) => {
+    const n = test({ kind: "text", text: c, font: p.font, size: p.size * f(i), style: p.style, shape: "straight" });
+    return n ? Math.max(need, n > 150 ? n : Math.ceil(n / f(i))) : need;
+  }, 0);
 }
 
 // Lettering under ~6 mm (x-height, or caps) stitches cleanest with thinner thread and needle (Ink/Stitch's small
@@ -1411,13 +1423,38 @@ export function cleanPiece(p) {
     if (q.hang != null) q.hang = q.hang === true;
   } else if (p.kind === "file") {
     const pt = (v) => Array.isArray(v) && v.length >= 2 && Number.isFinite(v[0]) && Number.isFinite(v[1]) && Math.abs(v[0]) < 1000 && Math.abs(v[1]) < 1000;
-    const blocks = Array.isArray(q.blocks) ? q.blocks.filter((b) => b && Array.isArray(b.paths)).map((b) => ({
+    const clean = (bs) => (Array.isArray(bs) ? bs.filter((b) => b && Array.isArray(b.paths)).map((b) => ({
       color: hex(b.color, "#000000"), name: typeof b.name === "string" ? b.name.slice(0, 40) : "",
-      paths: b.paths.filter((r) => Array.isArray(r) && r.length > 1 && r.every(pt)).map((r) => r.map(([x, y]) => [x, y])) })).filter((b) => b.paths.length) : [];
+      paths: b.paths.filter((r) => Array.isArray(r) && r.length > 1 && r.every(pt)).map((r) => r.map(([x, y]) => [x, y])) })).filter((b) => b.paths.length) : []);
+    const blocks = clean(q.blocks);
     if (!blocks.length) return null;
     q.blocks = blocks; q.name = typeof q.name === "string" && q.name.trim() ? q.name.slice(0, 60) : "Design file";
+    // resized (`resizeFile` in ui.js): the stitches as opened, the size against them, and whether the re-stitch is done
+    const orig = clean(q.orig);
+    if (orig.length && typeof q.scale === "number" && Number.isFinite(q.scale) && q.scale !== 1) {
+      q.orig = orig; q.scale = num(q.scale, FILE_SCALE[0], FILE_SCALE[1], 1);
+      if (q.pending != null) q.pending = q.pending === true;
+    } else { if (orig.length) q.blocks = orig; delete q.orig; delete q.scale; delete q.pending; }
   } else return null;
   return q;
+}
+
+// How far a design file can be resized inside a design: the doctor's re-stitch range (Open a design's Size)
+export const FILE_SCALE = [0.5, 2.5];
+// a file piece's blocks scaled about their centre as they are (the stand-in while the re-stitch runs, and its size)
+export const scaleBlocks = (blocks, f) => blocks.map((b) => ({ ...b, paths: b.paths.map((q) => q.map(([x, y]) => [Math.round(x * f * 10) / 10, Math.round(y * f * 10) / 10])) }));
+// a file piece's blocks as a pattern again (0.1 mm units, a jump to each run), for the doctor's `fix`
+export function blocksPattern(blocks) {
+  const stitches = [];
+  blocks.forEach((b, k) => {
+    if (k) stitches.push([...stitches[stitches.length - 1].slice(0, 2), 5]);
+    for (const q of b.paths) {
+      stitches.push([Math.round(q[0][0] * 10), Math.round(q[0][1] * 10), 1]);
+      for (const [x, y] of q) stitches.push([Math.round(x * 10), Math.round(y * 10), 0]);
+    }
+  });
+  stitches.push([...stitches[stitches.length - 1].slice(0, 2), 4]);
+  return { stitches, threads: blocks.map((b) => ({ color: b.color, name: b.name })) };
 }
 
 // An opened design as a piece: its stitches split into runs at jumps/trims, per colour block, centred.
