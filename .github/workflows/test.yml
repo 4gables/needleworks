@@ -11,6 +11,7 @@ jobs:
       - run: node tests/formats.test.mjs
       - run: node tests/doctor.test.mjs
       - run: node tests/sw.test.mjs
+      - run: node tests/flow_lint.test.mjs
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
