@@ -4,7 +4,7 @@ import { turnForMachine, turnPattern } from "./core/design.js";
 import { FONTS, fontOf, loadFont } from "./core/fonts.js";
 import { COLOR_CHANGE, STITCH, designBlockAgrees, designStats, machineThreads, readEmbroidery, validatePES, writePES } from "./core/formats.js";
 import { DEFAULT_MACHINE, MACHINES, MARGIN, hoop as getHoop } from "./core/machines.js";
-import { DENSITY, picturePlan } from "./core/digitize.js";
+import { DENSITY, LEARN, contentBox, picturePlan, pictureImage } from "./core/digitize.js";
 import { hexToRgb, nearestBrotherThread, pecThread } from "./core/threads.js";
 import { CLOTHS, colorBlocks, draw } from "./render.js";
 import { FINISH, FIRST_STEP, TURN_PIC, cutSVG, nextThread, sewSheet, youHtml } from "./sheet.js";
@@ -1257,41 +1257,6 @@ function makeCanvas(w, h) {
   const c = document.createElement("canvas"); c.width = w; c.height = h; return c;
 }
 
-// bounding box of everything that isn't the border colour (or transparent), so "size" means the design
-function contentBox(bitmap) {
-  const S = 256, k = Math.min(1, S / Math.max(bitmap.width, bitmap.height));
-  const w = Math.max(1, Math.round(bitmap.width * k)), h = Math.max(1, Math.round(bitmap.height * k));
-  const c = makeCanvas(w, h), ctx = c.getContext("2d", { willReadFrequently: true });
-  // (averaged, not sampled: a logo's 1 px rule fell between the samples, so the colours were learned without it and
-  // nothing could say it was left out)
-  ctx.imageSmoothingQuality = "high";
-  ctx.drawImage(bitmap, 0, 0, w, h);
-  const d = ctx.getImageData(0, 0, w, h).data;
-  const border = [];
-  for (let x = 0; x < w; x++) border.push(x, (h - 1) * w + x);
-  for (let y = 0; y < h; y++) border.push(y * w, y * w + w - 1);
-  const avg = [0, 1, 2].map((ch) => border.reduce((a, i) => a + d[i * 4 + ch], 0) / border.length);
-  let x0 = w, y0 = h, x1 = -1, y1 = -1;
-  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
-    const i = (y * w + x) * 4;
-    const ink = d[i + 3] > 127 && Math.abs(d[i] - avg[0]) + Math.abs(d[i + 1] - avg[1]) + Math.abs(d[i + 2] - avg[2]) > 60;
-    if (ink) { if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
-  }
-  if (x1 < 0) return { sx: 0, sy: 0, sw: bitmap.width, sh: bitmap.height };
-  const m = 2;
-  x0 = Math.max(0, x0 - m); y0 = Math.max(0, y0 - m); x1 = Math.min(w - 1, x1 + m); y1 = Math.min(h - 1, y1 + m);
-  return { sx: x0 / k, sy: y0 / k, sw: (x1 - x0 + 1) / k, sh: (y1 - y0 + 1) / k };
-}
-
-// the picture's colours are learned from a copy this size (px, longer side) whatever the Size or hoop, so changing
-// either never changes the threads
-const LEARN = 800;
-function drawn(bitmap, box, w, h) {
-  const c = makeCanvas(w, h), ctx = c.getContext("2d", { willReadFrequently: true });
-  ctx.imageSmoothingQuality = "high";
-  ctx.drawImage(bitmap, box.sx, box.sy, box.sw, box.sh, 0, 0, w, h);
-  return ctx.getImageData(0, 0, w, h);
-}
 // Size is the longer side of what's sewn, up to the largest that fits this hoop (it measured the whole picture: a
 // framed photo at "174 mm" sewed 84 x 58)
 function sizeRange(max) {
@@ -1305,7 +1270,7 @@ function makePicture(refit = false) {
   if (!refit) p.refits = 0;
   const box = p.bg ? (p.box ||= contentBox(p.bitmap)) : { sx: 0, sy: 0, sw: p.bitmap.width, sh: p.bitmap.height };
   const key = `${p.key}:${p.colors}:${p.bg}:${box.sx},${box.sy},${box.sw},${box.sh}`, k = LEARN / Math.max(box.sw, box.sh);
-  const learn = drawn(p.bitmap, box, Math.max(1, Math.round(box.sw * k)), Math.max(1, Math.round(box.sh * k)));
+  const learn = pictureImage(p.bitmap, box, Math.max(1, Math.round(box.sw * k)), Math.max(1, Math.round(box.sh * k)));
   // (nothing from another tab stays on screen, with its Download, while this picture stitches)
   if (state.mode === "picture" && state.view && state.view !== state.views.picture) setView(null);
   p.req++; busy(true, "Stitching your picture…");
@@ -1317,7 +1282,7 @@ function makePicture(refit = false) {
   const plan = picturePlan(box, p.model.boxes.filter((_, i) => !p.model.colors[i].background && !p.skip.includes(i)), p.size, h, undefined, fit);
   sizeRange(plan.max);
   p.asked = { key: fk, mm: plan.sizeMm, fit };
-  digitizeJob({ id: p.req, key, learn, img: drawn(p.bitmap, plan.crop, plan.w, plan.h), crop: plan.frac, opts });
+  digitizeJob({ id: p.req, key, learn, img: pictureImage(p.bitmap, plan.crop, plan.w, plan.h), crop: plan.frac, opts });
 }
 $("pic-file").onchange = (e) => loadPicture(e.target.files[0]);
 

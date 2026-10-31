@@ -196,35 +196,79 @@ function pixels(img) {
   }
   return { w, h, n, lab, opaque, hasAlpha: clear > n * 0.02 };
 }
-const nearestOf = (lab, i, C) => {
-  let best = 0, bd = Infinity;
+// (the clusters from `first` on are those learned from thin lines: a pixel further than ΔE 12 from one, and a blend of
+// its nearest other cluster and another, takes that nearest. The anti-aliased edge of green lettering, nearer a teal
+// rule's colour than to the green or the white, sewed teal slivers)
+const nearestOf = (lab, i, C, first = C.length) => {
+  let best = 0, bd = Infinity, base = 0, bb = Infinity;
   for (let j = 0; j < C.length; j++) {
     const a = lab[i * 3] - C[j][0], b = lab[i * 3 + 1] - C[j][1], e = lab[i * 3 + 2] - C[j][2], v = a * a + b * b + e * e;
     if (v < bd) { bd = v; best = j; }
+    if (j < first && v < bb) { bb = v; base = j; }
+  }
+  if (best < first || bd < 144) return best;
+  const A = C[base], p = [lab[i * 3], lab[i * 3 + 1], lab[i * 3 + 2]];
+  for (let j = 0; j < first; j++) {
+    if (j === base) continue;
+    const B = C[j], ab = [B[0] - A[0], B[1] - A[1], B[2] - A[2]], L2 = ab[0] ** 2 + ab[1] ** 2 + ab[2] ** 2;
+    if (L2 < 36) continue;
+    const t = ((p[0] - A[0]) * ab[0] + (p[1] - A[1]) * ab[1] + (p[2] - A[2]) * ab[2]) / L2;
+    if (t > 0 && t < 1 && (p[0] - A[0] - t * ab[0]) ** 2 + (p[1] - A[1] - t * ab[1]) ** 2 + (p[2] - A[2] - t * ab[2]) ** 2 < Math.max(36, 0.0225 * L2)) return base;
   }
   return best;
 };
 
 // k-means clusters of the pixels not in `skip`, learned from flat pixels only (anti-aliased edges blend two colours
-// and would steal a thread), and each pixel's cluster
-function cluster(P, k, skip) {
+// and would steal a thread), and each pixel's cluster. `lines`: then the colours of lines a pixel or two wide, which
+// have no flat pixel (a logo's teal rule, a red rule, a green stem: each sewn in the colour beside it). `real` marks
+// their pixels.
+function cluster(P, k, skip, lines = false) {
   const { w, n, lab } = P, opaque = skip ? P.opaque.filter((i) => !skip[i]) : P.opaque;
-  const flat = opaque.filter((i) => {
-    const x = i % w;
-    if (x === 0 || x === w - 1 || i < w || i >= n - w) return true;
-    let m = 0;
-    for (const j of [i - 1, i + 1, i - w, i + w]) {
-      const a = lab[i * 3] - lab[j * 3], b = lab[i * 3 + 1] - lab[j * 3 + 1], e = lab[i * 3 + 2] - lab[j * 3 + 2];
-      m = Math.max(m, a * a + b * b + e * e);
-    }
-    return m < 36;   // ΔE < 6 to every neighbour
-  });
+  const d2 = (i, j) => (lab[i * 3] - lab[j * 3]) ** 2 + (lab[i * 3 + 1] - lab[j * 3 + 1]) ** 2 + (lab[i * 3 + 2] - lab[j * 3 + 2]) ** 2;
+  const inner = (i) => { const x = i % w; return x > 0 && x < w - 1 && i >= w && i < n - w; };
+  const flat = opaque.filter((i) => !inner(i) || Math.max(d2(i, i - 1), d2(i, i + 1), d2(i, i - w), d2(i, i + w)) < 36);   // ΔE < 6 to every neighbour
   const train = flat.length > opaque.length * 0.2 ? flat : opaque, C = [];
   if (train.length) for (const c of kmeans(lab, train, Math.min(k, train.length)))
     if (!C.some((d) => (c[0] - d[0]) ** 2 + (c[1] - d[1]) ** 2 + (c[2] - d[2]) ** 2 < 4)) C.push(c);
+  const real = new Uint8Array(n);
+  if (lines && C.length) {
+    // A line's pixel is flat along it (ΔE < 6 to both neighbours one way) and no blend of what lies either side of it
+    // (an anti-aliased edge is flat along the edge too), nor of the side most unlike it and a colour found already (a
+    // dark 1 px rule drawn grey), nor near one (ΔE 10)
+    const at = (i) => [lab[i * 3], lab[i * 3 + 1], lab[i * 3 + 2]], e2 = (p, q) => (p[0] - q[0]) ** 2 + (p[1] - q[1]) ** 2 + (p[2] - q[2]) ** 2;
+    const mid = (p, A, B, hi) => {
+      const ab = [B[0] - A[0], B[1] - A[1], B[2] - A[2]], L2 = ab[0] ** 2 + ab[1] ** 2 + ab[2] ** 2;
+      if (L2 < 36) return false;
+      const t = ((p[0] - A[0]) * ab[0] + (p[1] - A[1]) * ab[1] + (p[2] - A[2]) * ab[2]) / L2;
+      // (within 6, or 0.15 of the way: blending in sRGB bows away from the straight line in Lab)
+      return t >= 0.1 && t <= hi && e2(p, [A[0] + t * ab[0], A[1] + t * ab[1], A[2] + t * ab[2]]) < Math.max(36, 0.0225 * L2);
+    };
+    const far = [], sides = new Map();
+    for (const i of opaque) {
+      if (!inner(i)) continue;
+      const lr = Math.max(d2(i, i - 1), d2(i, i + 1)), ud = Math.max(d2(i, i - w), d2(i, i + w));
+      if ((lr < 36) === (ud < 36)) continue;   // (flat both ways is flat; neither, no line)
+      const [a, b] = lr < 36 ? [i - w, i + w] : [i - 1, i + 1], p = at(i), A = at(a), B = at(b);
+      if (mid(p, A, B, 0.9) || C.some((c) => e2(p, c) < 100)) continue;
+      const side = d2(i, a) >= d2(i, b) ? A : B;
+      if (C.some((c) => mid(p, side, c, 1.05))) continue;
+      far.push(i);
+      const sc = nearestOf(lab, d2(i, a) >= d2(i, b) ? a : b, C); sides.set(sc, (sides.get(sc) || 0) + 1);
+    }
+    if (far.length >= 12) {
+      C.first = C.length;
+      // (the line's own colour, not the blends of it with what's beside it where a slanted line covers a pixel only
+      // in part: a 2 px red rule came out Red, Carmine and Salmon Pink. Strongest first, none a blend of the side's
+      // colour and one taken)
+      const S = C[[...sides.entries()].sort((p, q) => q[1] - p[1])[0][0]], got = [];
+      for (const c of kmeans(lab, far, Math.min(4, far.length)).sort((p, q) => e2(q, S) - e2(p, S)))
+        if (C.length < 31 && !C.some((d) => e2(c, d) < 100) && !got.some((g) => mid(c, S, g, 1.05))) { C.push(c); got.push(c); }
+      for (const i of far) real[i] = 1;
+    }
+  }
   const labels = new Int16Array(n).fill(-1);
-  for (const i of opaque) labels[i] = nearestOf(lab, i, C);
-  return { C, labels };
+  for (const i of opaque) labels[i] = nearestOf(lab, i, C, C.first);
+  return { C, labels, real };
 }
 
 // The picture's threads, learned from `img` (any size: the Picture tab sends the same copy whatever the Size).
@@ -233,13 +277,13 @@ function cluster(P, k, skip) {
 export function learnColours(img, opts = {}) {
   const o = { ...DEFAULTS, ...opts }, P = pixels(img), { w, h, n, opaque, hasAlpha } = P, { data } = img;
   const cut = o.removeBackground && !hasAlpha;
-  let { C, labels } = cluster(P, FINE, null), frame = null;
+  let { C, labels, real } = cluster(P, FINE, null, true), frame = null;
   // a frame (a band at the picture's edge) isn't part of the design, and isn't the background: learn again without it
   // (found on a coarse clustering: fine clusters chain a backdrop's shades into the frame's colour family)
   if (cut && C.length) {
     const q = cluster(P, 5, null);
     frame = findFrame(q.labels, w, h, q.C);
-    if (frame) ({ C, labels } = cluster(P, FINE, frame.frame));
+    if (frame) ({ C, labels, real } = cluster(P, FINE, frame.frame, true));
   }
   const K = C.length, area = new Array(K).fill(0), rgb = C.map(() => [0, 0, 0]);
   for (let i = 0; i < n; i++) {
@@ -266,6 +310,18 @@ export function learnColours(img, opts = {}) {
   // of it (a shadow across the backdrop)
   const e76 = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
   const isBg = (j) => bg >= 0 && (j === bg || e76(C[j], C[bg]) < 8 || (e76(C[j], C[bg]) < 15 && ring(j) >= 0.1) || (e76(C[j], C[bg]) < 20 && ring(j) >= 0.03));
+  // A pale colour (ΔE00 under 15 from the fabric) all but a fifth of which lies within 3 px of a stronger colour it
+  // isn't a shade of (over 1.5 x SAME from each) is that colour's fringe, fabric too: a JPEG's halo round blue
+  // lettering took two threads, Beige and Cream Brown.
+  const fringe = new Uint8Array(K);
+  if (bg >= 0) {
+    const pale = (j) => !isBg(j) && deltaE2000(C[j], C[bg]) < 15, strong = C.map((_, j) => area[j] > 0 && !isBg(j) && !pale(j));
+    const m = { w, h, data: new Uint8Array(n) };
+    for (let i = 0; i < n; i++) m.data[i] = labels[i] >= 0 && strong[labels[i]] ? 0 : 1;
+    const dist = distanceTransform(m), hug = new Int32Array(K);
+    for (let i = 0; i < n; i++) if (labels[i] >= 0 && dist[i] <= 3) hug[labels[i]]++;
+    for (let j = 0; j < K; j++) if (area[j] && pale(j) && hug[j] >= 0.8 * area[j] && C.every((c, q) => !strong[q] || deltaE2000(C[j], c) > 1.5 * SAME)) fringe[j] = 1;
+  }
   // Merge the design's clusters, cheapest first: the colour difference, made cheaper for a cluster that is small or
   // mostly edge (anti-aliasing, JPEG noise) so it joins its nearest colour first. A small colour of its own (a pink
   // flower, a yellow bird) outlasts the shades of one dark outline. The difference weighs hue more (kH 0.6), so
@@ -288,7 +344,38 @@ export function learnColours(img, opts = {}) {
     return v * (1 + grey * 0.5 * Math.min(1, (hi - HUED) / 8) + (1 - grey) * hue);
   };
   const ink = [];
-  for (let j = 0; j < K; j++) if (area[j] && !isBg(j)) ink.push(j);
+  // A colour that fades into the fabric with no edge (a soft drop shadow, a glow) is a shade of the fabric: where it
+  // meets the fabric, the pixels two steps either side differ by under 0.6 of its own difference from the fabric (and
+  // ΔE 20) along 70% of its edge with the fabric: a drawn edge, anti-aliased or not, is a step. (Sending colours soft
+  // along a third of their edge to the fabric too, when threads ran short, erased etsy_1's pale flowers.) Found from the fabric inwards, a shade at a time, so a shadow's darker core goes with its fading rim. A
+  // shadow had been sewn as an orange halo round navy lettering, or as three greys.
+  if (bg >= 0) {
+    const { lab } = P, d2 = (i, j) => (lab[i * 3] - lab[j * 3]) ** 2 + (lab[i * 3 + 1] - lab[j * 3 + 1]) ** 2 + (lab[i * 3 + 2] - lab[j * 3 + 2]) ** 2;
+    const out = (l) => l < 0 || isBg(l) || fringe[l], lim = C.map((c) => Math.min(20, 0.6 * e76(c, C[bg])) ** 2);
+    for (let round = 0; round < 12; round++) {
+      const soft = new Int32Array(K), all = new Int32Array(K);
+      for (let y = 3; y < h - 3; y++) for (let x = 3; x < w - 3; x++) {
+        const i = y * w + x;
+        for (const s of [1, w]) {
+          const j = i + s, a = labels[i], b = labels[j];
+          if (a < 0 || b < 0 || out(a) === out(b)) continue;
+          const [k, inner, outer] = out(a) ? [b, j + 2 * s, i - 2 * s] : [a, i - 2 * s, j + 2 * s];
+          all[k]++; if (d2(inner, outer) < lim[k]) soft[k]++;
+        }
+      }
+      // (unless the picture is soft all over, its biggest colours too: a 50 px drawing blown up)
+      if (!round) {
+        const big = C.map((_, j) => j).filter((j) => !out(j) && area[j]).sort((a, b) => area[b] - area[a]), tot = big.reduce((t, j) => t + area[j], 0);
+        let S = 0, T = 0, got = 0;
+        for (const j of big) { if (got >= 0.5 * tot) break; got += area[j]; S += soft[j]; T += all[j]; }
+        if (S >= 0.35 * T) break;
+      }
+      let more = false;
+        for (let j = 0; j < K; j++) if (!out(j) && area[j] && all[j] >= 20 && soft[j] >= 0.7 * all[j]) { fringe[j] = 1; more = true; }
+      if (!more) break;
+    }
+  }
+  for (let j = 0; j < K; j++) if (area[j] && !isBg(j) && !fringe[j]) ink.push(j);
   const A = ink.reduce((s, j) => s + area[j], 0) || 1;
   // A group's solid pixels are those whose 4 neighbours are in it too (a textured white splits into shades none of
   // which is solid on its own): pixels counted by the set of clusters round them, as bit masks
@@ -303,9 +390,13 @@ export function learnColours(img, opts = {}) {
     const t = tone.get(m) || tone.set(m, [0, 0, 0]).get(m);
     t[0] += data[i * 4]; t[1] += data[i * 4 + 1]; t[2] += data[i * 4 + 2];
   }
+  // (and a thin line's pixels, which have no solid pixel: a teal rule merged into the green lettering as an edge)
+  const lineIn = new Int32Array(K);
+  for (let i = 0; i < n; i++) if (real[i] && labels[i] >= 0) lineIn[labels[i]]++;
   const effOf = (g) => {
     const gm = g.members.reduce((s, v) => (s | (1 << v)) >>> 0, 0);
     let k = 0; for (const [m, c] of sets) if (!(Math.floor(m / 32) & ~gm)) k += c;
+    for (const j of g.members) k += lineIn[j];
     return g.area * Math.min(1, Math.max(0.05, k / g.area / 0.5));
   };
   let groups = ink.map((j) => ({ lab: C[j].slice(), area: area[j], members: [j] }));
@@ -318,16 +409,20 @@ export function learnColours(img, opts = {}) {
   };
   const toBg = [];
   for (;;) {
-    let best = null;
+    // (and two colours under SAME apart are one whatever their size: a big colour's weight kept two shades of one blue
+    // lettering apart, Ultramarine and Prussian Blue)
+    let best = null, same = null;
     for (let a = 0; a < groups.length; a++) {
       for (let b = a + 1; b < groups.length; b++) {
-        const c = apart(groups[a].lab, groups[b].lab) * Math.min(weight(groups[a]), weight(groups[b]));
+        const v = apart(groups[a].lab, groups[b].lab), c = v * Math.min(weight(groups[a]), weight(groups[b]));
         if (!best || c < best.c) best = { c, a, b };
+        if (v < SAME && (!same || c < same.c)) same = { c, a, b };
       }
       // (into the background only when it's that close: a white dog on a pale blue backdrop stays)
       if (bgLab) { const c = apart(groups[a].lab, bgLab) * weight(groups[a]); if (c < SAME && (!best || c < best.c)) best = { c, a, b: -1 }; }
     }
-    if (!best || (groups.length <= o.colors && best.c >= SAME)) break;
+    if (best && groups.length <= o.colors && best.c >= SAME) best = same;
+    if (!best) break;
     if (best.b < 0) { toBg.push(...groups[best.a].members); groups.splice(best.a, 1); continue; }
     const [a, b] = groups[best.a].area >= groups[best.b].area ? [best.a, best.b] : [best.b, best.a];
     join(groups[a], groups[b]); groups.splice(b, 1);
@@ -440,8 +535,9 @@ export function learnColours(img, opts = {}) {
     else if (C.every((c) => e76(c, C[bg >= 0 ? bg : 0]) < 15)) empty = "This picture is all one colour, so there's nothing in it to stitch.";
     else empty = "Everything in this picture is close to its background colour. Untick “Leave the background unstitched” to stitch it all.";
   }
-  const lost = groups.length ? lostLines(P, labels.map((l) => (l >= 0 ? map[l] : -1)), colors) / Math.max(w, h) : 0;
-  return { w, h, C, map, colors, bg: bg >= 0 ? colors.length - 1 : -1, frame, boxes, hasAlpha,
+  // (a shade or fringe left out on purpose is no lost line)
+  const lost = groups.length ? lostLines(P, labels.map((l) => (l < 0 ? -1 : fringe[l] ? -2 : map[l])), colors) / Math.max(w, h) : 0;
+  return { w, h, C, first: C.first ?? C.length, map, colors, bg: bg >= 0 ? colors.length - 1 : -1, frame, boxes, hasAlpha,
     merged: Math.max(0, o.colors - groups.length), empty, lost };
 }
 
@@ -466,7 +562,7 @@ export function labelWith(img, model, crop = [0, 0, 1, 1]) {
   // (no folding of colours that are mostly edge into their neighbours, as raw k-means clusters needed: the colours
   // here are merged already, and folding sent etsy_7's thin pastel doodles into the background)
   const G = model.colors.length;
-  for (const i of opaque) if (!(frame && frame[i])) labels[i] = model.map[nearestOf(lab, i, model.C)];
+  for (const i of opaque) if (!(frame && frame[i])) labels[i] = model.map[nearestOf(lab, i, model.C, model.first)];
   // majority filter cleans anti-aliased fringes and speckle
   for (let pass = 0; pass < 2; pass++) {
     const out = labels.slice(), cnt = new Int16Array(G + 1);
@@ -856,6 +952,7 @@ export function digitize(img, analysis, opts = {}) {
       const r = make(img, analysis, { ...opts, res });
       // (the longest line too thin to keep, as a share of the picture's longer side: the page says so)
       r.fine.lost = analysis.lost || 0;
+      r.res = res;   // (working px per mm, after any shrink to fit)
       return r;
     }
     catch (e) { if (!e.overBy || tries === 3) throw e; res *= e.overBy * 1.01; }
@@ -921,15 +1018,41 @@ function build(img, analysis, opts) {
     // no dot: KENJI'S apostrophe at 60 mm went. Marks out on their own still go: each is a trim and two locks)
     const away = { w, h, data: new Uint8Array(w * h) };
     for (let i = 0; i < w * h; i++) away.data[i] = cl[i] && !dot(cl[i]) ? 0 : 1;
-    const toBig = distanceTransform(away), near = new Uint8Array(count + 1);
+    const toBig = distanceTransform(away), near = new Uint8Array(count + 1), byText = new Uint8Array(count + 1);
     for (let i = 0; i < w * h; i++) if (cl[i] && toBig[i] <= 2 * res) near[cl[i]] = 1;
+    for (let i = 0; i < w * h; i++) if (cl[i] && toBig[i] <= 5 * res) byText[cl[i]] = 1;
     const mark = (c) => { const a = bx1[c] - bx0[c] + 1, b = by1[c] - by0[c] + 1; return near[c] && Math.max(a, b) >= 2 * res && Math.max(a, b) >= 1.5 * Math.min(a, b); };
-    const speck = (c) => dot(c) && !mark(c);
+    // (nor is a dot on the fabric, 0.8 mm across and 0.6 mm² or more, within 5 mm of one or of another such dot: an
+    // i's dot, a full stop, a colon after a space. Text lost every one of them under 4 mm². On the fabric: all but a fifth
+    // of its edge against open fabric (a blend colour's slivers along a crayon line's flecks aren't). It's filled,
+    // however thin: as a line it was under the 1.5 mm a line needs)
+    // (a colour between the fabric's and this one round it is its anti-aliased edge: fabric too)
+    const fab = colors.find((q) => q.background), lab3 = (id) => srgbToLab(...hexToRgb(colors[id].picture || colors[id].hex)), me = lab3(col.id);
+    const e3 = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]), F = fab ? lab3(fab.id) : null;
+    const edgy = new Map(colors.map((q) => [q.id, !stitched.has(q.id) || (F && e3(F, lab3(q.id)) + e3(lab3(q.id), me) <= 1.25 * e3(F, me))]));
+    const rim = new Int32Array(count + 1), bare = new Int32Array(count + 1);
+    for (let i = 0; i < w * h; i++) {
+      const c = cl[i]; if (!c || !dot(c)) continue;
+      const x = i % w;
+      for (const j of [x > 0 ? i - 1 : -1, x < w - 1 ? i + 1 : -1, i - w, i + w]) {
+        if (j < 0 || j >= w * h || cl[j] === c) continue;
+        rim[c]++; if (labels[j] < 0 || edgy.get(labels[j])) bare[c]++;
+      }
+    }
+    const solo = (c) => size[c] >= 0.6 * res * res && Math.min(bx1[c] - bx0[c] + 1, by1[c] - by0[c] + 1) >= 0.8 * res && bare[c] >= 0.8 * rim[c];
+    const cand = [], pair = new Uint8Array(count + 1);
+    for (let c = 1; c <= count; c++) if (dot(c) && solo(c)) cand.push(c);
+    for (const a of cand) for (const b of cand) {
+      const gx = Math.max(bx0[a], bx0[b]) - Math.min(bx1[a], bx1[b]), gy = Math.max(by0[a], by0[b]) - Math.min(by1[a], by1[b]);
+      if (a !== b && Math.max(gx, gy) <= 5 * res) pair[a] = 1;
+    }
+    const tittle = (c) => solo(c) && (byText[c] || pair[c]);
+    const speck = (c) => dot(c) && !mark(c) && !tittle(c), line = (c) => thinC(c) && !(dot(c) && tittle(c));
     // A thin piece lying between the fabric and another colour, in a colour between theirs, is the blend along that
     // colour's edge (a dark letter's anti-aliasing read as green), not a line of its own.
     const touch = new Map();
     for (let i = 0; i < w * h; i++) {
-      const c = cl[i]; if (!c || !thinC(c)) continue;
+      const c = cl[i]; if (!c || !line(c)) continue;
       const x = i % w;
       for (const j of [x > 0 ? i - 1 : -1, x < w - 1 ? i + 1 : -1, i - w, i + w]) {
         if (j < 0 || j >= w * h || cl[j] === c) continue;
@@ -965,8 +1088,8 @@ function build(img, analysis, opts) {
     let anyThin = false;
     for (let i = 0; i < w * h; i++) {
       if (!cl[i]) continue;
-      if (thinC(cl[i]) && between.has(cl[i]) && edgeOf(i, between.get(cl[i]))) { cl[i] = 0; mask.data[i] = 0; }
-      else if (thinC(cl[i])) { thin.data[i] = 1; anyThin = true; cl[i] = 0; mask.data[i] = 0; }
+      if (line(cl[i]) && between.has(cl[i]) && edgeOf(i, between.get(cl[i]))) { cl[i] = 0; mask.data[i] = 0; }
+      else if (line(cl[i])) { thin.data[i] = 1; anyThin = true; cl[i] = 0; mask.data[i] = 0; }
       else if (speck(cl[i])) { cl[i] = 0; mask.data[i] = 0; }
     }
     // The thin parts of a filled shape (a stem growing out of its leaves) are too narrow for fill rows (rows under
@@ -1259,7 +1382,7 @@ function lineArt(img, analysis, opts) {
   // lumps and broken door), and 4 mm letters as half outlines, half centre lines (KENJI'S at 120 mm).
   const STROKE = 0.04, wMax = Math.min(6, Math.max(BAND, (STROKE * Math.max(w, h)) / res)) * res;
   const lines = { w, h, data: new Uint8Array(w * h) }, bands = { w, h, data: new Uint8Array(w * h) }, wideAt = new Uint8Array(w * h);
-  const strokes = { w, h, data: new Uint8Array(w * h) }, widths = [], sw = [];
+  const strokes = { w, h, data: new Uint8Array(w * h) }, widths = [], sw = [], dots = [];
   for (const col of used) {
     const mask = { w, h, data: new Uint8Array(w * h) };
     for (let i = 0; i < w * h; i++) mask.data[i] = labels[i] === col.id ? 1 : 0;
@@ -1281,7 +1404,7 @@ function lineArt(img, analysis, opts) {
       }
       if (peak) ridge[c].push(dt[i]);
     }
-    const stroke = new Uint8Array(count + 1), across = new Float32Array(count + 1);
+    const stroke = new Uint8Array(count + 1), across = new Float32Array(count + 1), long = new Uint8Array(count + 1);
     for (let c = 1; c <= count; c++) {
       const d = ridge[c].sort((a, b) => a - b);
       if (!wide[c] || d.length < 3) continue;
@@ -1289,9 +1412,46 @@ function lineArt(img, analysis, opts) {
       // (even: along most of its middle (a fifth to four fifths) within 0.6 of itself, a leaf tapers; its deepest
       // point, at a corner or a join, under twice its half-width, a filled ear on an outline isn't; long: three widths
       // at least, a dot or a square is under 2; on the fabric: a coloured shape inside a drawing's outlines stays one)
-      across[c] = W;
-      if (W <= wMax && d[Math.floor(d.length * 0.2)] >= 0.6 * d[Math.floor(d.length * 0.8)] && top[c] <= W && open[c] >= 4 * shut[c])
-        stroke[c] = area[c] >= 3 * W * W ? 1 : 2;
+      // (a marker line twelve widths long is a stroke up to 6 mm, however small the drawing: a 4.5 mm one in a 100 mm
+      // drawing was traced round both edges; and one that runs into another colour, a stem into its flower, a third of
+      // its edge)
+      across[c] = W; long[c] = area[c] >= 3 * W * W ? 1 : 0;
+      if ((W <= wMax || (W <= 6 * res && area[c] >= 12 * W * W)) && d[Math.floor(d.length * 0.2)] >= 0.6 * d[Math.floor(d.length * 0.8)] && top[c] <= W && open[c] >= (long[c] && area[c] >= 12 * W * W ? 2 : 4) * shut[c])
+        stroke[c] = long[c] ? 1 : 2;
+    }
+    // A stroke's centre line keeps its limbs: where a quarter of it is limbs shorter than the stroke is wide but over
+    // half that (not a corner's spur), which the centre line's pruning takes off, the piece is outlined instead. Fat
+    // letters' limbs are that short: a bold N 3 mm wide sewed as a hook, an i went altogether.
+    const fat = new Uint8Array(count + 1);
+    {
+      const m = { w, h, data: new Uint8Array(w * h) };
+      for (let i = 0; i < w * h; i++) m.data[i] = cl[i] && stroke[cl[i]] ? 1 : 0;
+      const es = skeletonEdges(m, 1, { spur: 0 }), deg = new Map(), all = new Float64Array(count + 1), lost = new Float64Array(count + 1);
+      for (const [a, b] of es) { deg.set(a, (deg.get(a) || 0) + 1); deg.set(b, (deg.get(b) || 0) + 1); }
+      for (const [a, b, q] of es) {
+        const [x, y] = q[q.length >> 1].map(Math.round), c = cl[y * w + x] || cl[Math.round(q[0][1]) * w + Math.round(q[0][0])];
+        if (!c) continue;
+        all[c] += q.length;
+        if (a !== b && ((deg.get(a) === 1 && deg.get(b) >= 3) || (deg.get(b) === 1 && deg.get(a) >= 3)) && q.length >= 0.5 * across[c] && q.length < across[c]) lost[c] += q.length;
+      }
+      // (and when an eighth of all this colour's centre lines would go so, its letters are fat: all are outlined, but
+      // a marker line; "Night owl" came out with an outlined N among centre-lined letters)
+      let A = 0, L = 0;
+      for (let c = 1; c <= count; c++) { A += all[c]; L += lost[c]; }
+      for (let c = 1; c <= count; c++) if (stroke[c] && (lost[c] >= 0.25 * all[c] || (L >= 0.08 * A && area[c] < 12 * across[c] ** 2))) { stroke[c] = 0; fat[c] = 1; }
+    }
+    // One decision for all of a colour's letters: when a fifth of its long pieces (by area) aren't strokes, none is but a
+    // marker line (a slab face came out with its O and i outlined, its N, e and & as centre lines); else so is any long
+    // piece about as wide (a K whose arms meet its stem in a wider join)
+    let sa = 0, la = 0;
+    for (let c = 1; c <= count; c++) if (long[c] && across[c]) { la += area[c]; if (stroke[c] === 1) sa += area[c]; }
+    const wsl = [];
+    for (let c = 1; c <= count; c++) if (stroke[c] === 1) wsl.push(across[c]);
+    wsl.sort((a, b) => a - b);
+    for (let c = 1; c <= count; c++) {
+      if (!long[c] || !across[c]) continue;
+      if (sa < 0.8 * la) { if (stroke[c] && area[c] < 12 * across[c] ** 2) stroke[c] = 0; }
+      else if (!stroke[c] && !fat[c] && across[c] <= Math.min(6 * res, 1.3 * wsl[wsl.length >> 1]) && open[c] >= 4 * shut[c]) stroke[c] = 1;
     }
     // (a short piece as wide as this colour's strokes, an apostrophe among the letters, is one too; on its own, an
     // outline)
@@ -1299,24 +1459,48 @@ function lineArt(img, analysis, opts) {
     for (let c = 1; c <= count; c++) if (stroke[c] === 1) ws.push(across[c]);
     ws.sort((a, b) => a - b);
     for (let c = 1; c <= count; c++) if (stroke[c] === 2) stroke[c] = ws.length && across[c] <= 1.3 * ws[ws.length >> 1] && area[c] >= 1.6 * across[c] ** 2 ? 1 : 0;
-    let band = null;
-    if (dark(col)) {
-      const r = (BAND / 2) * res, core = { w, h, data: new Uint8Array(w * h) }, small = 2 * BAND * res;
-      const x0 = new Int32Array(count + 1).fill(w), x1 = new Int32Array(count + 1), y0 = new Int32Array(count + 1).fill(h), y1 = new Int32Array(count + 1);
-      for (let i = 0; i < w * h; i++) {
-        const c = cl[i]; if (!c) continue;
-        const x = i % w, y = (i - x) / w;
-        if (x < x0[c]) x0[c] = x; if (x > x1[c]) x1[c] = x; if (y < y0[c]) y0[c] = y; if (y > y1[c]) y1[c] = y;
-      }
-      for (let i = 0; i < w * h; i++) core.data[i] = cl[i] && dt[i] > r ? 0 : 1;
-      const toCore = distanceTransform(core);
-      band = (i) => toCore[i] > r + 0.5 && (x1[cl[i]] - x0[cl[i]] > small || y1[cl[i]] - y0[cl[i]] > small);
+    // Parts of a wide piece no disc BAND mm across reaches into are bands, sewn once along their centre: in a dark
+    // colour's piece that is mostly such bands (a drawing's outline with a filled ear on it; in a bold letter the thin
+    // parts, a serif or the e's bar, came out as centre lines with the rest outlined), and in any colour a band 4 times
+    // as long as it's wide and 5 mm or more on the fabric (a stem growing out of its leaves was outlined, two lines 2 mm
+    // apart)
+    const r = (BAND / 2) * res, core = { w, h, data: new Uint8Array(w * h) }, small = 2 * BAND * res;
+    const x0 = new Int32Array(count + 1).fill(w), x1 = new Int32Array(count + 1), y0 = new Int32Array(count + 1).fill(h), y1 = new Int32Array(count + 1);
+    const pc = new Int32Array(count + 1), sx = new Float64Array(count + 1), sy = new Float64Array(count + 1);
+    for (let i = 0; i < w * h; i++) {
+      const c = cl[i]; if (!c) continue;
+      const x = i % w, y = (i - x) / w;
+      if (x < x0[c]) x0[c] = x; if (x > x1[c]) x1[c] = x; if (y < y0[c]) y0[c] = y; if (y > y1[c]) y1[c] = y;
+      pc[c]++; sx[c] += x; sy[c] += y;
     }
+    // A dot (0.8-2.5 mm across, 0.6 mm² or more, too thin to outline) is a short line across its middle, out and back:
+    // its centre line was a point, and an i's dots and full stops went
+    const dotC = (c) => !wide[c] && pc[c] >= 0.6 * res * res && Math.min(x1[c] - x0[c], y1[c] - y0[c]) + 1 >= 0.8 * res && Math.max(x1[c] - x0[c], y1[c] - y0[c]) + 1 < 2.5 * res;
+    for (let c = 1; c <= count; c++) if (dotC(c)) {
+      const cx = sx[c] / pc[c], cy = sy[c] / pc[c], across = x1[c] - x0[c] >= y1[c] - y0[c], L = Math.max(0.35 * res, (Math.max(x1[c] - x0[c], y1[c] - y0[c]) + 1 - 0.5 * res) / 2);
+      dots.push([`d${col.id}_${c}a`, `d${col.id}_${c}b`, across ? [[cx - L, cy], [cx + L, cy]] : [[cx, cy - L], [cx, cy + L]]]);
+    }
+    for (let i = 0; i < w * h; i++) core.data[i] = cl[i] && dt[i] > r ? 0 : 1;
+    const toCore = distanceTransform(core), thin = (i) => cl[i] && wide[cl[i]] && !stroke[cl[i]] && toCore[i] > r + 0.5, part = new Int32Array(count + 1);
+    const tm = { w, h, data: new Uint8Array(w * h) };
+    for (let i = 0; i < w * h; i++) if (thin(i)) { part[cl[i]]++; tm.data[i] = 1; }
+    const { labels: tl, count: tc } = label(tm), tA = new Int32Array(tc + 1), tW = new Float32Array(tc + 1), tO = new Int32Array(tc + 1), tS = new Int32Array(tc + 1);
+    for (let i = 0; i < w * h; i++) {
+      const t = tl[i]; if (!t) continue;
+      tA[t]++; if (dt[i] > tW[t]) tW[t] = dt[i];
+      const x = i % w;
+      for (const j of [x > 0 ? i - 1 : -1, x < w - 1 ? i + 1 : -1, i - w, i + w]) {
+        if (j < 0 || j >= w * h || cl[j] === cl[i]) continue;
+        if (mine.has(labels[j])) tS[t]++; else tO[t]++;
+      }
+    }
+    const longPart = (t) => { const wd = 2 * tW[t]; return wd > 0 && tA[t] >= 4 * wd * wd && tA[t] / wd >= 5 * res && tO[t] >= 2 * tS[t]; };
+    const band = (i) => thin(i) && ((dark(col) && part[cl[i]] >= 0.5 * area[cl[i]] && (x1[cl[i]] - x0[cl[i]] > small || y1[cl[i]] - y0[cl[i]] > small)) || longPart(tl[i]));
     for (let i = 0; i < w * h; i++) {
       if (!cl[i]) continue;
-      if (!wide[cl[i]]) lines.data[i] = 1;   // a thin line: its centre comes from the skeleton
+      if (!wide[cl[i]]) { if (!dotC(cl[i])) lines.data[i] = 1; }   // a thin line: its centre comes from the skeleton
       else if (stroke[cl[i]]) { strokes.data[i] = 1; bands.data[i] = 1; sw.push(across[cl[i]]); }
-      else if (band && band(i)) { bands.data[i] = 1; widths.push(dt[i]); }
+      else if (band(i)) { bands.data[i] = 1; widths.push(dt[i]); }
       else wideAt[i] = 1;
     }
   }
@@ -1345,14 +1529,18 @@ function lineArt(img, analysis, opts) {
   if (sw.length) {
     sw.sort((a, b) => a - b);
     const W = Math.max(3, sw[Math.floor(sw.length * 0.9)]);
-    for (const [a, b, p] of lineEnds(skeletonEdges(strokes, W, { spur: 1 }), strokes, W)) edges.push([`s${a}`, `s${b}`, p]);
+    // (spurs pruned under 0.6 of the width: a whole width took a slab E's lower arm)
+    for (const [a, b, p] of lineEnds(skeletonEdges(strokes, W, { spur: 0.6 }), strokes, W)) edges.push([`s${a}`, `s${b}`, p]);
   }
   // each connected drawing walked out and back: a closed tour (mm) that ends where it starts; pieces under 2 mm long
   // in all, and not joined to another drawing, are specks (each one a trim, two locks and often a loose thread)
   // (stitches that keep to the curve, not 2 mm chords across a small flower's petals; points under 0.4 mm apart, where
   // short skeleton edges meet, are merged: tiny stitches nest and break thread)
+  const firstDot = edges.length;
+  edges.push(...dots);
   const tours = order(edges).map((comp) => {
     const t = [];
+    t.dot = comp.some(([, , k]) => k >= firstDot);
     for (const q of comp.flatMap(([p], k) => followRun(toMm(p), 2.0, 0.1).slice(k ? 1 : 0)))
       if (!t.length || Math.hypot(q[0] - t.at(-1)[0], q[1] - t.at(-1)[1]) >= 0.4) t.push(q);
     const s = comp[0][0][0], e = comp.at(-1)[0].at(-1);
@@ -1383,6 +1571,14 @@ function lineArt(img, analysis, opts) {
     const to = near(e, at[0], 2);
     if (to) joins.push({ a: at[0], ka: at[1], b: to[0], kb: to[1], v: to[2] });
   }
+  // (and so is a drawing too short to sew on its own, at its point nearest another: an i's dot or a full stop, which
+  // as a closed outline has no loose end)
+  tours.forEach((t, i) => {
+    if (arclen(t).at(-1) >= 4) return;
+    let best = null;
+    t.forEach((q, k) => { const to = near(q, i, 2); if (to && (!best || to[2] < best.v)) best = { a: i, ka: k, b: to[0], kb: to[1], v: to[2] }; });
+    if (best) joins.push(best);
+  });
   joins.sort((p, q) => p.v - q.v);
   const root = tours.map((_, i) => i), find = (i) => (root[i] === i ? i : (root[i] = find(root[i])));
   const links = tours.map(() => []);
@@ -1405,7 +1601,9 @@ function lineArt(img, analysis, opts) {
     for (let k = 1; k < t.length; k++) if (k === t.length - 1 || Math.hypot(t[k][0] - o.at(-1)[0], t[k][1] - o.at(-1)[1]) >= 0.4) o.push(t[k]);
     return o;
   };
-  let left = tours.map((_, i) => i).filter((i) => find(i) === i && total.get(i) >= 4).map((i) => spaced(nest(i, 0, -1)));
+  // (a dot not joined to a drawing is kept when another drawing is within 5 mm: a colon after a space)
+  const by = (i) => tours.some((u, j) => j !== i && find(j) !== find(i) && tours[i].some((q) => u.some((v) => Math.hypot(v[0] - q[0], v[1] - q[1]) <= 5)));
+  let left = tours.map((_, i) => i).filter((i) => find(i) === i && (total.get(i) >= 4 || (tours[i].dot && by(i)))).map((i) => spaced(nest(i, 0, -1)));
   const d = new Design(o.hoop);
   // (sewn in the darkest colour, or the thread picked for the lines)
   const line = o.line ? { hex: o.line, thread: nearestBrotherThread(o.line) } : ink;
@@ -1568,6 +1766,47 @@ export function picturePlan(box, boxes, sizeMm, hoop, res = DEFAULTS.res, fit = 
     w: Math.max(8, Math.round(crop.sw * s * res)), h: Math.max(8, Math.round(crop.sh * s * res)), max: Math.floor(max), sizeMm: Math.min(sizeMm, max) };
 }
 
+// The Picture tab's copies of a picture (also used by tests/browser/picture_corpus.html, so it sews what the page sews).
+// OffscreenCanvas where available (iOS 16.4+), a plain canvas otherwise.
+function canvasOf(w, h) {
+  if (typeof OffscreenCanvas !== "undefined") return new OffscreenCanvas(w, h);
+  const c = document.createElement("canvas"); c.width = w; c.height = h; return c;
+}
+// bounding box of everything that isn't the border colour (or transparent), so "size" means the design
+export function contentBox(bitmap) {
+  const S = 256, k = Math.min(1, S / Math.max(bitmap.width, bitmap.height));
+  const w = Math.max(1, Math.round(bitmap.width * k)), h = Math.max(1, Math.round(bitmap.height * k));
+  const c = canvasOf(w, h), ctx = c.getContext("2d", { willReadFrequently: true });
+  // (averaged, not sampled: a logo's 1 px rule fell between the samples, so the colours were learned without it and
+  // nothing could say it was left out)
+  ctx.imageSmoothingQuality = "high";
+  ctx.drawImage(bitmap, 0, 0, w, h);
+  const d = ctx.getImageData(0, 0, w, h).data;
+  const border = [];
+  for (let x = 0; x < w; x++) border.push(x, (h - 1) * w + x);
+  for (let y = 0; y < h; y++) border.push(y * w, y * w + w - 1);
+  const avg = [0, 1, 2].map((ch) => border.reduce((a, i) => a + d[i * 4 + ch], 0) / border.length);
+  let x0 = w, y0 = h, x1 = -1, y1 = -1;
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    const i = (y * w + x) * 4;
+    const ink = d[i + 3] > 127 && Math.abs(d[i] - avg[0]) + Math.abs(d[i + 1] - avg[1]) + Math.abs(d[i + 2] - avg[2]) > 60;
+    if (ink) { if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
+  }
+  if (x1 < 0) return { sx: 0, sy: 0, sw: bitmap.width, sh: bitmap.height };
+  const m = 2;
+  x0 = Math.max(0, x0 - m); y0 = Math.max(0, y0 - m); x1 = Math.min(w - 1, x1 + m); y1 = Math.min(h - 1, y1 + m);
+  return { sx: x0 / k, sy: y0 / k, sw: (x1 - x0 + 1) / k, sh: (y1 - y0 + 1) / k };
+}
+
+// the picture's colours are learned from a copy this size (px, longer side) whatever the Size or hoop, so changing
+// either never changes the threads
+export const LEARN = 800;
+export function pictureImage(bitmap, box, w, h) {
+  const c = canvasOf(w, h), ctx = c.getContext("2d", { willReadFrequently: true });
+  ctx.imageSmoothingQuality = "high";
+  ctx.drawImage(bitmap, box.sx, box.sy, box.sw, box.sh, 0, 0, w, h);
+  return ctx.getImageData(0, 0, w, h);
+}
 // fit the picture's longest side to sizeMm, capped by the hoop
 export function workingSize(imgW, imgH, sizeMm, hoop, res = DEFAULTS.res) {
   const maxW = hoop.w - 2 * MARGIN - 2, maxH = hoop.h - 2 * MARGIN - 2;
