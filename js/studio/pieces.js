@@ -1048,8 +1048,9 @@ export function inFrame(p, f, margin = 3) {
 export function underPatch(p, pieces, before = false) {
   const i = pieces.findIndex((o) => o.id === p.id);
   if (i < 0 || p.kind === "frame") return null;
-  const pts = pieceStitches(p).flat();
   const list = before ? pieces.slice(0, i).reverse() : pieces.slice(i + 1);
+  if (!list.some((f) => f.kind === "frame" && f.border === "patch")) return null;
+  const pts = pieceStitches(p).flat();
   for (const f of list) {
     if (f.kind !== "frame" || f.border !== "patch") continue;
     const edge = shapeOf(f).path(f.w, f.h).map(placer(f));
@@ -1080,10 +1081,10 @@ export const label = (p) => p.kind === "motif" ? `${(MOTIFS[p.motif] || MOTIFS.h
   : p.kind === "file" ? p.name : `${shapeOf(p).name}${p.border === "applique" ? " appliqué" : ""}`;
 
 // A piece read from a saved design, the clipboard or the page's own storage, made safe to build: every field checked
-// and clamped to what the editor allows (an unknown font -> the default, a size of -5 or 1000 -> the nearest that
-// works, a motif or shape that doesn't exist -> the first one). Returns null for one that can't be read at all (no
-// words, an unknown kind). A crafted file showed "Cannot read properties of undefined" and a piece named
-// "undefined", and stayed through a reload.
+// and clamped (an unknown font -> the default, a size of -5 or 1000 -> the nearest that can be sewn, with room for
+// what Fit to hoop sets; a motif or shape that doesn't exist -> the first one). Returns null for one that can't be
+// read at all (no words, an unknown kind). A crafted file showed "Cannot read properties of undefined" and a piece
+// named "undefined", and stayed through a reload.
 const own = (o, k) => typeof k === "string" && Object.hasOwn(o, k);
 const num = (v, lo, hi, d) => (typeof v === "number" && Number.isFinite(v) ? Math.min(hi, Math.max(lo, v)) : d);
 const hex = (v, d) => (typeof v === "string" && /^#[0-9a-f]{6}$/i.test(v) ? v : d);
@@ -1100,9 +1101,9 @@ export function cleanPiece(p) {
   if (p.kind === "text") {
     if (typeof q.text !== "string" || !q.text.trim()) return null;
     q.text = q.text.slice(0, 60).split("\n").slice(0, 3).join("\n");
-    q.font = font(FONTS, "NW Great Vibes"); q.size = num(q.size, 5, 120, 18); style();
-    q.shape = pick(q.shape, Object.keys(TEXT_SHAPES), "straight"); q.radius = num(q.radius, 8, 200, 30);
-    for (const [k, lo, hi] of [["ry", 8, 200], ["amp", 0, 60], ["waves", 0.5, 6], ["bulge", 0, 100], ["spacing", -10, 40], ["leading", 80, 200]])
+    q.font = font(FONTS, "NW Great Vibes"); q.size = num(q.size, 5, 300, 18); style();
+    q.shape = pick(q.shape, Object.keys(TEXT_SHAPES), "straight"); q.radius = num(q.radius, 8, 400, 30);
+    for (const [k, lo, hi] of [["ry", 8, 400], ["amp", 0, 100], ["waves", 0.5, 6], ["bulge", 0, 100], ["spacing", -10, 40], ["leading", 80, 200]])
       if (q[k] != null) { q[k] = num(q[k], lo, hi, undefined); if (q[k] === undefined) delete q[k]; }
     if (q.align != null) q.align = pick(q.align, ["left", "center", "right"], "center");
     if (q.deco != null && !own(MOTIFS, q.deco)) delete q.deco;
@@ -1112,16 +1113,16 @@ export function cleanPiece(p) {
     }
   } else if (p.kind === "monogram") {
     if (typeof q.letters !== "string" || !q.letters.trim()) return null;
-    q.letters = q.letters.slice(0, 12); q.font = font(FONTS, "NW Great Vibes"); q.size = num(q.size, 10, 120, 30); style();
+    q.letters = q.letters.slice(0, 12); q.font = font(FONTS, "NW Great Vibes"); q.size = num(q.size, 10, 300, 30); style();
   } else if (p.kind === "letters") {
     if (typeof q.text !== "string" || !q.text.trim()) return null;
-    q.text = q.text.slice(0, 12); q.font = font(APPLIQUE_FONTS, APPLIQUE_FONTS[0].family); q.size = num(q.size, 20, 120, 60);
+    q.text = q.text.slice(0, 12); q.font = font(APPLIQUE_FONTS, APPLIQUE_FONTS[0].family); q.size = num(q.size, 10, 300, 60);
   } else if (p.kind === "motif") {
-    q.motif = own(MOTIFS, q.motif) ? q.motif : "heart"; q.size = num(q.size, 10, 120, 40);
+    q.motif = own(MOTIFS, q.motif) ? q.motif : "heart"; q.size = num(q.size, 5, 300, 40);
     q.style = pick(q.style, ["fill", "outline", "applique"], "fill");
   } else if (p.kind === "frame") {
     q.shape = own(SHAPES, q.shape) ? q.shape : "circle"; q.border = own(BORDERS, q.border) ? q.border : "satin";
-    q.w = num(q.w, 20, 170, 80); q.h = num(q.h, 20, 170, q.w);
+    q.w = num(q.w, 10, 400, 80); q.h = num(q.h, 10, 400, q.w);
     if (q.fill != null) q.fill = hex(q.fill, "#0e1f7c");
     if (q.blend != null) { q.blend = hex(q.blend, undefined); if (!q.blend) delete q.blend; }
     if (q.pattern != null && !own(FILL_PATTERNS, q.pattern)) delete q.pattern;
