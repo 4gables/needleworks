@@ -80,15 +80,29 @@ export function draw(canvas, design, opts = {}) {
   // (outlines drawn over it, mm: each hooping of a split design; the view takes them in)
   for (const [a, b, c, d] of opts.boxes || []) { x0 = Math.min(x0, a * 10); y0 = Math.min(y0, b * 10); x1 = Math.max(x1, c * 10); y1 = Math.max(y1, d * 10); }
   // centred on the design, or on a fixed point (the Design tab keeps the hoop centre still while pieces move)
-  const cxd = opts.center ? opts.center[0] : (x0 + x1) / 2, cyd = opts.center ? opts.center[1] : (y0 + y1) / 2;
+  let cxd = opts.center ? opts.center[0] : (x0 + x1) / 2, cyd = opts.center ? opts.center[1] : (y0 + y1) / 2;
   const hoop = opts.hoop && opts.showHoop !== false ? opts.hoop : null;
   const bd = opts.backdrop, bw = bd ? bd.bmp.width * bd.unit : 0, bh = bd ? bd.bmp.height * bd.unit : 0;
   const spanW = Math.max(x1 - x0, hoop ? hoop.w * 10 : 0, bw * 0.9), spanH = Math.max(y1 - y0, hoop ? hoop.h * 10 : 0, bh * 0.9);
   // leave room at the top for the info chips (they wrap to more rows on a phone)
   // (and at the bottom for a message over the preview: the too-big note covered the hoop on a phone)
-  const pad = opts.pad ?? 24, top = opts.padTop ?? pad, bot = Math.max(pad, opts.padBottom ?? pad), fit = Math.min((W - pad * 2) / spanW, (H - bot - top) / spanH);
+  const pad = opts.pad ?? 24, bot = Math.max(pad, opts.padBottom ?? pad);
+  let top = opts.padTop ?? pad, fit = Math.min((W - pad * 2) / spanW, (H - bot - top) / spanH);
+  // a control over the top-right corner ([w, h] px: the zoom pad) is kept clear of what's drawn, by moving it down or
+  // in, whichever loses less (it sat over the empty hoop's corner)
+  if (opts.corner) {
+    const [cw, ch] = opts.corner, ring = 14;
+    if (W / 2 + (spanW * fit) / 2 + ring > W - cw && top + (H - bot - top - spanH * fit) / 2 - ring < ch) {
+      const t = Math.max(top, ch + ring), down = Math.min((W - pad * 2) / spanW, (H - bot - t) / spanH), inward = Math.min((W - (cw + ring) * 2) / spanW, (H - bot - top) / spanH);
+      if (down >= inward) { top = t; fit = down; } else fit = inward;
+    }
+  }
+  // a drag holds the fit and centre it began with (`opts.base`, from the last result): the view refitted to "too big"
+  // as a piece went past the hoop and the piece ran off several times faster than the pointer
+  let my = top + (H - bot - top) / 2;
+  if (opts.base) ({ fit, my, cxd, cyd } = opts.base);
   const s = fit * (opts.zoom || 1), pan = opts.pan || [0, 0];
-  const ox = W / 2 - cxd * s + pan[0], oy = top + (H - bot - top) / 2 - cyd * s + pan[1];
+  const ox = W / 2 - cxd * s + pan[0], oy = my - cyd * s + pan[1];
   const X = (x) => x * s + ox, Y = (y) => y * s + oy;
 
   if (bd) {   // a photo of the item at true size (bd.unit: 0.1 mm per photo pixel), its centre at bd.center
@@ -96,7 +110,7 @@ export function draw(canvas, design, opts = {}) {
   }
   if (hoop) {   // hoop: wooden ring around the sewable field
     const hw = hoop.w * 10 * s, hh = hoop.h * 10 * s, r = Math.min(hw, hh) * 0.12;
-    const hx = W / 2 - hw / 2 + pan[0], hy = top + (H - bot - top) / 2 - hh / 2 + pan[1];
+    const hx = W / 2 - hw / 2 + pan[0], hy = my - hh / 2 + pan[1];
     ctx.save();
     // a light field inside the hoop when asked (dark mode: navy and black thread vanished on the dark stage)
     if (opts.fieldColor) { ctx.fillStyle = opts.fieldColor; roundRect(ctx, hx, hy, hw, hh, r * 0.6); ctx.fill(); }
@@ -198,7 +212,7 @@ export function draw(canvas, design, opts = {}) {
       ctx.fillStyle = "#222"; ctx.beginPath(); ctx.arc(X(p[0]), Y(p[1]), 3.5, 0, Math.PI * 2); ctx.fill();
     }
   }
-  return { scale: s, total, ox, oy };
+  return { scale: s, total, ox, oy, base: { fit, my, cxd, cyd } };
 }
 
 // A run of stitches cut into the closed rings it sews (file units): the appliqué placement line goes round one outline
