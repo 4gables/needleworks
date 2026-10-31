@@ -4,15 +4,15 @@
 // Uses the shared lettering and stitch engines and returns a Design; the PES file is written by the locked
 // writer in js/core/formats.js, which nothing here touches.
 import { Design } from "../core/design.js";
-import { DENSITY, fillPolygon } from "../core/digitize.js";
-import { fontOf } from "../core/fonts.js";
+import { DENSITY, FILL_PATTERNS, fillPolygon } from "../core/digitize.js";
+import { APPLIQUE_FONTS, FONTS, fontOf } from "../core/fonts.js";
 import { MARGIN } from "../core/machines.js";
 import { bounds, edgeWalk, filletPolygon, followRun, normals, run, satin, zigzag } from "../core/geom.js";
 import { counterPockets, distanceTransform, label as labelMask, order } from "../core/raster.js";
 import { strokes } from "../core/text.js";
 import { MOTIFS } from "./motifs.js";
 import { letterOutlines, motifOutlines } from "./outline.js";
-import { contours, echo, stipple } from "./quilt.js";
+import { QUILTS, contours, echo, stipple } from "./quilt.js";
 
 // ---------- lettering ----------
 const lettering = new Map();   // font + text -> centre-line strokes (rendering is the slow part)
@@ -595,6 +595,8 @@ const tack = (e) => [loop(run(e, 2.0, true)), loop(run(e.slice().reverse(), 2.0,
 // the 3.6 mm satin border of appliqué, patch and in-the-hoop edges: edge walk, zigzag, satin
 const satinBorder = (e) => [edgeWalk(e, 3.6, true), loop(zigzag(e, 2.6, 2.0, true)), loop(satin(e, 3.6, sd(0.4), 0.3, true))];
 
+// motifs that face one way (1: to the right, -1: to the left), for lettering's motif either side
+const FACING = { bird: 1, dog: 1, bunny: 1, cat: 1, leaf: 1, moon: 1, fish: -1, horse: -1 };
 function localStages(p, fab = "cotton") {
   let stages = [];
   if (p.kind === "text") {
@@ -603,11 +605,14 @@ function localStages(p, fab = "cotton") {
     // a small filled motif either side (`deco`), sized to the letters and centred on them
     if (paths.length && MOTIFS[p.deco]) {
       const [x0, y0, x1, y1] = bounds(paths.flat()), s = Math.max(6, Math.min(p.size * 0.75, 30)), gap = s * 0.35;
-      const side = (dx) => motifStitches(motifOutlines(MOTIFS[p.deco].d, s), "fill").map((q) => q.map(([x, y]) => [x + dx, y + (y0 + y1) / 2]));
-      paths = [...side(x0 - gap - s / 2), ...paths, ...side(x1 + gap + s / 2)];
+      // (a motif that faces one way is mirrored on one side, so both face the words: two bunnies looked the same way)
+      const face = FACING[p.deco] || 0;
+      const side = (dx, f) => motifStitches(motifOutlines(MOTIFS[p.deco].d, s), "fill").map((q) => q.map(([x, y]) => [f * x + dx, y + (y0 + y1) / 2]));
+      paths = [...side(x0 - gap - s / 2, face < 0 ? -1 : 1), ...paths, ...side(x1 + gap + s / 2, face > 0 ? -1 : 1)];
     }
-    const words = (p.text || "").replace(/\s*\n\s*/g, " / ").trim();
-    if (paths.length) stages = [{ color: p.color, paths, sews: fab === "towel" ? `Sews a light base to flatten the pile, then “${words}” on it.` : `Sews “${words}”.` }];
+    // (the motifs are named too: "Sews “Leo”." sewed two bunnies as well)
+    const words = `“${(p.text || "").replace(/\s*\n\s*/g, " / ").trim()}”` + (paths.length && MOTIFS[p.deco] ? ` with ${/^[aeiou]/i.test(MOTIFS[p.deco].name) ? "an" : "a"} ${MOTIFS[p.deco].name.toLowerCase()} either side` : "");
+    if (paths.length) stages = [{ color: p.color, paths, sews: fab === "towel" ? `Sews a light base to flatten the pile, then ${words} on it.` : `Sews ${words}.` }];
   } else if (p.kind === "monogram") {
     const paths = monogram(p, fab);
     if (paths.length) stages = [{ color: p.color, paths, sews: fab === "towel" ? `Sews a light base to flatten the pile, then the monogram ${p.letters}.` : `Sews the monogram ${p.letters}.` }];
@@ -1031,8 +1036,107 @@ export function pieceBounds(p) {
   return pts.length ? bounds(pts) : null;
 }
 
+// Is every stitch of p at least `margin` mm inside frame f's outline? (where a new piece can go on a frame)
+export function inFrame(p, f, margin = 3) {
+  const edge = shapeOf(f).path(f.w, f.h).map(placer(f)), pts = pieceStitches(p).flat();
+  if (!pts.length) return false;
+  for (let i = 0; i < pts.length; i += 3) if (!inside(pts[i], edge) || edgeGap(pts[i], edge) < margin) return false;
+  return true;
+}
+// the first filled patch after p in the list that would cover some of p's stitches (sewn first, it's hidden), or null;
+// `before`: the last patch before p that p is sewn on
+export function underPatch(p, pieces, before = false) {
+  const i = pieces.findIndex((o) => o.id === p.id);
+  if (i < 0 || p.kind === "frame") return null;
+  const pts = pieceStitches(p).flat();
+  const list = before ? pieces.slice(0, i).reverse() : pieces.slice(i + 1);
+  for (const f of list) {
+    if (f.kind !== "frame" || f.border !== "patch") continue;
+    const edge = shapeOf(f).path(f.w, f.h).map(placer(f));
+    if (pts.some((q, k) => k % 3 === 0 && inside(q, edge))) return f;
+  }
+  return null;
+}
+// point in polygon (even-odd), and the distance to its nearest edge
+function inside([x, y], poly) {
+  let c = false;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const [xi, yi] = poly[i], [xj, yj] = poly[j];
+    if ((yi > y) !== (yj > y) && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) c = !c;
+  }
+  return c;
+}
+function edgeGap([x, y], poly) {
+  let d = Infinity;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const [ax, ay] = poly[j], [bx, by] = poly[i], dx = bx - ax, dy = by - ay, l = dx * dx + dy * dy;
+    const t = l ? Math.max(0, Math.min(1, ((x - ax) * dx + (y - ay) * dy) / l)) : 0;
+    d = Math.min(d, Math.hypot(x - ax - t * dx, y - ay - t * dy));
+  }
+  return d;
+}
+
 export const label = (p) => p.kind === "motif" ? `${(MOTIFS[p.motif] || MOTIFS.heart).name}` : p.kind === "text" ? `“${p.text.replace(/\s*\n\s*/g, " / ")}”` : p.kind === "letters" ? `Appliqué ${p.text}` : p.kind === "monogram" ? `Monogram ${p.letters}`
   : p.kind === "file" ? p.name : `${shapeOf(p).name}${p.border === "applique" ? " appliqué" : ""}`;
+
+// A piece read from a saved design, the clipboard or the page's own storage, made safe to build: every field checked
+// and clamped to what the editor allows (an unknown font -> the default, a size of -5 or 1000 -> the nearest that
+// works, a motif or shape that doesn't exist -> the first one). Returns null for one that can't be read at all (no
+// words, an unknown kind). A crafted file showed "Cannot read properties of undefined" and a piece named
+// "undefined", and stayed through a reload.
+const own = (o, k) => typeof k === "string" && Object.hasOwn(o, k);
+const num = (v, lo, hi, d) => (typeof v === "number" && Number.isFinite(v) ? Math.min(hi, Math.max(lo, v)) : d);
+const hex = (v, d) => (typeof v === "string" && /^#[0-9a-f]{6}$/i.test(v) ? v : d);
+const pick = (v, ok, d) => (ok.includes(v) ? v : d);
+export function cleanPiece(p) {
+  if (!p || typeof p !== "object" || Array.isArray(p)) return null;
+  // (a place far past any hoop is taken as the middle, not the hoop's edge: x 1e9 made a 1072 mm design)
+  const at = (v) => (typeof v === "number" && Math.abs(v) <= 300 ? v : 0);
+  const q = { ...p, x: at(p.x), y: at(p.y), color: hex(p.color, "#0e1f7c") };
+  if (q.rot != null) q.rot = num(q.rot, -180, 180, 0);
+  if (q.flip != null) q.flip = q.flip === true;
+  const font = (list, d) => (list.some((f) => f.family === q.font) ? q.font : d);
+  const style = () => { if (q.style != null) q.style = pick(q.style, ["auto", "satin", "line"], "auto"); };
+  if (p.kind === "text") {
+    if (typeof q.text !== "string" || !q.text.trim()) return null;
+    q.text = q.text.slice(0, 60).split("\n").slice(0, 3).join("\n");
+    q.font = font(FONTS, "NW Great Vibes"); q.size = num(q.size, 5, 120, 18); style();
+    q.shape = pick(q.shape, Object.keys(TEXT_SHAPES), "straight"); q.radius = num(q.radius, 8, 200, 30);
+    for (const [k, lo, hi] of [["ry", 8, 200], ["amp", 0, 60], ["waves", 0.5, 6], ["bulge", 0, 100], ["spacing", -10, 40], ["leading", 80, 200]])
+      if (q[k] != null) { q[k] = num(q[k], lo, hi, undefined); if (q[k] === undefined) delete q[k]; }
+    if (q.align != null) q.align = pick(q.align, ["left", "center", "right"], "center");
+    if (q.deco != null && !own(MOTIFS, q.deco)) delete q.deco;
+    if (q.kern != null) {
+      const k = q.kern && typeof q.kern === "object" ? Object.entries(q.kern).filter(([i, v]) => /^\d+$/.test(i) && +i < q.text.length && Number.isFinite(v)) : [];
+      if (k.length) q.kern = Object.fromEntries(k.map(([i, v]) => [i, Math.min(50, Math.max(-30, Math.round(v)))])); else delete q.kern;
+    }
+  } else if (p.kind === "monogram") {
+    if (typeof q.letters !== "string" || !q.letters.trim()) return null;
+    q.letters = q.letters.slice(0, 12); q.font = font(FONTS, "NW Great Vibes"); q.size = num(q.size, 10, 120, 30); style();
+  } else if (p.kind === "letters") {
+    if (typeof q.text !== "string" || !q.text.trim()) return null;
+    q.text = q.text.slice(0, 12); q.font = font(APPLIQUE_FONTS, APPLIQUE_FONTS[0].family); q.size = num(q.size, 20, 120, 60);
+  } else if (p.kind === "motif") {
+    q.motif = own(MOTIFS, q.motif) ? q.motif : "heart"; q.size = num(q.size, 10, 120, 40);
+    q.style = pick(q.style, ["fill", "outline", "applique"], "fill");
+  } else if (p.kind === "frame") {
+    q.shape = own(SHAPES, q.shape) ? q.shape : "circle"; q.border = own(BORDERS, q.border) ? q.border : "satin";
+    q.w = num(q.w, 20, 170, 80); q.h = num(q.h, 20, 170, q.w);
+    if (q.fill != null) q.fill = hex(q.fill, "#0e1f7c");
+    if (q.blend != null) { q.blend = hex(q.blend, undefined); if (!q.blend) delete q.blend; }
+    if (q.pattern != null && !own(FILL_PATTERNS, q.pattern)) delete q.pattern;
+    if (q.quilt != null && !own(QUILTS, q.quilt)) delete q.quilt;
+    if (q.hang != null) q.hang = q.hang === true;
+  } else if (p.kind === "file") {
+    const pt = (v) => Array.isArray(v) && v.length >= 2 && Number.isFinite(v[0]) && Number.isFinite(v[1]) && Math.abs(v[0]) < 1000 && Math.abs(v[1]) < 1000;
+    const blocks = Array.isArray(q.blocks) ? q.blocks.filter((b) => b && Array.isArray(b.paths)).map((b) => ({
+      color: hex(b.color, "#000000"), name: typeof b.name === "string" ? b.name.slice(0, 40) : "",
+      paths: b.paths.filter((r) => Array.isArray(r) && r.length > 1 && r.every(pt)).map((r) => r.map(([x, y]) => [x, y])) })).filter((b) => b.paths.length) : [];
+    if (!blocks.length) return null;
+    q.blocks = blocks; q.name = typeof q.name === "string" && q.name.trim() ? q.name.slice(0, 60) : "Design file";
+  } else return null;
+  return q;
+}
 
 // An opened design as a piece: its stitches split into runs at jumps/trims, per colour block, centred.
 export function fileBlocks(design) {

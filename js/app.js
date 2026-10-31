@@ -551,9 +551,12 @@ function namesFor() {
 }
 $("names-open").onclick = () => {
   const n = namesFor(); if (!n) return;
-  $("names-what").textContent = `Each name takes the place of “${n.what}”. Everything else stays the same.`;
-  $("names-list").value = store.get("names", ""); $("names-note").classList.remove("warn"); if ($("names-bad")) $("names-bad").hidden = true;
-  $("names-note").textContent = "One name per line, up to 40. You get one file for each, in a single .zip.";
+  // (a monogram takes initials: "JKM", one set a line)
+  $("names-what").textContent = n.monogram ? `Each line's initials take the place of the monogram “${n.what}” (up to 3, in the order first, LAST, middle). Everything else stays the same.`
+    : `Each name takes the place of “${n.what}”. Everything else stays the same.`;
+  $("names-list").value = store.get(n.monogram ? "names.initials" : "names", ""); $("names-note").classList.remove("warn"); if ($("names-bad")) $("names-bad").hidden = true;
+  $("names-list").placeholder = n.monogram ? "JKM\nALB\nR" : "Emma\nLiam\nOlivia"; $("names-list").setAttribute("aria-label", n.monogram ? "Initials, one set per line" : "Names, one per line");
+  $("names-note").textContent = n.monogram ? "One set of initials per line, up to 40. You get one file for each, in a single .zip." : "One name per line, up to 40. You get one file for each, in a single .zip.";
   $("names-shrink-row").hidden = !!n.bookmark;   // (the bookmark shrinks a long name by itself)
   $("names-thumbs").innerHTML = ""; $("names-cancel").textContent = "Cancel";
   $("names").showModal();
@@ -561,9 +564,10 @@ $("names-open").onclick = () => {
 $("names-make").onclick = async () => {
   const n = namesFor(); if (!n) return;
   const list = [...new Set($("names-list").value.split("\n").map((s) => s.trim()).filter(Boolean))].slice(0, 40);
-  store.set("names", list.join("\n"));
+  store.set(n.monogram ? "names.initials" : "names", list.join("\n"));
   if (!list.length) { $("names-note").textContent = "Type at least one name."; return; }
   $("names-make").disabled = true; $("names-note").textContent = "Making the files…";
+  // (file names compared ignoring case: emma.pes and Emma.pes are one file on a Mac, Windows or the USB stick)
   const files = [], bad = [], used = new Set(), made = [];
   for (const name of list) {
     await new Promise((r) => setTimeout(r, 0));
@@ -571,8 +575,8 @@ $("names-make").onclick = async () => {
       const { pattern, shown, smaller, thin, turned: sideways, runs } = n.build(name, $("names-shrink").checked), bytes = writePES(pattern), check = validatePES(bytes, pattern, hoop());
       if (!check.ok) throw new Error(check.error);
       let base = safeName(name, "name") + (n.bookmark ? "_bookmark" : ""), f = base, k = 2;
-      while (used.has(f)) f = `${base}_${k++}`;
-      used.add(f); files.push({ name: f + ".pes", bytes, problems: verdictOf(bytes) }); made.push({ name, file: f + ".pes", pattern, shown, smaller, thin, sideways, runs });
+      while (used.has(f.toLowerCase())) f = `${base}_${k++}`;
+      used.add(f.toLowerCase()); files.push({ name: f + ".pes", bytes, problems: verdictOf(bytes) }); made.push({ name, file: f + ".pes", pattern, shown, smaller, thin, sideways, runs });
     } catch (err) { bad.push(`${name} (${/hoop fits|too big/i.test(err.message) ? "too long for the hoop" : err.message})`); }
   }
   $("names-make").disabled = false;
@@ -582,7 +586,7 @@ $("names-make").onclick = async () => {
   for (const c of $("names-thumbs").querySelectorAll("canvas")) {
     const m = made[+c.dataset.i]; draw(c, m.shown || (n.bookmark ? turnPattern(m.pattern, false) : m.pattern), { pad: 6, fabric: "white" });   // (3 px: an arched name's top sat on the edge)
   }
-  const zipName = `${n.bookmark ? "bookmarks" : "names"}_${files.length}.zip`;
+  const zipName = n.bookmark ? `bookmarks_${files.length}.zip` : `${n.zip || "names"}_${files.length}_${n.monogram ? "monograms" : "names"}.zip`;
   if (files.length) {
     saveFile(new Blob([zip(files)], { type: "application/zip" }), zipName);
     $("names-cancel").textContent = "Done";
