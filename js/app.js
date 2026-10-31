@@ -662,8 +662,9 @@ $("names-make").onclick = async () => {
   }
   $("names-make").disabled = false;
   // every name as it'll sew, to look over (is one crowded?), with what's different about it
-  const notes = (m) => [m.thin ? "smaller, thin line" : m.smaller ? "smaller" : "", m.sideways ? "hoop turned" : "", m.runs ? `runs into ${m.runs}` : ""].filter(Boolean).join(", ");
-  $("names-thumbs").innerHTML = made.map((m, i) => `<figure><canvas data-i="${i}"></canvas><figcaption>${escapeHtml(m.name)}${notes(m) ? ` (${escapeHtml(notes(m))})` : ""}</figcaption></figure>`).join("");
+  // (a name sewn as a thin line where the design is bold stands out: it was one more word in the brackets)
+  const notes = (m) => [m.smaller ? "smaller" : "", m.sideways ? "hoop turned" : "", m.runs ? `runs into ${m.runs}` : ""].filter(Boolean).join(", ");
+  $("names-thumbs").innerHTML = made.map((m, i) => `<figure><canvas data-i="${i}"></canvas><figcaption>${escapeHtml(m.name)}${notes(m) ? ` (${escapeHtml(notes(m))})` : ""}${m.thin ? `<br><strong class="names-thin">Thin line, not bold</strong>` : ""}</figcaption></figure>`).join("");
   for (const c of $("names-thumbs").querySelectorAll("canvas")) {
     const m = made[+c.dataset.i]; draw(c, m.shown || (n.bookmark ? turnPattern(m.pattern, false) : m.pattern), { pad: 6, fabric: "white" });   // (3 px: an arched name's top sat on the edge)
   }
@@ -677,12 +678,13 @@ $("names-make").onclick = async () => {
   if (!box.isConnected) $("names-note").after(box);
   const poor = files.length ? badReport(box, files, zipName) : (box.hidden = true, []);
   // (a turned file needs the fabric hooped a quarter turn round: said per file, since only the long names are)
-  const side = made.filter((m) => m.sideways), runs = made.filter((m) => m.runs);
-  $("names-note").classList.toggle("warn", bad.length > 0 || runs.length > 0 || poor.length > 0 || left.length > 0);
+  const side = made.filter((m) => m.sideways), runs = made.filter((m) => m.runs), thin = made.filter((m) => m.thin);
+  $("names-note").classList.toggle("warn", bad.length > 0 || runs.length > 0 || poor.length > 0 || left.length > 0 || thin.length > 0);
   $("names-note").textContent = `${files.length ? `Made ${files.length} ${files.length === 1 ? "file" : "files"}, saved as one .zip (open it and copy the .pes files to the USB stick). ` : ""}`
     + (side.length === made.length && side.length > 1 ? `Every file is turned like the design: hoop the fabric a quarter turn round for each, with the top of the name toward the right of the hoop (the machine shows them on their side). `
       : side.length ? `Hoop the fabric a quarter turn round for ${side.map((m) => m.file).join(", ")}: the machine shows ${side.length === 1 ? "it" : "them"} on ${side.length === 1 ? "its" : "their"} side, with the top of the name toward the right of the hoop. ` : "")
     + (runs.length ? `Runs into another piece: ${runs.map((m) => m.name).join(", ")} (${$("names-shrink").checked ? "even at half size: shorten" : `tick "Make long names smaller", or shorten`} ${runs.length === 1 ? "it" : "them"}). ` : "")
+    + (thin.length ? `Sewn as a thin line, not bold like the design (too small for bold once shrunk to fit): ${thin.map((m) => m.name).join(", ")}. ` : "")
     + (bad.length ? `Couldn't make: ${bad.join(", ")}. ` : "")
     + (left.length ? `Left out (40 at a time): ${left.join(", ")}. Make them in a second batch.` : "")
     + (poor.length ? ` ${poor.length === 1 ? "One file" : `${poor.length} files`} may not sew well:` : "");

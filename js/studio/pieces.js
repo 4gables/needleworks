@@ -14,6 +14,10 @@ import { MOTIFS } from "./motifs.js";
 import { letterOutlines, motifOutlines } from "./outline.js";
 import { QUILTS, contours, echo, stipple } from "./quilt.js";
 
+// min and max of a long list (spread into Math.min, 60 letters' points overflowed the stack: a crafted file's "WWW…")
+const minOf = (a) => { let m = Infinity; for (const v of a) if (v < m) m = v; return m; };
+const maxOf = (a) => { let m = -Infinity; for (const v of a) if (v > m) m = v; return m; };
+
 // ---------- lettering ----------
 const lettering = new Map();   // font + text -> centre-line strokes (rendering is the slow part)
 // Nothing drawn before its font has loaded is cached: it was drawn in the browser's fallback font, and caching it
@@ -181,7 +185,7 @@ function bend(parts, shape, a, b = a) {
 // half span from the middle of the arch.
 function archRho(p, l) {
   const a = Math.max(p.radius, 8), b = Math.max(p.ry ?? p.radius, 8), xs = l.parts.flatMap(([q]) => q.map((v) => v[0]));
-  const span = Math.max(...xs.map(Math.abs));
+  const span = maxOf(xs.map(Math.abs));
   let s = 0, t = p.shape === "up" ? 0 : Math.PI, rho = Infinity;
   while (s <= span && Math.abs(t) < Math.PI * 2) {
     const v = Math.hypot(a * Math.cos(t), b * Math.sin(t));
@@ -207,7 +211,7 @@ export function archTight(p) {
 export function archStart(p) {
   const l = letters(p.text, p.font, p.size, p.style);
   if (!l.parts.length) return { radius: p.radius };
-  const xs = l.parts.flatMap(([q]) => q.map((v) => v[0])), span = Math.max(...xs) - Math.min(...xs);
+  const xs = l.parts.flatMap(([q]) => q.map((v) => v[0])), span = maxOf(xs) - minOf(xs);
   const q = { ...p, radius: Math.max(15, Math.min(80, Math.round(span / (2 * Math.PI * 0.3)))) };
   delete q.ry;
   return { radius: archFit(q)?.radius ?? q.radius };
@@ -250,7 +254,7 @@ export function archRoom(p) {
   if (p.kind !== "text" || (p.shape !== "up" && p.shape !== "down")) return null;
   const l = letters(p.text, p.font, p.size, p.style);
   if (!l.parts.length) return null;
-  const xs = l.parts.flatMap(([q]) => q.map((v) => v[0])), span = Math.max(...xs) - Math.min(...xs);
+  const xs = l.parts.flatMap(([q]) => q.map((v) => v[0])), span = maxOf(xs) - minOf(xs);
   const a = Math.max(p.radius, 8), b = Math.max(p.ry ?? p.radius, 8), per = Math.PI * (3 * (a + b) - Math.sqrt((3 * a + b) * (a + 3 * b)));
   if (span <= per * 0.55) return null;
   const k = span / (per * 0.45);
@@ -266,20 +270,42 @@ export function archRoom(p) {
 // app had just fitted, 2 mm clear of the satin.)
 const CLEAR = 1.5;
 export function touching(p, pieces) {
-  if (p.kind === "frame") return null;
+  return touchingAll(p, pieces, true)[0] || null;
+}
+// every other piece p runs into (`first`: stop at the first). Pieces whose boxes are further apart than CLEAR are
+// skipped without measuring (the same answer, faster: a design of 15 pieces measured every pair).
+export function touchingAll(p, pieces, first = false) {
+  if (p.kind === "frame") return [];
   const fit = fittedSizes(pieces), sewn = (o) => (fit.has(o.id) ? { ...o, size: fit.get(o.id) } : o);
-  const mine = cloud(pieceStitches(p));
+  const paths = pieceStitches(p), pts = paths.flat(), out = [];
+  if (!pts.length) return out;
+  const b = bounds(pts);
+  let mine = null;
   for (const o of pieces) {
     if (o === p || o.id === p.id || (o.kind === "frame" && o.border === "patch")) continue;
-    if (near(mine, pieceStitches(sewn(o)), CLEAR)) return o;
+    const theirs = pieceStitches(sewn(o)), tp = theirs.flat();
+    if (!tp.length) continue;
+    const c = bounds(tp);
+    if (c[0] > b[2] + CLEAR || c[2] < b[0] - CLEAR || c[1] > b[3] + CLEAR || c[3] < b[1] - CLEAR) continue;
+    mine ||= cloud(paths);
+    if (near(mine, theirs, CLEAR)) { out.push(o); if (first) break; }
   }
-  return null;
+  return out;
 }
 // the first piece that runs into another, and what it runs into ([p, q]), or null
 export function collision(pieces) {
   const fit = fittedSizes(pieces);
   for (const p of pieces) { const q = touching(fit.has(p.id) ? { ...p, size: fit.get(p.id) } : p, pieces); if (q) return [p, q]; }
   return null;
+}
+// every pair of pieces that run into each other, each pair once ([p, q] in list order)
+export function collisions(pieces) {
+  const fit = fittedSizes(pieces), out = [], seen = new Set();
+  for (const p of pieces) for (const q of touchingAll(fit.has(p.id) ? { ...p, size: fit.get(p.id) } : p, pieces)) {
+    const [a, b] = pieces.indexOf(p) < pieces.indexOf(q) ? [p, q] : [q, p], k = a.id + ":" + b.id;
+    if (!seen.has(k)) { seen.add(k); out.push([a, b]); }
+  }
+  return out;
 }
 // the biggest size (0.5 mm steps, down to 60 %, never too small to stitch) at which p clears `other`, or 0
 export function clearSize(p, pieces, other) {
@@ -519,11 +545,12 @@ export function fineLine(p) {
   return !!l && l.parts.length > 0 && l.satinW === 0;
 }
 
-// Lettering smaller than this blurs: the bulk of the letters (x-height, or caps) under ~4 mm.
+// Lettering smaller than this blurs: the bulk of the letters (x-height, or caps) under ~4 mm, or the font's own `min`
+// for lettering (a script whose small loops close sooner: Alex Brush at the 4 mm "Abbie" read "Avvie").
 export function minSize(p) {
-  const l = bulk(p);
-  if (!l || !l.parts.length || l.xh >= 4) return 0;
-  return Math.ceil((p.size * 4) / l.xh);
+  const l = bulk(p), least = p.kind === "text" ? fontOf(p.font).min || 4 : 4;
+  if (!l || !l.parts.length || l.xh >= least) return 0;
+  return Math.ceil((p.size * least) / l.xh);
 }
 
 // On a towel the satin is at least 2.5 mm wide (a fine line sinks into the loops), so a small x-height fills its loops
@@ -549,8 +576,9 @@ export function towelMin(p) {
 // Automatic satin lettering whose own loops (a tenth of the x-height or more to their middle: a b's bowl, an e's eye)
 // close even round the narrowest column (0.8 mm, `counterCaps`): the height at which they stay open, or 0 when they
 // do. Said with "Thin line" as the other fix (Alex Brush "Abbie" at 12 mm sewed as "Avvie", with no word).
+// (Bold chosen by hand too: Allura and Meow Script in Bold at their smallest size sewed as blobs with no word)
 export function loopsFill(p) {
-  if ((p.style || "auto") !== "auto") return 0;
+  if ((p.style || "auto") === "line") return 0;
   const l = bulk(p);
   if (!l || !l.parts.length || !l.satinW) return 0;
   const shut = l.pockets.filter((c) => c.peak >= Math.max(0.45, 0.1 * l.xh) && Math.max(c.saddle - 0.2, c.peak - OPEN / 2) < 0.45);
@@ -706,7 +734,7 @@ function textRows(p, fab = "cotton") {
   if (ls.length > 1) ls = ls.map((l, i) => (i && l.xh ? letters(lines[i], p.font, (p.size * ls[0].xh) / l.xh, style, sp, kerns[i]) : l));
   ls = ls.filter((l) => l.parts.length);
   if (!ls.length) return [];
-  const pitch = (p.size * (p.leading ?? 130)) / 100, span = (l) => { const xs = l.parts.flatMap(([q]) => q.map((v) => v[0])); return [Math.min(...xs), Math.max(...xs)]; };
+  const pitch = (p.size * (p.leading ?? 130)) / 100, span = (l) => { const xs = l.parts.flatMap(([q]) => q.map((v) => v[0])); return [minOf(xs), maxOf(xs)]; };
   const spans = ls.map(span), W = Math.max(...spans.map(([a, b]) => b - a));
   const top = Math.min(...ls.map((l, i) => l.top + i * pitch)), bottom = Math.max(...ls.map((l, i) => l.bottom + i * pitch));
   return ls.map((l, i) => {
@@ -716,7 +744,7 @@ function textRows(p, fab = "cotton") {
 }
 // along y = amp·sin(waves·2πx/W), letters spaced by arc length and turned with the curve
 function wave(parts, p) {
-  const xs = parts.flatMap(([q]) => q.map((v) => v[0])), x0 = Math.min(...xs), x1 = Math.max(...xs), W = Math.max(x1 - x0, 1);
+  const xs = parts.flatMap(([q]) => q.map((v) => v[0])), x0 = minOf(xs), x1 = maxOf(xs), W = Math.max(x1 - x0, 1);
   const amp = p.amp ?? p.size * 0.35, k = ((p.waves ?? 1) * 2 * Math.PI) / W, n = 600, pts = [], len = [0];
   for (let i = 0; i <= n; i++) { const x = x0 - W * 0.6 + (W * 2.2 * i) / n; pts.push([x, amp * Math.sin(k * (x - x0))]); }
   for (let i = 1; i <= n; i++) len.push(len[i - 1] + Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]));
@@ -728,16 +756,16 @@ function wave(parts, p) {
     return [ax + (bx - ax) * t, ay + (by - ay) * t, -(by - ay) / L, (bx - ax) / L];
   };
   const out = parts.map(([q, ...r]) => [densify(q, 1).map(([x, y]) => { const [px, py, nx, ny] = at(s0 + x - x0); return [px + y * nx, py + y * ny]; }), ...r]);
-  const cx = (Math.min(...out.flatMap(([q]) => q.map((v) => v[0]))) + Math.max(...out.flatMap(([q]) => q.map((v) => v[0])))) / 2;
-  const ys = out.flatMap(([q]) => q.map((v) => v[1])), cy = (Math.min(...ys) + Math.max(...ys)) / 2;
+  const cx = (minOf(out.flatMap(([q]) => q.map((v) => v[0]))) + maxOf(out.flatMap(([q]) => q.map((v) => v[0])))) / 2;
+  const ys = out.flatMap(([q]) => q.map((v) => v[1])), cy = (minOf(ys) + maxOf(ys)) / 2;
   return out.map(([q, ...r]) => [q.map(([x, y]) => [x - cx, y - cy]), ...r]);
 }
 // letters stretched upward toward the middle: the tops make an arch, the baseline stays put
 function bridge(parts, p) {
-  const xs = parts.flatMap(([q]) => q.map((v) => v[0])), x0 = Math.min(...xs), x1 = Math.max(...xs), W = Math.max(x1 - x0, 1);
+  const xs = parts.flatMap(([q]) => q.map((v) => v[0])), x0 = minOf(xs), x1 = maxOf(xs), W = Math.max(x1 - x0, 1);
   const k = (p.bulge ?? 30) / 100;
   const out = parts.map(([q, ...r]) => [densify(q, 1).map(([x, y]) => { const u = (2 * (x - (x0 + x1) / 2)) / W; return [x, y < 0 ? y * (1 + k * (1 - u * u)) : y]; }), ...r]);
-  const ys2 = out.flatMap(([q]) => q.map((v) => v[1])), cy = (Math.min(...ys2) + Math.max(...ys2)) / 2;
+  const ys2 = out.flatMap(([q]) => q.map((v) => v[1])), cy = (minOf(ys2) + maxOf(ys2)) / 2;
   return out.map(([q, ...r]) => [q.map(([x, y]) => [x, y - cy]), ...r]);
 }
 
@@ -1194,7 +1222,7 @@ function monogram(p, fab = "cotton") {
   const big = p.size, small = p.size * 0.68, gap = p.size * (chars.length === 3 ? 0.04 : 0.14);
   const sizes = chars.length === 3 ? [small, big, small] : chars.map(() => big);
   const ls = chars.map((c, i) => letters(c, p.font, sizes[i], styleOn(p, fab)));
-  const widths = ls.map((l) => { const xs = l.parts.flatMap(([q]) => q.map((v) => v[0])); return xs.length ? Math.max(...xs) - Math.min(...xs) : 0; });
+  const widths = ls.map((l) => { const xs = l.parts.flatMap(([q]) => q.map((v) => v[0])); return xs.length ? maxOf(xs) - minOf(xs) : 0; });
   // Print letters are spaced by what's sewn: their satins reach half a column past the centre lines the widths are
   // measured on, so TKM in Josefin ran the T's bar into the K and the K's leg into the M. Each letter moves right until
   // its stitches, band by band (0.5 mm tall, each checked against its neighbours too), clear the last one's by the gap
@@ -1208,7 +1236,7 @@ function monogram(p, fab = "cotton") {
       for (const [k, [, right]] of prof[i - 1]) for (let d = -1; d <= 1; d++) { const v = prof[i].get(k + d); if (v) need = Math.max(need, right - v[0]); }
       at.push(at[i - 1] + (need === -Infinity ? widths[i - 1] : need) + gap + 0.4);
     }
-    const xs = sewn.flatMap((paths, i) => paths.flat().map(([a]) => a + at[i])), c = (Math.min(...xs) + Math.max(...xs)) / 2;
+    const xs = sewn.flatMap((paths, i) => paths.flat().map(([a]) => a + at[i])), c = (minOf(xs) + maxOf(xs)) / 2;
     return sewn.flatMap((paths, i) => paths.map((q) => moved(q, ([a, b]) => [a + at[i] - c, b])));
   }
   let x = -(widths.reduce((a, b) => a + b, 0) + gap * (chars.length - 1)) / 2;
@@ -1279,6 +1307,9 @@ const own = (o, k) => typeof k === "string" && Object.hasOwn(o, k);
 const num = (v, lo, hi, d) => (typeof v === "number" && Number.isFinite(v) ? Math.min(hi, Math.max(lo, v)) : d);
 const hex = (v, d) => (typeof v === "string" && /^#[0-9a-f]{6}$/i.test(v) ? v : d);
 const pick = (v, ok, d) => (ok.includes(v) ? v : d);
+// (no piece bigger than the biggest hoop holds: one piece can't be shared between two hoopings, and `size: 1e9` loaded
+// as an 808 mm word)
+const BIG = 180;
 export function cleanPiece(p) {
   if (!p || typeof p !== "object" || Array.isArray(p)) return null;
   // (a place far past any hoop is taken as the middle, not the hoop's edge: x 1e9 made a 1072 mm design)
@@ -1291,7 +1322,7 @@ export function cleanPiece(p) {
   if (p.kind === "text") {
     if (typeof q.text !== "string" || !q.text.trim()) return null;
     q.text = q.text.slice(0, 60).split("\n").slice(0, 3).join("\n");
-    q.font = font(FONTS, "NW Great Vibes"); q.size = num(q.size, 5, 300, 18); style();
+    q.font = font(FONTS, "NW Great Vibes"); q.size = num(q.size, 5, BIG, 18); style();
     q.shape = pick(q.shape, Object.keys(TEXT_SHAPES), "straight"); q.radius = num(q.radius, 8, 400, 30);
     for (const [k, lo, hi] of [["ry", 8, 400], ["amp", 0, 100], ["waves", 0.5, 6], ["bulge", 0, 100], ["spacing", -10, 40], ["leading", 80, 200]])
       if (q[k] != null) { q[k] = num(q[k], lo, hi, undefined); if (q[k] === undefined) delete q[k]; }
@@ -1303,16 +1334,16 @@ export function cleanPiece(p) {
     }
   } else if (p.kind === "monogram") {
     if (typeof q.letters !== "string" || !q.letters.trim()) return null;
-    q.letters = q.letters.slice(0, 12); q.font = font(FONTS, "NW Great Vibes"); q.size = num(q.size, 10, 300, 30); style();
+    q.letters = q.letters.slice(0, 12); q.font = font(FONTS, "NW Great Vibes"); q.size = num(q.size, 10, BIG, 30); style();
   } else if (p.kind === "letters") {
     if (typeof q.text !== "string" || !q.text.trim()) return null;
-    q.text = q.text.slice(0, 12); q.font = font(APPLIQUE_FONTS, APPLIQUE_FONTS[0].family); q.size = num(q.size, 10, 300, 60);
+    q.text = q.text.slice(0, 12); q.font = font(APPLIQUE_FONTS, APPLIQUE_FONTS[0].family); q.size = num(q.size, 10, BIG, 60);
   } else if (p.kind === "motif") {
-    q.motif = own(MOTIFS, q.motif) ? q.motif : "heart"; q.size = num(q.size, 5, 300, 40);
+    q.motif = own(MOTIFS, q.motif) ? q.motif : "heart"; q.size = num(q.size, 5, BIG, 40);
     q.style = pick(q.style, ["fill", "outline", "applique"], "fill");
   } else if (p.kind === "frame") {
     q.shape = own(SHAPES, q.shape) ? q.shape : "circle"; q.border = own(BORDERS, q.border) ? q.border : "satin";
-    q.w = num(q.w, 10, 400, 80); q.h = num(q.h, 10, 400, q.w);
+    q.w = num(q.w, 10, BIG, 80); q.h = num(q.h, 10, BIG, q.w);
     if (q.fill != null) q.fill = hex(q.fill, "#0e1f7c");
     if (q.blend != null) { q.blend = hex(q.blend, undefined); if (!q.blend) delete q.blend; }
     if (q.pattern != null && !own(FILL_PATTERNS, q.pattern)) delete q.pattern;
@@ -1408,6 +1439,8 @@ function clearOf(p, frame, size) {
 // A monogram given fewer initials inside a frame keeps the width it had (one letter left of the starter's "aMs" stayed
 // 23 mm tall in a 90 mm circle), as big as the frame then lets it be sewn (`fittedSizes`). More initials, or no
 // frame around it: its size stays (the frame fit shrinks it if it must).
+// It grows only as far as its stitches stay CLEAR of the frame's and everything else's (a Great Vibes L or A grew
+// from 23 to 73 mm, past its circle: the fit measures the letters' box, and a script capital's swash reaches past it).
 export function monoSize(p, letters, pieces) {
   const count = (t) => [...(t || "").replace(/\s+/g, "")].length, n0 = count(p.letters), n1 = count(letters);
   if (p.kind !== "monogram" || !n1 || n1 >= n0 || !frameAround(p, pieces.filter((f) => f === p || !(f.rot || 0)))) return p.size;
@@ -1415,7 +1448,12 @@ export function monoSize(p, letters, pieces) {
   const at = fittedSizes(pieces).get(p.id) ?? p.size, w0 = wide({ ...p, size: at }), w1 = wide({ ...p, letters, size: at });
   if (!w0 || !w1 || w1 >= w0) return p.size;
   const q = { ...p, letters, size: Math.min(90, Math.round(((at * w0) / w1) * 2) / 2) };
-  return fittedSizes(pieces.map((o) => (o.id === p.id ? q : o))).get(p.id) ?? q.size;
+  const ps = pieces.map((o) => (o.id === p.id ? q : o)), top = fittedSizes(ps).get(p.id) ?? q.size, others = ps.filter((o) => o.id !== p.id);
+  // (whole mm down from the biggest, then the half above the first that clears; never below where it started)
+  const clear = (s) => !touchingAll({ ...q, size: s }, others, true).length;
+  if (clear(top)) return top;
+  for (let s = Math.floor(top) - 1; s > p.size; s--) if (clear(s)) return clear(s + 0.5) ? s + 0.5 : s;
+  return p.size;
 }
 
 // The earlier round frame arched lettering sits in, and the curve that runs it just inside that frame's border
@@ -1431,7 +1469,9 @@ export function followFrame(p, pieces) {
 }
 
 // what the design is sewn on: changes the stitches (knit, towel) and the stabilizer advice
-const ascii = (s) => (s || "").normalize("NFKD").replace(/[\u0300-\u036f]/g, "").replace(/[‘’]/g, "'").replace(/[“”]/g, "\"").replace(/[^\x20-\x7e]/g, "");
+// (letters with no accent to strip spelled out as the file names do: "Monogram Ø" was "Monogram " on the machine)
+const LATIN = { Ł: "L", ł: "l", Ø: "O", ø: "o", ß: "ss", Æ: "AE", æ: "ae", Œ: "OE", œ: "oe", Đ: "D", đ: "d", Ð: "D", ð: "d", Þ: "Th", þ: "th", ı: "i", Ħ: "H", ħ: "h", Ŧ: "T", ŧ: "t", Ŋ: "N", ŋ: "n", ĸ: "k" };
+const ascii = (s) => (s || "").replace(/[ŁłØøßÆæŒœĐđÐðÞþıĦħŦŧŊŋĸ]/g, (c) => LATIN[c]).normalize("NFKD").replace(/[\u0300-\u036f]/g, "").replace(/[‘’]/g, "'").replace(/[“”]/g, "\"").replace(/[^\x20-\x7e]/g, "");
 
 // (`ready` is what "Have ready" lists and `tip` what "Sewing on" says: one place per fabric, so they agree)
 // (`hoop` starts step 1, `after` is "When it's done": knit said "tear or cut away" though cut-away must be trimmed)
