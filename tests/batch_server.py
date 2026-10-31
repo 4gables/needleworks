@@ -28,4 +28,7 @@ class Handler(SimpleHTTPRequestHandler):
 if __name__ == "__main__":
     os.makedirs(OUT, exist_ok=True)
     port = int(sys.argv[2]) if len(sys.argv) > 2 else 8765
+    # (a backlog of 5, the default, refused connections when a page fetched its ~40 modules at once: "the server
+    # drops a module request under load", most often with several browser tabs)
+    ThreadingHTTPServer.request_queue_size = 256
     ThreadingHTTPServer(("127.0.0.1", port), partial(Handler, directory=ROOT)).serve_forever()
