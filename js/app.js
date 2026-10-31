@@ -1684,7 +1684,12 @@ const studio = initStudio({
     pattern = toMachine(pattern);
     if (look.split) look = { ...look, split: look.split.map((p) => ({ ...p, pattern: toMachine(p.pattern) })) };
     if (designTurned() && look.sheet?.cut) look = { ...look, sheet: { ...look.sheet, cut: look.sheet.cut.map((c) => turnCut(c)) } };
-    const v = { pattern, verifyAgainst: pattern, bytes: writePES(pattern), filename, fabric: "linen", ...look };
+    // (a design the writer can't hold, such as two 121-colour design files, 241 thread changes: said, and no stale file
+    // left to download; it threw past here and the last design stayed on screen)
+    let bytes;
+    try { bytes = writePES(pattern); }
+    catch { state.views.design = null; if (state.mode === "design") setView(null); showError("This design has more thread changes than a file can hold. Use fewer thread colours, or a design file with fewer of them."); return; }
+    const v = { pattern, verifyAgainst: pattern, bytes, filename, fabric: "linen", ...look };
     state.views.design = v;
     if (state.mode === "design") { const keep = [state.zoom, state.pan]; setView(v); [state.zoom, state.pan] = keep; paint(); }
   },
