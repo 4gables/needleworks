@@ -332,6 +332,71 @@ Embroidery-file tools for home machines. Two implementations of the same engine:
   fitted whole (`v.whole`); the checkup's thickness at every grid offset (`peak` in doctor.js)):
   Batch after merging: 396/396 ok, 153 files changed, stitches -1.5%, same-hole 0, script bookmarks byte-identical.
   VM: FITS 18/18; PE-DESIGN opened peace at 150 %, appliqué AB, mug rug, cross-stitch.
+  Round 4 fixes (2026-10-30; testers 6/5/6 found a picture that never finished, a cut file with slits into every
+  appliqué letter, thread names that didn't match swatches; four worktree agents again, then UI: a 60 s picture
+  watchdog that restarts the worker, a supply list on every design, Turn hoop reset per starter, off-centre layouts
+  say the machine centres them, "Knit / T-shirt" and "Towel / fleece", motifs beside the words, one-tap 5x7 for the
+  bookmark, `bookmarks_N.zip`, section headings, the "colours too alike" note). `tests/cdp.mjs` puts Chrome's temp
+  files beside its profile (TMPDIR, MAC_CHROMIUM_TMPDIR): a full system disk stopped headless Chrome starting.
+  Batch after merging: 400/400 ok (4 new BABY cases), 249 changed, script bookmarks byte-identical. VM: FITS 16/16;
+  PE-DESIGN opened BABY appliqué, etsy_8 (title sewn), gnome at 160 %, the patch (fill, JD, edge last).
+  - Picture travel searches stop past `SEWN` (3 mm) on finished stitches or past their length limit; a fill's sections
+    are chosen with one search from the needle per move (`reach`), not one per section. Limits: 50k cells per search,
+    6M per router, 12M per picture (`routeBudget`, counted in cells so browser and Node match); past them it jumps.
+    etsy_5 (a framed photo's textured backdrop, 1782 sections) took over 280 s, now 0.55 s; the app also stops a job
+    after 60 s and restarts the worker.
+  - Frames (`findFrame`): edge ring mixed but a ring within 8% inwards 85% one colour family (ΔE < 10) for 2% -> the
+    band's pieces are the frame; colours learned again without it, its blended inner edge cut, background read from
+    5 clean rings. Shades within ΔE 8 of the background, or ΔE 15 and over a quarter of the border, are background.
+  - Near-identical k-means clusters (ΔE < 6) are learned again with more clusters (twice at most); `analyze` returns
+    `merged` (asked-for colours that came out the same; the Picture tab says so) and `frame`.
+  - Thin lines (< 1 mm) are never dropped as specks: walked, sewn out as a triple run and back. Groups (pieces within
+    2 mm) under 6 mm of line are specks; parts of filled shapes narrower than 0.7 mm (`THIN_PART`) are lines too;
+    anti-aliased blend pixels between the fabric and another colour are left out. (etsy_8's title and etsy_1's stems
+    had vanished from Filled.) Filled pictures +25% stitches from this (triple run kept on purpose).
+  - Picture colours are snapped to Brother threads by CIEDE2000 (`snapToThreads`, unique, never 62-64; plain Lab sent
+    olive to Russet Brown): `hex` is the thread colour, `picture` the picture's own; the writer's red-mean match then
+    picks the same thread, so swatch, name and machine agree (a green was "Pewter").
+  - Open: etsy_7 thin doodles near-white at 4 colours; etsy_6 green panel (63% of the picture) still sewn; app.js's
+    content crop sizes a framed picture by the whole frame.
+  - Lettering satin (round 4 fixes): min(3.5, 0.2 xh, max(stroke, 0.12 xh, min(0.15 xh, 1.2))); auto satin from 0.8 mm,
+    under that a fine line (it was 1.0, bumped to 1.2: 20 mm script names sewed as a thin line). Counters:
+    `counterPockets` (raster.js) measures each gap between the centre lines; `counterCaps` narrows only the strokes
+    round one that would close (0.8 mm between needle points after pull; gaps under 0.6 mm left to fill; explicit Satin
+    and towel ignore it). Script skeletons keep short ends reaching 1.5 strokes and 0.2 xh out (`tongues`; pieces.js
+    only, the bookmark unchanged): Yellowtail's e tongue and y tail came back, so Yellowtail words are a little
+    smaller at the same size. `towelMin` checks counters under the towel column (down arches squeeze by the bend:
+    Great Vibes "Oliver" 17 -> 38 mm); `archTight` also flags an up arch whose letters are taller than 0.6 x its curve
+    radius; `archFit` grows the arch (both size buttons use it). Print monograms spaced by their stitches in 0.5 mm
+    bands (gap + 0.4 mm). `Design.path(..., lockAt)`: lettering runs lock 1 mm in under their satin. Satin dots are one
+    satin at least 1 mm long with no run under it. Design-tab stitches +7.6%; files at 24 hits/mm² 99 -> 160 (more
+    small script is satin now; all <= 24). Dropped: satin cut short at junctions (gaps in Josefin's A and h).
+  - Appliqué routing (`applRoutes`, replaced `chained()`, after a tester's cut file had slits into every letter): each
+    stage moves between outlines only where it ends up hidden. Placement: inside the letter or under a satin still to
+    come (a hole with no exit goes back across to its outline and along it). Tack-down: along its own line, then across
+    gaps the satin covers. Satin: each starts where it leaves (reached along its own centre line), moving from its outer
+    edge into the next satin. Covered = 0.15 mm short of the satin's reach (1.8 mm out, 1.0 in). New runs start at
+    least 5.5 mm from the last stop, across pauses too. Holes still trim in tack-down and satin. BABY (Lilita 34 mm)
+    21 -> 18 trims; appliqué-letter batch 228 -> 176. Cut files are the outlines (`cut` on the stage), never the
+    placement run; the preview's fabric splits a placement run into its rings (`rings` in render.js). Open: only the
+    first fabric block gets a fabric shape in the preview.
+  - Stipple seed: the outline of a random Kruskal tree over knots 1.5 x space apart (lobes 0.4-0.8 x space, leaves
+    x1.4, necks 0.32), holes filled, then `relax` with no growth within 0.9 x space of the free edge (a tester still
+    saw a maze). Longest straight run 22-30 -> 12-22 mm. Dropped: knots 2 x space apart (sparse coral), full growth at
+    the edge (lines along the frame).
+  - `hang` on in-the-hoop frames (ornament and key fob starters; unquilted ITH frames by default) adds the ribbon text.
+  - Re-stitch (round 4 fixes): keeps the source's density, satin same-edge gap clamped to `SATIN` 0.3-0.5 and fill rows
+    (area / row length) to `ROWS` 0.35-0.5; zigzags over `OPEN` 1 mm (underlay) stay lines (rebuilt as satin, peace's
+    took +81 % thread). A column's half-stitch at either end is sewn but isn't an edge point (it pulled edges in at
+    joins: ursula 250 % 21 bare spots -> 6); edges are interpolated by their own point counts. Column ends reach `EXT`
+    0.5 mm on only where the source sews within 0.3 mm past (`COV`) and never outside the source's scaled box (`BOX`).
+    Square-wave satins count as zigzags (star_badge 250 %: 100 bare spots -> 0). Refills start from the end nearer the
+    needle and `travel` reaches them through cells inside the fill or sewn by this colour or a later one.
+  - `respace` (resizes within 80-120 %, or `fix({ satin: true })`): satins outside 0.3-0.5 are re-spaced in place, first
+    and last hole kept. Checkup flags satins tighter than 0.25 and offers "Even out the satin stitches".
+  - `fix` runs in `js/doctor-worker.js` (newest job only, spinner after 150 ms); the slider rebuilds on `change`; a
+    "Longer side" box sets the size in mm; Tiny/Thin ticked by shrinking are unticked back at >= 100 %.
+  - File pieces label each stage with the block's own thread name (all were "gnome").
   - Picture travel (2026-10-30): `makeRouter` (digitize.js) is the shared 0.5 mm-cell A* (`routeFill` refactored onto
     it, byte-identical). In `build`, a move between a colour's sections or shapes (up to 10 mm, `TRAVEL`) travels, with
     stitches up to 2.5 mm, through cells this colour's unsewn fills (0.25 mm inside) or a later colour's solid fill
