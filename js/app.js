@@ -511,7 +511,7 @@ function downloaded(v, zipped, files = [], saved = true) {
   $("done-title").textContent = saved ? "Saved to your downloads" : "Not saved";
   // (nothing to copy to a USB stick: only what's wrong and the fixed copy)
   document.querySelector("#done .done-steps").hidden = !saved;
-  $("done-checked").textContent = hardBad ? `${saved ? "It may not open or sew right" : "Not saved: it wouldn't open or sew right"} ${what}: ${bad.length > 1 ? `${bad.length} of the files break` : zipped ? "one of the files breaks" : "it breaks"} a rule the machine needs.`
+  $("done-checked").textContent = hardBad ? `${saved ? "It may not open or sew right" : "It wouldn't open or sew right"} ${what}: ${bad.length > 1 ? `${bad.length} of the files break` : zipped ? "one of the files breaks" : "it breaks"} a rule the machine needs.`
     : bad.length ? `It opens ${what}, but ${bad.length > 1 ? `${bad.length} of the files` : zipped ? "one of the files" : "it"} may not sew well:`
     : part ? `It opens ${what}, but only part of the design is in it: the file it came from ends early. Download that file again if you can.` : `Checked: it opens ${what}.`;
   $("done-checked").className = bad.length || part ? "warn" : "good";
