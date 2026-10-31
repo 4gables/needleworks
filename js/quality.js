@@ -94,6 +94,10 @@ export function verdict(pattern) {
   if (m.same > SAME_SHARE * m.stitches) out.push({ key: "same", text: `${m.same} ${m.same === 1 ? "stitch goes" : "stitches go"} back into the hole the needle is already in.` });
   // (the PEC header's thread list, one per block, is what the machine steps through: pe900_check fails any other count)
   if (pattern.pec && pattern.pec.length !== blocks) out.push({ key: "colours", text: `The file lists ${pattern.pec.length} ${pattern.pec.length === 1 ? "thread" : "threads"} for ${blocks} ${blocks === 1 ? "colour" : "colours"}: the machine may ask for the wrong threads.` });
+  // (PEC 62-64 are appliqué steps on Brother machines, not threads: the machine shows "Appliqué material" there. A
+  // file that names its threads so means it; anything else would ask for the wrong thing at the machine)
+  const appl = (pattern.pec || []).filter((c) => c >= 62).length;
+  if (appl && !(pattern.threads || []).some((t) => /appli|placement|tack/i.test(t.name || ""))) out.push({ key: "applique", text: `${appl === 1 ? "One colour uses a code" : `${appl} colours use codes`} Brother machines read as an appliqué step, not a thread: the machine would show “Appliqué” there instead of the thread to use.` });
   if (blocks > MAX_BLOCKS) out.push({ key: "blocks", text: `${stopWords(blocks - 1 - stops, stops)}: the machine stops ${MAX_BLOCKS - 1} times at most in one design.` });
   if (gap != null && gap > SPARSE) out.push({ key: "sparse", text: `The satin stitches are far apart (${gap.toFixed(2)} mm on each edge; well-made designs 0.3–0.4 mm), so fabric may show through.` });
   return out;
@@ -101,6 +105,9 @@ export function verdict(pattern) {
 
 // the densest spot in plain words, one wording everywhere (the checkup said "sold designs stay under 25" beside
 // Download's "24 is the most sold designs have"; "needle hits per mm²" meant nothing to a newcomer)
+// what the machine itself can't take as the file is: never saved as it came (it's written again, or not saved at all)
+export const HARD = new Set(["blocks", "colours", "block", "applique"]);
+
 export const denseWords = (max) => `up to ${max} stitches in one square millimetre, about a pinhead; sold designs have ${LIMIT} at most`;
 
 // "195 thread changes and 4 pauses", as the facts beside the preview count a design's stops (a 200-colour file said
