@@ -1,4 +1,4 @@
-"""Serve the repo for tests/browser/pe900_batch.html and save the PES files it POSTs.
+"""Serve the repo for tests/browser/pe900_batch.html (and the other batch pages) and save the PES files (or JSON results, PNG renders) they POST.
 
 usage: .venv/bin/python tests/batch_server.py OUT_DIR [port]   then open http://127.0.0.1:8765/tests/browser/pe900_batch.html
 """
@@ -15,7 +15,7 @@ OUT = sys.argv[1]
 class Handler(SimpleHTTPRequestHandler):
     def do_POST(self):
         name = os.path.basename(unquote(self.path[len("/save/"):]))
-        if not self.path.startswith("/save/") or not name.endswith(".pes"):
+        if not self.path.startswith("/save/") or not name.endswith((".pes", ".json", ".png")):
             self.send_error(404); return
         with open(os.path.join(OUT, name), "wb") as f:
             f.write(self.rfile.read(int(self.headers["Content-Length"])))
