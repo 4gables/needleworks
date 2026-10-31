@@ -1,0 +1,181 @@
+<!doctype html><meta charset="utf-8"><title>Engine fuzz</title>
+<link rel="stylesheet" href="../../css/app.css">
+<style>body{display:block;padding:12px;font:13px monospace} pre{white-space:pre-wrap}</style>
+<p>Class guarded: a file the app hands out that fails a machine or quality rule (category audit class 7). Seeded random
+but valid parameters over every engine, built with the site's own code the way the app builds them: lettering (every
+font, 5-120 mm, every fabric and thread weight, straight/arched/wave/bridge, 1-3 lines, automatic/satin/thin line,
+spacing, letter pairs, motifs either side), monograms, frames (every shape × border × size × hoop, patch patterns and
+blends, quilting, hanging loops), motifs × styles × sizes, appliqué letters, layouts of several pieces, turned hoops,
+starters, the bookmark, the design doctor's resize (50-250 %) of the sample files, saved designs with hostile fields
+(cleaned as Open saved does) and, reported apart (the picture engine is another stream's), pictures. Every file must
+pass <code>validatePES</code> and the app's own verdict (js/quality.js, which is tests/pe900_check.py's rules); each is
+POSTed to <code>/save/fz_*.pes</code> with the cases in <code>fz_log.json</code>, so run
+<code>tests/pe900_check.py OUT/fz_*.pes</code> after it. Too big for the hoop (said by the app, no Download) and nothing
+to stitch are counted, not problems.</p>
+<p>Serve with <code>tests/batch_server.py OUT PORT</code>, open
+<code>tests/browser/engine_fuzz.html?seed=1&amp;n=300</code> (<code>&amp;only=K</code> rebuilds case K alone;
+<code>&amp;engine=lettering</code> runs one engine; <code>&amp;save=0</code> saves nothing). Title: <code>DONE n problems</code>.</p>
+<pre id="log"></pre>
+<script type="module">
+import { hoop as getHoop } from "../../js/core/machines.js";
+import { readEmbroidery, writePES, validatePES } from "../../js/core/formats.js";
+import { APPLIQUE_FONTS, FONTS } from "../../js/core/fonts.js";
+import { BORDERS, FABRICS, SHAPES, TEXT_SHAPES, THREADS, cleanPiece, compose, fileBlocks, followFrame } from "../../js/studio/pieces.js";
+import { STARTERS } from "../../js/studio/ui.js";
+import { MOTIFS } from "../../js/studio/motifs.js";
+import { QUILTS } from "../../js/studio/quilt.js";
+import { DENSITY, FILL_PATTERNS, analyze, digitize, workingSize } from "../../js/core/digitize.js";
+import { buildBookmark } from "../../js/core/bookmark.js";
+import { turnForMachine } from "../../js/core/design.js";
+import { fix } from "../../js/doctor.js";
+import { verdictOf } from "../../js/quality.js";
+
+const Q = new URLSearchParams(location.search), SEED = +(Q.get("seed") || 1), N = +(Q.get("n") || 300), ONLY = Q.get("only"), ENGINE = Q.get("engine"), SAVE = Q.get("save") !== "0";
+const out = document.getElementById("log"), log = (s) => (out.textContent += s + "\n");
+const rng = (seed) => { let s = (seed * 2654435761) >>> 0 || 1; return () => { s ^= s << 13; s >>>= 0; s ^= s >> 17; s ^= s << 5; s >>>= 0; return s / 4294967296; }; };
+for (const f of [...FONTS, ...APPLIQUE_FONTS]) await document.fonts.load(`40px "${f.family}"`);
+
+const WORDS = ["Emma", "Ashley", "Zoë", "Katherine", "Oliver", "Max", "Lily-Rose", "O'Neil", "JD", "Ava", "Harper", "Sam", "Abbie goes", "WILD", "Noah",
+  "Happy Birthday", "Made with love", "Tea time", "since 2026", "WITH LOVE", "Grandma's Kitchen", "Sunday Best", "Best Mom Ever!", "12 & 34", "Ça va, Señor?", "MMM www", "illi", "AVATAR"];
+const COLOURS = ["#ed171f", "#0e1f7c", "#00673e", "#770176", "#e8a900", "#f993bc", "#000000", "#f0f0f0", "#c70156", "#2584bb"];
+const SAMPLES = ["tests/fixtures/golden/ashley_v3.pes", "tests/fixtures/golden/multi.pes", ...["flower_ludd", "flower_rl", "gnome", "needleworks_rl", "peace", "star_badge", "ufront", "ursula", "wreath", "rosacea"].map((n) => `tests/external/pes/${n}.pes`), "tests/external/pes/rosacea.dst"];
+const files = new Map();
+for (const s of SAMPLES) { try { const r = await fetch(`../../${s}`); if (r.ok) files.set(s, new Uint8Array(await r.arrayBuffer())); } catch {} }
+const PICTURES = ["assets/sample-flower.png", ...[1, 2, 3, 4, 5, 6, 7, 8].map((i) => `tests/external/images/etsy_${i}.jpg`)];
+
+// ---- one case's spec from the random stream: plain data, so the log replays it ----
+function spec(r, k) {
+  const ri = (a, b) => a + Math.floor(r() * (b - a + 1)), pick = (a) => a[Math.floor(r() * a.length)], chance = (p) => r() < p;
+  // (sizes spread evenly on a log scale, mostly under 40 mm where most designs are: a 120 mm word rarely fits)
+  const logu = (a, b) => Math.round(Math.exp(Math.log(a) + r() * (Math.log(b) - Math.log(a))) * 2) / 2;
+  const hoopId = chance(0.75) ? "5x7" : "4x4", turned = hoopId === "5x7" && chance(0.3);
+  const opts = { fabric: pick(Object.keys(FABRICS)), thread: pick(Object.keys(THREADS)), baste: chance(0.1) };
+  let id = 1;
+  const P = (o) => ({ id: id++, x: 0, y: 0, rot: 0, color: pick(COLOURS), ...o });
+  const font = () => pick(FONTS), words = (lines = 1) => Array.from({ length: lines }, () => pick(WORDS)).join("\n");
+  const text = () => {
+    const f = font(), shape = chance(0.55) ? "straight" : pick(Object.keys(TEXT_SHAPES)), lines = shape === "straight" && chance(0.25) ? ri(2, 3) : 1;
+    const t = P({ kind: "text", text: words(lines), font: f.family, size: chance(0.6) ? logu(5, 40) : logu(5, 120), shape, radius: ri(15, 90), style: pick(["auto", "auto", "satin", "line"]) });
+    if (shape === "up" || shape === "down") { if (chance(0.3)) t.ry = ri(15, 90); }
+    if (shape === "wave") Object.assign(t, { amp: ri(0, 20), waves: pick([0.5, 1, 1.5, 2, 3]) });
+    if (shape === "bridge") t.bulge = ri(0, 100);
+    if (lines > 1) Object.assign(t, { align: pick(["left", "center", "right"]), leading: ri(80, 200) });
+    if (f.print && chance(0.4)) t.spacing = ri(-10, 40);
+    if (f.print && chance(0.3)) t.kern = Object.fromEntries(Array.from({ length: ri(1, 3) }, () => [ri(0, t.text.length - 2), ri(-30, 50)]));
+    if (chance(0.1)) t.deco = pick(Object.keys(MOTIFS));
+    if (chance(0.1)) t.flip = true;
+    return t;
+  };
+  const mono = () => P({ kind: "monogram", letters: Array.from({ length: ri(1, 3) }, () => pick("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz")).join(""), font: font().family, size: logu(10, 120), style: pick(["auto", "satin", "line"]) });
+  const frame = (o = {}) => {
+    const border = pick(Object.keys(BORDERS)), f = P({ kind: "frame", shape: pick(Object.keys(SHAPES)), border, w: ri(10, 180), h: ri(10, 180), ...o });
+    if (f.border === "patch" || chance(0.1)) { f.fill = pick(COLOURS); if (chance(0.4)) f.pattern = pick(Object.keys(FILL_PATTERNS)); if (chance(0.3)) f.blend = pick(COLOURS); }
+    if (chance(0.25)) f.quilt = pick(Object.keys(QUILTS));
+    if (f.border === "ith" || chance(0.1)) f.hang = chance(0.5);
+    return f;
+  };
+  const motif = () => P({ kind: "motif", motif: pick(Object.keys(MOTIFS)), size: logu(5, 120), style: pick(["fill", "outline", "applique"]) });
+  const appl = () => P({ kind: "letters", text: Array.from({ length: ri(1, 5) }, () => pick("ABCDEFGHIJKLMNOPQRSTUVWXYZ&8a")).join(""), font: pick(APPLIQUE_FONTS).family, size: logu(10, 120) });
+  const inside = (f, p) => { p.size = Math.min(p.size, Math.max(5, Math.min(f.w, f.h) * pick([0.15, 0.25, 0.4]))); return p; };
+  const studio = (engine, pieces) => ({ engine, hoopId, turned, opts, pieces });
+  const engines = {
+    lettering: () => studio("lettering", [text()]),
+    monogram: () => studio("monogram", [mono()]),
+    frame: () => { const f = frame({ w: ri(20, hoopId === "4x4" ? 96 : 126), h: ri(20, hoopId === "4x4" ? 96 : 176) }); return studio("frame", chance(0.6) ? [f, inside(f, chance(0.6) ? text() : mono())] : [f]); },
+    motif: () => studio("motif", [motif()]),
+    patch: () => { const f = frame({ border: "patch", w: ri(30, 110), h: ri(30, 110), fill: pick(COLOURS) }); return studio("patch", [f, inside(f, pick([text, mono, motif])())]); },
+    quilt: () => { const f = frame({ border: pick(["line", "bold", "satin", "ith", "applique"]), quilt: pick(["stipple", "echo"]), w: ri(40, 120), h: ri(40, 120) }); return studio("quilt", [f, ...(chance(0.8) ? [inside(f, pick([text, mono, motif])())] : [])]); },
+    applique: () => studio("applique", [appl()]),
+    layout: () => studio("layout", Array.from({ length: ri(2, 4) }, () => ({ ...pick([text, mono, motif, frame, appl])(), x: ri(-45, 45), y: ri(-60, 60), rot: pick([0, 0, 0, 15, -30, 90, 180]) }))),
+    starter: () => { const s = pick(STARTERS.filter((x) => x.make)); return { engine: "starter", starter: s.id, hoopId, turned, opts: { fabric: s.fabric || opts.fabric, thread: opts.thread, baste: s.baste ?? opts.baste } }; },
+    bookmark: () => { const f = font(); return { engine: "bookmark", name: chance(0.1) ? "" : pick(WORDS.filter((w) => w.length < 14)), family: f.family, print: !!f.print, lead: chance(0.6), tail: chance(0.6), color: pick(COLOURS) }; },
+    doctor: () => files.size ? { engine: "doctor", file: pick([...files.keys()]), scale: Math.round((0.5 + r() * 2) * 100) / 100, tiny: chance(0.5), thin: chance(0.5), sort: chance(0.3), satin: chance(0.3) } : engines.lettering(),
+    filepiece: () => files.size ? { ...studio("filepiece", [P({ kind: "file", file: pick([...files.keys()].filter((f) => f.endsWith(".pes"))), rot: pick([0, 10, 90]) }), ...(chance(0.6) ? [{ ...text(), size: logu(6, 20), y: 50 }] : [])]) } : engines.lettering(),
+    json: () => { const s = engines[pick(["lettering", "monogram", "frame", "motif", "patch", "applique", "layout"])](); s.engine = "json"; s.pieces = hostile(r, s.pieces); s.opts = chance(0.3) ? { fabric: pick(["", "silk", null, 3]), thread: pick(["15", null, {}]), baste: pick(["yes", 1]) } : s.opts; return s; },
+    picture: () => ({ engine: "picture", src: pick(PICTURES), colors: ri(1, 12), size: ri(20, 170), style: pick(["fill", "fill", "line", "cross"]), density: pick(["standard", "solid"]), cross: pick([1.5, 2, 2.5, 3]), turned, hoopId }),
+  };
+  const names = Object.keys(engines), weights = { lettering: 6, monogram: 2, frame: 3, motif: 2, patch: 2, quilt: 1, applique: 2, layout: 3, starter: 2, bookmark: 2, doctor: 2, filepiece: 1, json: 3, picture: 1 };
+  if (ENGINE) return engines[ENGINE]();
+  const bag = names.flatMap((n) => Array(weights[n]).fill(n));
+  return engines[pick(bag)]();
+}
+// saved-design fields set to what a damaged or crafted file could hold
+function hostile(r, pieces) {
+  const pick = (a) => a[Math.floor(r() * a.length)];
+  const KEYS = ["text", "size", "font", "shape", "radius", "ry", "amp", "waves", "bulge", "spacing", "leading", "align", "kern", "deco", "letters", "style", "motif", "w", "h", "border", "fill", "blend", "pattern", "quilt", "hang", "x", "y", "rot", "flip", "color", "kind"];
+  const VALUES = [null, -1, 0, 1e9, -1e9, "NaN", "", "x", [], {}, true, "#zzzzzz", 3.7, 1e-9, "Emma\n\n\n\nX", "W".repeat(500), { 0: 1e9, x: 2 }, [1, 2], "monogram", "frame", "#ED171F", 180.5, -180, 2.5];
+  const ps = JSON.parse(JSON.stringify(pieces));
+  for (let k = 1 + Math.floor(r() * 4); k--;) { const p = pick(ps); p[pick(KEYS)] = pick(VALUES); }
+  return JSON.parse(JSON.stringify(ps));
+}
+
+// ---- building a spec the way the app does ----
+const picCache = new Map();
+async function build(s) {
+  if (s.engine === "bookmark") return { pattern: buildBookmark({ name: s.name, blank: !s.name, family: s.family, color: s.color, hoop: getHoop("brother-pe900", "5x7"), lead: s.lead, tail: s.tail, print: s.print }).pattern(), hoop: getHoop("brother-pe900", "5x7") };
+  if (s.engine === "doctor") {
+    // (as the Open tab does: what the file fails is ticked, and shrinking ticks Remove tiny stitches and Thin)
+    const d = readEmbroidery(files.get(s.file), s.file), need = new Set(verdictOf(writePES(d)).map((q) => q.key)), small = s.scale < 1;
+    const o = { ...s, tiny: s.tiny || small || need.has("tiny") || need.has("same"), thin: s.thin || small || need.has("dense"), satin: s.satin || need.has("sparse") };
+    return { pattern: fix(d, o), hoop: getHoop("brother-pe900", "5x7"), fitOnly: true };
+  }
+  const hoop = getHoop("brother-pe900", s.hoopId), field = s.turned ? { ...hoop, w: hoop.h, h: hoop.w } : hoop;
+  if (s.engine === "picture") {
+    if (!picCache.has(s.src)) { try { picCache.set(s.src, await createImageBitmap(await (await fetch(`../../${s.src}`)).blob())); } catch { picCache.set(s.src, null); } }
+    const bmp = picCache.get(s.src); if (!bmp) throw Object.assign(new Error("no picture"), { skip: true });
+    const sz = workingSize(bmp.width, bmp.height, s.size, field), c = new OffscreenCanvas(sz.w, sz.h), ctx = c.getContext("2d");
+    ctx.imageSmoothingQuality = "high"; ctx.drawImage(bmp, 0, 0, sz.w, sz.h);
+    const img = ctx.getImageData(0, 0, sz.w, sz.h), opts = { colors: s.colors, removeBackground: true, fillAngle: 45, density: DENSITY[s.density], skip: [], hoop: field, style: s.style === "fill" ? undefined : s.style, cross: s.cross };
+    const p = digitize(img, analyze(img, opts), opts).design.pattern();
+    return { pattern: s.turned ? turnForMachine(p) : p, hoop };
+  }
+  let pieces = s.engine === "starter" ? STARTERS.find((x) => x.id === s.starter).make() : s.pieces;
+  // (a design file sews as it came: what it fails on its own comes with it, and isn't this engine's)
+  let inherited = new Set();
+  if (s.engine === "filepiece") pieces = pieces.map((p) => {
+    if (p.kind !== "file") return p;
+    const d = readEmbroidery(files.get(p.file), p.file);
+    for (const q of verdictOf(writePES(d))) inherited.add(q.key);
+    return { ...p, name: "file", blocks: fileBlocks(d) };
+  });
+  if (s.engine === "json") pieces = pieces.map(cleanPiece).filter(Boolean);
+  // (arched lettering inside a round frame follows it, as the editor's "Follow the frame" does, half the time)
+  pieces = pieces.map((p) => (p.kind === "text" && (p.shape === "up" || p.shape === "down") && p.id % 2 ? { ...p, ...followFrame(p, pieces) } : p));
+  const o = s.opts || {}, d = compose(pieces, field, { fabric: o.fabric, thread: o.thread, baste: o.baste === true }).design.pattern();
+  return { pattern: s.turned ? turnForMachine(d) : d, hoop, inherited };
+}
+
+const cases = [], counts = {}, bad = [], picBad = [];
+for (let k = 0; k < N; k++) cases.push(spec(rng(SEED * 100003 + k), k));
+const which = ONLY != null ? [+ONLY] : cases.map((_, k) => k);
+let n = 0;
+for (const k of which) {
+  const s = cases[k], tag = `fz_${SEED}_${String(k).padStart(4, "0")}_${s.engine}`, t0 = performance.now();
+  const note = (kind, msg) => { counts[kind] = (counts[kind] || 0) + 1; if (msg) (s.engine === "picture" ? picBad : bad).push({ k, tag, kind, msg, spec: s }); if (msg) log(`${kind.toUpperCase()} ${tag}: ${msg}`); };
+  await new Promise((res) => setTimeout(res, 0));
+  let built;
+  try { built = await build(s); }
+  catch (e) {
+    if (e.overBy || /too big|doesn't fit|fit the hoop|bigger than/i.test(e.message)) note("toobig");
+    else if (e.empty || e.skip || /nothing to stitch/i.test(e.message)) note("empty");
+    else note("error", `${e.constructor.name}: ${e.message} ${(e.stack || "").split("\n")[1]?.trim() || ""}`);
+    continue;
+  }
+  const ms = performance.now() - t0;
+  let bytes;
+  try { bytes = writePES(built.pattern); } catch (e) { note("write", e.message); continue; }
+  // (the hoop field as the app checks it: too big is said and has no Download)
+  const v = validatePES(bytes, built.pattern, built.hoop);
+  if (!v.ok) { if (/hoop fits/.test(v.error)) note(built.fitOnly ? "toobig" : "overfit", built.fitOnly ? "" : v.error); else note("invalid", v.error); continue; }
+  const all = verdictOf(bytes), q = all.filter((x) => !built.inherited?.has(x.key));
+  if (q.length) note("quality", q.map((x) => `${x.key}: ${x.text}`).join(" | ")); else note(all.length ? "inherited" : "ok");
+  if (ms > 20000) note("slow", `${(ms / 1000).toFixed(1)} s`);
+  // (not a file whose only problems came with a design file: the checker would fail it for the source's sake)
+  if (SAVE && !(all.length && !q.length)) await fetch(`/save/${tag}.pes`, { method: "POST", body: bytes });
+  n++;
+}
+if (SAVE && ONLY == null) await fetch(`/save/fz_${SEED}_log.json`, { method: "POST", body: JSON.stringify({ seed: SEED, n: N, counts, problems: bad, pictures: picBad, cases }) });
+log(`counts ${JSON.stringify(counts)}; picture problems (reported, not counted): ${picBad.length}`);
+log(`DONE ${n} files, ${bad.length} problems`);
+document.title = `DONE ${n} ${bad.length}`;
+</script>
