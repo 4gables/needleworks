@@ -182,17 +182,48 @@ export function initStudio(api) {
       } catch { c.remove(); }
     }
   }
+  // One Tab stop for the whole list, arrow keys within it (each row was 5-6 Tab presses, ~22 from the starters to the
+  // editor): Up/Down go between pieces, Left/Right along a row's buttons, Home/End to the first/last piece. `rove` is
+  // the button holding the Tab stop (the last one focused), else the selected piece's name.
+  let rove = null;
+  const OPS = [["up", "↑", "Earlier", "Sew earlier (move up the list)", "Sew earlier"], ["down", "↓", "Later", "Sew later (move down the list)", "Sew later"],
+    ["dup", "⧉", "Copy", "Duplicate: add a copy below it (or copy and paste)", "Duplicate"], ["flip", "⇋", "Mirror", "Mirror: flip it left to right", "Mirror"],
+    ["del", "✕", "Remove", "Remove this piece", "Remove"]];
   function list() {
     $("st-pieces").innerHTML = pieces.map((p, i) => `<li data-id="${p.id}" aria-selected="${p.id === sel}">
-      <button type="button" class="pick" data-id="${p.id}" title="${api.escapeHtml(label(p))}" ${p.id === sel ? `aria-current="true"` : ""}><i style="background:${p.color}"></i><span class="nm">${api.escapeHtml(label(p))}</span></button>
-      <span class="ops">
-        <button type="button" data-op="up" data-id="${p.id}" aria-label="Sew earlier: ${api.escapeHtml(label(p))}" title="Sew earlier" ${i ? "" : "disabled"}>↑</button>
-        <button type="button" data-op="down" data-id="${p.id}" aria-label="Sew later: ${api.escapeHtml(label(p))}" title="Sew later" ${i < pieces.length - 1 ? "" : "disabled"}>↓</button>
-        <button type="button" data-op="dup" data-id="${p.id}" aria-label="Duplicate: ${api.escapeHtml(label(p))}" title="Make a copy (or copy and paste)">⧉</button>
-        <button type="button" data-op="flip" data-id="${p.id}" aria-label="Mirror: ${api.escapeHtml(label(p))}" title="Mirror (flip left to right)" aria-pressed="${!!p.flip}">⇋</button>
-        <button type="button" data-op="del" data-id="${p.id}" aria-label="Remove: ${api.escapeHtml(label(p))}" title="Remove">✕</button>
+      <button type="button" class="pick" data-id="${p.id}" title="${api.escapeHtml(label(p))}" aria-describedby="st-pieces-keys" tabindex="-1" ${p.id === sel ? `aria-current="true"` : ""}><i style="background:${p.color}"></i><span class="nm">${api.escapeHtml(label(p))}</span></button>
+      <span class="ops">${OPS.map(([op, icon, cap, tip, name]) => `
+        <button type="button" data-op="${op}" data-id="${p.id}" aria-label="${name}: ${api.escapeHtml(label(p))}" title="${tip}" tabindex="-1"${op === "flip" ? ` aria-pressed="${!!p.flip}"` : ""}${(op === "up" && !i) || (op === "down" && i === pieces.length - 1) ? " disabled" : ""}><span aria-hidden="true">${icon}</span><small aria-hidden="true">${cap}</small></button>`).join("")}
       </span></li>`).join("");
+    roving();
   }
+  const roveBtns = () => [...$("st-pieces").querySelectorAll("button")];
+  function roving(to) {
+    const all = roveBtns(), q = (s) => $("st-pieces").querySelector(s);
+    const at = to || (rove && q(`button[data-id="${rove.id}"]${rove.op ? `[data-op="${rove.op}"]` : ".pick"}`)), ok = at && !at.disabled ? at
+      : (rove && q(`.pick[data-id="${rove.id}"]`)) || q(`.pick[data-id="${sel}"]`) || q(".pick");
+    for (const b of all) b.tabIndex = b === ok ? 0 : -1;
+    return ok;
+  }
+  $("st-pieces").addEventListener("focusin", (e) => {
+    const b = e.target.closest("button"); if (!b) return;
+    rove = { id: b.dataset.id, op: b.dataset.op || "" }; roving(b);
+  });
+  $("st-pieces").addEventListener("keydown", (e) => {
+    const b = e.target.closest("button"), row = b?.closest("li");
+    if (!row || e.altKey || e.ctrlKey || e.metaKey) return;
+    const rows = [...$("st-pieces").children], r = rows.indexOf(row), here = [...row.querySelectorAll("button")], c = here.indexOf(b);
+    // (in the row above or below: the same column, else the nearest button there that can be pressed)
+    const near = (li, col) => { const bs = [...li.querySelectorAll("button")]; for (let d = 0; d < bs.length; d++) for (const j of [col - d, col + d]) if (bs[j] && !bs[j].disabled) return bs[j]; };
+    let n = null;
+    if (e.key === "ArrowLeft" || e.key === "ArrowRight") { const d = e.key === "ArrowLeft" ? -1 : 1; for (let j = c + d; j >= 0 && j < here.length && !n; j += d) if (!here[j].disabled) n = here[j]; }
+    else if (e.key === "ArrowUp" || e.key === "ArrowDown") { const li = rows[r + (e.key === "ArrowUp" ? -1 : 1)]; n = li && near(li, c); }
+    else if (e.key === "Home" || e.key === "End") n = rows.at(e.key === "Home" ? 0 : -1)?.querySelector(".pick");
+    else if (e.key === "Delete" || e.key === "Backspace") { e.preventDefault(); row.querySelector("[data-op=del]").click(); return; }
+    else return;
+    e.preventDefault();
+    if (n) { roving(n); n.focus(); }
+  });
   const swatches = (p, k = "color") => COLORS.map((c) => `<button type="button" data-${k}="${c}" style="background:${c}" aria-pressed="${c === p[k]}" title="Brother ${nearestBrotherThread(c).name}"></button>`).join("")
     + `<span class="custom"><input type="color" data-${k}-any value="${p[k]}" aria-label="Any colour"></span>`;
   const fontSelect = (p) => `<select data-k="font">${FONTS.map((f) => `<option value="${f.family}" ${f.family === p.font ? "selected" : ""}>${f.name}${f.print ? " (print)" : ""}</option>`).join("")}</select>`;
@@ -758,7 +789,10 @@ export function initStudio(api) {
     else if (b.dataset.op === "up" && i > 0) [pieces[i - 1], pieces[i]] = [pieces[i], pieces[i - 1]];
     else if (b.dataset.op === "down" && i < pieces.length - 1) [pieces[i + 1], pieces[i]] = [pieces[i], pieces[i + 1]];
     else sel = id;
+    const had = $("st-pieces").contains(document.activeElement);
     save(); ui(); if (b.dataset.op) make();
+    // (✕, or ↓ on what is now the last piece, leaves nothing focused: the list keeps the keyboard)
+    if (had && !$("st-pieces").contains(document.activeElement)) roving()?.focus();
   };
   const edit = $("st-edit");
   edit.addEventListener("input", (e) => {

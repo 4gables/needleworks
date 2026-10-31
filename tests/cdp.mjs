@@ -15,6 +15,7 @@
 //   text                   document.body.innerText
 //   els                    visible buttons/inputs/links with centre coords
 //   dark on|off            emulate prefers-color-scheme
+//   forced on|off          emulate forced-colors (high contrast)
 //   offline on|off
 //   console                console messages + uncaught exceptions since the last call
 //   reload                 hard reload
@@ -163,6 +164,9 @@ async function run(cmd, args) {
     case "dark":
       await s.send("Emulation.setEmulatedMedia", { features: [{ name: "prefers-color-scheme", value: args[0] === "on" ? "dark" : "light" }] });
       out.push("dark", args[0]); break;
+    case "forced":   // Windows high contrast (forced-colors: active)
+      await s.send("Emulation.setEmulatedMedia", { features: [{ name: "forced-colors", value: args[0] === "on" ? "active" : "none" }] });
+      out.push("forced", args[0]); break;
     case "offline":
       await s.send("Network.enable");
       await s.send("Network.emulateNetworkConditions", { offline: args[0] === "on", latency: 0, downloadThroughput: -1, uploadThroughput: -1 });
