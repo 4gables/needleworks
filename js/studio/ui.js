@@ -5,11 +5,11 @@ import { turnPattern } from "../core/design.js";
 import { APPLIQUE_FONTS, FONTS, loadFont } from "../core/fonts.js";
 import { hoop as getHoop } from "../core/machines.js";
 import { nearestBrotherThread } from "../core/threads.js";
-import { designStats, readEmbroidery } from "../core/formats.js";
+import { designStats, machineThreads, readEmbroidery } from "../core/formats.js";
 import { stopWords } from "../quality.js";
 import { FILL_PATTERNS } from "../core/digitize.js";
 import { draw } from "../render.js";
-import { youHtml } from "../sheet.js";
+import { TURN_PIC, youHtml } from "../sheet.js";
 import { QUILTS } from "./quilt.js";
 import { MOTIFS } from "./motifs.js";
 import { BORDERS, FABRICS, THREADS, SHAPES, TEXT_SHAPES, splitPieces, archFit, archStart, frontPanel, inkHeight, monoSize, archRoom, archShrink, archTight, cleanPiece, clearSize, collision, collisions, inFrame, letterMetrics, underPatch, crossName, crossStep, layoutSize, touching, touchingAll, towelMin, fineLine, loopsFill, compose, fileBlocks, fittedSizes, followFrame, label, minSize, pieceBounds, previewLook, smallText, bulkReady } from "./pieces.js";
@@ -18,7 +18,7 @@ const SCRIPT = "NW Great Vibes", PRINT = "NW Josefin Sans", ROUND = "NW Quicksan
 // exact Brother PEC thread colours, so the name on screen is the one the machine shows
 const RED = "#ed171f", NAVY = "#0e1f7c", BLACK = "#000000";
 const PINK = "#f993bc", WHITE = "#f0f0f0";
-export const TURNED = "The hoop is turned: the machine shows this design on its side. Hoop the fabric a quarter turn round, with the top of the design toward the right of the hoop (as the sew sheet shows).";
+export const TURNED = "The hoop is turned, so the machine sews this design on its side. Hoop the fabric a quarter turn round: the top of the design goes to the right-hand side of the hoop as you face the machine (the sew sheet shows it that way).";
 // thread weight in plain words, on the chips (the number is printed on the spool; a bigger number is a finer thread)
 const WT_TITLE = { auto: "Standard 40 weight thread, the usual machine embroidery thread", 30: "30 weight: a thicker thread, for bold letters",
   40: "40 weight: the usual machine embroidery thread", 60: "60 weight: a finer thread, for small letters and fine detail" };
@@ -432,9 +432,9 @@ export function initStudio(api) {
     const btn = (attrs, text, l) => `<button type="button" class="link" ${attrs}${l?.fits === "turn" ? " data-turn" : ""}>${text}${l?.fits === "turn" ? " and turn the hoop" : ""}</button>`;
     const cotton = onTowel ? ` A flat-weave tea towel (no loops) can be sewn as Cotton: ${btn(`data-fab-set="cotton"`, "Sew it as Cotton")}` : "";
     let size = "";
-    if (towel > max) size = `On a towel or fleece these letters close up (the pile needs a wide satin), even at the biggest size. Try a bolder font, like Yellowtail or Satisfy.${cotton}`;
+    if (towel > max) size = `On a towel or fleece the stitches are made wide so they sit on top of the loops, and that closes these letters up even at the biggest size. Try a bolder font, like Yellowtail or Satisfy.${cotton}`;
     else if (need) {
-      const what = m ? `These letters are too small to stitch cleanly${need > m ? ` (on a towel or fleece the pile needs a wide satin: ${need} mm)` : ""}.` : `On a towel or fleece these letters close up (the pile needs a wide satin): ${need} mm or more keeps them open.`;
+      const what = m ? `These letters are too small to stitch cleanly${need > m ? ` (on a towel or fleece they need to be ${need} mm, so the wide stitches that sit on top of the loops leave the letters open)` : ""}.` : `On a towel or fleece the stitches are made wide so they sit on top of the loops, and at this size that closes the letters up: ${need} mm or more keeps them open.`;
       if (fs) {   // (the frame fit sets the size: a bigger size would be shrunk straight back, the "Make it 10 mm" loop)
         // two lines, at the biggest size (up to the one asked for) that fits the frame and clears everything else
         const two = twoLines(p);
@@ -673,12 +673,21 @@ export function initStudio(api) {
       // hidden under a patch sewn after it, or sewn on a patch in nearly its own thread
       const covered = dragging ? null : pieces.find((p) => underPatch(p, pieces));
       const lost = dragging ? null : pieces.find((p) => p.kind !== "frame" && p.kind !== "file" && ((b) => b && hard(p.color, b.fill || b.color))(underPatch(p, pieces, true)));
+      // lettering that won't read once sewn (too small, closing up on a towel or fleece, loops filling in): said beside
+      // Download too, not only in the editor below the fold (a fleece "Lily" at 24 mm downloaded as "Checked")
+      const fit = dragging ? null : fittedSizes(pieces);
+      const unread = dragging ? [] : pieces.filter((p) => p.kind === "text" || p.kind === "monogram").map((p) => {
+        const q = fit.has(p.id) ? { ...p, size: fit.get(p.id) } : p, m = minSize(q), t = fabric === "towel" ? towelMin(m ? { ...q, size: m } : q) : 0;
+        const why = m ? "is too small to stitch cleanly" : t > q.size * 1.04 ? "closes up on a towel or fleece" : fabric !== "towel" && loopsFill(q) ? "has small loops that fill in at this size" : "";
+        return why && `${label(p)} ${why}`;
+      }).filter(Boolean);
       api.setView(design.pattern(), `${api.safeName(firstWords(), "design")}.pes`, {
         // (every pair named: twelve pieces piled on one spot said only that one ran into another)
         ...look, warn: [hits.length ? `${hits.slice(0, 4).map(([a, b]) => `${label(a)} runs into ${label(b)}`).join("; ")}${hits.length > 4 ? `; and ${hits.length - 4} more` : ""}: select ${hits.length > 1 ? "each" : "it"} for a fix before you stitch.` : "",
           lacking ? `The font of ${label(lacking[0])} has no ${lacking[1].map((c) => `“${c}”`).join(" ")}: ${lacking[1].length === 1 ? "it" : "they"} would be stitched in a stand-in letter.` : "",
           covered ? `${label(covered)} sews before the patch that covers it: select it to sew it after.` : "",
-          lost ? `${label(lost)} is nearly the same thread as the patch under it, so it won't show.` : ""].filter(Boolean).join(" "),
+          lost ? `${label(lost)} is nearly the same thread as the patch under it, so it won't show.` : "",
+          unread.length ? `${unread.join("; ")}: select ${unread.length > 1 ? "each" : "it"} for a fix before you stitch.` : ""].filter(Boolean).join(" "),
         block: wrap ? `${label(wrap)} runs into itself round the curve: select it to widen the curve or make the letters smaller.` : "",
         fabric: look.fabricShapeBlock != null ? "pink" : "linen", steps: steps.length,
         sheet: { steps: steps.map((st) => ({ you: st.you, sews: st.sews.join(" ") })), after: done, ready, cut: steps.filter((st) => st.cut).map((st) => st.cut),
@@ -716,13 +725,29 @@ export function initStudio(api) {
     const ready = [own(before) ? "" : FABRICS[fabric].ready, ...before,
       appliqued() ? "A piece of fabric for each appliqué shape, 1 in bigger than its outline, and small curved scissors (iron-on fusible web on the back stops cotton fraying)." : "",
       api.threadList(steps.map((st) => st.color))].filter(Boolean), done = [own(after) ? "" : FABRICS[fabric].after, ...after].filter(Boolean);
-    return { design, steps: firstStep(sameSpool(steps), hoop), done, ready, small, later };
+    return { design, steps: firstStep(threadNames(sameSpool(steps)), hoop), done, ready, small, later };
   }
-  // step 1 says what to do too: hoop it, put the thread on, Start (a one-step design said only "Sews “Leo”.")
+  // step 1 says what to do too: hoop it, put the thread on, Start (a one-step design said only "Sews “Leo”."), one
+  // sentence each so they show as numbered sub-steps (a towel's hoop, topper, thread and Start ran together as one)
   function firstStep(steps, hoop) {
     if (!steps.length || !hoop) return steps;
-    const own = api.ownSpool(steps[0].color), t = own ? `your ${own}` : `Brother ${nearestBrotherThread(steps[0].color).name}`;
-    return [{ ...steps[0], you: steps[0].you ? `${hoop} and put on ${t}. ${steps[0].you}` : `${hoop}, put on ${t} and press Start.` }, ...steps.slice(1)];
+    const h = `${hoop}.`.replace(/\.\.$/, "."), t = steps[0].thread;
+    return [{ ...steps[0], you: `${h} Put on ${t}. ${steps[0].you || "Press Start."}` }, ...steps.slice(1)];
+  }
+  // each step's thread as the machine's screen names it (the file's own palette, one per hooping: a colour may get its
+  // second-nearest Brother thread), or their own spool; a thread change says which ("Change to the next thread" left
+  // the colour to the swatch beside it)
+  function threadNames(steps) {
+    const name = new Map();
+    let seg = [];
+    const flush = () => { machineThreads(seg.map((st) => ({ color: st.color }))).forEach((t, k) => name.set(seg[k], t.name)); seg = []; };
+    for (const st of steps) if (st.rehoop) flush(); else seg.push(st);
+    flush();
+    return steps.map((st) => {
+      if (st.rehoop) return st;
+      const own = api.ownSpool(st.color), thread = own ? `your ${own}` : `Brother ${name.get(st)}`;
+      return { ...st, machine: name.get(st), thread, you: st.you && st.you.replace(/^Change to the next thread\b/, `Change to ${thread}`) };
+    });
   }
   // two colours in a row that are the same spool of theirs ("Threads I own"): keep it on, not "change to the next thread"
   function sameSpool(steps) {
@@ -800,7 +825,7 @@ export function initStudio(api) {
     // the whole design for the preview (a big pretend hoop) with the crosses the files sew, and every step of both
     // hoopings in order, the rehooping between them (not a step: the machine doesn't stop for it, so it's no pause)
     const all = compose(pieces, { ...hoop, w: 2000, h: 2000 }, { ...opts, marks: { pts: parts[0].marks, end: true } });
-    const steps = sameSpool([...firstStep(built[0].steps, built[0].hoop), { rehoop: true, title: `Second hooping: ${built[1].filename}`, you: `When ${built[0].filename} is done, take the hoop off the machine and the fabric out of the hoop. Leave the crosses in: the second file lines up on them.` }, ...built[1].steps]);
+    const steps = firstStep(threadNames(sameSpool([...built[0].steps, { rehoop: true, title: `Second hooping: ${built[1].filename}`, you: `When ${built[0].filename} is done, take the hoop off the machine and the fabric out of the hoop. Leave the crosses in: the second file lines up on them.` }, ...built[1].steps])), built[0].hoop);
     // (what to have ready and do after, for the whole design: it listed only the first file's, without the fabric's)
     const whole = stepsOf(all), done = [...new Set([...whole.done, ...built[1].after])];
     stepsUI(steps, done, whole.small, whole.ready, "", built[0].filename);
@@ -877,12 +902,12 @@ export function initStudio(api) {
     let n = 0;
     // each step is a button: the preview shows the design as it is after that step, what's still to come faint
     $("st-steps").innerHTML = (waiting ? `<li class="after"><b>Waiting for a fit</b><span>${api.escapeHtml(waiting)}</span></li>` : "")
-      + (api.turned() ? `<li class="after"><b>Hooping</b><span>${TURNED}</span></li>` : "") + (before.length ? `<li class="after"><b>Have ready</b><ul class="ready">${before.map((r) => `<li>${api.escapeHtml(r)}</li>`).join("")}</ul></li>` : "")
+      + (api.turned() ? `<li class="after"><b>Hooping</b><span class="turned">${TURN_PIC}${TURNED}</span></li>` : "") + (before.length ? `<li class="after"><b>Have ready</b><ul class="ready">${before.map((r) => `<li>${api.escapeHtml(r)}</li>`).join("")}</ul></li>` : "")
       + (first ? `<li class="after"><b>First hooping: ${api.escapeHtml(first)}</b></li>` : "")
       + steps.map((st, i) => st.rehoop ? `<li class="after"><b>${api.escapeHtml(st.title)}</b>${youHtml(st.you, api.escapeHtml)}</li>` : `<li><button type="button" data-step="${i}" aria-pressed="${api.step() === i}">
-      <b><span class="n">${++n}</span><i style="background:${st.color}"></i>Brother ${nearestBrotherThread(st.color).name}${api.spool(st.color) ? ` <small>${api.escapeHtml(api.spool(st.color))}</small>` : ""}</b>
+      <b><span class="n">${++n}</span><i style="background:${st.color}"></i>Brother ${api.escapeHtml(st.machine || nearestBrotherThread(st.color).name)}${api.spool(st.color) ? ` <small>${api.escapeHtml(api.spool(st.color))}</small>` : ""}</b>
       ${st.you ? youHtml(st.you, api.escapeHtml) : ""}<span>${api.escapeHtml(st.sews.join(" "))}</span>
-      ${st.early ? `<small>Sewn early, with the other ${api.escapeHtml(nearestBrotherThread(st.color).name)} parts, to save a thread change.</small>` : ""}</button></li>`).join("")
+      ${st.early ? `<small>Sewn early, with the other ${api.escapeHtml(st.machine || nearestBrotherThread(st.color).name)} parts, to save a thread change.</small>` : ""}</button></li>`).join("")
       + (threadTip(small) ? `<li class="after"><b>Thread and needle</b><span>${api.escapeHtml(threadTip(small))}</span></li>` : "")
       + (after.length ? `<li class="after"><b>When it's done</b><span>${api.escapeHtml(after.join(" "))}</span></li>` : "");
   }

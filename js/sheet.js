@@ -4,11 +4,17 @@
 import { colorBlocks } from "./render.js";
 
 // steps for a file that says nothing of its fabric or pauses (an opened design): both stabilizers, said plainly
-export const FIRST_STEP = "Hoop the fabric with stabilizer under it, put on the first thread and press Start.";
+export const FIRST_STEP = "Hoop the fabric with stabilizer under it. Put on the first thread. Press Start.";
 export const FINISH = "Take the hoop off and snip any loose threads. Tear-away stabilizer: tear it off gently, holding the stitches down with your thumb. Cut-away: trim it about ¼ in from the stitching (don't tear it).";
 
+// the turned hoop as you face the machine: a house lying with its roof (the top) to the right, an arrow that way (no
+// text in it: the note it sits in is read by its textContent for the share text and Sew along)
+export const TURN_PIC = `<svg class="turn-pic" viewBox="0 0 58 52" width="70" height="63" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="38" height="48" rx="9"/><path d="M8 12 H22 L35 26 L22 40 H8 Z M8 21 H15 V31 H8"/><path d="M44 26 H55 M51 22 L55 26 L51 30"/></svg>`;
+
 // a file's own steps, block by block: a stop in the same thread is a pause, not a thread change (an appliqué's fabric steps)
-export const nextThread = (blocks, i) => (!i ? FIRST_STEP : blocks[i]?.color === blocks[i - 1]?.color ? "The machine pauses: keep the same thread on and press Start." : "Change to the next thread and press Start.");
+// (`name`: the thread as the machine shows it, "Brother Red": "Change to the next thread" didn't say which)
+export const nextThread = (blocks, i, name) => (!i ? (name ? FIRST_STEP.replace("the first thread", name) : FIRST_STEP) : blocks[i]?.color === blocks[i - 1]?.color ? "The machine pauses: keep the same thread on and press Start."
+  : `Change to ${name || "the next thread"} and press Start.`);
 
 // A step's "what you do" as its actions, one per sentence ("Then take the hoop off" as "Take the hoop off"): the
 // ornament's last step was one paragraph of six things to do
@@ -70,7 +76,7 @@ ${groups.map((g, i) => `  <g id="fabric-${i + 1}"><path d="${path(g)}" fill="non
 // sheet: { steps: [{ title?, you?, sews? }], ready: [] (one "Have ready" list), after: [], notes: [], cut: [[loop...]...] }, thread names as the machine shows them
 export function sewSheet({ pattern, filename, hoop, facts, threads, hide, sheet = {}, spool = () => "" }) {
   const { blocks } = colorBlocks(pattern);
-  const steps = sheet.steps?.length ? sheet.steps : blocks.map((b, i) => ({ you: nextThread(blocks, i) }));
+  const steps = sheet.steps?.length ? sheet.steps : blocks.map((b, i) => ({ you: nextThread(blocks, i, threads[i] && `Brother ${threads[i].name}`) }));
   const after = sheet.after?.length ? sheet.after : [FINISH];
   const rows = steps.map((s, i) => {
     const b = blocks.find((x) => x.index === i), t = threads[i];
