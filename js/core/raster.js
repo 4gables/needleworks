@@ -481,12 +481,13 @@ export function strokeWidth(mask, sk = skeletonize(mask)) {
 
 // Euler-style walk: each stroke is a centre run on the way out and a satin back over it,
 // so a connected shape is stitched with no jumps. Returns [[[pts, "run"|"satin", edge index], ...] per component]
-export function order(edges) {
-  const adj = new Map();
-  edges.forEach(([a, b], i) => {
-    if (!adj.has(a)) adj.set(a, []); adj.get(a).push(i);
-    if (b !== a) { if (!adj.has(b)) adj.set(b, []); adj.get(b).push(i); }
-  });
+// near (px, optional): pieces are still sewn left to right, each walk ending where it began, but each may start
+// anywhere on itself (a node or partway along a stroke) so it's within `near` of where the last one began and ended,
+// wherever that saves a trim (`chained`): Great Vibes' S began at its foot and the "unday" beside it at the u, a jump
+// apart, though the S's spine passes the u. Without it (pictures, print letters) every piece starts at its leftmost end.
+export function order(edges, near = 0, loose = Infinity) {
+  if (near > 0) return chained(edges, near, loose);
+  const adj = adjacency(edges);
   const used = new Array(edges.length).fill(false), comps = [];
   while (used.some((u) => !u)) {
     let bi = -1, bx = Infinity;
@@ -496,22 +497,101 @@ export function order(edges) {
       if (x < bx) { bx = x; bi = i; }
     });
     const [a, b, p] = edges[bi];
-    const start = p[0][0] <= p[p.length - 1][0] ? a : b;
-    const seq = [], stack = [{ u: start, k: 0, back: null }];
-    while (stack.length) {
-      const fr = stack[stack.length - 1], list = adj.get(fr.u) || [];
-      let next = -1;
-      while (fr.k < list.length) { const i = list[fr.k++]; if (!used[i]) { next = i; break; } }
-      if (next < 0) { stack.pop(); if (fr.back) seq.push([fr.back, "satin", fr.e]); continue; }
-      used[next] = true;
-      const [ea, eb, ep] = edges[next];
-      const fwd = ea === fr.u ? ep : ep.slice().reverse();
-      seq.push([fwd, "run", next]);
-      stack.push({ u: ea === fr.u ? eb : ea, k: 0, back: fwd.slice().reverse(), e: next });
-    }
-    comps.push(seq);
+    comps.push(walk(edges, adj, used, p[0][0] <= p[p.length - 1][0] ? a : b));
   }
   return comps;
+}
+
+function adjacency(edges) {
+  const adj = new Map();
+  edges.forEach(([a, b], i) => {
+    if (!adj.has(a)) adj.set(a, []); adj.get(a).push(i);
+    if (b !== a) { if (!adj.has(b)) adj.set(b, []); adj.get(b).push(i); }
+  });
+  return adj;
+}
+
+// depth first from `start`: each stroke out as a run, back as a satin; `id` maps an edge to the index reported
+function walk(edges, adj, used, start, id = (i) => i) {
+  const seq = [], stack = [{ u: start, k: 0, back: null }];
+  while (stack.length) {
+    const fr = stack[stack.length - 1], list = adj.get(fr.u) || [];
+    let next = -1;
+    while (fr.k < list.length) { const i = list[fr.k++]; if (!used[i]) { next = i; break; } }
+    if (next < 0) { stack.pop(); if (fr.back) seq.push([fr.back, "satin", fr.e]); continue; }
+    used[next] = true;
+    const [ea, eb, ep] = edges[next];
+    const fwd = ea === fr.u ? ep : ep.slice().reverse();
+    seq.push([fwd, "run", id(next)]);
+    stack.push({ u: ea === fr.u ? eb : ea, k: 0, back: fwd.slice().reverse(), e: id(next) });
+  }
+  return seq;
+}
+
+// `order` with each piece's start chosen for the cheapest moves from one piece's start to the next (dynamic programming
+// over the nodes of every piece and points every near/2 along its strokes): within `near` stitched (free), else a trim
+// (1), but within `loose` a jump the machine won't trim (1.5, a loose thread: `moveCost` in geom.js), then the leftmost
+// start where that changes nothing, a node before a point along a stroke. A stroke started partway is split there (both
+// halves report its index).
+function chained(edges, near, loose) {
+  const adj = adjacency(edges), seen = new Array(edges.length).fill(false), pieces = [];
+  const xOf = (e) => Math.min(e[2][0][0], e[2][e[2].length - 1][0]);
+  for (let i = 0; i < edges.length; i++) {
+    if (seen[i]) continue;
+    const list = [], todo = [i];
+    seen[i] = true;
+    while (todo.length) {
+      const j = todo.pop();
+      list.push(j);
+      for (const u of [edges[j][0], edges[j][1]]) for (const k of adj.get(u) || []) if (!seen[k]) { seen[k] = true; todo.push(k); }
+    }
+    let bi = list[0];
+    for (const j of list) if (xOf(edges[j]) < xOf(edges[bi]) || (xOf(edges[j]) === xOf(edges[bi]) && j < bi)) bi = j;
+    const [a, b, p] = edges[bi], first = p[0][0] <= p[p.length - 1][0] ? a : b;
+    // candidates: [point, node id or null, edge, index along it, cost of choosing it]
+    const nodes = new Map(), cands = [];
+    for (const j of list) { const [u, v, q] = edges[j]; nodes.set(u, q[0]); nodes.set(v, q[q.length - 1]); }
+    for (const [id, q] of nodes) cands.push([q, id, -1, -1, id === first ? 0 : 1e-3]);
+    for (const j of list) {
+      const q = edges[j][2];
+      let run = 0;
+      for (let t = 1; t < q.length - 1; t++) {
+        run += Math.hypot(q[t][0] - q[t - 1][0], q[t][1] - q[t - 1][1]);
+        if (run >= near / 2) { cands.push([q[t], null, j, t, 2e-3]); run = 0; }
+      }
+    }
+    pieces.push({ bi, x: xOf(edges[bi]), cands });
+  }
+  pieces.sort((u, v) => u.x - v.x || u.bi - v.bi);
+  let prev = null;
+  for (const pc of pieces) {
+    pc.dp = pc.cands.map(([q, , , , own]) => {
+      let best = 0, from = -1;
+      if (prev) {
+        best = Infinity;
+        prev.cands.forEach(([r], m) => { const d = Math.hypot(q[0] - r[0], q[1] - r[1]), c = prev.dp[m][0] + (d <= near ? 0 : d <= loose ? 1.5 : 1); if (c < best) { best = c; from = m; } });
+      }
+      return [best + own, from];
+    });
+    prev = pc;
+  }
+  if (!pieces.length) return [];
+  let m = 0;
+  const end = pieces[pieces.length - 1].dp;
+  end.forEach((v, i) => { if (v[0] < end[m][0]) m = i; });
+  for (let k = pieces.length - 1; k >= 0; k--) { pieces[k].start = pieces[k].cands[m]; m = pieces[k].dp[m][1]; }
+  // split the strokes started partway, then walk each piece from its start
+  const all = edges.slice(), orig = edges.map((_, i) => i);
+  for (const pc of pieces) {
+    const [, id, j, t] = pc.start;
+    if (id !== null) { pc.node = id; continue; }
+    const [a, b, q] = edges[j];
+    pc.node = `split ${j}`;
+    all[j] = [a, pc.node, q.slice(0, t + 1)];
+    all.push([pc.node, b, q.slice(t)]); orig.push(j);
+  }
+  const adj2 = adjacency(all), used = new Array(all.length).fill(false);
+  return pieces.map((pc) => walk(all, adj2, used, pc.node, (i) => orig[i]));
 }
 
 // The counters of lettering sewn as columns on `lines` (the strokes' centre lines, in px): every pocket of space between

@@ -324,6 +324,12 @@ body[data-mode="design"] #view { cursor: grab; }
 .steps ol.sub, ol.sub { margin: 2px 0 0; padding-left: 1.5em; display: grid; gap: 3px; list-style: decimal; font-size: 15px; }
 .steps ol.sub li::marker { color: var(--muted); }
 .st-steps .ready { margin: 0; padding-left: 18px; list-style: disc; color: var(--muted); font-size: 15px; display: grid; gap: 2px; }
+/* the design's problems (words.js): still to look at in the warning colour, good to know plain */
+ul.problems { margin: 0; padding-left: 18px; list-style: disc; display: grid; gap: 2px; font-size: 15px; }
+.look > b, .look ul.problems { color: var(--warn); }
+.along-look { display: grid; gap: 6px; }
+.along-look b { font-size: 15px; color: var(--muted); }
+.along-look .look > b { color: var(--warn); }
 .edit .warn { color: var(--warn); font-weight: 700; }
 .cards canvas { width: 100%; height: 72px; display: block; margin-bottom: 2px; }
 .st-load { display: inline-flex; align-items: center; cursor: pointer; font-weight: 400; color: var(--ink); }
@@ -361,6 +367,9 @@ body[data-mode="design"] #view { cursor: grab; }
   .sheet .list ol.sub li { margin: 0; }
   .sheet .sw { display: inline-block; width: 4mm; height: 4mm; border: 0.2mm solid #666; border-radius: 1mm; margin-right: 2mm; vertical-align: -0.6mm; print-color-adjust: exact; -webkit-print-color-adjust: exact; }
   .sheet .tip { border-left: 1mm solid #bbb; padding-left: 3mm; margin: 3mm 0; }
+  .sheet .probs { margin: 0 0 3mm; }
+  .sheet .probs ul.problems { padding-left: 6mm; font-size: 11pt; }
+  .sheet .look > b, .sheet .look ul.problems { color: #000; }
 }
 @media (min-width: 700px) and (min-height: 560px) {
   .actions { display: grid; grid-auto-flow: column; justify-content: end; row-gap: 6px; }
