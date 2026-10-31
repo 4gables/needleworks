@@ -310,6 +310,33 @@ export function collisions(pieces) {
   }
   return out;
 }
+// What scaling the whole layout by k (Fit to hoop) would leave, judged from the stitches as they are, scaled (nothing
+// stitched again: worked out for every change while a design is too big, re-stitching each piece at the fitted size
+// held the page up 4.6 s): { tiny: lettering that would be too small to stitch and isn't now, hit: [a, b] a pair that
+// would run into each other and doesn't now }
+export function scaledFit(pieces, k) {
+  const fit = fittedSizes(pieces), sewn = (o) => (fit.has(o.id) ? { ...o, size: fit.get(o.id) } : o);
+  const tiny = pieces.find((p) => { const q = sewn(p), l = bulk(q), least = q.kind === "text" ? fontOf(q.font).min || 4 : 4; return l && l.parts.length && l.xh >= least && l.xh * k < least; }) || null;
+  const was = new Set(collisions(pieces).map(([a, b]) => `${a.id}:${b.id}`));
+  const st = new Map(pieces.map((o) => [o.id, pieceStitches(sewn(o)).map((q) => q.map(([x, y]) => [x * k, y * k]))]));
+  for (const p of pieces) {
+    if (p.kind === "frame") continue;
+    const mine = st.get(p.id), b = bounds(mine.flat());
+    if (!mine.flat().length) continue;
+    let c0 = null;
+    for (const o of pieces) {
+      if (o === p || (o.kind === "frame" && o.border === "patch")) continue;
+      const theirs = st.get(o.id), tp = theirs.flat(); if (!tp.length) continue;
+      const [i, j] = pieces.indexOf(p) < pieces.indexOf(o) ? [p, o] : [o, p];
+      if (was.has(`${i.id}:${j.id}`)) continue;
+      const c = bounds(tp);
+      if (c[0] > b[2] + CLEAR || c[2] < b[0] - CLEAR || c[1] > b[3] + CLEAR || c[3] < b[1] - CLEAR) continue;
+      c0 ||= cloud(mine);
+      if (near(c0, theirs, CLEAR)) return { tiny, hit: [i, j] };
+    }
+  }
+  return { tiny, hit: null };
+}
 // the biggest size (0.5 mm steps, down to 60 %, never too small to stitch) at which p clears `other`, or 0
 // (halving the range, not 0.5 mm at a time: a 113 mm filled heart over a monogram stitched ~90 sizes, 4.7 s per change)
 export function clearSize(p, pieces, other) {

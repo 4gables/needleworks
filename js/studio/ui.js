@@ -13,7 +13,7 @@ import { draw } from "../render.js";
 import { TURN_PIC, youHtml } from "../sheet.js";
 import { QUILTS, quiltOf } from "./quilt.js";
 import { MOTIFS } from "./motifs.js";
-import { quiltDone, BORDERS, FABRICS, THREADS, SHAPES, TEXT_SHAPES, splitPieces, archFit, archStart, frontPanel, inkHeight, monoSize, archRoom, archShrink, archTight, cleanPiece, clearSize, collision, collisions, inFrame, letterMetrics, underPatch, crossName, crossStep, layoutSize, touching, touchingAll, towelMin, fineLine, loopsFill, compose, fileBlocks, blocksPattern, scaleBlocks, FILE_SCALE, fittedSizes, followFrame, label, minSize, pieceBounds, previewLook, smallText, bulkReady } from "./pieces.js";
+import { quiltDone, scaledFit, BORDERS, FABRICS, THREADS, SHAPES, TEXT_SHAPES, splitPieces, archFit, archStart, frontPanel, inkHeight, monoSize, archRoom, archShrink, archTight, cleanPiece, clearSize, collision, collisions, inFrame, letterMetrics, underPatch, crossName, crossStep, layoutSize, touching, touchingAll, towelMin, fineLine, loopsFill, compose, fileBlocks, blocksPattern, scaleBlocks, FILE_SCALE, fittedSizes, followFrame, label, minSize, pieceBounds, previewLook, smallText, bulkReady } from "./pieces.js";
 
 const SCRIPT = "NW Great Vibes", PRINT = "NW Josefin Sans", ROUND = "NW Quicksand";
 // exact Brother PEC thread colours, so the name on screen is the one the machine shows
@@ -999,11 +999,16 @@ export function initStudio(api) {
       // design fitted to the hoop came out with 6 mm letters run into each other)
       const lands = fitLands(), fitNow = lands.ok ? { label: "Fit to hoop", run: () => { remember(); fitHoop(); } } : null;
       if (turn) { tooBig(msg + " It fits with the hoop turned:", { label: "Turn the hoop", run: () => $("turn").click() }); return; }
-      // two hoopings, when they're possible: with the hoop turned, or with long lettering split between two words
-      const way = twoHoopings(hoop);
-      if (way.ok) tooBig(`${msg} ${way.ok} the machine sews one half, then you hoop the fabric again for the other (crosses line them up).${fitNow ? " Or Fit to hoop for one hooping, smaller." : ` (Fitted to one hooping, ${lands.why}.)`}`,
-        { label: "Sew it in two hoopings", run: () => { remember(); fitted = false; two = true; if (way.pieces) pieces = way.pieces; if (way.turn) { api.setTurn(!api.turned()); api.fit(); } save(); ui(); make(); } }, fitNow);
-      else tooBig(`${msg}${way.why ? ` ${way.why}` : ""} ${fitNow ? "Make the biggest piece smaller, or" : `Make the biggest piece smaller, or take something out (fitted to the hoop, ${lands.why}).`}`, fitNow);
+      // two hoopings, when they're possible: with the hoop turned, or with long lettering split between two words (that
+      // one stitches both halves: worked out once the design has been still for a moment, not on every letter typed)
+      const say = (way) => {
+        if (way.ok) tooBig(`${msg} ${way.ok} the machine sews one half, then you hoop the fabric again for the other (crosses line them up).${fitNow ? " Or Fit to hoop for one hooping, smaller." : ` (Fitted to one hooping, ${lands.why}.)`}`,
+          { label: "Sew it in two hoopings", run: () => { remember(); fitted = false; two = true; if (way.pieces) pieces = way.pieces; if (way.turn) { api.setTurn(!api.turned()); api.fit(); } save(); ui(); make(); } }, fitNow);
+        else tooBig(`${msg}${way.why ? ` ${way.why}` : ""} ${fitNow ? "Make the biggest piece smaller, or" : `Make the biggest piece smaller, or take something out (fitted to the hoop, ${lands.why}).`}`, fitNow);
+      };
+      const way = twoHoopings(hoop, true), s = seq;
+      say(way);
+      if (way.later) setTimeout(() => { if (s === seq) say(twoHoopings(hoop)); }, 700);
       return;
     }
     const opts = { fabric, baste, thread }, base = api.safeName(firstWords(), "design");
@@ -1035,22 +1040,18 @@ export function initStudio(api) {
     api.setView(all.design.pattern(), `${base}_2_hoopings.zip`, { fabric: "linen", steps: 0, hoopings,
       split: built.map((b) => ({ pattern: b.design.pattern(), filename: b.filename })) });
   }
-  // What Fit to hoop would leave: { ok } when everything then fits one hooping, with nothing too small to stitch or run
-  // into something it wasn't; else { why } in a few words. (The last answer is kept for the same design and hoop.)
+  // What Fit to hoop would leave: { ok } when nothing would then be too small to stitch or run into something it doesn't
+  // now; else { why } in a few words (judged from the stitches as they are, scaled: `scaledFit`). Kept for the same
+  // design and hoop.
   let lastLands = null;
   function fitLands() {
     const key = snap() + JSON.stringify(api.hoop());
     if (lastLands?.key === key) return lastLands.val;
-    const keep = pieces, kf = fitted, sized = (ps) => { const fs = fittedSizes(ps); return (p) => (fs.has(p.id) ? { ...p, size: fs.get(p.id) } : p); };
-    const pairs = (ps) => new Set(collisions(ps).map(([a, b]) => `${a.id}:${b.id}`)), small = (ps) => { const at = sized(ps); return ps.filter((p) => (p.kind === "text" || p.kind === "monogram") && minSize(at(p))); };
-    let out;
-    try { pieces = structuredClone(pieces); fitHoop(false); out = pieces; } finally { pieces = keep; fitted = kf; }
+    const bs = pieces.map(pieceBounds).filter(Boolean), hp = api.hoop();
     let val = { ok: true };
-    try { compose(out, api.hoop(), { fabric, baste, thread, later: [] }); }
-    catch (err) { if (!err.overBy) throw err; val = { why: "it still wouldn't fit" }; }
-    if (val.ok) {
-      const was = new Set(small(pieces).map((p) => p.id)), tiny = small(out).find((p) => !was.has(p.id));
-      const before = pairs(pieces), hit = !tiny && collisions(out).find(([a, b]) => !before.has(`${a.id}:${b.id}`));
+    if (bs.length) {
+      const w = Math.max(...bs.map((b) => b[2])) - Math.min(...bs.map((b) => b[0])), h = Math.max(...bs.map((b) => b[3])) - Math.min(...bs.map((b) => b[1]));
+      const { tiny, hit } = scaledFit(pieces, Math.min((hp.w - 10) / w, (hp.h - 10) / h));
       if (tiny) val = { why: `${label(tiny)} would be too small to stitch` };
       else if (hit) val = { why: `${label(hit[0])} would run into ${label(hit[1])}` };
     }
@@ -1061,13 +1062,14 @@ export function initStudio(api) {
   // the hoop): would it share out with the hoop turned, or with the longest straight lettering split into two pieces
   // between words (each word where it was, at the same letter size)? { ok: what's done, pieces, turn } or { why } (a
   // 266 mm "HAPPY BIRTHDAY" said only "Make the biggest piece smaller, or Fit to hoop")
-  function twoHoopings(hoop) {
+  function twoHoopings(hoop, quick = false) {
     const other = hoop.w !== hoop.h ? { ...hoop, w: hoop.h, h: hoop.w } : null, ways = [[hoop, false], ...(other ? [[other, true]] : [])];
     if (splitPieces(pieces, hoop)) return { ok: "It can be sewn in two hoopings:" };
     for (const [h, t] of ways) if (t && splitPieces(pieces, h)) return { ok: "It can be sewn in two hoopings with the hoop turned:", turn: true };
     const fit = fittedSizes(pieces), wide = (q) => { const b = pieceBounds(q); return b ? b[2] - b[0] : 0; };
     const long = pieces.filter((p) => p.kind === "text" && (p.shape || "straight") === "straight" && !p.text.includes("\n") && !fit.has(p.id) && !(p.rot || 0) && !p.deco && / /.test(p.text.trim()))
       .sort((a, b) => wide(b) - wide(a))[0];
+    if (long && quick) return { later: true };
     if (long) {
       // (the two gaps nearest the middle: each try draws both halves' lettering, and this runs as the words are typed)
       const t = long.text.trim(), gaps = [...t.matchAll(/ +/g)].map((m) => [m.index, m.index + m[0].length]).sort((a, b) => Math.abs(a[0] - t.length / 2) - Math.abs(b[0] - t.length / 2)).slice(0, 2);
@@ -1081,18 +1083,21 @@ export function initStudio(api) {
         q.y = Math.round((long.y - (m0.top + m0.bottom) / 2 + (m.top + m.bottom) / 2) * 2) / 2;
         return q;
       };
-      const tries = gaps.map(([a, b]) => [part(t.slice(0, a), false), part(t.slice(b), true)]).filter(([a, b]) => a && b)
-        .sort(([a1, b1], [a2, b2]) => Math.max(wide(a1), wide(b1)) - Math.max(wide(a2), wide(b2)));
+      // (the gap nearest the middle first, the next only when that one doesn't share out: each try stitches both halves)
       const fitsOne = (q) => { const b = pieceBounds(q), w = b[2] - b[0], hh = b[3] - b[1]; return ways.some(([h]) => w <= h.w - 6 && hh <= h.h - 6); };
-      const best = tries[0], over = best && [best[0], best[1]].find((q) => !fitsOne(q));
-      if (over) return { why: `Even split between two hoopings, ${label(over)} would be bigger than the hoop by itself.` };
-      for (const [a, b] of tries) {
+      let over = null;
+      for (const [ga, gb] of gaps) {
+        const a = part(t.slice(0, ga), false), b = part(t.slice(gb), true);
+        if (!a || !b) continue;
+        const big = [a, b].find((q) => !fitsOne(q));
+        if (big) { over ||= big; continue; }
         const ps = pieces.flatMap((p) => (p === long ? [a, b] : [p]));
         for (const [h, tt] of ways) if (splitPieces(ps, h)) {
           nextId = Math.max(nextId, a.id + 1);
           return { ok: `It can be sewn in two hoopings${tt ? ", with the hoop turned" : ""}, with ${label(a)} and ${label(b)} as two pieces:`, pieces: ps, turn: tt };
         }
       }
+      if (over) return { why: `Even split between two hoopings, ${label(over)} would be bigger than the hoop by itself.` };
     }
     // why not: one piece bigger than the hoop by itself, either way round
     const big = pieces.find((p) => { const b = pieceBounds(fit.has(p.id) ? { ...p, size: fit.get(p.id) } : p); if (!b) return false; const w = b[2] - b[0], hh = b[3] - b[1];

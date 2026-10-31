@@ -141,6 +141,10 @@ const KINDS = [["small", /too small to stitch cleanly/], ["towel", /closes? (the
   ["hit", /^This runs into/], ["thin", /sews as a thin line/], ["loops", /small loops .*fill in/], ["lines", /^On (two|three) lines/], ["motif", /this small, the/],
   ["named", /looks like a name|has 3 initials at most/], ["oneline", /sews the words on one line/], ["under", /patch sews after this|sews before the patch/],
   ["same", /nearly the same thread/], ["kern", /pushed into each other/], ["missing", /has no /], ["framefit", /^Shrunk to fit inside the frame/]];
+// (beside Download each problem names its pieces: "“Emma” runs into Heart; …")
+const GLOBAL = [["hit", /runs into/], ["missing", /has no /], ["under", /sews before the patch/], ["same", /nearly the same thread/], ["small", /too small to stitch/],
+  ["towel", /closes up on a towel/], ["loops", /loops that fill in/], ["verdict", /may not sew well/]];
+const globalKinds = (t) => new Set(GLOBAL.filter(([, re]) => re.test(t)).map(([k]) => k));
 const kindOf = (t) => (KINDS.find(([, re]) => re.test(t)) || [t.replace(/[\d.,]+|“[^”]*”/g, "#").slice(0, 40)])[0];
 // ("on two lines it can be…" is an offer, and "it sews as a thin line" a note with an offer, not problems)
 const kinds = (spans) => new Set(spans.filter((t) => t.trim()).map(kindOf).filter((k) => k !== "lines" && k !== "thin"));
@@ -416,7 +420,7 @@ function openChecks() {
 // fits, something changed; with `undo`, one Undo takes it all back.
 async function tryFix(b, undo) {
   const bad = [], label = b.textContent.trim(), span = b.closest("#st-edit [data-warn] > span"), k = span ? kindOf(span.textContent) : null;
-  const f0 = fresh(), d0 = design(), sel0 = studio()?.sel, sc0 = screen().kind, k0 = kinds(screen().edit), g0 = kinds(screen().warn.split(/(?<=\.) /));
+  const f0 = fresh(), d0 = design(), sel0 = studio()?.sel, sc0 = screen().kind, k0 = kinds(screen().edit), g0 = globalKinds(screen().warn);
   const where = span ? `“${span.textContent.slice(0, 90)}”` : "";
   b.click(); await idle();
   const f1 = fresh(), d1 = design(), sc = screen(), sel1 = studio()?.sel;
@@ -429,7 +433,7 @@ async function tryFix(b, undo) {
     const extra = [...k1].filter((x) => !k0.has(x) && !(x === "loops" && /^Make it bold/.test(label)));
     if (extra.length) add("fix", `brought new warnings: ${extra.map((x) => `“${sc.edit.find((t) => kindOf(t) === x)}”`).join(" ")}`);
   }
-  const g1 = kinds(sc.warn.split(/(?<=\.) /)), gx = [...g1].filter((x) => !g0.has(x));
+  const g1 = globalKinds(sc.warn), gx = [...g1].filter((x) => !g0.has(x));
   // (a design too big for the hoop says only that beside Download: what else is wrong shows once it fits)
   if (gx.length && sc0 === "one") add("fix", `brought new warnings beside Download: ${gx.join(", ")} (“${sc.warn.slice(0, 160)}”)`);
   const h0 = pairKeys(f0.hits), nh = [...(f1.hits || [])].filter(([a, c]) => !h0.has(`${a.id}:${c.id}`));

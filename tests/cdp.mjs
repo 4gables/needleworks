@@ -161,7 +161,13 @@ async function run(cmd, args) {
       const dt = new Map(pr.nodes.map((n) => [n.id, 0])); pr.samples.forEach((id, i) => dt.set(id, dt.get(id) + (pr.timeDeltas[i] || 0) / 1000));
       const self = new Map();
       for (const n of pr.nodes) { const f = n.callFrame, k = `${f.functionName || "(anon)"} ${f.url.split("/").pop()}:${f.lineNumber + 1}`; self.set(k, (self.get(k) || 0) + dt.get(n.id)); }
-      out.push(JSON.stringify(r), ...[...self].sort((a, b) => b[1] - a[1]).slice(0, 25).map(([k, v]) => `${v.toFixed(0).padStart(6)} ${k}`)); break;
+      // and inclusive time (the function and everything it called), counted once per sample
+      const kids = new Map(pr.nodes.map((n) => [n.id, n.children || []])), byId = new Map(pr.nodes.map((n) => [n.id, n])), total = new Map();
+      const walk = (id, seen) => { const n = byId.get(id), f = n.callFrame, k = `${f.functionName || "(anon)"} ${f.url.split("/").pop()}:${f.lineNumber + 1}`;
+        let t = dt.get(id); for (const c of kids.get(id)) t += walk(c, new Set([...seen, k])); if (!seen.has(k)) total.set(k, (total.get(k) || 0) + t); return t; };
+      walk(pr.nodes[0].id, new Set());
+      out.push(JSON.stringify(r), ...[...self].sort((a, b) => b[1] - a[1]).slice(0, 25).map(([k, v]) => `${v.toFixed(0).padStart(6)} ${k}`),
+        "inclusive:", ...[...total].filter(([k]) => !/^\(/.test(k)).sort((a, b) => b[1] - a[1]).slice(0, 30).map(([k, v]) => `${v.toFixed(0).padStart(6)} ${k}`)); break;
     }
     case "text": out.push(await ev("document.body.innerText")); break;
     case "els": {
