@@ -147,6 +147,9 @@ input[type="range"] { width: 100%; accent-color: var(--accent); min-height: 32px
 .info { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px 16px; display: grid; gap: 6px; }
 .info .warn { color: var(--warn); font-weight: 700; }
 .info .good { color: var(--good); font-weight: 700; }
+/* (shown with the opened file's card only) */
+.open-words { margin: 0; }
+#open-info[hidden] + .open-words { display: none; }
 .fine-warn { margin: 0; padding: 10px 12px; border-radius: 10px; background: #fdf3e7; color: #7a3f12; font-size: 15px; }
 #pic-density button { padding: 6px 14px; }
 

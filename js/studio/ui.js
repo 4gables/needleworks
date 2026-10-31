@@ -3,6 +3,7 @@
 import { buildBookmark, hiddenBlocks } from "../core/bookmark.js";
 import { turnPattern } from "../core/design.js";
 import { APPLIQUE_FONTS, FONTS, loadFont } from "../core/fonts.js";
+import { glyphs } from "../core/glyphs.js";
 import { hoop as getHoop } from "../core/machines.js";
 import { nearestBrotherThread } from "../core/threads.js";
 import { designStats, readEmbroidery } from "../core/formats.js";
@@ -12,7 +13,7 @@ import { draw } from "../render.js";
 import { youHtml } from "../sheet.js";
 import { QUILTS } from "./quilt.js";
 import { MOTIFS } from "./motifs.js";
-import { BORDERS, FABRICS, THREADS, SHAPES, TEXT_SHAPES, splitPieces, archFit, archStart, frontPanel, inkHeight, monoSize, archRoom, archShrink, archTight, cleanPiece, clearSize, collision, collisions, inFrame, letterMetrics, underPatch, crossName, crossStep, layoutSize, touching, touchingAll, towelMin, fineLine, loopsFill, compose, fileBlocks, fittedSizes, followFrame, label, minSize, pieceBounds, previewLook, smallText } from "./pieces.js";
+import { BORDERS, FABRICS, THREADS, SHAPES, TEXT_SHAPES, splitPieces, archFit, archStart, frontPanel, inkHeight, monoSize, archRoom, archShrink, archTight, cleanPiece, clearSize, collision, collisions, inFrame, letterMetrics, underPatch, crossName, crossStep, layoutSize, touching, touchingAll, towelMin, fineLine, loopsFill, compose, fileBlocks, blocksPattern, scaleBlocks, FILE_SCALE, fittedSizes, followFrame, label, minSize, pieceBounds, previewLook, smallText } from "./pieces.js";
 
 const SCRIPT = "NW Great Vibes", PRINT = "NW Josefin Sans", ROUND = "NW Quicksand";
 // exact Brother PEC thread colours, so the name on screen is the one the machine shows
@@ -257,20 +258,18 @@ export function initStudio(api) {
     for (const [k, v] of Object.entries(kern)) { const i = +k; if (i + 1 < a) out[i] = v; else if (i >= old.length - b) out[i + now.length - old.length] = v; }
     return Object.keys(out).length ? out : undefined;
   }
-  // characters the font doesn't have (the browser would draw them in a stand-in font). The fonts are Latin only, so
-  // anything past Latin Extended (emoji, CJK, Hebrew…) other than punctuation and currency is missing; a Latin letter
-  // is missing when the font doesn't change its width against either fallback. (Measuring alone misses CJK: the
-  // system's fallback chain changes with the font in front of it.)
+  // characters the font doesn't have (the browser would draw them in a stand-in font), from the font's own character
+  // map (glyphs.js). Guessing by code point (anything past Latin Extended) said Great Vibes had no ễ or А, which it has;
+  // measuring widths against fallbacks misses CJK (the system's fallback chain changes with the font in front of it).
   const probe = document.createElement("canvas").getContext("2d");
-  const width = (font, ch) => { probe.font = font; return probe.measureText(ch).width; };
   function missing(text, family) {
-    if (!family) return [];
+    const has = family && glyphs(family);
+    if (!has) return [];
     return [...new Set(text.replace(/\s/g, ""))].filter((ch) => {
       const cp = ch.codePointAt(0);
       // (invisible joiners and emoji variation selectors aren't letters: "❤️" listed U+FE0F as an empty “”)
       if ((cp >= 0xfe00 && cp <= 0xfe0f) || (cp >= 0x200b && cp <= 0x200d) || cp >= 0xe0000) return false;
-      if (cp > 0x24f && !(cp >= 0x2100 && cp <= 0x214f)) return !(cp >= 0x2000 && cp <= 0x20cf);
-      return width(`40px "${family}", monospace`, ch) === width("40px monospace", ch) && width(`40px "${family}", serif`, ch) === width("40px serif", ch);
+      return !has.has(cp);
     });
   }
   // mm with inches beside them (US sewists think in inches)
@@ -358,7 +357,11 @@ export function initStudio(api) {
       if (p.border === "ith") h += `<p class="hint">Two-sided, made in the hoop: an appliqué front, then the pieces below it in the list, then backing fabric under the hoop and a satin edge through everything. The steps are under “How to stitch it”.</p>`;
       if (p.border === "applique") h += `<p class="hint">Sews an outline, pauses for you to lay fabric on and trim it, then covers the edge in satin. The steps are under “How to stitch it”.</p>`;
     } else {
-      h += `<p class="hint">${api.escapeHtml(p.name)}: its stitches are used exactly as they are, so it can be moved and turned but not resized.</p>`;
+      // a design file is resized as Open a design resizes it: re-stitched at the new size (`resizeFile`), so it can
+      // shrink with the words added to it (it could only be moved and turned: Fit to hoop shrank just the words)
+      const pct = Math.round((p.scale || 1) * 100);
+      h += `<label class="range"><span>Size</span><input type="range" data-file-scale min="${FILE_SCALE[0] * 100}" max="${FILE_SCALE[1] * 100}" step="1" value="${pct}"><output>${fileSize(p, pct / 100)}</output></label>`;
+      h += `<p class="hint">${api.escapeHtml(p.name)}: ${p.pending ? "re-stitching it at this size…" : pct === 100 ? "its stitches exactly as they are in the file." : "re-stitched at this size, with the stitches spaced as the file had them."}</p>`;
     }
     if (p.kind === "text" || p.kind === "monogram") h += `<p class="hint" data-fit hidden></p>`;
     if (p.kind !== "frame") h += `<p class="hint warn" data-warn aria-live="polite" hidden></p>`;
@@ -461,8 +464,12 @@ export function initStudio(api) {
       const to = host && !cs ? spotIn(p) : null, zip = host?.border === "zip";
       const move = to ? btn("data-move", `Move it ${zip ? "below the zipper" : `to the free space in the ${frameName}`}${to.size !== (fs ?? p.size) ? `, ${to.size} mm` : ""}`) : "";
       const full = host ? `There's no free space for it in the ${frameName}: make the frame bigger, or take something out.` : "";
+      // (or, at the size it is, to free room beside what it runs into: a motif made bigger over the name under it had
+      // only "Drag it apart", as did a design file)
+      const away = !inside && !to ? moveAway(p, near) : null;
+      const go = away ? btn(`data-move-to="${away.x},${away.y}"`, `Move it ${away.where}`, away.l) : "";
       hit = inside ? `This runs into the ${frameName} around it${zip ? " (the zipper and its stitching are across the top)" : ""}. ${cs ? btn(`data-size="${cs}"`, `Make it ${cs} mm`) : move || full}`
-        : `This runs into ${api.escapeHtml(and(nears.map(label)))}. ${cs ? `${btn(`data-size="${cs}"`, `Make it ${cs} mm`)} or drag it apart.` : move ? `${move}, or drag it apart.` : full || "Drag it apart."}`;
+        : `This runs into ${api.escapeHtml(and(nears.map(label)))}. ${cs || go ? `${[cs ? btn(`data-size="${cs}"`, `Make it ${cs} mm`) : "", go].filter(Boolean).map((b, i) => (i ? b.replace(">Move", ">move") : b)).join(", ")} or drag it apart.` : move ? `${move}, or drag it apart.` : full || "Drag it apart."}`;
     }
     // (a bigger size for loops that fill in is offered only when it lands, like every other fix)
     const fillsAt = fills && !m && !towel && fabric !== "towel" && fills <= 3 * q.size ? landing(p, sizeChange(p, fills)) : null;
@@ -510,6 +517,21 @@ export function initStudio(api) {
     if (!ok(lo)) return 0;
     while (hi - lo > 0.5) { const m = (lo + hi) / 2; if (ok(m)) lo = m; else hi = m; }
     return Math.floor(lo * 2) / 2;
+  }
+  // p at the size it is, moved to the nearest free room (`freeRoom`, with p itself out of the way) that runs into
+  // nothing and keeps one hooping; said by where it goes from `other`: { x, y, where, l } or null
+  function moveAway(p, other) {
+    const keep = pieces, fs = fittedSizes(pieces).get(p.id);
+    if (fs) return null;   // (sized by its frame: moving it out of the frame isn't the fix)
+    let r;
+    try { pieces = pieces.filter((o) => o.id !== p.id); r = freeRoom({ ...p }, null); } finally { pieces = keep; }
+    if (!r || (p.size != null && r.size !== p.size)) return null;
+    const l = landing(p, { x: r.x, y: r.y });
+    if (!l.fits) return null;
+    const a = pieceBounds({ ...p, x: r.x, y: r.y }), b = pieceBounds(other);
+    const nm = api.escapeHtml(other.kind === "motif" || other.kind === "frame" ? `the ${label(other).toLowerCase()}` : label(other));
+    const where = !a || !b ? "to free space" : a[1] >= b[3] - 1 ? `below ${nm}` : a[3] <= b[1] + 1 ? `above ${nm}` : `beside ${nm}`;
+    return { x: r.x, y: r.y, where, l };
   }
   const and = (xs) => (xs.length > 1 ? `${xs.slice(0, -1).join(", ")} and ${xs.at(-1)}` : xs[0] || "");
   // what a one-tap change to p would leave: { w, h, fits: "fits" (as the hoop is now), "turn" (only with the hoop
@@ -625,6 +647,7 @@ export function initStudio(api) {
       const fonts = [...new Set(pieces.filter((p) => p.font).map((p) => p.font))];
       await Promise.all(fonts.map(loadFont));
       if (s !== seq) return;
+      if (!dragging) restitchFiles();
       let composed;
       try { composed = compose(pieces, api.hoop(), { fabric, baste, thread, dragging }); }
       catch (err) {
@@ -636,6 +659,7 @@ export function initStudio(api) {
       }
       if (s !== seq) return;
       refitted = false;
+      const resizing = !dragging && pieces.find((p) => p.kind === "file" && p.pending);
       const { design, steps, done, ready, small } = stepsOf(composed);
       stepsUI(steps, done, small, ready);
       const look = previewLook(steps);
@@ -653,7 +677,8 @@ export function initStudio(api) {
           lacking ? `The font of ${label(lacking[0])} has no ${lacking[1].map((c) => `“${c}”`).join(" ")}: ${lacking[1].length === 1 ? "it" : "they"} would be stitched in a stand-in letter.` : "",
           covered ? `${label(covered)} sews before the patch that covers it: select it to sew it after.` : "",
           lost ? `${label(lost)} is nearly the same thread as the patch under it, so it won't show.` : ""].filter(Boolean).join(" "),
-        block: wrap ? `${label(wrap)} runs into itself round the curve: select it to widen the curve or make the letters smaller.` : "",
+        block: wrap ? `${label(wrap)} runs into itself round the curve: select it to widen the curve or make the letters smaller.`
+          : resizing ? `Re-stitching ${resizing.name} at ${Math.round(resizing.scale * 100)} %…` : "", blockLabel: wrap ? "" : resizing ? "Re-stitching…" : "",
         fabric: look.fabricShapeBlock != null ? "pink" : "linen", steps: steps.length,
         sheet: { steps: steps.map((st) => ({ you: st.you, sews: st.sews.join(" ") })), after: done, ready, cut: steps.filter((st) => st.cut).map((st) => st.cut),
           notes: [api.turned() ? TURNED : "", $("st-tip").hidden ? "" : $("st-tip").textContent, fabricTip(), threadTip(small)] } });
@@ -668,6 +693,65 @@ export function initStudio(api) {
       else { console.error(err); api.showError(err.message); }
     }
   }
+  // ---------- design files resized ----------
+  // A file piece keeps the stitches it was opened with (`orig`) and its size against them (`scale`); `blocks` are what
+  // it sews. A new size is the stitches scaled as a stand-in (`pending`, Download waits) while the doctor's `fix`
+  // re-stitches it in a worker, one at a time; results are kept for undo and redo.
+  const restitched = new Map();
+  const fileKey = (p, f) => `${p.name}|${p.orig.length}|${p.orig[0].paths.length}|${p.orig[0].paths[0][0]}|${f}`;
+  function resizeFile(p, f) {
+    f = Math.min(FILE_SCALE[1], Math.max(FILE_SCALE[0], Math.round(f * 100) / 100));
+    const orig = p.orig || p.blocks;
+    if (f === 1) { p.blocks = orig; delete p.orig; delete p.scale; delete p.pending; return; }
+    if (f === p.scale) return;
+    p.orig = orig; p.scale = f;
+    const hit = restitched.get(fileKey(p, f));
+    if (hit) { p.blocks = hit; delete p.pending; } else { p.blocks = scaleBlocks(orig, f); p.pending = true; }
+  }
+  // its size in words, at scale f: "62 % · 55 × 48 mm"
+  function fileSize(p, f) {
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    for (const b of p.orig || p.blocks) for (const q of b.paths) for (const [x, y] of q) { x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y); }
+    return `${Math.round(f * 100)} % · ${Math.round((x1 - x0) * f)} × ${Math.round((y1 - y0) * f)} mm`;
+  }
+  let fileWorker = null, fileJob = null;
+  function restitchFiles() {
+    if (fileJob) return;
+    const p = pieces.find((q) => q.kind === "file" && q.pending);
+    if (!p) return;
+    const hit = restitched.get(fileKey(p, p.scale));
+    if (hit) { p.blocks = hit; delete p.pending; save(); make(); return; }
+    if (!fileWorker) {
+      fileWorker = new Worker(new URL("../doctor-worker.js", import.meta.url), { type: "module" });
+      fileWorker.onmessage = (e) => {
+        const job = fileJob; fileJob = null;
+        const q = pieces.find((o) => o.id === job.id && o.kind === "file" && o.pending && o.scale === job.scale);
+        let blocks = null;
+        if (e.data.ok) try { blocks = fileBlocks(e.data.pattern); restitched.set(job.key, blocks); } catch (err) { e.data.error = err.message; }
+        if (q && blocks) { q.blocks = blocks; delete q.pending; }
+        // (it couldn't be re-stitched at that size: back to the size it came in, and said)
+        else if (q) { resizeFile(q, 1); api.showError(`${q.name} couldn't be resized: ${e.data.error}`); }
+        save(); if (q && current()?.id === q.id) editor(); make();
+      };
+    }
+    fileJob = { id: p.id, scale: p.scale, key: fileKey(p, p.scale) };
+    fileWorker.postMessage({ id: 0, d: blocksPattern(p.orig), opts: { scale: p.scale, tiny: p.scale < 1, thin: true } });
+  }
+  // A design opened on the Open tab, to add words to: a new design of the file and a line of lettering under it (the
+  // last design stays one Undo away). Fit to hoop then resizes both.
+  function addWords(d, name) {
+    const blocks = fileBlocks(d), had = pieces.length;
+    remember();
+    const f = piece({ kind: "file", name, blocks, color: blocks[0].color }), t = text({ text: "Your words", font: SCRIPT });
+    pieces = [f]; fitted = false; from = name;
+    freeSpot(t, "down"); pieces.push(t); sel = t.id; recentre();
+    api.setMode("design"); save(); ui(); make();
+    if (had) toast(`Started a new design with ${name}.`, { label: "Undo", run: undo });
+    // (straight into the words, selected, so typing replaces them)
+    const w = $("st-edit").querySelector('textarea[data-k="text"]');
+    if (w) { w.focus(); w.select(); }
+  }
+
   // the steps as shown and printed: what to have ready, what's done after, and whether the letters are small
   function stepsOf({ design, steps, after, before, hoop }) {
     const fit = fittedSizes(pieces), small = thread !== "60" && pieces.some((p) => smallText(fit.has(p.id) ? { ...p, size: fit.get(p.id) } : p));
@@ -982,6 +1066,7 @@ export function initStudio(api) {
     if (t.matches("[data-blend-any]")) { change((p) => (p.blend = t.value)); return; }
     if (t.matches("[data-blend]")) { change((p) => (t.checked ? (p.blend = p.fill === RED ? NAVY : RED) : delete p.blend), true); editor(); return; }
     if (t.matches("[data-pair]")) { pairAt = +t.value; editor(); return; }
+    if (t.matches("[data-file-scale]")) { t.nextElementSibling.textContent = fileSize(current(), t.value / 100); return; }
     if (t.matches("[data-kern]")) {
       t.nextElementSibling.textContent = `${t.value} %`;
       change((p) => { p.kern = { ...p.kern, [pairAt]: +t.value }; if (!+t.value) delete p.kern[pairAt]; });
@@ -1030,7 +1115,10 @@ export function initStudio(api) {
     for (const el of [r, r2]) if (el) { el.max = Math.max(+el.max, radius); el.value = radius; el.nextElementSibling.textContent = shown(radius, "mm"); }
   }
   let warnTimer = 0;
-  edit.addEventListener("change", (e) => { if (e.target.dataset.k === "font" || e.target.dataset.k === "deco" || e.target.matches("[data-color-any], [data-fill-any], [data-blend-any]")) editor(); });
+  edit.addEventListener("change", (e) => {
+    // (re-stitched once the slider is let go: each step is a re-stitch)
+    if (e.target.matches("[data-file-scale]")) { const v = e.target.value / 100; change((p) => resizeFile(p, v), true); editor(); return; }
+    if (e.target.dataset.k === "font" || e.target.dataset.k === "deco" || e.target.matches("[data-color-any], [data-fill-any], [data-blend-any]")) editor(); });
   edit.addEventListener("click", (e) => {
     const c = e.target.closest("[data-color]");
     if (c) { change((p) => (p.color = c.dataset.color), true, true); editor(); return; }
@@ -1063,6 +1151,8 @@ export function initStudio(api) {
     if (kr) { change((p) => { delete p.kern[kr.dataset.kernOff]; if (!Object.keys(p.kern).length) delete p.kern; }, true); editor(); return; }
     const ru = e.target.closest("[data-run-up]");
     if (ru) { change((p) => Object.assign(p, { rot: -90, size: +ru.dataset.runUp }), true); editor(); return; }
+    const mt = e.target.closest("[data-move-to]");
+    if (mt) { const [x, y] = mt.dataset.moveTo.split(",").map(Number); change((p) => { Object.assign(p, { x, y }); recentre(); }, true); turnToo(mt); editor(); return; }
     if (e.target.closest("[data-move]")) { const to = spotIn(current()); if (to) change((p) => Object.assign(p, { x: to.x, y: to.y, size: to.size }), true); editor(); return; }
     if (e.target.closest("[data-follow]")) { change((p) => Object.assign(p, followFrame(p, pieces)), true); editor(); return; }
     const s = e.target.closest("[data-seg] button");
@@ -1149,7 +1239,8 @@ export function initStudio(api) {
     fitted = true;
     const scale = (f) => { for (const p of pieces) {
       p.x *= f; p.y *= f;
-      if (p.kind !== "file") for (const k of ["size", "radius", "ry", "w", "h"]) if (p[k] != null) p[k] = Math.round(p[k] * f * 2) / 2;
+      if (p.kind === "file") resizeFile(p, (p.scale || 1) * f);
+      else for (const k of ["size", "radius", "ry", "w", "h"]) if (p[k] != null) p[k] = Math.round(p[k] * f * 2) / 2;
     } };
     scale(Math.min((hp.w - 10) / w, (hp.h - 10) / h));
     recentre();   // (in the middle, as the machine sews it: a fitted layout said "Off centre here")
@@ -1323,6 +1414,9 @@ export function initStudio(api) {
         const q = { ...q0, x: Math.round(x * 2) / 2, y: Math.round(y * 2) / 2 };
         if (ith && !inFrame(q, ith, 4)) continue;
         if (p.kind !== "frame" && touching(q, pieces)) continue;
+        // (rounded to the half mm, a spot on the field's edge could take the layout 0.08 mm past it: the design then
+        // counted as two hoopings already, and every later piece went below it, out of the hoop)
+        if (!ith && !fitsWith(q)) continue;
         // (at the size a frame it lands in then sews it, as `spotIn` does)
         return { x: q.x, y: q.y, ...(p.size == null ? {} : { size: fittedSizes([...pieces, q]).get(p.id) ?? size }) };
       }
@@ -1361,7 +1455,9 @@ export function initStudio(api) {
     const all = pieces.map(pieceBounds).filter(Boolean);
     if (!all.length) return;
     const cx = (Math.min(...all.map((b) => b[0])) + Math.max(...all.map((b) => b[2]))) / 2, cy = (Math.min(...all.map((b) => b[1])) + Math.max(...all.map((b) => b[3]))) / 2;
-    for (const q of pieces) { q.x = Math.round((q.x - cx) * 2) / 2; q.y = Math.round((q.y - cy) * 2) / 2; }
+    // (one shift for all, in half mm: rounding each piece on its own moved them up to half a mm apart)
+    const sx = Math.round(cx * 2) / 2, sy = Math.round(cy * 2) / 2;
+    for (const q of pieces) { q.x = Math.round((q.x - sx) * 2) / 2; q.y = Math.round((q.y - sy) * 2) / 2; }
   }
   // add an opened design (PES/PEC/DST) as a piece, to combine a motif with lettering
   $("st-file").onchange = async (e) => {
@@ -1442,5 +1538,5 @@ export function initStudio(api) {
   }
 
   cards(); ui();
-  return { make, relabel: () => { ui(); make(); }, start, move, end, nudge, deselect, forNames, remember, recentre: () => { remember(); recentre(); save(); ui(); make(); } };
+  return { make, addWords, relabel: () => { ui(); make(); }, start, move, end, nudge, deselect, forNames, remember, recentre: () => { remember(); recentre(); save(); ui(); make(); } };
 }

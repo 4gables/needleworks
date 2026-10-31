@@ -349,11 +349,29 @@ $("turn").onclick = () => {
   if (state.mode === "picture") makePicture(); else if (state.mode === "design") studio.make(); else setView(state.view);
 };
 
-// USB file names the machine can show: plain ASCII (José -> Jose, Łukasz -> Lukasz, Søren -> Soren), nothing else,
-// never empty (letters with no accent to strip were dropped: "Zoe_ukasz", "S_ren")
-const LATIN = { Ł: "L", ł: "l", Ø: "O", ø: "o", ß: "ss", Æ: "AE", æ: "ae", Œ: "OE", œ: "oe", Đ: "D", đ: "d", Ð: "D", ð: "d", Þ: "Th", þ: "th", ı: "i", Ħ: "H", ħ: "h", Ŧ: "T", ŧ: "t", Ŋ: "N", ŋ: "n", ĸ: "k" };
+// USB file names the machine can show: plain ASCII (José -> Jose, Łukasz -> Lukasz, Søren -> Soren, Анна -> Anna,
+// Σοφία -> Sofia, שרה -> Shrh), nothing else, never empty (letters with no accent to strip were dropped: "Zoe_ukasz",
+// "S_ren"; Greek, Cyrillic and Hebrew names all came out design.pes)
+const LATIN = {};
+for (const [from, to] of [
+  ["łøßæœđðþıħŧŋĸ", "l o ss ae oe d d th i h t n k"],
+  // Greek (modern sound values)
+  ["αβγδεζηθικλμνξοπρσςτυφχψω", "a v g d e z i th i k l m n x o p r s s t y f ch ps o"],
+  // Cyrillic: Russian, then Ukrainian, Belarusian, Serbian and Macedonian letters
+  ["абвгдеёжзийклмнопрстуфхцчшщъыьэюя", "a b v g d e e zh z i y k l m n o p r s t u f kh ts ch sh shch - y - e yu ya"],
+  ["іїєґўђјљњћџѓќѕ", "i yi ye g u dj j lj nj c dz gj kj dz"],
+  // Hebrew consonants (vowel points are dropped with the other marks)
+  ["אבגדהוזחטיכךלמםנןסעפףצץקרשת", "a b g d h v z ch t y k k l m m n n s a p f ts ts k r sh t"],
+]) [...from].forEach((c, i) => { LATIN[c] = to.split(" ")[i].replace("-", ""); });
+// (a capital followed by a capital is all capitals: ЖЕНЯ -> ZHENYA; Hebrew has no capitals, so a word starts with one)
+const latin = (t) => t.replace(/./gu, (c, i) => {
+  const l = c.toLowerCase(), r = LATIN[l], up = (d = "") => d !== d.toLowerCase();
+  if (r === undefined) return c;
+  if (l !== c && (up(t[i + 1]) || up(t[i - 1]))) return r.toUpperCase();
+  return l !== c || (/[\u05d0-\u05ea]/.test(c) && !/[\u05d0-\u05ea]/.test(t[i - 1] || "")) ? r.charAt(0).toUpperCase() + r.slice(1) : r;
+});
 function safeName(s, fallback) {
-  const t = s.replace(/[ŁłØøßÆæŒœĐđÐðÞþıĦħŦŧŊŋĸ]/g, (c) => LATIN[c]).normalize("NFKD").replace(/[\u0300-\u036f]/g, "").replace(/[^A-Za-z0-9_-]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 40);
+  const t = latin(latin(s.normalize("NFC")).normalize("NFKD").replace(/[\u0300-\u036f\u0591-\u05c7]/g, "")).replace(/[^A-Za-z0-9_-]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 40);
   // (Windows can't save a file called CON, PRN, AUX, NUL, COM1-9 or LPT1-9, in any case, with any extension: what's
   // added after the name here always follows a dot or an underscore, so only the bare word needs one)
   return /^(con|prn|aux|nul|com[1-9]|lpt[1-9])$/i.test(t) ? t + "_" : t || fallback;
@@ -1517,6 +1535,11 @@ function blockColour(hex) {
   coloursUI(); openView();
 }
 $("open-info").addEventListener("click", (e) => { if (e.target.id === "doc-largest") toLargest(); });
+// the opened design, as it stands here (resized or fixed), into Design your own with a line of words under it
+$("open-words").onclick = () => {
+  const o = state.opened, v = state.views.open; if (!o || !v) return;
+  studio.addWords(v.bytes && v.verifyAgainst ? readEmbroidery(v.bytes, "x.pes") : o.d, o.base);
+};
 // colours for files that carry none (DST): distinct exact Brother threads, then round again
 const DST_COLOURS = ["#0e1f7c", "#ed171f", "#00673e", "#e8a900", "#770176", "#f64a8a", "#000000", "#c70156"];
 const DST_SWATCHES = [...DST_COLOURS, "#f0f0f0", "#2584bb", "#b27624", "#66ba49"];

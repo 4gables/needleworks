@@ -34,6 +34,7 @@ const FILES = [
   "js/core/design.js",
   "js/core/digitize.js",
   "js/core/fonts.js",
+  "js/core/glyphs.js",
   "js/core/formats.js",
   "js/core/geom.js",
   "js/core/machines.js",
