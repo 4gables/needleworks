@@ -663,6 +663,7 @@ function namesFor() {
   if (state.mode !== "bookmark" || state.bm.blank) return null;
   // (a letter the font lacks is refused, as in the Design tab: Анна in Sacramento stitched stand-in letters)
   return { what: state.bm.name, bookmark: true, build: (name) => {
+    if (!/[\p{L}\p{N}]/u.test(name)) throw new Error("no letters to stitch");
     const gone = lacks(name, state.bm.font);
     if (gone.length) throw new Error(`the font has no ${lackList(gone)}`);
     return { name, pattern: buildBookmark({ name, family: state.bm.font, color: state.bm.color, hoop: hoop(),
@@ -980,8 +981,9 @@ function drawBookmarkUI() {
 // stitched exactly as typed
 const stitchedName = () => state.bm.name.trim();
 function escapeHtml(s) { return s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]); }
+$("bm-name").addEventListener("compositionend", (e) => e.target.dispatchEvent(new Event("input")));
 $("bm-name").addEventListener("input", (e) => {
-  state.bm.name = tidyField(e.target, { max: 14 }); store.set("bm.name", state.bm.name);
+  state.bm.name = e.isComposing ? e.target.value : tidyField(e.target, { max: 14 }); store.set("bm.name", state.bm.name);
   document.querySelectorAll("#bm-fonts .sample").forEach((s) => (s.textContent = stitchedName() || "Emma"));
   clearTimeout(bmTimer); bmTimer = setTimeout(makeBookmark, 350);
 });

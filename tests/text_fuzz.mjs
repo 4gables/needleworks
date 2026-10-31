@@ -9,15 +9,21 @@
 //   unique ignoring case (and accents), never empty, letters the font lacks refused with a reason, every name accounted for;
 // - Save design / Open saved: the words come back as they were; Send by text or email: the share text carries no
 //   control or invisible characters and stays under ~1900 characters;
+// - punctuation (O'Neil, Mary-Kate, Jo., Ann & Bo, Hi!, Ava, Mia) in every lettering font, with and without swashes:
+//   in the ink the strokes are thinned from, no mark is one piece with a letter, and the mark is still there;
 // - layout: with 60-letter words, long names and long refusals, no text runs out of the pieces list, the editor, the
 //   note beside Download, the Download button, the toast, the names dialog or the done dialog, and the page doesn't
 //   scroll sideways (desktop 1413 x 717 and phone 390 x 844).
 // It catches: R8 "font has no ễ ị ằ / А н а" in fonts that have them, Greek/Cyrillic/Hebrew names saved as design.pes,
-// R6 CON.pes and Ł/ø names, R5 emma/Emma in one ZIP, R7 5000 W's, NFD "José" listed as lacking “◌\u0301”, invisible
-// characters splitting a script word or listed as “”, bookmark names in a font without their letters (no warning).
+// R6 CON.pes and Ł/ø names, R5 emma/Emma in one ZIP, R7 5000 W's and O'Neil's apostrophe sewn into the O, NFD "José"
+// listed as lacking a lone accent, invisible characters splitting a script word or listed as “”, bookmark names in a
+// font without their letters (no warning), a "." alone drawn 5880000000000 mm wide, a 60-W word running out of the
+// steps and the toast.
 // Run (from the repo, server and Chrome on your own ports):
 //   .venv/bin/python tests/batch_server.py out/batch 8786 &  node tests/cdp.mjs 9316 start /tmp/tf
-//   node tests/text_fuzz.mjs 9316 8786 [--quick] [--shots DIR]     (~4 min, ~1 min quick; prints "DONE <checks> <problems>")
+//   node tests/text_fuzz.mjs 9316 8786 [--quick] [--shots DIR]
+//     [--only words,initials,letters,fonts,bookmark,names,saved,share,marks,layout]
+//   (about 15 min, quick about 5; prints "DONE <checks> <problems>" and exits 1 on a problem)
 import { FONTS, APPLIQUE_FONTS } from "../js/core/fonts.js";
 import { initials, lackList, lacks, safeName, tidy } from "../js/core/words.js";
 import { FIXED, LONG, VARIANTS, corpus, rng } from "./text_corpus.mjs";
@@ -132,10 +138,12 @@ function lackSaid(where, said, text, family, what) {
   else check(`${where} says nothing is missing`, !/has no /.test(said), `${what}: says ${show(said.slice(said.indexOf("has no")))}`);
 }
 
+// (headless Chrome sometimes doesn't start app.js, and the test server sometimes drops a module: load again)
 async function load(hash) {
-  for (let i = 0; i < 4; i++) {
+  for (let i = 0; i < 6; i++) {
     await cdp("goto", `http://127.0.0.1:${HTTP}/?tf=${Date.now()}${hash}`);
-    if (await ev("document.body.dataset.mode || ''")) break;
+    if (await ev("!!document.body.dataset.mode && !!document.querySelector('[data-start]')")) break;
+    if (i === 5) throw new Error("the page didn't start");
   }
   await ev(PAGE);
 }
@@ -338,13 +346,16 @@ async function marks() {
 const scripted = FIXED;
 const strings = QUICK ? sample(40) : [...new Set([...scripted, ...sample(120)])];
 // --only words,initials,letters,fonts,bookmark,names,saved,share,marks,layout
-const ONLY = process.argv.includes("--only") ? process.argv[process.argv.indexOf("--only") + 1].split(",") : null, on = (k) => !ONLY || ONLY.includes(k);
+const ONLY = process.argv.includes("--only") ? process.argv[process.argv.indexOf("--only") + 1].split(",") : null;
+// (a part that stops with an error is a problem, and the rest still run)
+const on = (k) => !ONLY || ONLY.includes(k);
+async function part(k, f) { if (!on(k)) return; try { await f(); } catch (err) { check(`${k}: runs to the end`, false, String(err.message).slice(0, 300)); } }
 await cdp("viewport", 1413, 717);
-if (on("words")) await field("Words", "words", '#st-edit textarea[data-k="text"]', { lines: 3, max: 60 }, FONTS, strings);
-if (on("initials")) await field("Initials", "monogram", '#st-edit input[data-k="letters"]', { max: 12 }, FONTS, QUICK ? sample(15) : sample(80));
-if (on("letters")) await field("Letters", "initials", '#st-edit input[data-k="text"]', { max: 12 }, APPLIQUE_FONTS, QUICK ? sample(10) : sample(40));
+await part("words", () => field("Words", "words", '#st-edit textarea[data-k="text"]', { lines: 3, max: 60 }, FONTS, strings));
+await part("initials", () => field("Initials", "monogram", '#st-edit input[data-k="letters"]', { max: 12 }, FONTS, QUICK ? sample(15) : sample(80)));
+await part("letters", () => field("Letters", "initials", '#st-edit input[data-k="text"]', { max: 12 }, APPLIQUE_FONTS, QUICK ? sample(10) : sample(40)));
 // every font for the names people reported
-if (on("fonts")) {
+await part("fonts", async () => {
   await field("Words", "words", '#st-edit textarea[data-k="text"]', { lines: 3, max: 60 }, FONTS, []);
   for (const f of QUICK ? FONTS.slice(0, 3) : FONTS) {
     for (const s of ["Jose\u0301", "Анна", "Nguyễn Thị Hằng", "Σοφία", "Em\u200bma", "❤\ufe0f Emma"]) {
@@ -354,11 +365,11 @@ if (on("fonts")) {
       lackSaid("Words editor (every font)", seen.warn, tidy(s, { lines: 3 }), f.family, `${f.name} ${show(s)}`);
     }
   }
-}
-if (on("bookmark")) await bookmark(QUICK ? sample(12) : [...sample(50), "Анна", "Jose\u0301", "CON", "Zoë", "שרה", "❤\ufe0f", ".", "Jo."]);
+});
+await part("bookmark", () => bookmark(QUICK ? sample(12) : [...sample(50), "Анна", "Jose\u0301", "CON", "Zoë", "שרה", "❤\ufe0f", ".", "Jo."]));
 // names batches: corpus names plus names differing only by case or accent
 const batch = (n) => [...VARIANTS, "CON", "con", "nul", "Łukasz", "Søren", "Анна", "Σοφία", "שרה", "李明", "❤\ufe0f", "O'Neil", ".", ...sample(n)];
-if (on("names")) {
+await part("names", async () => {
   await load("#design"); await start("words");
   await names("Words", batch(QUICK ? 6 : 20), "NW Great Vibes");
   await start("monogram");
@@ -366,11 +377,11 @@ if (on("names")) {
   await load("#bookmark");
   await ev(`(async () => { document.querySelector('#bm-fonts [data-f="NW Sacramento"]').click(); await __tf.settle(500); return true; })()`);
   await names("Bookmark", batch(QUICK ? 4 : 10), "NW Sacramento");
-}
-if (on("saved")) await roundTrip(QUICK ? ["Jose\u0301", "Line one\nLine two", "Em\u200bma"] : ["Jose\u0301", "Line one\nLine two\nLine three\nLine four", "\n\nEmma", "Em\u200bma", "O’Neil & Co", "Анна", "❤\ufe0f Emma", "<b>x</b>", "W".repeat(5000), "e\u0301".repeat(40), ...sample(12)]);
-if (on("share")) await share(QUICK ? ["Emma", "Em\u0000ma"] : ["Emma", "Em\u0000ma", "\u202eamme", "W".repeat(60), "❤\ufe0f Emma", ...sample(6)]);
-if (on("marks")) await marks();
-if (on("layout")) { await layout([1413, 717]); await layout([390, 844, "mobile"]); }
+});
+await part("saved", () => roundTrip(QUICK ? ["Jose\u0301", "Line one\nLine two", "Em\u200bma"] : ["Jose\u0301", "Line one\nLine two\nLine three\nLine four", "\n\nEmma", "Em\u200bma", "O’Neil & Co", "Анна", "❤\ufe0f Emma", "<b>x</b>", "W".repeat(5000), "e\u0301".repeat(40), ...sample(12)]));
+await part("share", () => share(QUICK ? ["Emma", "Em\u0000ma"] : ["Emma", "Em\u0000ma", "\u202eamme", "W".repeat(60), "❤\ufe0f Emma", ...sample(6)]));
+await part("marks", marks);
+await part("layout", async () => { await layout([1413, 717]); await layout([390, 844, "mobile"]); });
 await cdp("viewport", 1413, 717);
 
 const kinds = new Map();

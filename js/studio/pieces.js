@@ -1407,9 +1407,11 @@ export function cleanPiece(p) {
       if (k.length) q.kern = Object.fromEntries(k.map(([i, v]) => [i, Math.min(50, Math.max(-30, Math.round(v)))])); else delete q.kern;
     }
   } else if (p.kind === "monogram") {
-    if (typeof q.letters !== "string" || !(q.letters = tidy(q.letters, { max: 12 })).trim()) return null; q.font = font(FONTS, "NW Great Vibes"); q.size = num(q.size, 10, BIG, 30); style();
+    if (typeof q.letters !== "string" || !(q.letters = tidy(q.letters, { max: 12 })).trim()) return null;
+    q.font = font(FONTS, "NW Great Vibes"); q.size = num(q.size, 10, BIG, 30); style();
   } else if (p.kind === "letters") {
-    if (typeof q.text !== "string" || !(q.text = tidy(q.text, { max: 12 })).trim()) return null; q.font = font(APPLIQUE_FONTS, APPLIQUE_FONTS[0].family); q.size = num(q.size, 10, BIG, 60);
+    if (typeof q.text !== "string" || !(q.text = tidy(q.text, { max: 12 })).trim()) return null;
+    q.font = font(APPLIQUE_FONTS, APPLIQUE_FONTS[0].family); q.size = num(q.size, 10, BIG, 60);
   } else if (p.kind === "motif") {
     q.motif = own(MOTIFS, q.motif) ? q.motif : "heart"; q.size = num(q.size, 5, BIG, 40);
     q.style = pick(q.style, ["fill", "outline", "applique"], "fill");

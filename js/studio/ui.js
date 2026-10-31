@@ -3,7 +3,7 @@
 import { buildBookmark, hiddenBlocks } from "../core/bookmark.js";
 import { turnPattern } from "../core/design.js";
 import { APPLIQUE_FONTS, FONTS, loadFont } from "../core/fonts.js";
-import { graphemes, initials, lackList, lacks, tidy, tidyField } from "../core/words.js";
+import { initials, lackList, lacks, tidy, tidyField } from "../core/words.js";
 import { hoop as getHoop } from "../core/machines.js";
 import { nearestBrotherThread } from "../core/threads.js";
 import { designStats, machineThreads, readEmbroidery } from "../core/formats.js";
@@ -295,7 +295,9 @@ export function initStudio(api) {
     let h = "";
     if (p.kind === "text") {
       const lines = p.text.split("\n").length, arc = p.shape === "up" || p.shape === "down";
-      h += `<label class="field"><span>Words</span><textarea data-k="text" rows="${Math.min(3, lines)}" maxlength="60" autocomplete="off" spellcheck="false">\n${api.escapeHtml(p.text)}</textarea></label>`   // (the parser drops one new line after <textarea>: words starting on a new line lost it on every redraw)
+      // (a new line first: the parser drops one straight after <textarea>, so words starting on a new line lost it on
+      // every redraw)
+      h += `<label class="field"><span>Words</span><textarea data-k="text" rows="${Math.min(3, lines)}" maxlength="60" autocomplete="off" spellcheck="false">\n${api.escapeHtml(p.text)}</textarea></label>`
         + `<p class="hint" data-lines-hint aria-live="polite" hidden>Three lines is the most: that new line became a space.</p>`;
       h += `<label class="field"><span>Font</span>${fontSelect(p)}</label>`;
       h += range("size", "Height", 5, 60, p.size);
@@ -1202,6 +1204,8 @@ export function initStudio(api) {
     if (had && !$("st-pieces").contains(document.activeElement)) roving()?.focus();
   };
   const edit = $("st-edit");
+  // (a word an input method has finished composing is tidied then: no input event follows the composition's end)
+  edit.addEventListener("compositionend", (e) => e.target.dispatchEvent(new Event("input", { bubbles: true })));
   edit.addEventListener("input", (e) => {
     const t = e.target, k = t.dataset.k;
     if (t.matches("[data-color-any]")) { change((p) => (p.color = t.value)); return; }
@@ -1220,7 +1224,8 @@ export function initStudio(api) {
     if (!k) return;
     // the words as they'll be stitched (`tidy` in words.js: composed accents, plain spaces, no invisible characters),
     // and a 4th Enter becomes a space, so words typed after it don't run into the line ("Line threeFour")
-    if (k === "text" || k === "letters") {
+    // (not mid-way through a word an input method is still composing: changing the field then breaks it)
+    if ((k === "text" || k === "letters") && !e.isComposing) {
       const many = t.tagName === "TEXTAREA" && t.value.split("\n").length > 3;
       tidyField(t, { lines: t.tagName === "TEXTAREA" ? 3 : 1, max: t.maxLength > 0 ? t.maxLength : Infinity });
       if (many) setTimeout(() => { const hint = edit.querySelector("[data-lines-hint]"); if (hint) hint.hidden = false; });
@@ -1654,7 +1659,7 @@ export function initStudio(api) {
         if (!/[\p{L}\p{N}]/u.test(name)) throw new Error("no letters to stitch");
         const gone = missing(name, p.font);
         if (gone.length) throw new Error(`the font has no ${lackList(gone)}`);
-        if (mono && graphemes(name.replace(/\s+/g, "")).length > 3) throw new Error("a monogram takes 3 initials at most");
+        if (mono && initials(name).length > 3) throw new Error("a monogram takes 3 initials at most");
         const h0 = mono ? 0 : inkHeight(p.text.split("\n").find((l) => l.trim()) || p.text, p.font), h1 = mono ? 0 : inkHeight(name, p.font);
         const size0 = mono ? monoSize(p, name, pieces) : h0 && h1 ? Math.min(60, (p.size * h1) / h0) : p.size;
         // A name the design sews bold stays bold where it can. Shrinking clear of something in 10 % steps, a step that
