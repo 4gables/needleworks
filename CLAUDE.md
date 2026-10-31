@@ -483,8 +483,9 @@ Embroidery-file tools for home machines. Two implementations of the same engine:
   - Facts such as thread colours come from the maker's own published source, cited in the file's header, never from
     another project's table.
   - Drawings are drawn here, without looking at other icon sets.
-  - The one exception is the bundled fonts (OFL/Apache), kept under their own licences in `THIRD_PARTY_NOTICES.md`.
-    A new font follows the same rule: an OFL file with its licence text beside it.
+  - Exception: free assets such as fonts, under a permissive licence (OFL, MIT, Apache). They may be committed as is,
+    each with its licence text beside it and a line in `THIRD_PARTY_NOTICES.md` (today: the bundled fonts).
+    Code, ported code and data tables never fall under this exception.
   - The 2026-10-30 clean-room round replaced `formats.js`/`threads.js` (was a pyembroidery port, spec in
     `docs/formats-spec.md`), `motifs.js` (was Phosphor) and `brandcharts.js` (was Embroidermodder).
 - **PES writer is locked** (2026-10-29, after Ashley's PE900 failure). `writePES`/`writePEC`/`pecEncode` output is
