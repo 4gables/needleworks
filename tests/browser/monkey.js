@@ -322,6 +322,7 @@ async function exec(d) {
       $("st-load").files = dt.files; fire($("st-load"), "change");
       await idle();
       const now = design();
+      if (was) was.pieces = was.pieces.map((p) => { const { id, ...q } = P.cleanPiece({ ...p, id: 1 }) || {}; return q; });   // (missing settings filled in as opening does)
       // (a design that spilled past the field is recentred on opening; otherwise it comes back as it was saved)
       const strip = (x) => x && { ...x, pieces: x.pieces.map(({ x: _x, y: _y, ...p }) => p) };
       if (!same(strip(now), strip(was))) act.extra.push({ kind: "undo", msg: `Open saved changed the design it was saved from: ${diff(strip(was), strip(now))}` });
@@ -435,7 +436,7 @@ async function tryFix(b, undo) {
   }
   const g1 = globalKinds(sc.warn), gx = [...g1].filter((x) => !g0.has(x));
   // (a design too big for the hoop says only that beside Download: what else is wrong shows once it fits)
-  if (gx.length && sc0 === "one") add("fix", `brought new warnings beside Download: ${gx.join(", ")} (“${sc.warn.slice(0, 160)}”)`);
+  if (gx.filter((x) => !(x === "loops" && /^Make it bold/.test(label))).length && sc0 === "one") add("fix", `brought new warnings beside Download: ${gx.join(", ")} (“${sc.warn.slice(0, 160)}”)`);
   const h0 = pairKeys(f0.hits), nh = [...(f1.hits || [])].filter(([a, c]) => !h0.has(`${a.id}:${c.id}`));
   if (nh.length) add("fix", `ran ${nh.map(([a, c]) => `${P.label(a)} into ${P.label(c)}`).join(", ")}`);
   if (f0.fits && !f1.fits && !/two hoopings|anyway/.test(label)) add("fix", `took the design past the hoop`);

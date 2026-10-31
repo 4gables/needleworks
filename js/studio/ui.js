@@ -485,7 +485,7 @@ export function initStudio(api) {
       const cs = ((c) => (c && landing(p, { size: c }).fits === "fits" && !touchingAll({ ...q, size: fittedSizes(pieces.map((o) => (o.id === p.id ? { ...p, size: c } : o))).get(p.id) ?? c }, pieces).length ? c : 0))(lettering || p.kind === "motif" ? clearSize(p, pieces, near) : 0);
       // (no size clears it: a spot in the frame that does, at a size that fits there, else no advice that can't work;
       // "Make it smaller." with no button sat under a monogram across a pouch's zipper)
-      const to = host && !cs ? spotIn(p) : null, zip = host?.border === "zip";
+      const to = host && !cs ? spotIn(p, true) : null, zip = host?.border === "zip";
       const move = to ? btn("data-move", `Move it ${zip ? "below the zipper" : `to the free space in the ${frameName}`}${to.size !== (fs ?? p.size) ? `, ${to.size} mm` : ""}`) : "";
       const full = host ? `There's no free space for it in the ${frameName}: make the frame bigger, or take something out.` : "";
       // (or, at the size it is, to free room beside what it runs into: a motif made bigger over the name under it had
@@ -499,7 +499,7 @@ export function initStudio(api) {
     // edges run together under 30 mm (a 15 mm butterfly's antennae merged, a house's window filled in, and the
     // appliqué fabric piece was 7 mm across). Outline was offered as the way out for a small filled one: it's worse.
     let small = "";
-    const style = p.style || "fill", least = p.kind === "motif" ? { fill: 25, outline: 30, applique: 30 }[style] || 0 : 0;
+    const style = p.style || "fill", least = MOTIF_MIN(p);
     if (least && p.size < least) {
       const l = landing(p, { size: least });
       small = `${style === "fill" ? "Filled this small, the detail closes up." : style === "outline" ? "As an outline this small, the edges run together and the detail fills in." : "As appliqué this small, the fabric piece is tiny to cut and the edges run together."} `
@@ -1398,7 +1398,7 @@ export function initStudio(api) {
     }
     const mt = e.target.closest("[data-move-to]");
     if (mt) { const [x, y] = mt.dataset.moveTo.split(",").map(Number); change((p) => { Object.assign(p, { x, y }); recentre(); }, true); turnToo(mt); editor(); return; }
-    if (e.target.closest("[data-move]")) { const to = spotIn(current()); if (to) change((p) => Object.assign(p, { x: to.x, y: to.y, size: to.size }), true); editor(); return; }
+    if (e.target.closest("[data-move]")) { const to = spotIn(current(), true); if (to) change((p) => Object.assign(p, { x: to.x, y: to.y, size: to.size }), true); editor(); return; }
     if (e.target.closest("[data-follow]")) { change((p) => Object.assign(p, followFrame(p, pieces)), true); editor(); return; }
     const s = e.target.closest("[data-seg] button");
     if (s) {
@@ -1602,6 +1602,7 @@ export function initStudio(api) {
   }
   // made smaller to find it room, a piece must still stitch cleanly (and on a towel, keep its letters open): "Move it
   // to the free space in the circle, 17 mm" closed a towel monogram up
+  const MOTIF_MIN = (q) => (q.kind === "motif" ? { fill: 25, outline: 30, applique: 30 }[q.style || "fill"] || 0 : 0);
   const readable = (q) => !minSize(q) && !(fabric === "towel" && (q.kind === "text" || q.kind === "monogram") && towelMin(q) > q.size * 1.04);
   // x, y that put p in the middle of frame f's front (a zipper pouch's is below the zipper)
   function middleOf(f, p) {
@@ -1611,7 +1612,9 @@ export function initStudio(api) {
   // Where p goes inside the biggest (unturned) frame with room for it, running into nothing: in the middle of the
   // frame's front, or below, above or beside what's in it already, at its own size or smaller (10 % steps, down to
   // `least`). { f, x, y, size }, or null.
-  function spotIn(p) {
+  // (`fix`: as a one-tap fix, no smaller than the piece's style stitches well either: "Move it to the free space, 20.5
+  // mm" made a filled motif too small for its detail; a new piece may go that small, and the editor says so)
+  function spotIn(p, fix = false) {
     const H = (f) => (f.shape === "circle" ? f.w : f.h), others = pieces.filter((o) => o.id !== p.id);
     const frames = others.filter((f) => f.kind === "frame" && !(f.rot || 0)).sort((a, b) => b.w * H(b) - a.w * H(a));
     if (!frames.length) return null;
@@ -1620,7 +1623,7 @@ export function initStudio(api) {
     for (const size of sizes) {
       if (!frames.some((f) => big(size, f.w, H(f)))) continue;
       const q0 = { ...p, size }, fb = pieceBounds({ ...q0, x: 0, y: 0 });
-      if (!fb || (size !== p.size && !readable(q0))) continue;
+      if (!fb || (size !== p.size && (!readable(q0) || (fix && size < MOTIF_MIN(q0) && p.size >= MOTIF_MIN(q0))))) continue;
       const cx = (fb[0] + fb[2]) / 2, cy = (fb[1] + fb[3]) / 2;
       for (const f of frames) {
         // what's in it already (frames too: the quilt block's heart), and the spots round that
