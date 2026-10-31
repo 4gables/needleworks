@@ -28,10 +28,11 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 let ver = 0;
 // load a tab with a fresh module cache; the local server sometimes drops a module request and the page never starts
 async function open(hash, before = "") {
-  for (let i = 0; i < 4; i++) {
-    if (before) { await call("goto", `${base}/manifest.webmanifest`); await ev(`(() => { ${before}; return 1; })()`); }
+  for (let i = 0; i < 8; i++) {
+    if (before) { await call("goto", `${base}/manifest.webmanifest`); await ev(`(() => { ${before}; return 1; })()`).catch(() => 0); }
     await call("goto", `${base}/?v=s${Date.now()}${ver++}${hash}`);
     for (let k = 0; k < 30; k++) { await sleep(300); if (await ev("document.body.dataset.mode && typeof nwTest === 'object' ? 1 : 0").catch(() => 0)) return; }
+    if (i > 2) await sleep(2000);   // (give a busy server a moment)
   }
   throw new Error("the page didn't start");
 }
