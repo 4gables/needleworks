@@ -40,6 +40,7 @@ const FILES = [
   "js/core/machines.js",
   "js/core/raster.js",
   "js/core/text.js",
+  "js/core/words.js",
   "js/core/threads.js",
   "js/doctor.js",
   "js/quality.js",

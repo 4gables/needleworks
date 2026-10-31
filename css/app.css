@@ -672,8 +672,11 @@ input[type="text"], .edit textarea { font: 400 20px/1.3 var(--body); }
 /* (rows were 60 px on a desktop, 112 on a phone: the name button had the picture tab's 52 px "pick" height) */
 .pieces .pick { min-height: 0; }
 @media (pointer: coarse) { .pieces .pick { min-height: 44px; } }
-/* (a word longer than the box, a pasted run of Ws, ran out of the too-big note past the window's edge) */
-.error, #st-big { overflow-wrap: anywhere; }
+/* Text people type (a word longer than the box, a pasted run of Ws) wraps wherever it must rather than running out of
+   its box: it ran out of the too-big note, the steps, the toast and the names dialog past the window's edge
+   (tests/text_fuzz.mjs). `anywhere` where the box is a flex or grid item, whose width a long word would set. */
+body { overflow-wrap: break-word; }
+.error, #st-big, .st-steps, .toast, .names-thumbs, #names-note, #names-bad, #done, #dl-warn, .warn, .hint, .chips { overflow-wrap: anywhere; }
 #st-big { color: var(--warn); font-weight: 700; }
 /* stacked, a message over the preview sits under the hoop rather than over it: the preview grows to hold the chips,
    at least 200 px of hoop and the message (a phone's too-big note left the hoop 35 px tall) */

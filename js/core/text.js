@@ -3,7 +3,7 @@
 // The word is drawn on a canvas, swashes and bridges between unjoined letters are added tangent to
 // real stroke ends, then the ink is thinned to a graph of strokes.
 import { cubic, resample } from "./geom.js";
-import { label, prune, skeletonEdges, skeletonGraph, skeletonize, strokeWidth } from "./raster.js";
+import { distanceTransform, label, prune, skeletonEdges, skeletonGraph, skeletonize, strokeWidth } from "./raster.js";
 
 const PX = 400;
 
@@ -58,6 +58,60 @@ function swash(p0, d, length, xh, ybase, s) {
   return [...leg1, ...leg2.slice(1)];
 }
 
+// marks that aren't letters or digits (punctuation and symbols: ' . - & ...), by their index in the text
+const MARK = /[\p{P}\p{S}]/u;
+// Keeps each mark in `text` (punctuation, symbols) at least `gap` px from every other ink where the font draws it over
+// a letter or closer (the letters drawn without the marks, run by run, at `at(i)`): a mark above the letters (an
+// apostrophe, quotes) moves the least distance up or sideways that does it, one among them (a hyphen, a full stop, &)
+// only sideways; where no move up to 5 gaps (3 sideways) does, its own ink that close is shaved off, if most of the mark is left
+// (else it stays as drawn: sewn into the letter beats gone). Changes `mask`; returns the pixels taken out and put in
+// ({ cut, add }), or null when no mark was too close.
+function apart(ctx, mask, text, at, baseline, mid, gap) {
+  const idx = [...text].length === text.length ? [...text.matchAll(new RegExp(MARK.source, "gu"))].map((m) => m.index) : [];
+  if (!idx.length) return null;
+  const { w, h } = mask, n = w * h, c = canvas(w, h), g = c.getContext("2d", { willReadFrequently: true });
+  g.font = ctx.font; g.fontKerning = "normal"; g.letterSpacing = ctx.letterSpacing || "0px"; g.textBaseline = "alphabetic";
+  // the letters: each run between marks drawn where the whole word puts it
+  let from = 0;
+  for (const i of [...idx, text.length]) { if (i > from) g.fillText(text.slice(from, i), at(from), baseline); from = i + 1; }
+  const letters = maskOf(g, w, h), cut = [], add = [];
+  const deg = (a) => (a * Math.PI) / 180, UP = [-90, -75, -105, -60, -120, -45, -135, -30, -150, -15, -165, 0, 180].map(deg), ACROSS = [0, 180, -10, -170, 10, 170].map(deg);
+  for (const i of idx) {
+    g.clearRect(0, 0, w, h); g.fillText(text[i], at(i), baseline);
+    const m = maskOf(g, w, h), glyph = [], own = new Uint8Array(n);
+    let over = false, ys = 0;
+    for (let k = 0; k < n; k++) {
+      if (!m.data[k] || !mask.data[k]) continue;
+      glyph.push(k); ys += Math.floor(k / w);
+      if (letters.data[k]) over = true; else own[k] = 1;
+    }
+    if (!glyph.length) continue;
+    // distance from every other ink (the letters, a letter the font draws differently beside the mark, other marks)
+    const free = { w, h, data: new Uint8Array(n) };
+    for (let k = 0; k < n; k++) free.data[k] = mask.data[k] && !own[k] ? 0 : 1;
+    const d = distanceTransform(free);
+    if (!over && !glyph.some((k) => own[k] && d[k] <= gap)) continue;
+    // the nearest place for the whole mark, in rings of half a gap
+    const high = ys / glyph.length < baseline - 0.75 * mid;
+    let best = null;
+    for (let r = gap / 2; r <= (high ? 5 : 3) * gap + 1e-9 && best === null; r += gap / 2) {
+      for (const t of high ? UP : ACROSS) {
+        const dx = Math.round(r * Math.cos(t)), dy = Math.round(r * Math.sin(t)), off = dy * w + dx;
+        if (!off) continue;
+        if (glyph.every((k) => { const x = (k % w) + dx, y = Math.floor(k / w) + dy; return x >= 0 && y >= 0 && x < w && y < h && d[k + off] > gap; })) { best = off; break; }
+      }
+    }
+    if (best !== null) {
+      for (let k = 0; k < n; k++) if (own[k]) { mask.data[k] = 0; cut.push(k); }
+      for (const k of glyph) { mask.data[k + best] = 1; add.push(k + best); }
+      continue;
+    }
+    const near = glyph.filter((k) => own[k] && d[k] <= gap);
+    if (near.length <= 0.5 * glyph.length) for (const k of near) { mask.data[k] = 0; cut.push(k); }
+  }
+  return cut.length || add.length ? { cut, add } : null;
+}
+
 // lengths of lead-in / tail are in x-heights. deco "swash" curls off the letters; "dash" is a straight
 // rule on the middle of the x-height, apart from the letters (print fonts, which are also left unjoined).
 // spacing: extra room between letters, as a fraction of the font size (canvas letterSpacing; the joins below bridge
@@ -96,7 +150,14 @@ export function renderWord(text, family, { leadIn = 0, tail = 0, join = true, de
   }
 
   // thinned once: the stroke width, the stroke ends and (when nothing gets drawn on) the lettering's own skeleton
-  const sk = skeletonize(mask), stroke = strokeWidth(mask, sk);
+  let sk = skeletonize(mask);
+  const stroke = strokeWidth(mask, sk);
+  // Punctuation the font draws into a letter (Great Vibes' and Meow Script's apostrophe touch the O of O'Neil, Cookie's
+  // hyphen its y, Italianno's & its neighbours) is moved half a stroke clear of the letters (`apart`), so it's sewn as
+  // a mark of its own: thinned with the letter, it was a spur off it, pruned away or sewn as a lump on it. Letters
+  // never move; words without a mark that close to a letter don't change.
+  const shaved = apart(ctx, mask, text, (i) => ox + shift[i] + probe.measureText(text.slice(0, i + 1)).width - probe.measureText(text[i]).width, baseline, mid, stroke);
+  if (shaved) sk = skeletonize(mask);
   const sw = Math.max(2, Math.round(stroke)), ybase = baseline - stroke / 2;
   const span = [ox + inkL, ox + inkR];
   // stroke ends and letter pieces only matter for joins and swashes (not print letters with dashes)
@@ -148,6 +209,10 @@ export function renderWord(text, family, { leadIn = 0, tail = 0, join = true, de
     if (tail) brush(ctx, [[span[1] + gap, y], [span[1] + gap + tail * xh, y]], sw);
     drew ||= !!(leadIn || tail);
   } else {
+    // (a swash leaves a letter's own stroke: never from a mark at either end, which it was joined onto: Hi! got a tail
+    // curling off the full stop of its !)
+    if (MARK.test(text[0])) leadIn = 0;
+    if (MARK.test(text[text.length - 1])) tail = 0;
     drew ||= !!(leadIn || tail);
     if (leadIn) {
       // first letter's entry stroke; letters without one (E, O) are joined tangentially at their lowest point
@@ -164,7 +229,9 @@ export function renderWord(text, family, { leadIn = 0, tail = 0, join = true, de
     }
   }
   if (!drew) return { mask, stroke, baseline, xh, mid, span, sk };
-  return { mask: maskOf(ctx, w, h), stroke, baseline, xh, mid, span };
+  const out = maskOf(ctx, w, h);
+  if (shaved) { for (const k of shaved.cut) out.data[k] = 0; for (const k of shaved.add) out.data[k] = 1; }   // (kept apart from what was drawn on too)
+  return { mask: out, stroke, baseline, xh, mid, span };
 }
 
 // opts.tongues: keep short dead ends that reach well out of their stroke, a fifth of the x-height or more (`skeletonEdges`;

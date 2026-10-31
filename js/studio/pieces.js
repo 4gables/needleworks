@@ -11,6 +11,7 @@ import { MARGIN } from "../core/machines.js";
 import { bounds, edgeWalk, filletPolygon, followRun, normals, run, satin, zigzag } from "../core/geom.js";
 import { counterPockets, distanceTransform, order } from "../core/raster.js";
 import { strokes } from "../core/text.js";
+import { initials, latin, tidy } from "../core/words.js";
 import { PEC_MATCH, pecThread } from "../core/threads.js";
 import { MOTIFS } from "./motifs.js";
 import { letterOutlines, motifOutlines } from "./outline.js";
@@ -56,7 +57,8 @@ function letters(text, family, size, style = "auto", spacing = 0, kern = null) {
   const all = comps.flatMap((c) => c.flatMap(([p]) => p));
   if (!all.length) return { parts: [], satinW: 0 };
   // (sized by the strokes before their loose ends reached out to the ink's edge, so a word keeps its size)
-  const [x0, y0, x1, y1] = bounds(info.sized), s = size / Math.max(y1 - y0, 1e-9), cx = (x0 + x1) / 2;
+  // (marks alone, with no letter or digit, are sized as the font's x-height: a "." 20 mm tall was 5880000000000 mm wide)
+  const [x0, y0, x1, y1] = bounds(info.sized), s = size / Math.max(y1 - y0, /[\p{L}\p{N}]/u.test(text) ? 1e-9 : info.mid), cx = (x0 + x1) / 2;
   // (print letters: the third entry marks the first stroke of each separate piece after the first, so the needle jumps
   // to it and never stitches across, however close: an i's stem reaching up to its dot was sewn to it)
   const print = !!fontOf(family).print;
@@ -577,7 +579,7 @@ function spaced(p, min = 0.4) {
 // so with 3 letters that smaller size is what blurs first); null for other pieces
 function bulk(p) {
   if (p.kind !== "text" && p.kind !== "monogram") return null;
-  const chars = [...(p.letters || "")];
+  const chars = initials(p.letters);
   return p.kind === "text" ? letters(p.text, p.font, p.size, p.style) : letters(chars[1] || p.letters, p.font, chars.length === 3 ? p.size * 0.68 : p.size, p.style);
 }
 
@@ -585,7 +587,7 @@ function bulk(p) {
 // lines), so what only needs it for a tip or a label can say so a moment later instead of holding up the preview
 export function bulkReady(p) {
   if (p.kind !== "text" && p.kind !== "monogram") return true;
-  const chars = [...(p.letters || "")], text = ((p.kind === "text" ? p.text : chars[1] || p.letters) || "").replace(/\s*\n\s*/g, " ").trim();
+  const chars = initials(p.letters), text = ((p.kind === "text" ? p.text : chars[1] || p.letters) || "").replace(/\s*\n\s*/g, " ").trim();
   return !text || lettering.has(p.font + "\n" + text + "\n0");
 }
 
@@ -642,7 +644,7 @@ export function loopsFill(p) {
 // A monogram's size where every initial passes `test` (each sewn at its own size, as `monogram` sews it): the middle
 // letter alone was measured, so RMK's M said nothing while the R's bowl filled in on a towel. 0 when they all pass.
 function eachInitial(p, test) {
-  const chars = [...(p.letters || "").replace(/\s+/g, "")].slice(0, 3), f = (i) => (chars.length === 3 && i !== 1 ? 0.68 : 1);
+  const chars = initials(p.letters).slice(0, 3), f = (i) => (chars.length === 3 && i !== 1 ? 0.68 : 1);
   return chars.reduce((need, c, i) => {
     const n = test({ kind: "text", text: c, font: p.font, size: p.size * f(i), style: p.style, shape: "straight" });
     return n ? Math.max(need, n > 150 ? n : Math.ceil(n / f(i))) : need;
@@ -1288,7 +1290,7 @@ export function previewLook(steps) {
 export const pieceStitches = (p) => pieceStages(p).flatMap((st) => st.paths);
 
 function monogram(p, fab = "cotton") {
-  const chars = [...(p.letters || "").replace(/\s+/g, "")].slice(0, 3);
+  const chars = initials(p.letters).slice(0, 3);
   if (!chars.length) return [];
   // three letters sit close (the big middle one carries the shape); one or two need air between them
   const big = p.size, small = p.size * 0.68, gap = p.size * (chars.length === 3 ? 0.04 : 0.14);
@@ -1392,8 +1394,8 @@ export function cleanPiece(p) {
   const font = (list, d) => (list.some((f) => f.family === q.font) ? q.font : d);
   const style = () => { if (q.style != null) q.style = pick(q.style, ["auto", "satin", "line"], "auto"); };
   if (p.kind === "text") {
-    if (typeof q.text !== "string" || !q.text.trim()) return null;
-    q.text = q.text.slice(0, 60).split("\n").slice(0, 3).join("\n");
+    // (the words tidied as typing tidies them: tidy in words.js; a saved "\r\n" or a cut emoji came back as stand-ins)
+    if (typeof q.text !== "string" || !(q.text = tidy(q.text, { lines: 3, max: 60 })).trim()) return null;
     q.font = font(FONTS, "NW Great Vibes"); q.size = num(q.size, 5, BIG, 18); style();
     q.shape = pick(q.shape, Object.keys(TEXT_SHAPES), "straight"); q.radius = num(q.radius, 8, 400, 30);
     for (const [k, lo, hi] of [["ry", 8, 400], ["amp", 0, 100], ["waves", 0.5, 6], ["bulge", 0, 100], ["spacing", -10, 40], ["leading", 80, 200]])
@@ -1405,11 +1407,9 @@ export function cleanPiece(p) {
       if (k.length) q.kern = Object.fromEntries(k.map(([i, v]) => [i, Math.min(50, Math.max(-30, Math.round(v)))])); else delete q.kern;
     }
   } else if (p.kind === "monogram") {
-    if (typeof q.letters !== "string" || !q.letters.trim()) return null;
-    q.letters = q.letters.slice(0, 12); q.font = font(FONTS, "NW Great Vibes"); q.size = num(q.size, 10, BIG, 30); style();
+    if (typeof q.letters !== "string" || !(q.letters = tidy(q.letters, { max: 12 })).trim()) return null; q.font = font(FONTS, "NW Great Vibes"); q.size = num(q.size, 10, BIG, 30); style();
   } else if (p.kind === "letters") {
-    if (typeof q.text !== "string" || !q.text.trim()) return null;
-    q.text = q.text.slice(0, 12); q.font = font(APPLIQUE_FONTS, APPLIQUE_FONTS[0].family); q.size = num(q.size, 10, BIG, 60);
+    if (typeof q.text !== "string" || !(q.text = tidy(q.text, { max: 12 })).trim()) return null; q.font = font(APPLIQUE_FONTS, APPLIQUE_FONTS[0].family); q.size = num(q.size, 10, BIG, 60);
   } else if (p.kind === "motif") {
     q.motif = own(MOTIFS, q.motif) ? q.motif : "heart"; q.size = num(q.size, 5, BIG, 40);
     q.style = pick(q.style, ["fill", "outline", "applique"], "fill");
@@ -1544,7 +1544,7 @@ function clearOf(p, frame, size) {
 // It grows only as far as its stitches stay CLEAR of the frame's and everything else's (a Great Vibes L or A grew
 // from 23 to 73 mm, past its circle: the fit measures the letters' box, and a script capital's swash reaches past it).
 export function monoSize(p, letters, pieces) {
-  const count = (t) => [...(t || "").replace(/\s+/g, "")].length, n0 = count(p.letters), n1 = count(letters);
+  const count = (t) => initials(t).length, n0 = count(p.letters), n1 = count(letters);
   if (p.kind !== "monogram" || !n1 || n1 >= n0 || !frameAround(p, pieces.filter((f) => f === p || !(f.rot || 0)))) return p.size;
   const wide = (q) => { const b = pieceBounds({ ...q, x: 0, y: 0 }); return b ? b[2] - b[0] : 0; };
   const at = fittedSizes(pieces).get(p.id) ?? p.size, w0 = wide({ ...p, size: at }), w1 = wide({ ...p, letters, size: at });
@@ -1571,9 +1571,9 @@ export function followFrame(p, pieces) {
 }
 
 // what the design is sewn on: changes the stitches (knit, towel) and the stabilizer advice
-// (letters with no accent to strip spelled out as the file names do: "Monogram Ø" was "Monogram " on the machine)
-const LATIN = { Ł: "L", ł: "l", Ø: "O", ø: "o", ß: "ss", Æ: "AE", æ: "ae", Œ: "OE", œ: "oe", Đ: "D", đ: "d", Ð: "D", ð: "d", Þ: "Th", þ: "th", ı: "i", Ħ: "H", ħ: "h", Ŧ: "T", ŧ: "t", Ŋ: "N", ŋ: "n", ĸ: "k" };
-const ascii = (s) => (s || "").replace(/[ŁłØøßÆæŒœĐđÐðÞþıĦħŦŧŊŋĸ]/g, (c) => LATIN[c]).normalize("NFKD").replace(/[\u0300-\u036f]/g, "").replace(/[‘’]/g, "'").replace(/[“”]/g, "\"").replace(/[^\x20-\x7e]/g, "");
+// (thread names in the file in plain ASCII, spelled as the file names are (`latin` in words.js): "Monogram Ø" was
+// "Monogram " on the machine)
+const ascii = latin;
 
 // (`ready` is what "Have ready" lists and `tip` what "Sewing on" says: one place per fabric, so they agree)
 // (`hoop` starts step 1, `after` is "When it's done": knit said "tear or cut away" though cut-away must be trimmed)

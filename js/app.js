@@ -9,6 +9,7 @@ import { hexToRgb, nearestBrotherThread, pecThread } from "./core/threads.js";
 import { CLOTHS, colorBlocks, draw } from "./render.js";
 import { FINISH, FIRST_STEP, TURN_PIC, cutSVG, nextThread, sewSheet, youHtml } from "./sheet.js";
 import { zip } from "./zip.js";
+import { lackList, lacks, safeName, tidy, tidyField, uniqueName } from "./core/words.js";
 import { blockThreads, checkup, fewerBlocks, fix, heat, landJumps, pauses, shortJumps, sortedChanges } from "./doctor.js";
 import { HARD, MAX_BLOCKS, denseWords, endsEarly, moves, stopWords, verdictOf } from "./quality.js";
 import { BRANDS, chartSpools, exampleSpools, lab, nearestSpool, spools } from "./core/brands.js";
@@ -40,7 +41,7 @@ const state = {
   showHoop: store.get("showHoop", true),
   // hoop turned sideways on screen, per tab; the bookmark reads best lying down
   turn: { picture: false, bookmark: true, design: false, open: false, ...store.get("turn", {}) },
-  bm: { name: store.get("bm.name", "Emma"), font: store.get("bm.font", FONTS[0].family), color: (c => OLD_THREADS[c] || c)(store.get("bm.color", RED)), fabric: store.get("bm.fabric", "pink"), lead: store.get("bm.lead", true), tail: store.get("bm.tail", true), blank: store.get("bm.blank", false) },
+  bm: { name: tidy(store.get("bm.name", "Emma"), { max: 14 }), font: store.get("bm.font", FONTS[0].family), color: (c => OLD_THREADS[c] || c)(store.get("bm.color", RED)), fabric: store.get("bm.fabric", "pink"), lead: store.get("bm.lead", true), tail: store.get("bm.tail", true), blank: store.get("bm.blank", false) },
   brand: BRANDS[store.get("brand", "")] ? store.get("brand", "") : "",   // thread brand for spool numbers ("" = Brother only)
   spools: store.get("spools", {}),   // { brand: [spool numbers owned] }
   pic: { mine: store.get("pic.mine", false), style: "fill", cross: 2.5, file: null, bitmap: null, key: 0, skip: [], colors: 6, size: 100, angle: 45, bg: true, density: store.get("pic.density", "standard"), req: 0, colorsInfo: [], line: "" },
@@ -355,33 +356,6 @@ $("turn").onclick = () => {
   if (state.mode === "picture") makePicture(); else if (state.mode === "design") studio.make(); else setView(state.view);
 };
 
-// USB file names the machine can show: plain ASCII (José -> Jose, Łukasz -> Lukasz, Søren -> Soren, Анна -> Anna,
-// Σοφία -> Sofia, שרה -> Shrh), nothing else, never empty (letters with no accent to strip were dropped: "Zoe_ukasz",
-// "S_ren"; Greek, Cyrillic and Hebrew names all came out design.pes)
-const LATIN = {};
-for (const [from, to] of [
-  ["łøßæœđðþıħŧŋĸ", "l o ss ae oe d d th i h t n k"],
-  // Greek (modern sound values)
-  ["αβγδεζηθικλμνξοπρσςτυφχψω", "a v g d e z i th i k l m n x o p r s s t y f ch ps o"],
-  // Cyrillic: Russian, then Ukrainian, Belarusian, Serbian and Macedonian letters
-  ["абвгдеёжзийклмнопрстуфхцчшщъыьэюя", "a b v g d e e zh z i y k l m n o p r s t u f kh ts ch sh shch - y - e yu ya"],
-  ["іїєґўђјљњћџѓќѕ", "i yi ye g u dj j lj nj c dz gj kj dz"],
-  // Hebrew consonants (vowel points are dropped with the other marks)
-  ["אבגדהוזחטיכךלמםנןסעפףצץקרשת", "a b g d h v z ch t y k k l m m n n s a p f ts ts k r sh t"],
-]) [...from].forEach((c, i) => { LATIN[c] = to.split(" ")[i].replace("-", ""); });
-// (a capital followed by a capital is all capitals: ЖЕНЯ -> ZHENYA; Hebrew has no capitals, so a word starts with one)
-const latin = (t) => t.replace(/./gu, (c, i) => {
-  const l = c.toLowerCase(), r = LATIN[l], up = (d = "") => d !== d.toLowerCase();
-  if (r === undefined) return c;
-  if (l !== c && (up(t[i + 1]) || up(t[i - 1]))) return r.toUpperCase();
-  return l !== c || (/[\u05d0-\u05ea]/.test(c) && !/[\u05d0-\u05ea]/.test(t[i - 1] || "")) ? r.charAt(0).toUpperCase() + r.slice(1) : r;
-});
-function safeName(s, fallback) {
-  const t = latin(latin(s.normalize("NFC")).normalize("NFKD").replace(/[\u0300-\u036f\u0591-\u05c7]/g, "")).replace(/[^A-Za-z0-9_-]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 40);
-  // (Windows can't save a file called CON, PRN, AUX, NUL, COM1-9 or LPT1-9, in any case, with any extension: what's
-  // added after the name here always follows a dot or an underscore, so only the bare word needs one)
-  return /^(con|prn|aux|nul|com[1-9]|lpt[1-9])$/i.test(t) ? t + "_" : t || fallback;
-}
 // a file handed to the browser's downloads
 function saveFile(blob, name) {
   const url = URL.createObjectURL(blob), a = document.createElement("a");
@@ -536,7 +510,7 @@ function downloaded(v, zipped, files = []) {
   // (Design-tab warnings still showing: "Checked" shouldn't read as "all good")
   // (what's said beside Download covers every piece, the editor's note only the one selected: a fleece name that closes
   // up downloaded under a green "Checked" with the editor scrolled away)
-  const warns = state.mode === "design" ? (v.warn ? [v.warn] : [...document.querySelectorAll("#st-edit [data-warn]:not([hidden])")].map((w) => w.textContent.trim())) : [];
+  const warns = state.mode === "design" ? (v.warn ? [v.warn] : [...document.querySelectorAll("#st-edit [data-warn]:not([hidden])")].map((w) => w.textContent.trim())) : state.mode === "bookmark" && v.warn ? [v.warn] : [];
   // (an opened file's own note, such as two designs in one file, said again: not a cut-short file, said above)
   const note = state.mode === "open" && !part ? v.warn : "";
   $("done-warn").hidden = !warns.length && !note; $("done-warn").textContent = warns.length ? "Still to look at: " + warns.join(" ") : note || "";
@@ -687,8 +661,13 @@ function namesFor() {
     catch { return null; }
   }
   if (state.mode !== "bookmark" || state.bm.blank) return null;
-  return { what: state.bm.name, bookmark: true, build: (name) => ({ name, pattern: buildBookmark({ name, family: state.bm.font, color: state.bm.color, hoop: hoop(),
-    lead: state.bm.lead, tail: state.bm.tail, print: !!fontOf(state.bm.font).print }).pattern() }) };
+  // (a letter the font lacks is refused, as in the Design tab: Анна in Sacramento stitched stand-in letters)
+  return { what: state.bm.name, bookmark: true, build: (name) => {
+    const gone = lacks(name, state.bm.font);
+    if (gone.length) throw new Error(`the font has no ${lackList(gone)}`);
+    return { name, pattern: buildBookmark({ name, family: state.bm.font, color: state.bm.color, hoop: hoop(),
+      lead: state.bm.lead, tail: state.bm.tail, print: !!fontOf(state.bm.font).print }).pattern() };
+  } };
 }
 $("names-open").onclick = () => {
   const n = namesFor(); if (!n) return;
@@ -714,7 +693,7 @@ $("names-list").addEventListener("input", () => {
 $("names-make").onclick = async () => {
   const n = namesFor(); if (!n) return;
   // (past 40, the rest are said as left out: the 41st was dropped without a word)
-  const all = [...new Set($("names-list").value.split("\n").map((s) => s.trim()).filter(Boolean))], list = all.slice(0, 40), left = all.slice(40);
+  const all = [...new Set($("names-list").value.split("\n").map((s) => tidy(s).trim()).filter(Boolean))], list = all.slice(0, 40), left = all.slice(40);
   store.set(n.monogram ? "names.initials" : "names", all.join("\n"));
   if (!list.length) { $("names-note").textContent = "Type at least one name."; return; }
   $("names-make").disabled = true; $("names-note").textContent = "Making the files…";
@@ -725,9 +704,8 @@ $("names-make").onclick = async () => {
     try {
       const { pattern, shown, smaller, thin, turned: sideways, runs } = n.build(name, $("names-shrink").checked), bytes = writePES(pattern), check = validatePES(bytes, pattern, hoop());
       if (!check.ok) throw new Error(check.error);
-      let base = safeName(name, "name") + (n.bookmark ? "_bookmark" : ""), f = base, k = 2;
-      while (used.has(f.toLowerCase())) f = `${base}_${k++}`;
-      used.add(f.toLowerCase()); files.push({ name: f + ".pes", bytes, problems: verdictOf(bytes) }); made.push({ name, file: f + ".pes", pattern, shown, smaller, thin, sideways, runs });
+      const f = uniqueName(safeName(name, "name") + (n.bookmark ? "_bookmark" : ""), used);
+      files.push({ name: f + ".pes", bytes, problems: verdictOf(bytes) }); made.push({ name, file: f + ".pes", pattern, shown, smaller, thin, sideways, runs });
     } catch (err) { bad.push(`${name} (${/hoop fits|too big/i.test(err.message) ? "too long for the hoop" : err.message})`); }
   }
   $("names-make").disabled = false;
@@ -1003,7 +981,7 @@ function drawBookmarkUI() {
 const stitchedName = () => state.bm.name.trim();
 function escapeHtml(s) { return s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]); }
 $("bm-name").addEventListener("input", (e) => {
-  state.bm.name = e.target.value; store.set("bm.name", state.bm.name);
+  state.bm.name = tidyField(e.target, { max: 14 }); store.set("bm.name", state.bm.name);
   document.querySelectorAll("#bm-fonts .sample").forEach((s) => (s.textContent = stitchedName() || "Emma"));
   clearTimeout(bmTimer); bmTimer = setTimeout(makeBookmark, 350);
 });
@@ -1029,7 +1007,10 @@ async function makeBookmark() {
       print: !!fontOf(state.bm.font).print, blank });
     const pattern = d.pattern();
     if (seq !== bmSeq || state.mode !== "bookmark") { state.views.bookmark = null; return; }
+    // (letters the font doesn't have, said beside Download as the Design tab says them)
+    const gone = blank ? [] : lacks(name, state.bm.font);
     setView({ pattern, verifyAgainst: pattern, bytes: writePES(pattern), filename: blank ? "blank_bookmark.pes" : `${safeName(state.bm.name, "name")}_bookmark.pes`,
+      warn: gone.length ? `The ${fontOf(state.bm.font).name} font has no ${lackList(gone)}: ${gone.length === 1 ? "it" : "they"} would be stitched in a stand-in letter. Take ${gone.length === 1 ? "it" : "them"} out or pick another font.` : "",
       fabricShapeBlock: 0, hide: hiddenBlocks(blank), fabric: state.bm.fabric,
       sheet: { steps: stepsFor(blank).map((s) => ({ title: s.title, you: s.you, sews: s.machine })), cut: d.cut, ready: [READY], after: [DONE] }, threadLabel: () => `Brother ${nearestBrotherThread(state.bm.color).name} · whole bookmark` });
   } catch (err) {

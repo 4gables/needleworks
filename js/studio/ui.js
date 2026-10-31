@@ -3,7 +3,7 @@
 import { buildBookmark, hiddenBlocks } from "../core/bookmark.js";
 import { turnPattern } from "../core/design.js";
 import { APPLIQUE_FONTS, FONTS, loadFont } from "../core/fonts.js";
-import { glyphs } from "../core/glyphs.js";
+import { graphemes, initials, lackList, lacks, tidy, tidyField } from "../core/words.js";
 import { hoop as getHoop } from "../core/machines.js";
 import { nearestBrotherThread } from "../core/threads.js";
 import { designStats, machineThreads, readEmbroidery } from "../core/formats.js";
@@ -263,19 +263,9 @@ export function initStudio(api) {
     return Object.keys(out).length ? out : undefined;
   }
   // characters the font doesn't have (the browser would draw them in a stand-in font), from the font's own character
-  // map (glyphs.js). Guessing by code point (anything past Latin Extended) said Great Vibes had no ễ or А, which it has;
-  // measuring widths against fallbacks misses CJK (the system's fallback chain changes with the font in front of it).
-  const probe = document.createElement("canvas").getContext("2d");
-  function missing(text, family) {
-    const has = family && glyphs(family);
-    if (!has) return [];
-    return [...new Set(text.replace(/\s/g, ""))].filter((ch) => {
-      const cp = ch.codePointAt(0);
-      // (invisible joiners and emoji variation selectors aren't letters: "❤️" listed U+FE0F as an empty “”)
-      if ((cp >= 0xfe00 && cp <= 0xfe0f) || (cp >= 0x200b && cp <= 0x200d) || cp >= 0xe0000) return false;
-      return !has.has(cp);
-    });
-  }
+  // map (`lacks` in words.js, also the bookmark's). Guessing by code point (anything past Latin Extended) said Great
+  // Vibes had no ễ or А, which it has; measuring widths against fallbacks misses CJK.
+  const missing = lacks, probe = document.createElement("canvas").getContext("2d");
   // mm with inches beside them (US sewists think in inches)
   const own = (o, k) => typeof k === "string" && Object.hasOwn(o, k);
   const shown = (v, unit) => (unit === "mm" ? `${v} mm · ${(v / 25.4).toFixed(2)} in` : `${v} ${unit}`);
@@ -305,7 +295,7 @@ export function initStudio(api) {
     let h = "";
     if (p.kind === "text") {
       const lines = p.text.split("\n").length, arc = p.shape === "up" || p.shape === "down";
-      h += `<label class="field"><span>Words</span><textarea data-k="text" rows="${Math.min(3, lines)}" maxlength="60" autocomplete="off" spellcheck="false">${api.escapeHtml(p.text)}</textarea></label>`
+      h += `<label class="field"><span>Words</span><textarea data-k="text" rows="${Math.min(3, lines)}" maxlength="60" autocomplete="off" spellcheck="false">\n${api.escapeHtml(p.text)}</textarea></label>`   // (the parser drops one new line after <textarea>: words starting on a new line lost it on every redraw)
         + `<p class="hint" data-lines-hint aria-live="polite" hidden>Three lines is the most: that new line became a space.</p>`;
       h += `<label class="field"><span>Font</span>${fontSelect(p)}</label>`;
       h += range("size", "Height", 5, 60, p.size);
@@ -506,7 +496,7 @@ export function initStudio(api) {
     // a name typed as initials ("Max" sewed as a first/LAST/middle monogram, "MaX" with a big a): as lettering instead
     let named = "";
     if (p.kind === "monogram") {
-      const t = [...p.letters.replace(/\s+/g, "")], word = t.join("");
+      const t = initials(p.letters), word = t.join("");
       if (t.length > 3 || /^\p{Lu}\p{Ll}{2,}$/u.test(word))
         named = (t.length > 3 ? `A monogram has 3 initials at most, so only “${api.escapeHtml(t.slice(0, 3).join(""))}” would be sewn.`
           : `“${api.escapeHtml(word)}” looks like a name: a monogram sews initials (first, LAST, middle) with the middle one biggest, so it wouldn't read as “${api.escapeHtml(word)}”.`)
@@ -526,7 +516,7 @@ export function initStudio(api) {
     const oneLine = rows > 1 && p.shape !== "straight" ? `${TEXT_SHAPES[p.shape]} sews the words on one line, so the ${rows} lines are joined into one. ${btn(`data-seg-set="shape:straight"`, "Make it straight")} to keep the lines.` : "";
     // (said plainly, with a one-tap fix where there is one)
     w.innerHTML = [named, oneLine, under, same, kerned, small,
-      gone.length ? `This font has no ${gone.map((c) => `“${api.escapeHtml(c)}”`).join(" ")}: ${gone.length === 1 ? "it" : "they"} would be stitched in a stand-in letter. Take ${gone.length === 1 ? "it" : "them"} out or try another font.` : "",
+      gone.length ? `This font has no ${api.escapeHtml(lackList(gone))}: ${gone.length === 1 ? "it" : "they"} would be stitched in a stand-in letter. Take ${gone.length === 1 ? "it" : "them"} out or try another font.` : "",
       size, arc, hit,
       !m && !towel && fabric !== "towel" && fineLine(q) ? `At this size it sews as a thin line. <button type="button" class="link" data-seg-set="style:satin">Make it bold</button> (small loops may fill in).` : "",
       !m && !towel && fabric !== "towel" && fills ? `At this size the small loops (the holes in letters like b and e) fill in. <button type="button" class="link" data-seg-set="style:line">Thin line</button> keeps them open${fillsAt?.fits ? `, or ${btn(`data-size="${fills}"`, `make it ${fills} mm`, fillsAt)}` : ""}.` : "",
@@ -765,7 +755,7 @@ export function initStudio(api) {
       api.setView(design.pattern(), `${api.safeName(firstWords(), "design")}.pes`, {
         // (every pair named: twelve pieces piled on one spot said only that one ran into another)
         ...look, warn: [hits.length ? `${hits.slice(0, 4).map(([a, b]) => `${label(a)} runs into ${label(b)}`).join("; ")}${hits.length > 4 ? `; and ${hits.length - 4} more` : ""}: select ${hits.length > 1 ? "each" : "it"} for a fix before you stitch.` : "",
-          lacking ? `The font of ${label(lacking[0])} has no ${lacking[1].map((c) => `“${c}”`).join(" ")}: ${lacking[1].length === 1 ? "it" : "they"} would be stitched in a stand-in letter.` : "",
+          lacking ? `The font of ${label(lacking[0])} has no ${lackList(lacking[1])}: ${lacking[1].length === 1 ? "it" : "they"} would be stitched in a stand-in letter.` : "",
           covered ? `${label(covered)} sews before the patch that covers it: select it to sew it after.` : "",
           lost ? `${label(lost)} is nearly the same thread as the patch under it, so it won't show.` : "",
           unread.length ? `${unread.join("; ")}: select ${unread.length > 1 ? "each" : "it"} for a fix before you stitch.` : ""].filter(Boolean).join(" "),
@@ -1228,10 +1218,12 @@ export function initStudio(api) {
       return;
     }
     if (!k) return;
-    if (k === "text" && t.tagName === "TEXTAREA" && t.value.split("\n").length > 3) {
-      // (a 4th Enter becomes a space, so words typed after it don't run into the line: "Line threeFour")
-      const at = t.selectionStart, ls = t.value.split("\n"); t.value = [...ls.slice(0, 2), ls.slice(2).join(" ")].join("\n"); t.setSelectionRange(at, at);
-      setTimeout(() => { const hint = edit.querySelector("[data-lines-hint]"); if (hint) hint.hidden = false; });
+    // the words as they'll be stitched (`tidy` in words.js: composed accents, plain spaces, no invisible characters),
+    // and a 4th Enter becomes a space, so words typed after it don't run into the line ("Line threeFour")
+    if (k === "text" || k === "letters") {
+      const many = t.tagName === "TEXTAREA" && t.value.split("\n").length > 3;
+      tidyField(t, { lines: t.tagName === "TEXTAREA" ? 3 : 1, max: t.maxLength > 0 ? t.maxLength : Infinity });
+      if (many) setTimeout(() => { const hint = edit.querySelector("[data-lines-hint]"); if (hint) hint.hidden = false; });
     }
     if (t.type === "range") t.nextElementSibling.textContent = shown(t.value, t.dataset.unit);
     change((p) => {
@@ -1432,7 +1424,8 @@ export function initStudio(api) {
       const pairs = data.pieces.map((p) => [p, cleanPiece(p)]), loaded = pairs.map(([, q]) => q).filter(Boolean);
       if (!loaded.length) throw bad();
       // (words past the editor's 60 letters, or initials past 12, are cut: said so plainly)
-      const cut = pairs.some(([p, q]) => q && typeof p.text === "string" && typeof q.text === "string" && q.text.length < p.text.length) || pairs.some(([p, q]) => q?.letters && p.letters.length > q.letters.length);
+      // (measured on the words tidied, as they're kept: accents typed apart, which join up, aren't letters cut)
+      const cut = pairs.some(([p, q]) => q && typeof p.text === "string" && typeof q.text === "string" && q.text.length < tidy(p.text, { lines: 3 }).length) || pairs.some(([p, q]) => q?.letters && tidy(p.letters).length > q.letters.length);
       // (a setting it had that came out different; ones it lacked and got filled in aren't counted)
       const changed = pairs.filter(([p, q]) => q && Object.keys(p).some((k) => k !== "id" && k !== "text" && k !== "letters" && JSON.stringify(p[k]) !== JSON.stringify(q[k]))).length;
       remember(); nextId = 1; pieces = loaded.map((p) => ({ ...p, id: nextId++ })); sel = pieces[pieces.length - 1].id;
@@ -1660,8 +1653,8 @@ export function initStudio(api) {
       build: (name, shrink = false) => {
         if (!/[\p{L}\p{N}]/u.test(name)) throw new Error("no letters to stitch");
         const gone = missing(name, p.font);
-        if (gone.length) throw new Error(`the font has no ${gone.map((c) => `“${c}”`).join(" ")}`);
-        if (mono && [...name.replace(/\s+/g, "")].length > 3) throw new Error("a monogram takes 3 initials at most");
+        if (gone.length) throw new Error(`the font has no ${lackList(gone)}`);
+        if (mono && graphemes(name.replace(/\s+/g, "")).length > 3) throw new Error("a monogram takes 3 initials at most");
         const h0 = mono ? 0 : inkHeight(p.text.split("\n").find((l) => l.trim()) || p.text, p.font), h1 = mono ? 0 : inkHeight(name, p.font);
         const size0 = mono ? monoSize(p, name, pieces) : h0 && h1 ? Math.min(60, (p.size * h1) / h0) : p.size;
         // A name the design sews bold stays bold where it can. Shrinking clear of something in 10 % steps, a step that
