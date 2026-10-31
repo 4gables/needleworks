@@ -1,7 +1,23 @@
 // Spool numbers in the thread brand people actually own: the nearest spool to a colour, overall or among the ones
 // they've listed. Labels only; the PES file always carries Brother PEC colours.
-import { BRAND_CHARTS } from "./brandcharts.js";
-import { hexToRgb } from "./threads.js";
+import { BRAND_CHARTS as OTHERS } from "./brandcharts.js";
+import { PEC_THREADS, hexToRgb, rgbToHex } from "./threads.js";
+
+// Brother Embroidery thread: the numbers on the spools for the 61 colours the machine names (Brother's own list,
+// support.brother.com Artspira thread names), coloured as the PEC palette, so "Brother 800 Red" is exactly the
+// machine's Red. Most PE900 owners' spools are these.
+const BROTHER_NUM = { "Prussian Blue": "007", Blue: "405", "Teal Green": "534", "Cornflower Blue": "070", Red: "800", "Reddish Brown": "337",
+  Magenta: "620", "Light Lilac": "810", Lilac: "612", "Mint Green": "502", "Deep Gold": "214", Orange: "208", Yellow: "205", "Lime Green": "513",
+  Brass: "328", Silver: "005", "Russet Brown": "330", "Cream Brown": "010", Pewter: "704", Black: "900", Ultramarine: "406", "Royal Purple": "869",
+  "Dark Gray": "707", "Dark Brown": "058", "Deep Rose": "086", "Light Brown": "323", "Salmon Pink": "079", Vermilion: "030", White: "001",
+  Violet: "613", Seacrest: "542", "Sky Blue": "019", Pumpkin: "126", "Cream Yellow": "812", Khaki: "348", "Clay Brown": "339", "Leaf Green": "509",
+  "Peacock Blue": "415", Gray: "817", "Warm Gray": "399", "Dark Olive": "517", "Flesh Pink": "124", Pink: "085", "Deep Green": "808",
+  Lavender: "804", "Wisteria Violet": "607", Beige: "843", Carmine: "807", "Amber Red": "333", "Olive Green": "519", "Dark Fuchsia": "107",
+  Tangerine: "209", "Light Blue": "017", "Emerald Green": "507", Purple: "614", "Moss Green": "515", "Harvest Gold": "206",
+  "Electric Blue": "420", "Lemon Yellow": "202", "Fresh Green": "027" };
+const seen = new Set();
+const BRAND_CHARTS = { brother: { name: "Brother", rows: PEC_THREADS.slice(1, 62).filter((t) => BROTHER_NUM[t[0]] && !seen.has(t[0]) && seen.add(t[0]))
+  .map(([name, r, g, b]) => `${rgbToHex([r, g, b]).slice(1)}|${BROTHER_NUM[name]}|${name}`).join(";") }, ...OTHERS };
 
 // CIELAB (D65): the brand charts' approximate darks are told apart by eye, not by the red-mean distance the machine
 // uses (that called black "Ivy", a dark green, in Robison-Anton)

@@ -1,7 +1,7 @@
 // Design tab UI: start from a card, edit pieces in a short list, drag them on the preview.
 import { buildBookmark, hiddenBlocks } from "../core/bookmark.js";
 import { turnPattern } from "../core/design.js";
-import { APPLIQUE_FONTS, FONTS } from "../core/fonts.js";
+import { APPLIQUE_FONTS, FONTS, loadFont } from "../core/fonts.js";
 import { hoop as getHoop } from "../core/machines.js";
 import { nearestBrotherThread } from "../core/threads.js";
 import { readEmbroidery } from "../core/formats.js";
@@ -16,8 +16,6 @@ const SCRIPT = "NW Great Vibes", PRINT = "NW Josefin Sans", ROUND = "NW Quicksan
 const RED = "#ed171f", NAVY = "#0e1f7c", BLACK = "#000000";
 const PINK = "#f993bc";
 export const TURNED = "The hoop is turned: the machine shows this design on its side. Hoop the fabric a quarter turn round, with the top of the design toward the right of the hoop (as the sew sheet shows).";
-// fabric buttons in the words people use (a T-shirt is a knit; fleece and minky sew like towel)
-const FABRIC_NAMES = { knit: "Knit / T-shirt", towel: "Towel / fleece" };
 const SMALL_TIP = "Small letters come out crisper with 60 wt thread and a 65/9 or 70/10 needle, and with the machine slowed down.";
 const COLORS = [RED, NAVY, "#00673e", "#770176", "#e8a900", "#f993bc", BLACK, "#f0f0f0"];
 
@@ -155,7 +153,7 @@ export function initStudio(api) {
     if (thumbed || !$("st-cards").offsetWidth) return;
     thumbed = true;
     const fonts = [...new Set(STARTERS.flatMap((s) => (s.make ? s.make() : [])).filter((p) => p.font).map((p) => p.font).concat(SCRIPT))];
-    await Promise.all(fonts.map((f) => document.fonts.load(`40px "${f}"`)));
+    await Promise.allSettled(fonts.map(loadFont));
     for (const s of STARTERS) {
       await idle();
       const c = $("st-cards").querySelector(`[data-start="${s.id}"] canvas`);
@@ -172,13 +170,13 @@ export function initStudio(api) {
   }
   function list() {
     $("st-pieces").innerHTML = pieces.map((p, i) => `<li data-id="${p.id}" aria-selected="${p.id === sel}">
-      <button type="button" class="pick" data-id="${p.id}" ${p.id === sel ? `aria-current="true"` : ""}><i style="background:${p.color}"></i><span class="nm">${api.escapeHtml(label(p))}</span></button>
+      <button type="button" class="pick" data-id="${p.id}" title="${api.escapeHtml(label(p))}" ${p.id === sel ? `aria-current="true"` : ""}><i style="background:${p.color}"></i><span class="nm">${api.escapeHtml(label(p))}</span></button>
       <span class="ops">
-        <button type="button" data-op="up" data-id="${p.id}" aria-label="Sew earlier: ${api.escapeHtml(label(p))}" ${i ? "" : "disabled"}>↑</button>
-        <button type="button" data-op="down" data-id="${p.id}" aria-label="Sew later: ${api.escapeHtml(label(p))}" ${i < pieces.length - 1 ? "" : "disabled"}>↓</button>
-        <button type="button" data-op="dup" data-id="${p.id}" aria-label="Duplicate: ${api.escapeHtml(label(p))}" title="Duplicate">⧉</button>
+        <button type="button" data-op="up" data-id="${p.id}" aria-label="Sew earlier: ${api.escapeHtml(label(p))}" title="Sew earlier" ${i ? "" : "disabled"}>↑</button>
+        <button type="button" data-op="down" data-id="${p.id}" aria-label="Sew later: ${api.escapeHtml(label(p))}" title="Sew later" ${i < pieces.length - 1 ? "" : "disabled"}>↓</button>
+        <button type="button" data-op="dup" data-id="${p.id}" aria-label="Duplicate: ${api.escapeHtml(label(p))}" title="Make a copy (or copy and paste)">⧉</button>
         <button type="button" data-op="flip" data-id="${p.id}" aria-label="Mirror: ${api.escapeHtml(label(p))}" title="Mirror (flip left to right)" aria-pressed="${!!p.flip}">⇋</button>
-        <button type="button" data-op="del" data-id="${p.id}" aria-label="Remove: ${api.escapeHtml(label(p))}">✕</button>
+        <button type="button" data-op="del" data-id="${p.id}" aria-label="Remove: ${api.escapeHtml(label(p))}" title="Remove">✕</button>
       </span></li>`).join("");
   }
   const swatches = (p, k = "color") => COLORS.map((c) => `<button type="button" data-${k}="${c}" style="background:${c}" aria-pressed="${c === p[k]}" title="Brother ${nearestBrotherThread(c).name}"></button>`).join("")
@@ -217,6 +215,8 @@ export function initStudio(api) {
     if (!family) return [];
     return [...new Set(text.replace(/\s/g, ""))].filter((ch) => {
       const cp = ch.codePointAt(0);
+      // (invisible joiners and emoji variation selectors aren't letters: "❤️" listed U+FE0F as an empty “”)
+      if ((cp >= 0xfe00 && cp <= 0xfe0f) || (cp >= 0x200b && cp <= 0x200d) || cp >= 0xe0000) return false;
       if (cp > 0x24f && !(cp >= 0x2100 && cp <= 0x214f)) return !(cp >= 0x2000 && cp <= 0x20cf);
       return width(`40px "${family}", monospace`, ch) === width("40px monospace", ch) && width(`40px "${family}", serif`, ch) === width("40px serif", ch);
     });
@@ -226,23 +226,26 @@ export function initStudio(api) {
   const seg = (k, opts, v) => `<div class="seg" data-seg="${k}">${Object.entries(opts).map(([key, name]) => `<button type="button" data-v="${key}" aria-pressed="${key === v}">${name}</button>`).join("")}</div>`;
 
   // satin and fine line, said plainly: bold columns or a thin outline of the letter
-  const STITCHES = { auto: "Stitch: automatic", satin: "Bold", line: "Thin line" };
+  const STITCHES = { auto: "Automatic", satin: "Bold", line: "Thin line" };
+  // the automatic chip says what it'll do here ("Stitch: automatic" was lit while the note said it sews as a thin line)
+  const autoName = (p) => { const fs = fittedSizes(pieces).get(p.id); return fabric === "towel" || !fineLine({ ...p, size: fs ?? p.size, style: "auto" }) ? "Automatic: bold" : "Automatic: thin line"; };
+  const stitchSeg = (p) => seg("style", { ...STITCHES, auto: autoName(p) }, p.style || "auto");
   let moreOpen = false;
   $("st-edit").addEventListener("toggle", (e) => { if (e.target.matches("details.more")) moreOpen = e.target.open; }, true);
   const editor = () => api.keepFocus($("st-edit"), drawEditor);
   function drawEditor() {
     const p = current();
-    $("st-center").hidden = !p;
+    $("st-center").hidden = !p; $("st-drag-hint").hidden = !p;   // (no piece, nothing to drag)
     if (!p) { $("st-edit").innerHTML = `<p class="hint">Pick a piece above, or add one.</p>`; return; }
     let h = "";
     if (p.kind === "text") {
       const lines = p.text.split("\n").length, arc = p.shape === "up" || p.shape === "down";
-      h += `<label class="field"><span>Words</span><textarea data-k="text" rows="${Math.min(3, lines)}" maxlength="60" style="font-family:'${p.font}', sans-serif" autocomplete="off" spellcheck="false">${api.escapeHtml(p.text)}</textarea></label>`;
+      h += `<label class="field"><span>Words</span><textarea data-k="text" rows="${Math.min(3, lines)}" maxlength="60" autocomplete="off" spellcheck="false">${api.escapeHtml(p.text)}</textarea></label>`;
       h += `<label class="field"><span>Font</span>${fontSelect(p)}</label>`;
       h += range("size", "Height", 5, 60, p.size);
       h += `<p class="hint">About 10 mm for a pocket or cuff, 20-30 mm for a pillow or blanket corner, 30-50 mm for a towel.</p>`;
       h += seg("shape", TEXT_SHAPES, p.shape);
-      h += seg("style", STITCHES, p.style || "auto");
+      h += stitchSeg(p);
       h += `<label class="field"><span>Motif either side</span><select data-k="deco"><option value="">None</option>${Object.entries(MOTIFS).map(([k, m]) => `<option value="${k}" ${k === p.deco ? "selected" : ""}>${m.name}</option>`).join("")}</select></label>`;   // (a heart or star either side was hidden under More)
       if (arc) {
         h += range("radius", "Curve width", 15, 80, p.radius);
@@ -259,11 +262,11 @@ export function initStudio(api) {
         + (p.shape === "straight" && lines > 1 ? seg("align", { left: "Left", center: "Centre", right: "Right" }, p.align || "center") + range("leading", "Line spacing", 80, 200, p.leading ?? 130, "%", 5) : "");
       h += `<details class="more" ${moreOpen ? "open" : ""}><summary>More</summary>${more}</details>`;
     } else if (p.kind === "monogram") {
-      h += `<label class="field"><span>Initials</span><input type="text" data-k="letters" style="font-family:'${p.font}', sans-serif" value="${api.escapeHtml(p.letters)}" maxlength="3" autocomplete="off" spellcheck="false"></label>`;
+      h += `<label class="field"><span>Initials</span><input type="text" data-k="letters" value="${api.escapeHtml(p.letters)}" maxlength="3" autocomplete="off" spellcheck="false"></label>`;
       h += `<p class="hint">Traditional order: first, LAST, middle. The middle letter is stitched biggest.</p>`;
       h += `<label class="field"><span>Font</span>${fontSelect(p)}</label>`;
       h += range("size", "Height", 15, 90, p.size);
-      h += seg("style", STITCHES, p.style || "auto");
+      h += stitchSeg(p);
     } else if (p.kind === "motif") {
       h += `<div class="field"><span>Motif</span><div class="motifs" role="group" aria-label="Motif">${Object.entries(MOTIFS).map(([k, m]) => `<button type="button" data-motif="${k}" aria-pressed="${k === p.motif}" title="${m.name}"><svg viewBox="0 0 256 256" aria-hidden="true"><path d="${m.d}"/></svg></button>`).join("")}</div></div>`;
       h += range("size", "Size", 10, 120, p.size);
@@ -271,7 +274,7 @@ export function initStudio(api) {
       if ((p.style || "fill") === "fill" && p.size < 25) h += `<p class="hint warn">Filled this small, the detail closes up. Make it 25 mm or more, or choose Outline.</p>`;
       if (p.style === "applique") h += `<p class="hint">Sews an outline, pauses for you to lay fabric on and trim it, then satins the edges. 50 mm or bigger cuts most easily.</p>`;
     } else if (p.kind === "letters") {
-      h += `<label class="field"><span>Letters</span><input type="text" data-k="text" style="font-family:'${p.font}', sans-serif" value="${api.escapeHtml(p.text)}" maxlength="12" autocomplete="off" spellcheck="false"></label>`;
+      h += `<label class="field"><span>Letters</span><input type="text" data-k="text" value="${api.escapeHtml(p.text)}" maxlength="12" autocomplete="off" spellcheck="false"></label>`;
       h += `<label class="field"><span>Font</span><select data-k="font">${APPLIQUE_FONTS.map((f) => `<option value="${f.family}" ${f.family === p.font ? "selected" : ""}>${f.name} (${f.note})</option>`).join("")}</select></label>`;
       h += range("size", "Height", 20, 120, p.size);
       h += `<p class="hint">Cut from fabric: the machine sews an outline, pauses for you to lay fabric on and trim it, then satins the edges. Letters 30 mm or taller cut and sew most easily.</p>`;
@@ -306,7 +309,7 @@ export function initStudio(api) {
   }
   function ui() { api.keepFocus($("panel-design"), () => { list(); editor(); sewnOn(); }); }
   function sewnOn() {
-    $("st-fabric").innerHTML = Object.entries(FABRICS).map(([k, f]) => `<button type="button" data-fab="${k}" aria-pressed="${k === fabric}">${FABRIC_NAMES[k] || f.name}</button>`).join("");
+    $("st-fabric").innerHTML = Object.entries(FABRICS).map(([k, f]) => `<button type="button" data-fab="${k}" aria-pressed="${k === fabric}">${f.name}</button>`).join("");
     $("st-baste").checked = baste; $("st-fabric-tip").textContent = FABRICS[fabric].tip; $("st-fabric-name").textContent = FABRICS[fabric].name + (baste ? ", basted" : "");
     // (numeric keys come first in an object, so the order is spelled out)
     $("st-thread").innerHTML = `<span class="chips-label">Thread</span>` + ["auto", "30", "40", "60"].map((k) => `<button type="button" data-thread="${k}" aria-pressed="${k === thread}">${THREADS[k].name}</button>`).join("");
@@ -318,7 +321,7 @@ export function initStudio(api) {
   // too-small lettering, said plainly (updated in place so typing keeps focus)
   async function warn() {
     const w = $("st-edit").querySelector("[data-warn]"), p = current(); if (!w || !p) return;
-    if (p.font) await document.fonts.load(`40px "${p.font}"`);
+    if (p.font) try { await loadFont(p.font); } catch { return; }
     const fit = $("st-edit").querySelector("[data-fit]"), fs = fittedSizes(pieces).get(p.id);
     if (fit) { fit.hidden = !fs; fit.textContent = fs ? `Shrunk to ${fs} mm so it fits inside the frame.` : ""; }
     const q = fs ? { ...p, size: fs } : p, m = minSize(q), room = archRoom(p), near = touching(q, pieces);
@@ -327,14 +330,16 @@ export function initStudio(api) {
     w.innerHTML = [
       gone.length ? `This font has no ${gone.map((c) => `“${api.escapeHtml(c)}”`).join(" ")}: ${gone.length === 1 ? "it" : "they"} would be stitched in a stand-in letter. Take ${gone.length === 1 ? "it" : "them"} out or try another font.` : "",
       m ? `These letters are too small to stitch cleanly. <button type="button" class="link" data-size="${m}">Make it ${m} mm</button>` : "",
-      towel > (p.kind === "monogram" ? 90 : 60) ? `On a towel these letters close up (the loops need a wide satin), even at the biggest size. Try a bolder font, like Yellowtail or Satisfy.`
-        : towel ? `On a towel these letters close up (the loops need a wide satin). Make the height ${towel} mm or more, or pick a bolder font. <button type="button" class="link" data-size="${towel}">Make it ${towel} mm</button>` : "",
+      towel > (p.kind === "monogram" ? 90 : 60) ? `On a towel or fleece these letters close up (the pile needs a wide satin), even at the biggest size. Try a bolder font, like Yellowtail or Satisfy.`
+        : towel ? `On a towel or fleece these letters close up (the pile needs a wide satin). Make the height ${towel} mm or more, or pick a bolder font. <button type="button" class="link" data-size="${towel}">Make it ${towel} mm</button>` : "",
       room ? `The words wrap most of the way round the curve${room.full ? " and run into themselves" : ""}. <button type="button" class="link" data-room>Widen the curve</button>` : "",
       !room && archTight(p) ? `The curve is too tight for letters this tall: they'd bunch up. ${archFit(p) ? `<button type="button" class="link" data-room>Widen the curve</button> or make the letters smaller.` : "Make the curve bigger or the letters smaller."}` : "",
       near ? `This runs into ${api.escapeHtml(label(near))}. Drag it apart or make it smaller.` : "",
       !m && !towel && fabric !== "towel" && fineLine(q) ? `At this size it sews as a thin line. <button type="button" class="link" data-seg-set="style:satin">Make it bold</button> (small loops may fill in).` : "",
     ].filter(Boolean).map((t) => `<span>${t}</span>`).join("<br>");
     w.hidden = !w.innerHTML;
+    const auto = $("st-edit").querySelector('[data-seg="style"] [data-v="auto"]');
+    if (auto) auto.textContent = autoName(p);
   }
 
   function change(fn, now = false) {
@@ -350,7 +355,7 @@ export function initStudio(api) {
     api.showError("");
     try {
       const fonts = [...new Set(pieces.filter((p) => p.font).map((p) => p.font))];
-      await Promise.all(fonts.map((f) => document.fonts.load(`40px "${f}"`)));
+      await Promise.all(fonts.map(loadFont));
       if (s !== seq) return;
       let composed;
       try { composed = compose(pieces, api.hoop(), { fabric, baste, thread, dragging }); }
@@ -358,24 +363,33 @@ export function initStudio(api) {
       const { design, steps, after, before, tip } = composed;
       if (s !== seq) return;
       const fit = fittedSizes(pieces), small = thread !== "60" && pieces.some((p) => smallText(fit.has(p.id) ? { ...p, size: fit.get(p.id) } : p));
-      // (what the fabric needs goes first: a towel's topper was only in the folded "Sewing on")
-      const names = [...new Set(steps.map((st) => nearestBrotherThread(st.color).name))];
-      const ready = [FABRICS[fabric].ready || "Tear-away stabilizer (cut-away for anything stretchy).", ...before,
-        steps.some((st) => st.fabric && st.cut) ? "A piece of fabric for each appliqué shape, 1 in bigger than its outline, and small curved scissors (iron-on fusible web on the back stops cotton fraying)." : "",
-        `Thread: ${names.map((n) => "Brother " + n).join(", ")}.`].filter(Boolean), done = [...after, FABRICS[fabric].after].filter(Boolean);
+      // (what the fabric needs goes first: a towel's topper was only in the folded "Sewing on"; the threads by the
+      // spools they own when they've listed them, not the Brother names)
+      const names = [...new Set(steps.map((st) => api.ownSpool(st.color) || "Brother " + nearestBrotherThread(st.color).name))];
+      // (plain cotton's "Tear-away stabilizer." is left out when a project's own list already has it)
+      const ready = [fabric === "cotton" && before.some((b) => /stabilizer/i.test(b)) ? "" : FABRICS[fabric].ready, ...before,
+        appliqued() ? "A piece of fabric for each appliqué shape, 1 in bigger than its outline, and small curved scissors (iron-on fusible web on the back stops cotton fraying)." : "",
+        `Thread: ${names.join(", ")}.`].filter(Boolean), done = [...after, FABRICS[fabric].after].filter(Boolean);
       stepsUI(steps, done, small, ready);
       const look = previewLook(steps);
       // pieces sewn into each other (checked when the design settles, not on every drag frame)
       const hit = dragging ? null : pieces.map((p) => [p, touching(p, pieces)]).find(([, q]) => q);
+      // and letters the font doesn't have (only said in the editor, below the fold)
+      const lacking = dragging ? null : pieces.map((p) => [p, missing(p.text ?? p.letters ?? "", p.font)]).find(([, g]) => g.length);
       api.setView(design.pattern(), `${api.safeName(firstWords(), "design")}.pes`, {
-        ...look, warn: hit ? `${label(hit[0])} runs into ${label(hit[1])}: drag them apart before you stitch.` : "", fabric: look.fabricShapeBlock != null ? "pink" : "linen", steps: steps.length,
+        ...look, warn: [hit ? `${label(hit[0])} runs into ${label(hit[1])}: drag them apart before you stitch.` : "",
+          lacking ? `The font of ${label(lacking[0])} has no ${lacking[1].map((c) => `“${c}”`).join(" ")}: ${lacking[1].length === 1 ? "it" : "they"} would be stitched in a stand-in letter.` : ""].filter(Boolean).join(" "), fabric: look.fabricShapeBlock != null ? "pink" : "linen", steps: steps.length,
         sheet: { steps: steps.map((st) => ({ you: st.you, sews: st.sews.join(" ") })), after: done, ready, cut: steps.filter((st) => st.cut).map((st) => st.cut),
-          notes: [api.turned() ? TURNED : "", ...ready.map((b) => "Have ready: " + b), $("st-tip").hidden ? "" : $("st-tip").textContent, tip, thread === "auto" ? "" : THREADS[thread].tip, small ? SMALL_TIP : ""] } });
+          notes: [api.turned() ? TURNED : "", $("st-tip").hidden ? "" : $("st-tip").textContent, tip, thread === "auto" ? "" : THREADS[thread].tip, small ? SMALL_TIP : ""] } });
     } catch (err) {
       if (s !== seq) return;
       api.setView(null);
       // (an empty design isn't a mistake: the preview says what to do, in its own words, not in red)
-      if (err.empty) stepsUI([]); else { console.error(err); api.showError(err.message); }
+      if (err.empty) stepsUI([]);
+      // (a font that didn't load, a network blip: said plainly, tried again on the next change or the button; not
+      // "Nothing to stitch yet" over a raw "A network error occurred.")
+      else if (err.font) { api.showError(err.message, { label: "Try again", run: () => make() }); $("empty").hidden = true; }
+      else { console.error(err); api.showError(err.message); }
     }
   }
   // too big for the hoop: two hoopings if whole pieces can be shared out, else say how much to shrink
@@ -409,8 +423,11 @@ export function initStudio(api) {
       split: built.map((b) => ({ pattern: b.design.pattern(), filename: b.filename })) });
   }
   // appliqué tips: shown the first time a design has fabric to lay on, then on request
+  // real appliqué (shapes cut from fabric and satined), not the front of an in-the-hoop project: its fabric is in its
+  // own supply list (the mug rug listed curved scissors and appliqué shapes)
+  const appliqued = () => pieces.some((p) => p.kind === "letters" || (p.kind === "motif" && p.style === "applique") || (p.kind === "frame" && p.border === "applique"));
   function applGuide(steps) {
-    const has = steps.some((st) => st.fabric && st.cut);
+    const has = steps.length > 0 && appliqued();
     $("st-appl-open").hidden = !has;
     if (!has) $("st-appl").hidden = true;
     else if (!api.store.get("studio.applSeen", false) && $("st-guide").hidden) $("st-appl").hidden = false;
@@ -445,7 +462,8 @@ export function initStudio(api) {
     const b = e.target.closest("[data-start]"); if (!b) return;
     const s = STARTERS.find((x) => x.id === b.dataset.start);
     const phone = matchMedia("(max-width: 600px)").matches;
-    if (s.mode) { api.setMode(s.mode); if (phone) $("view").scrollIntoView({ block: "center", behavior: "smooth" }); return; }
+    api.store.set("studio.guideSeen", true);   // (step 1 done: the guide isn't shown on the next visit)
+    if (s.mode) { api.setMode(s.mode); if (phone) $("view").scrollIntoView({ block: "start", behavior: "smooth" }); return; }
     api.fit();   // (a new design opens whole, not at the last one's zoom)
     api.unturn();   // (and upright: the last starter's turned hoop made a bib hoop sideways; too big offers the turn)
     remember(); pieces = s.make(); sel = pieces[pieces.length - 1].id;
@@ -453,12 +471,14 @@ export function initStudio(api) {
     baste = !!s.baste;
     $("st-tip").hidden = !s.tip; $("st-tip").textContent = s.tip || "";
     save(); ui(); make();
-    // phones: the preview is above the cards, so the change happened off-screen
-    if (phone) $("view").scrollIntoView({ block: "center", behavior: "smooth" });
+    // phones: the preview is above the cards, so the change happened off-screen (scrolled to its top, so the sewing
+    // controls under it stay above the Download bar)
+    if (phone) $("view").scrollIntoView({ block: "start", behavior: "smooth" });
   };
   $("st-add").onclick = (e) => {
     const b = e.target.closest("[data-add]"); if (!b) return;
     if (b.dataset.add === "file") { $("st-file").click(); return; }
+    api.store.set("studio.guideSeen", true);
     remember();
     const p = b.dataset.add === "text" ? text({ y: 20 }) : b.dataset.add === "monogram" ? mono() : b.dataset.add === "letters" ? appl() : b.dataset.add === "motif" ? motif() : frame({ border: "line" });
     // a new piece that would land on another goes below what's there (it landed on top: + Lettering over a design)
@@ -468,11 +488,22 @@ export function initStudio(api) {
     if (moved) recentre();
     save(); ui(); make();
   };
+  let deleted = 0, toastTimer = 0;
+  const note = Object.assign(document.createElement("div"), { id: "st-toast", className: "toast", hidden: true });
+  note.setAttribute("role", "status"); document.body.append(note);
+  // a moment's note with a one-tap way back ("Removed Monogram aMs. Undo")
+  function toast(msg, action) {
+    note.innerHTML = `<span>${api.escapeHtml(msg)}</span>${action ? `<button type="button" class="link">${action.label}</button>` : ""}`;
+    if (action) note.querySelector("button").onclick = () => { note.hidden = true; action.run(); };
+    note.hidden = false; clearTimeout(toastTimer); toastTimer = setTimeout(() => (note.hidden = true), 6000);
+  }
   $("st-pieces").onclick = (e) => {
     const b = e.target.closest("button"); if (!b) return;
     const id = +b.dataset.id, i = pieces.findIndex((p) => p.id === id);
+    // (the next row's ✕ slides under the same finger: a second tap straight after is ignored)
+    if (b.dataset.op === "del" && Date.now() - deleted < 600) return;
     if (b.dataset.op) remember();
-    if (b.dataset.op === "del") { pieces.splice(i, 1); if (sel === id) sel = pieces[Math.max(0, i - 1)]?.id; }
+    if (b.dataset.op === "del") { deleted = Date.now(); toast(`Removed ${label(pieces[i])}.`, { label: "Undo", run: undo }); pieces.splice(i, 1); if (sel === id) sel = pieces[Math.max(0, i - 1)]?.id; }
     else if (b.dataset.op === "dup") {
       // the copy goes just below the original
       const bb = pieceBounds(pieces[i]), c = { ...structuredClone(pieces[i]), id: nextId++, y: pieces[i].y + (bb ? bb[3] - bb[1] + 4 : 10) };
@@ -619,6 +650,24 @@ export function initStudio(api) {
     }
     const arrows = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] }[e.key];
     if (arrows && (e.target === document.body || e.target.id === "view")) { e.preventDefault(); nudge(arrows[0] * (e.shiftKey ? 5 : 1), arrows[1] * (e.shiftKey ? 5 : 1)); }
+  });
+  // ⌘C / ⌘V copy and paste the selected piece (as a saved design's JSON, so it pastes into another window too); only
+  // from the page or the preview, never while typing, and a picture on the clipboard is left to the picture tab
+  const onPage = (e) => document.body.dataset.mode === "design" && (e.target === document.body || e.target.id === "view") && !getSelection()?.toString();
+  document.addEventListener("copy", (e) => {
+    const p = current(); if (!onPage(e) || !p) return;
+    e.preventDefault(); e.clipboardData.setData("text/plain", JSON.stringify({ needleworks: 1, pieces: [p] }));
+    toast(`Copied ${label(p)}. Paste to add a copy.`);
+  });
+  document.addEventListener("paste", (e) => {
+    if (!onPage(e) || e.clipboardData?.files?.length) return;
+    let got; try { got = JSON.parse(e.clipboardData.getData("text/plain")); } catch { return; }
+    const ps = got?.needleworks === 1 && Array.isArray(got.pieces) ? got.pieces.filter((p) => ["text", "monogram", "frame", "file", "letters", "motif"].includes(p?.kind) && Number.isFinite(p.x) && Number.isFinite(p.y)) : [];
+    if (!ps.length) return;
+    e.preventDefault(); remember();
+    // (below the original, like ⧉)
+    for (const q of ps) { const bb = pieceBounds(q), c = { ...structuredClone(q), id: nextId++, y: q.y + (bb ? bb[3] - bb[1] + 4 : 10) }; pieces.push(c); sel = c.id; }
+    save(); ui(); make();
   });
   // a new piece in free space beside what's there: above or below (the other way if that doesn't fit the hoop)
   function freeSpot(p, prefer) {

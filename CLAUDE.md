@@ -168,7 +168,7 @@ Embroidery-file tools for home machines. Two implementations of the same engine:
   `last` stage) in the frame's thread. A visible stage that joins a tack-down block un-hides that block in the
   preview (the quilting, or same-thread lettering on an ITH frame, was hidden with the tack line). Starters: Mug rug,
   Coaster, Quilt block.
-- Motifs (`js/studio/motifs.js`: 29 filled icons from Phosphor Icons, MIT; `kind: "motif"`, `motif`, `size` mm across
+- Motifs (`js/studio/motifs.js`: 30 filled icons from Phosphor Icons, MIT; `kind: "motif"`, `motif`, `size` mm across
   the longer side, `style` fill | outline | applique): the SVG path is filled on a canvas and traced like appliqué
   letters (`motifOutlines` in outline.js, holes included). Fill = `fillPolygon(loops, { inset: 0.6 })` (it now takes
   several loops, even-odd) plus a 1.4 mm satin edge; outline = `edgeSatin` (narrower round small holes); appliqué =
@@ -459,6 +459,37 @@ Embroidery-file tools for home machines. Two implementations of the same engine:
     spiral (each ring glides over its last 3 gaps onto the next; a ring reached by glide stops halfway round);
     straight steps only under 2.5 gaps crossing nothing. Batch quilting: trims 105 -> 84, stitches -0.3%, density
     unchanged. Open: narrow heart/diamond tips stay empty; quilt label with stipple sews as 3 lines.
+- Re-run fixes (2026-10-30): stream 5, UI only (both batches byte-identical, 400/400, plus one new file for the
+  book motif; all 401 pass pe900_check):
+  - Layout: the "runs into" note beside Download is its own row (`.dl-warn` in `.bottom`; it squeezed the thread chips
+    to "B / P"); thread chips keep 10em before the buttons wrap under them. Two columns from 700 px wide when 560 px
+    tall (820 x 1180 had the guide 1150 px down, 800 x 600 the editor 1370 px down); a compact tier at <= 760 px tall.
+    Phones: the thread select beside the logo (one header row fewer), the sewing buttons on one row under the slider,
+    the preview `calc(100svh - 370px)`, so Watch it sew and Turn hoop show above the fixed Download bar at load; Watch it
+    sew scrolls so they stay above it; a solid strip behind the bar (the slider showed at its corners). Stacked, the
+    preview is as tall as its row (its 420 px minimum ran under the controls at 840 x 525 and on an iPhone SE).
+    `draw` keeps `padBottom` clear for the message over the preview, and draws the hoop with nothing to stitch.
+    Skip links (settings / preview and Download). Undo and Redo sit on the Pieces heading line (a shorter list moved
+    them ~70 px); a piece row wraps its buttons rather than cut the name to "Cir…".
+  - A font that fails to load stays failed in its @font-face (every `document.fonts.load` rejects with "A network
+    error occurred." until a reload): `loadFont` (fonts.js) adds a second FontFace from the stylesheet's own URL and
+    says so plainly with Try again. `document.fonts.check` stays false for that family, so its lettering isn't cached
+    (slower, correct).
+  - Threads: Brother is a brand (`brother` in brands.js: Brother's own spool numbers, from its Artspira thread list,
+    on the PEC colours; 60 colours, Linen 307 has no PEC colour); labels "spool 800". An owned brand reads "My Isacord"
+    ("(threads I own)" was cut off). Supply lists name the owned spools (`ownSpool`), white/cream thread gets an edge in
+    every preview.
+  - Supplies: `ready` on every fabric in `FABRICS` (one source with `tip`; denim had none), names "Knit / T-shirt",
+    "Towel / fleece" (texts say towel or fleece, "the pile"), Canvas / tote added (sews as cotton), the pillowcase/tote
+    hint in the cotton tip. The appliqué line and tips only for real appliqué (`appliqued()`: letters, appliqué motif or
+    frame), not an in-the-hoop front. The sew sheet prints one "Have ready" list. Done dialog: no "at every pause" with
+    no pauses, Android gets USB-C wording. Sew along draws a turned design as the machine shows it.
+  - Editor: readable input font (the preview shows the script), the automatic stitch chip says "Automatic: bold/thin
+    line", missing letters also beside Download (variation selectors ignored), "Removed … Undo" toast and a 600 ms guard
+    on a second ✕, copy/paste of pieces (as `{ needleworks: 1, pieces }` text), tappable fact chips (`data-tip`), the
+    guide counts as seen after a starter or an added piece, a Book motif.
+  - Headless Chrome with `nocache` sometimes doesn't start app.js after `goto` (4 in 14 loads, baseline code too):
+    check `document.body.dataset.mode` and navigate again.
 - The preview is the file: `setView` decodes `v.bytes` with `readEmbroidery` and draws/counts/fit-checks that, and
   thread labels come from the file's own PEC palette.
 
@@ -522,8 +553,10 @@ Embroidery-file tools for home machines. Two implementations of the same engine:
   length (clusters >= 0.3 mm²; corner tips don't count) and the count of hairline (< 1 mm) shapes. The site warns at
   >= 0.8 mm² or >= 5 hairlines.
 - Download names are ASCII only (`safeName`): the machine's USB reader may not show accented names.
-- Desktop layout fits the window (min-width 861px): body is 100dvh with no page scroll; only `.controls` may scroll
-  on short screens, and a max-height 900px tier hides ledes/captions. Phones scroll normally.
+- Desktop layout fits the window (min-width 861px, or 700px when at least 560px tall: tablets, 800 x 600): body is
+  100dvh with no page scroll; only `.controls` may scroll on short screens (it's `position: relative`, or an off-screen
+  file input made the page 869-970 px tall), and a max-height 900px tier hides ledes/captions. Stacked layouts (phones,
+  landscape phones, 200 % zoom) scroll normally; the preview is first in the HTML so Tab follows what's seen.
 - Thread names come from the 64-colour Brother PEC palette with pyembroidery's red-mean distance; that's what
   the machine itself maps to, so a dusty pink can legitimately show as "Gray".
 - The fonts after Meow Script are free (OFL/Apache) lookalikes of popular embroiderydesigns.com samples; the

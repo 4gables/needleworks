@@ -1,6 +1,6 @@
 import { buildBookmark, hiddenBlocks, READY, RED, stepsFor } from "./core/bookmark.js";
 import { turnForMachine, turnPattern } from "./core/design.js";
-import { FONTS, fontOf } from "./core/fonts.js";
+import { FONTS, fontOf, loadFont } from "./core/fonts.js";
 import { STITCH, designStats, machineThreads, readEmbroidery, validatePES, writePES } from "./core/formats.js";
 import { DEFAULT_MACHINE, MACHINES, MARGIN, hoop as getHoop } from "./core/machines.js";
 import { DENSITY, workingSize } from "./core/digitize.js";
@@ -65,8 +65,12 @@ function stepLook(v, i, block) {
 }
 function paint() {
   const v = state.view;
-  $("empty").hidden = !!v;
-  if (!v) { draw(canvas, null); return; }
+  $("empty").hidden = !!v || !$("error").hidden;   // (an error says what's wrong; "Nothing to stitch yet" under it misled)
+  // (room kept clear for the chips at the top and a message at the bottom: the too-big note covered the hoop on phones)
+  const err = $("error"), room = { padTop: $("facts").offsetHeight + 16, padBottom: err.hidden ? undefined : err.offsetHeight + 28 };
+  const field = { hoop: shownHoop(), showHoop: state.showHoop && !state.backdrop, fieldColor: dark.matches && state.showHoop && !state.backdrop ? "#ece5da" : undefined };
+  // (nothing to stitch yet: the hoop stays, so there's still something to put the first piece in)
+  if (!v) { state.tf = draw(canvas, null, { ...field, ...room, zoom: state.zoom, pan: state.pan }); return; }
   const block = state.step != null && state.mode === "design" && v.cache.blocks.find((b) => b.index === state.step);
   const look = block ? stepLook(v, state.step, block) : { upto: state.upto ?? undefined, hide: v.hide, fabricShapeBlock: v.fabricShapeBlock };
   state.tf = draw(canvas, v.shown, {
@@ -74,10 +78,8 @@ function paint() {
     center: state.mode === "design" && !v.whole ? [0, 0] : undefined, ghost: !!block,
     cache: v.cache, fabric: v.fabric, ...look,
     heat: state.heat ? (v.heat ||= heat(v.shown)) : null, backdrop: state.backdrop,
-    hoop: shownHoop(), showHoop: state.showHoop && !state.backdrop, zoom: state.zoom, pan: state.pan, showNeedle: state.upto != null,
-    real: state.real,
-    fieldColor: dark.matches && state.showHoop && !state.backdrop ? "#ece5da" : undefined,
-    padTop: $("facts").offsetHeight + 16,
+    ...field, zoom: state.zoom, pan: state.pan, showNeedle: state.upto != null,
+    real: state.real, ...room,
   });
 }
 new ResizeObserver(() => paint()).observe(canvas);
@@ -103,15 +105,17 @@ function setView(v) {
   v.whole = !!v.split || !fits;
   const inch = (mm) => (mm / 25.4).toFixed(1);
   const minutes = Math.max(1, Math.round(st.stitches / 550 + st.colorChanges * 0.5)), snips = shortJumps(v.file);
+  $("fact-tip")?.remove();
   $("facts").innerHTML = [
     `<span>${shown.widthMm.toFixed(0)} × ${shown.heightMm.toFixed(0)} mm · ${inch(shown.widthMm)} × ${inch(shown.heightMm)} in</span>`,
     `<span>${st.stitches.toLocaleString()} stitches</span>`,
     // (on the Picture and Open tabs every pause is a change of thread: say so; the Design tab's can be fabric steps)
-    st.colorChanges ? (state.mode === "picture" || state.mode === "open" ? `<span title="The machine stops for each one: thread the next colour and press Start.">${st.colorChanges} thread ${st.colorChanges === 1 ? "change" : "changes"}</span>` : `<span>${st.colorChanges} ${st.colorChanges === 1 ? "pause" : "pauses"}</span>`) : "",
+    st.colorChanges ? (state.mode === "picture" || state.mode === "open" ? `<span${tip("The machine stops for each one: thread the next colour and press Start.")}>${st.colorChanges} thread ${st.colorChanges === 1 ? "change" : "changes"}</span>`
+      : `<span${tip(`The machine stops ${st.colorChanges === 1 ? "once" : `${st.colorChanges} times`} for you: to change the thread, or to lay fabric on. “How to stitch it” (or Sew along) says what to do at each stop.`)}>${st.colorChanges} ${st.colorChanges === 1 ? "pause" : "pauses"}</span>`) : "",
     `<span>≈ ${minutes} min</span>`,
     v.split ? `<span>${v.split.length} hoopings</span>` : fits ? "" : `<span class="bad">Too big for the ${h.name}</span>`,
     offCentre(v, fits) ? `<span class="note">Off centre here: the machine centres it <button type="button" class="link" id="recentre">Centre it</button></span>` : "",
-    snips ? `<span title="The machine only trims jumps longer than its 'jump stitch not to trim' setting (5 mm at the lowest). The thread is locked at both ends, so these are safe to snip after stitching.">${snips} loose ${snips === 1 ? "thread" : "threads"} to snip after</span>` : "",
+    snips ? `<span${tip("The machine only trims jumps longer than its “jump stitch not to trim” setting (5 mm at the lowest). The thread is locked at both ends, so these are safe to snip after stitching.")}>${snips} loose ${snips === 1 ? "thread" : "threads"} to snip after</span>` : "",
   ].join("");
   const seen = new Set(), mt = machineThreadList(v);
   $("threads").innerHTML = v.cache.blocks.filter((b) => !(v.hide && v.hide.has(b.index)))
@@ -154,8 +158,9 @@ function machineThreadList(v) {
 }
 // an error in plain words, with a one-tap fix when there is one ({ label, run })
 function showError(msg, fix) {
-  const e = $("error"); e.textContent = msg; e.hidden = !msg;
+  const e = $("error"), was = e.hidden; e.textContent = msg; e.hidden = !msg;
   if (msg && fix) { const b = document.createElement("button"); b.type = "button"; b.className = "link"; b.textContent = fix.label; b.onclick = fix.run; e.append(" ", b); }
+  if (msg || !was) paintSoon();   // (the preview keeps clear of the message)
 }
 function busy(on, text = "Stitching…") { $("busy").hidden = !on; $("busy-text").textContent = text; }
 
@@ -215,8 +220,11 @@ $("play").onclick = () => {
   if (!state.view) return;
   showStep(null);
   if (playing) { stopPlay(); return; }
-  // (phones: the hoop was mostly scrolled off while it played)
-  const r = canvas.getBoundingClientRect(); if (r.top < 0 || r.bottom > innerHeight) canvas.scrollIntoView({ block: "center", behavior: "smooth" });
+  // (phones: the hoop was mostly scrolled off while it played; scrolled to the middle, Pause went under the Download bar)
+  const r = canvas.getBoundingClientRect(), sew = $("play").parentElement.getBoundingClientRect();
+  const room = innerHeight - (matchMedia("(max-width: 600px)").matches ? 88 : 0), lo = sew.bottom - room + 8, hi = r.top - 8;
+  const dy = lo > hi ? lo : lo > 0 ? lo : hi < 0 ? hi : 0;
+  if (dy) scrollBy({ top: dy, behavior: "smooth" });
   const total = state.view.cache.total, dur = Math.min(14000, 3000 + total * 1.2);
   const from = state.upto == null || state.upto >= total ? 0 : state.upto, t0 = performance.now() - (from / total) * dur;
   $("play").textContent = "❚❚ Pause";
@@ -233,7 +241,16 @@ $("progress").oninput = (e) => {
 };
 $("show-heat").onchange = (e) => { state.heat = e.target.checked; paint(); };
 $("show-real").checked = state.real = store.get("real", false);
-$("facts").addEventListener("click", (e) => { if (e.target.id === "recentre") studio.recentre(); });
+$("facts").addEventListener("click", (e) => { if (e.target.id === "recentre") studio.recentre(); const t = e.target.closest("[data-tip]"); if (t) factTip(t); });
+$("facts").addEventListener("keydown", (e) => { const t = e.target.closest("[data-tip]"); if (t && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); factTip(t); } });
+// a chip's explanation under the chips, tapped open and shut (touch screens have no tooltips: "1 pause" went unexplained)
+const tip = (t) => ` data-tip="${t}" title="${t}" tabindex="0" role="button"`;
+function factTip(el) {
+  let p = $("fact-tip");
+  if (p?.dataset.for === el.textContent) { p.remove(); return; }
+  if (!p) { p = document.createElement("p"); p.id = "fact-tip"; p.className = "fact-tip"; p.setAttribute("role", "status"); $("facts").after(p); }
+  p.dataset.for = el.textContent; p.textContent = el.dataset.tip; p.style.top = `${$("facts").offsetTop + $("facts").offsetHeight + 6}px`;
+}
 $("show-real").onchange = (e) => { state.real = e.target.checked; store.set("real", state.real); if (state.real && state.zoom < 3) { state.zoom = 3; } paint(); };
 $("show-hoop").checked = state.showHoop;
 $("show-hoop").onchange = (e) => { state.showHoop = e.target.checked; store.set("showHoop", state.showHoop); paint(); };
@@ -300,13 +317,18 @@ function downloaded(v, zipped) {
   $("done-checked").textContent = `Checked: it opens on a ${h.machineName} in the ${h.name}${s ? `, ${s.widthMm.toFixed(0)} × ${s.heightMm.toFixed(0)} mm, ${s.colorChanges ? (state.mode === "picture" || state.mode === "open" ? `${s.colorChanges} thread ${s.colorChanges === 1 ? "change" : "changes"}` : `${s.colorChanges} ${s.colorChanges === 1 ? "pause" : "pauses"}`) : "no pauses"}` : ""}.`;
   $("done-zip").hidden = !zipped;
   $("done-phone").hidden = !matchMedia("(pointer: coarse)").matches;
+  // (an Android phone has no Lightning port, nor an iPhone a "Files by Google")
+  $("done-phone").textContent = /Android/i.test(navigator.userAgent)
+    ? " On a phone: plug a USB-C stick (or an adapter for a USB stick) into it, then in the Files app move the file from Downloads to the stick. Or email the file to yourself and copy it on a computer."
+    : " On a phone: plug a USB-C (or Lightning) stick into it, then in the Files app move the file from Downloads to the stick. Or email the file to yourself and copy it on a computer.";
   $("done-turn").hidden = !(state.mode === "design" && state.turn.design);
   // (Design-tab warnings still showing: "Checked" shouldn't read as "all good")
   const warns = state.mode === "design" ? [...document.querySelectorAll("#st-edit [data-warn]:not([hidden])")].map((w) => w.textContent.trim()) : [];
   $("done-warn").hidden = !warns.length; $("done-warn").textContent = warns.length ? "Still to look at: " + warns.join(" ") : "";
   // (only the Design tab and the bookmark have “How to stitch it”)
-  $("done-sew").textContent = state.mode === "design" || state.mode === "bookmark"
-    ? "Pick the design, then follow “How to stitch it” (or Sew along) at every pause."
+  // (and a design with no pauses has none to follow)
+  $("done-sew").textContent = !s?.colorChanges ? "Pick the design and press Start."
+    : state.mode === "design" || state.mode === "bookmark" ? "Pick the design, then follow “How to stitch it” (or Sew along) at every pause."
     : "Pick the design and press Start. At each pause, thread the next colour listed beside the preview (Sew along shows each one).";
   $("done").showModal();
 }
@@ -393,7 +415,9 @@ function alongSteps(v) {
 }
 function alongShow() {
   const v = state.view, steps = alongSteps(v), i = along.i, done = i >= steps.length, mt = machineThreadList(v);
-  $("along-count").textContent = done ? "All done" : `Step ${i + 1} of ${steps.length}`;
+  // (the hoop turned: drawn on its side, as the machine shows it, like the steps say; it was drawn upright)
+  const machine = turned() && !!v.file;
+  $("along-count").textContent = (done ? "All done" : `Step ${i + 1} of ${steps.length}`) + (machine ? " · as the machine shows it" : "");
   $("along-back").disabled = i === 0;
   $("along-next").textContent = done ? "Close" : i === steps.length - 1 ? "Finish" : "Next step";
   let look = { hide: v.hide, fabricShapeBlock: v.fabricShapeBlock };
@@ -409,7 +433,7 @@ function alongShow() {
     $("along-time").textContent = `About ${s.minutes} min of sewing.`;
     look = stepLook(v, i, s.block);
   }
-  draw($("along-view"), v.shown, { cache: v.cache, fabric: v.fabric, ...look, ghost: look.upto != null, hoop: shownHoop(), showHoop: false, pad: 12 });
+  draw($("along-view"), machine ? v.file : v.shown, { cache: machine ? (v.fileCache ||= colorBlocks(v.file)) : v.cache, fabric: v.fabric, ...look, ghost: look.upto != null, hoop: machine ? hoop() : shownHoop(), showHoop: false, pad: 12 });
 }
 $("along-open").onclick = async () => {
   if (!state.view?.cache) return;
@@ -482,14 +506,21 @@ function spool(hex) {
   if (!state.brand) return "";
   const own = state.spools[state.brand], s = nearestSpool(state.brand, hex, own);
   // (an owned spool far from the colour isn't a match: white showed as "your Isacord 5513", a green)
-  return !s ? "" : !own?.length ? `≈ ${s.label}` : s.dE > 25 ? `nearest of yours, ${s.label}, is quite different` : `your ${s.label}`;
+  // (Brother's own spools match the machine's colours exactly: just the number)
+  return !s ? "" : !own?.length ? (state.brand === "brother" ? `spool ${s.num}` : `≈ ${s.label}`) : s.dE > 25 ? `nearest of yours, ${s.label}, is quite different` : `your ${s.label}`;
+}
+// the spool they own for a colour ("Isacord 0015 White"), for supply lists; "" when they haven't listed one close to it
+function ownSpool(hex) {
+  const own = state.brand && state.spools[state.brand], s = own?.length && nearestSpool(state.brand, hex, own);
+  return s && s.dE <= 25 ? s.label : "";
 }
 function brandUI() {
-  $("brand").innerHTML = `<option value="">Brother thread</option>` + Object.entries(BRANDS).map(([k, n]) => `<option value="${k}">${n}</option>`).join("")
+  $("brand").innerHTML = `<option value="">Brother thread</option>` + Object.entries(BRANDS).map(([k, n]) => `<option value="${k}">${k === "brother" ? "Brother spool numbers" : n}</option>`).join("")
     + `<option value="@mine">Threads I own…</option>`;
-  // (with spools listed, the brand reads "Isacord (threads I own)")
-  for (const o of $("brand").options) if (o.value && state.spools[o.value]?.length) o.textContent += " (threads I own)";
+  // (with spools listed, the brand reads "My Isacord": "Isacord (threads I own)" was cut off by the select)
+  for (const o of $("brand").options) if (o.value && state.spools[o.value]?.length) o.textContent = `My ${BRANDS[o.value]}`;
   $("brand").value = state.brand;
+  $("brand").title = `${$("brand").selectedOptions[0]?.textContent || ""}: the spool numbers of the thread you use`;
   const mine = state.brand && state.spools[state.brand]?.length;
   $("pic-mine-row").hidden = !mine; $("pic-mine").checked = !!mine && state.pic.mine;
 }
@@ -501,7 +532,7 @@ $("brand").onchange = (e) => {
 };
 function openSpools() {
   $("spools-brand").innerHTML = Object.entries(BRANDS).map(([k, n]) => `<option value="${k}">${n}</option>`).join("");
-  $("spools-brand").value = state.brand || "isacord";
+  $("spools-brand").value = state.brand || "brother";   // (a Brother machine's owner mostly has Brother spools)
   $("spools-list").value = (state.spools[$("spools-brand").value] || []).join(" ");
   spoolsPreview(); $("spools").showModal();
 }
@@ -639,7 +670,7 @@ async function makeBookmark() {
   if (!name && !blank) { setView(null); $("empty").textContent = "Type a name to see the bookmark."; return; }
   busy(true, "Lettering…");
   try {
-    await document.fonts.load(`40px "${state.bm.font}"`);
+    await loadFont(state.bm.font);
     await new Promise((r) => setTimeout(r, 0));
     if (seq !== bmSeq) return;
     const d = buildBookmark({ name, family: state.bm.font, color: state.bm.color, hoop: hoop(), lead: state.bm.lead, tail: state.bm.tail,
@@ -648,11 +679,12 @@ async function makeBookmark() {
     if (seq !== bmSeq || state.mode !== "bookmark") { state.views.bookmark = null; return; }
     setView({ pattern, verifyAgainst: pattern, bytes: writePES(pattern), filename: blank ? "blank_bookmark.pes" : `${safeName(state.bm.name, "name")}_bookmark.pes`,
       fabricShapeBlock: 0, hide: hiddenBlocks(blank), fabric: state.bm.fabric,
-      sheet: { steps: stepsFor(blank).map((s) => ({ title: s.title, you: s.you, sews: s.machine })), cut: d.cut, ready: [READY], notes: ["Have ready: " + READY] }, threadLabel: () => `Brother ${nearestBrotherThread(state.bm.color).name} · whole bookmark` });
+      sheet: { steps: stepsFor(blank).map((s) => ({ title: s.title, you: s.you, sews: s.machine })), cut: d.cut, ready: [READY] }, threadLabel: () => `Brother ${nearestBrotherThread(state.bm.color).name} · whole bookmark` });
   } catch (err) {
     setView(null); $("empty").hidden = true;
     const big = Object.keys(MACHINES[state.machine].hoops).find((k) => { const h = getHoop(state.machine, k); return h.w >= 130 && h.h >= 180; });
     if (/needs the 5/.test(err.message) && big) showError(err.message.replace(/ Pick it at the top\.?$/, ""), { label: "Use the 5\" × 7\" hoop", run: () => { $("hoop").value = big; $("hoop").dispatchEvent(new Event("change")); } });
+    else if (err.font) showError(err.message, { label: "Try again", run: makeBookmark });
     else { console.error(err); showError(err.message); }
   }
   finally { if (seq === bmSeq) busy(false); }
@@ -1014,6 +1046,9 @@ document.addEventListener("paste", (e) => {
   if (f) { e.preventDefault(); route(f); }
 });
 
+// skip links move focus without changing the address (its #hash is the tab)
+for (const a of document.querySelectorAll(".skip")) a.onclick = (e) => { e.preventDefault(); const t = $(a.hash.slice(1)); t.focus({ preventScroll: true }); t.scrollIntoView({ block: "start" }); };
+
 // ---------- start ----------
 fillMachines();
 brandUI();
@@ -1025,7 +1060,7 @@ function showStep(i) {
   state.step = i; document.dispatchEvent(new CustomEvent("nw:step", { detail: i })); paint();
 }
 const studio = initStudio({
-  hoop: designHoop, turned: () => !!state.turn.design, unturn: () => { if (state.turn.design) { state.turn.design = false; store.set("turn", state.turn); $("turn").setAttribute("aria-pressed", false); } }, fit: () => { state.zoom = 1; state.pan = [0, 0]; }, store, showError, busy, safeName, escapeHtml, saveFile, keepFocus, showStep, step: () => state.step, setMode, spool,
+  hoop: designHoop, turned: () => !!state.turn.design, unturn: () => { if (state.turn.design) { state.turn.design = false; store.set("turn", state.turn); $("turn").setAttribute("aria-pressed", false); } }, fit: () => { state.zoom = 1; state.pan = [0, 0]; }, store, showError, busy, safeName, escapeHtml, saveFile, keepFocus, showStep, step: () => state.step, setMode, spool, ownSpool,
   setView(pattern, filename, look = {}) {
     if (!pattern) { state.views.design = null; if (state.mode === "design") setView(null); return; }
     pattern = toMachine(pattern);
