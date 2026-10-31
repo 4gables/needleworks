@@ -345,11 +345,10 @@ function reachEnds(edges, mask, stroke, corners = false) {
   // before it, that went the way the stroke before it did (not a curve, nor the bend into a junction) and it ends in a
   // corner of the ink, it goes straight on instead. q runs toward the loose end.
   const decurl = (q) => {
-    // (a short stroke, an X's arm from its crossing: the 0.6 stroke before is from wherever it starts)
-    // (the straight-before check leaves out the half stroke at the path's start: a short stroke bends into its junction
-    // there, and that read as a curve, so Josefin's v and w kept a 2.4 mm curl along their flat tops at 40 mm)
-    // (and so does the stroke before: a short arm, a v's from its point, is measured from 0.4 stroke along, and its
-    // last 0.6 stroke is the curl when 0.9 doesn't leave room)
+    // (a short stroke, an X's arm from its crossing or a v's from its point: the stroke before is measured from 0.4
+    // stroke along it, past the bend into its junction, and its last 0.6 stroke is the curl when 0.9 leaves no room;
+    // the straight-before check also leaves out the half stroke at the start. Until round 7 that bend read as a curve,
+    // and Josefin's v and w kept a curl 2.4 mm long along their flat tops at 40 mm.)
     const n = q.length, ih0 = n - 1 - Math.round(stroke * 2.1), j0 = Math.round(stroke * 0.4);
     let i1 = n - 1 - Math.round(stroke * 0.9), i0 = Math.max(0, n - 1 - Math.round(stroke * 1.5));
     if (i0 < j0) { i0 = j0; if (i1 - i0 < stroke * 0.4) i1 = n - 1 - Math.round(stroke * 0.6); }
