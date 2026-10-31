@@ -142,11 +142,12 @@ function lackSaid(where, said, text, family, what) {
 async function load(hash) {
   await cdp("console");
   for (let i = 0; i < 6; i++) {
+    if (i >= 2) await cdp("goto", "about:blank");
     await cdp("goto", `http://127.0.0.1:${HTTP}/?tf=${Date.now()}${hash}`);
     for (let k = 0; k < 10 && !(await ev("!!document.body.dataset.mode && !!document.querySelector('[data-start]')")); k++) await sleep(500);
     if (await ev("!!document.body.dataset.mode && !!document.querySelector('[data-start]')")) break;
     // (said with what the page logged and the design it had stored, to find out why)
-    if (i === 5) throw new Error(`the page didn't start: ${(await cdp("console")).slice(0, 300)} stored ${String(await ev("localStorage.getItem('nw:studio')")).slice(0, 200)}`);
+    if (i === 5) throw new Error(`the page didn't start: ${await ev("location.href + ' ' + document.readyState + ' ' + document.title")} ${(await cdp("console")).slice(0, 300)} stored ${String(await ev("localStorage.getItem('nw:studio')")).slice(0, 200)}`);
   }
   await ev(PAGE);
 }
