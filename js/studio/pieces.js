@@ -29,8 +29,11 @@ function letterStrokes(text, family, spacing = 0, kern = null) {
   const lines = edges.map((e) => e[2]), near = (p, [x, y]) => Math.min(...p.map((q) => Math.hypot(q[0] - x, q[1] - y)));
   const counters = counterPockets(info.mask, lines, info.stroke).map((c) => ({ ...c, edges: lines.flatMap((p, i) => (near(p, c.at) <= c.peak + 1.5 ? [i] : [])) }));
   // (a corner's ink width across it, px, from the junction out: `taper`)
-  const tapers = edges.map((e) => (e[3] ? { start: e[2][0], w: e[3], atEnd: e[3][0] >= e[3][e[3].length - 1] } : null));
-  const out = { comps: order(edges), info, counters, notches: notches(edges, info.stroke), tapers };
+  const tapers = edges.map((e) => (e[3] ? { start: e[2][0], w: e[3], atEnd: e[3][0] >= e[3][e[3].length - 1], cos: e[4] } : null));
+  // (how the ink ends round a loose end, px: `endShape` in raster.js)
+  const ends = edges.map((e) => (e[5] ? { start: e[2][0], ...e[5] } : null));
+  const sides = edges.map((e) => (e[6] ? { start: e[2][0], w: e[6], path: e[2] } : null));
+  const out = { comps: order(edges), info, counters, notches: notches(edges, info.stroke), tapers, ends, sides };
   if (fontReady(family)) {
     lettering.set(key, out);
     if (lettering.size > 60) lettering.delete(lettering.keys().next().value);
@@ -43,7 +46,7 @@ function letterStrokes(text, family, spacing = 0, kern = null) {
 function letters(text, family, size, style = "auto", spacing = 0, kern = null) {
   text = (text || "").replace(/\s*\n\s*/g, " ").trim();
   if (!text) return { parts: [], satinW: 0 };
-  const { comps, info, counters, notches, tapers } = letterStrokes(text, family, spacing, kern && kern.some((v) => v) ? kern : null);
+  const { comps, info, counters, notches, tapers, ends, sides } = letterStrokes(text, family, spacing, kern && kern.some((v) => v) ? kern : null);
   const all = comps.flatMap((c) => c.flatMap(([p]) => p));
   if (!all.length) return { parts: [], satinW: 0 };
   // (sized by the strokes before their loose ends reached out to the ink's edge, so a word keeps its size)
@@ -73,10 +76,33 @@ function letters(text, family, size, style = "auto", spacing = 0, kern = null) {
     const idx = t.atEnd ? q.map((_, i) => q.length - 1 - i) : q.map((_, i) => i), prof = [];
     let d = 0;
     idx.forEach((i, m) => { if (m) d += Math.hypot(q[i][0] - q[idx[m - 1]][0], q[i][1] - q[idx[m - 1]][1]) * s; prof.push([d, w[i] * s]); });
-    // (k: the column's width over the font's: a corner of a word sewn thinner than its font is that much shorter)
-    return { atEnd: same ? t.atEnd : !t.atEnd, prof, k: satinW ? Math.min(1, satinW / stroke) : 1 };
+    // (cut: how much narrower the point is across where the strokes into it are sewn narrower than the font's: each
+    // stroke's edge comes in by half the difference, which across the point is that over the cosine of its angle)
+    return { atEnd: same ? t.atEnd : !t.atEnd, prof, cut: satinW ? Math.max(0, stroke - satinW) / Math.max(0.5, t.cos || 1) : 0 };
   };
-  const parts = comps.flatMap((c, k) => c.map(([p, mode, e], j) => [p.map(([x, y]) => [(x - cx) * s, (y - info.baseline) * s]), mode, print && k > 0 && j === 0, caps.get(e) || 0, taperOf(p, e)]));
+  // (the sixth entry: the stroke's ends, { first, last }: [[mm from the end, slant, side, other side], ...] with the
+  // sides as the stroke's own path runs (its normal's side first), or null)
+  const endsOf = (p, e) => {
+    const t = ends[e];
+    if (!t) return null;
+    const same = p[0][0] === t.start[0] && p[0][1] === t.start[1];
+    const mm = (rows, flip) => rows && rows.map(([d, k, a, b]) => [d * s, k, (flip ? b : a) * s, (flip ? a : b) * s]);
+    // (at the path's last point it runs out toward the end, as raster measured it; at its first point it runs in, so
+    // the normal is the other side)
+    return same ? { first: mm(t.a, true), last: mm(t.b, false) } : { first: mm(t.b, true), last: mm(t.a, false) };
+  };
+  // (the seventh: the ink either side of the stroke's line, [[fraction along, side, other side] (mm), ...] as its
+  // path runs, nulls where the line is off the ink)
+  const sidesOf = (p, e) => {
+    const t = sides[e];
+    if (!t) return null;
+    const same = p[0][0] === t.start[0] && p[0][1] === t.start[1], q = t.path, at = [0];
+    for (let i = 1; i < q.length; i++) at.push(at[i - 1] + Math.hypot(q[i][0] - q[i - 1][0], q[i][1] - q[i - 1][1]));
+    const L = at[at.length - 1] || 1;
+    const rows = t.w.map((v, i) => [same ? at[i] / L : 1 - at[i] / L, v && (same ? v[0] : v[1]) * s, v && (same ? v[1] : v[0]) * s]);
+    return same ? rows : rows.reverse();
+  };
+  const parts = comps.flatMap((c, k) => c.map(([p, mode, e], j) => [p.map(([x, y]) => [(x - cx) * s, (y - info.baseline) * s]), mode, print && k > 0 && j === 0, caps.get(e) || 0, taperOf(p, e), endsOf(p, e), sidesOf(p, e)]));
   const open = Math.min(satinW || Infinity, ...caps.values());
   const pockets = counters.map((c) => ({ peak: c.peak * s, saddle: c.saddle * s }));
   return { parts, satinW, xh, stroke, open, pockets, top: (y0 - info.baseline) * s, bottom: (y1 - info.baseline) * s };
@@ -292,18 +318,22 @@ function stitchLetters(parts, satinW, fab = "cotton", small = false) {
   const zz = fab === "knit" ? 1.5 : 2.5, pull = fab === "knit" ? 0.3 : 0;
   const density = wt === "auto" ? (fab === "knit" ? 0.42 : small ? 0.34 : 0.38) : THREADS[wt].satin + (fab === "knit" ? 0.04 : 0);
   let gap = false;   // (a skipped stroke hands its jump on to the next one sewn)
-  return parts.map(([p0, mode, g, cap, taper]) => {
+  return parts.map(([p0, mode, g, cap, taper, ends, sides]) => {
     // (a corner is narrowed to the ink, and stops where that's under the narrowest column: not on a towel, which
-    // keeps its wide columns, nor in a fine line)
-    const tp = taper && satinW && fab !== "towel" ? tapered(p0, taper) : null, p = tp ? tp.p : p0;
-    const r = p.length < 2 ? [] : sewPart(p, mode, cap && fab !== "towel" ? Math.min(cap, satinW) : satinW, tp?.wAt, p0);   // (a towel keeps its wide column)
+    // keeps its wide columns, nor in a fine line; its centre run goes on to where the point is)
+    const w = cap && fab !== "towel" ? Math.min(cap, satinW) : satinW;   // (a towel keeps its wide column)
+    const tp = taper && satinW && fab !== "towel" ? tapered(p0, taper) : null, p = tp ? (mode === "run" ? tp.run : tp.p) : p0;
+    const shaped = satinW && fab !== "towel" && !tp, clip = shaped && sides ? sideClip(p, sides, w) : null;
+    const en = shaped && ends ? endCut(p, ends, w, clip) : clip ? { p, shape: clip, first: 0, last: 0 } : null;
+    const q = en && mode !== "run" ? en.p : p;
+    const r = q.length < 2 ? [] : sewPart(q, mode, w, tp ? tp.wAt || CENTRE : null, p0, en);
     gap ||= !!g;
     if (gap && r.length) { r.gap = true; gap = false; }
     // (a run satined back over: a lock at its start goes 1 mm in along the stroke, under that satin; never past halfway)
     if (mode === "run" && satinW && r.length > 2) r.lockAt = along(p, Math.min(1, length(p) / 2));
     return r;
   });
-  function sewPart(p, mode, satinW, wAt = null, self = p) {
+  function sewPart(p, mode, satinW, wAt = null, self = p, en = null) {
     // thin lettering: a stroke under ~0.6 mm is a speck of the skeleton; skip it (the next stroke picks up there),
     // unless it stands alone: that's a dot (a full stop, an i's dot) and sews as a 0.7 mm stroke out and back
     // (small print lettering lost its full stops: "Sam R." sewed as "Sam R")
@@ -335,33 +365,101 @@ function stitchLetters(parts, satinW, fab = "cotton", small = false) {
     // inside each edge so it never shows past the satin (it ends back on the centre line: ending on an edge left the
     // satin's start 2.4 mm away, a jump and trim)
     // (a tapered corner: a centre run, as the zigzag would stick out of the point)
+    // (a shaped end: the zigzag stops where the end's shaping starts, and a centre run goes on from there)
+    if (mode === "run" && satinW >= zz && !wAt && en && (en.first || en.last)) {
+      const L = length(p), [d0, d1] = [en.first, L - en.last], mid = d1 - d0 > 1 ? slice(p, d0, d1) : null;
+      if (!mid) return run(p, 1.2);
+      const zz2 = zigzag(mid, Math.max(satinW - 0.8, satinW * 0.5), 2.5);
+      return [...(d0 > 0 ? run(slice(p, 0, d0), 1.2) : [p[0]]), ...zz2, ...(d1 < L ? run(slice(p, d1, L), 1.2) : [p[p.length - 1]])];
+    }
     if (mode === "run") return satinW >= zz && !wAt ? [p[0], ...zigzag(p, Math.max(satinW - 0.8, satinW * 0.5), 2.5), p[p.length - 1]] : satinW ? run(p, 1.2) : spaced(followRun(p, 1.6, 0.1, 0.8));
     // pull comp 0.15 mm a side; 0.05 on thin columns (more widens them enough to close small counters). It starts
     // from the centre: two satins back to back at a junction ended and began on opposite edges, a column's width
     // apart (2.4 mm on a 24 mm name), which was a jump and a trim: 11 needless trims on "Ashley" in Yellowtail.
-    if (satinW) return [p[0], ...satin(p, satinW, density, (satinW >= 1.5 ? 0.3 : 0.1) + pull, false, false, wAt)];
+    if (satinW) return [p[0], ...satin(p, satinW, density, (satinW >= 1.5 ? 0.3 : 0.1) + pull, false, false, wAt, en?.shape)];
     const r = spaced(followRun(p, 1.6, 0.1, 0.8)), back = r.slice().reverse();   // the walk's way back: back, forth and back again
     return r.length > 1 ? [...r, ...back.slice(1), ...r.slice(1)] : r;
   }
 }
-// A corner (`taper` from letters): the font's point, shrunk about its junction by k (the column's width over the
-// font's stroke, so the point is where the narrower columns' edges would meet), sewn as a column as wide as the
-// point is across, and trimmed where that's under TIP mm. A full-width column ran to the font's own tip and its square
-// end stuck out (Quicksand "WILD" at 43.5 mm, 3.5 mm columns on a 4.4 mm font stroke: 4-5 mm stubs at the W's points).
-const TIP = 0.8;   // (the narrowest satin column)
-function tapered(p, { atEnd, prof, k }) {
+// A corner (`taper` from letters): the font's point, sewn as a column as wide as the point is across less `cut` (the
+// strokes into it are sewn narrower than the font's, so their edges meet that much nearer the junction), trimmed where
+// that's under TIP mm; the centre run under it goes on to where the narrower point would be. A full-width column ran
+// to the font's own tip and its square end stuck out (Quicksand "WILD" at 43.5 mm: 4-5 mm stubs at the W's points).
+// (Until round 6 the point was shrunk about the junction by satin / stroke and stopped at 0.8 mm across: at 10 mm
+// Josefin's V and W points stopped 1-1.5 mm short of the ink's.)
+const CENTRE = () => Infinity;   // (a corner's run with no column left over it: still only a centre run)
+const TIP = 0.4;   // (the narrowest column's stitches, pull comp added: 0.5 mm, clear of the 0.3 mm tiny stitch)
+function tapered(p, { atEnd, prof, cut: red }) {
   const wd = (d) => { let i = 1; while (i < prof.length - 1 && prof[i][0] < d) i++; const [d0, w0] = prof[i - 1], [d1, w1] = prof[i] || prof[i - 1]; return d1 > d0 ? w0 + ((w1 - w0) * Math.min(1, Math.max(0, (d - d0) / (d1 - d0)))) : w1; };
   const q = atEnd ? p.slice().reverse() : p.slice();   // (from the point in)
   const L = length(q);
-  let cut = 0;   // (mm in from the shrunk point)
-  for (const [d, w] of prof) { if (k * w >= TIP) break; cut = k * d; }
-  const from = L * (1 - k) + cut, M = L - from;
-  if (M < 0.3) return { p: [], wAt: null };
+  // (mm in from the font's point: where the narrower point is, and where it's TIP across)
+  let tip = 0, cut = 0;
+  for (const [d, w] of prof) { if (w - red > 0) break; tip = d; }
+  for (const [d, w] of prof) { if (w - red >= TIP) break; cut = d; }
+  const from = (d) => { let walked = 0; return [along(q, d), ...q.filter((v, i) => (walked += i ? Math.hypot(v[0] - q[i - 1][0], v[1] - q[i - 1][1]) : 0) > d)]; };
+  const own = (r) => (atEnd ? r.reverse() : r);
+  const runP = L - tip < 0.3 ? [] : own(from(tip));
+  if (L - cut < 0.3) return { p: [], run: runP, wAt: null };
+  const M = L - cut;
+  // t runs along the column (the stroke's own direction): from the point when it starts there
+  return { p: own(from(cut)), run: runP, wAt: (t) => wd(cut + (atEnd ? 1 - t : t) * M) - red };
+}
+// A loose end's shape (`ends` from letters) for a column of width w: each stitch reaches only as far as the ink does
+// either side, plus what the column has over the ink there anyway (it may be wider than the font), and slants onto a
+// cut the font made on a slant; the column stops where its stitches would be under TIP. Returns the column's path,
+// the shape for `satin` and how far in from each end the shaping goes (the zigzag underlay stops there).
+function endCut(p, { first, last }, w, inner = null) {
+  const L = length(p), h = w / 2;
+  const side = (rows) => {
+    if (!rows) return null;
+    const ref = rows[rows.length - 1], xa = Math.max(0, h - ref[2]), xb = Math.max(0, h - ref[3]);
+    const at = (d) => { let i = 0; while (i < rows.length - 1 && rows[i + 1][0] <= d) i++; const r = rows[i], n = rows[i + 1] || r, f = n[0] > r[0] ? Math.min(1, Math.max(0, (d - r[0]) / (n[0] - r[0]))) : 0; return [r[2] + (n[2] - r[2]) * f + xa, r[3] + (n[3] - r[3]) * f + xb, r[1] + (n[1] - r[1]) * f]; };
+    let stop = 0;   // (mm in from the end where the stitches are TIP long)
+    for (const [d] of rows) { const [a, b] = at(d); if (Math.min(h, a) + Math.min(h, b) >= TIP) break; stop = d; }
+    return { at, stop, span: ref[0] };
+  };
+  const F = side(first), E = side(last);
+  if (!F && !E) return inner ? { p, shape: inner, first: 0, last: 0 } : null;
+  const d0 = F ? F.stop : 0, d1 = L - (E ? E.stop : 0);
+  if (d1 - d0 < 0.3) return { p: [], shape: null, first: F ? F.span : 0, last: E ? E.span : 0 };
+  const q = d0 > 0 || d1 < L ? slice(p, d0, d1) : p;
+  // (the shape, along the trimmed column)
+  const shape = (s) => {
+    const a = d0 + s;
+    if (F && a <= F.span) return F.at(a);
+    if (E && L - a <= E.span) return E.at(L - a);
+    return inner ? inner(a) : null;
+  };
+  return { p: q, shape, first: F ? F.span : 0, last: E ? E.span : 0 };
+}
+// A stroke's column kept to the ink either side (`sides` from letters): each side reaches at most CLEAR_INK past the
+// ink, plus what the column has over the stroke's usual width anyway; never under 0.4 of the column. (mm along p) ->
+// [side, other side, 0], or null where it's the column's own width.
+const CLEAR_INK = 0.15;
+function sideClip(p, rows, w) {
+  const h = w / 2, L = length(p) || 1, ok = rows.filter((r) => r[1] !== null);
+  if (ok.length < 3) return null;
+  const med = (k) => { const v = ok.map((r) => r[k]).sort((x, y) => x - y); return v[v.length >> 1]; };
+  const xa = Math.max(0, h - med(1)) + CLEAR_INK, xb = Math.max(0, h - med(2)) + CLEAR_INK;
+  if (!ok.some((r) => r[1] + xa < h || r[2] + xb < h)) return null;
+  return (s) => {
+    const t = s / L;
+    let lo = 0, hi = rows.length - 1;
+    while (hi - lo > 1) { const m = (lo + hi) >> 1; if (rows[m][0] <= t) lo = m; else hi = m; }
+    const r = Math.abs(rows[lo][0] - t) <= Math.abs(rows[hi][0] - t) ? rows[lo] : rows[hi];
+    if (r[1] === null) return null;
+    const a = Math.min(h, r[1] + xa), b = Math.min(h, r[2] + xb);
+    return a >= h && b >= h ? null : [Math.max(a, 0.4 * h), Math.max(b, 0.4 * h), 0];
+  };
+}
+// the part of p from d0 to d1 mm along it
+function slice(p, d0, d1) {
+  const out = [along(p, d0)];
   let walked = 0;
-  const rest = [along(q, from), ...q.filter((v, i) => (walked += i ? Math.hypot(v[0] - q[i - 1][0], v[1] - q[i - 1][1]) : 0) > from)];
-  const back = atEnd ? rest.reverse() : rest;
-  // t runs along `back` (the stroke's own direction): from the point when it starts there
-  return { p: back, wAt: (t) => k * wd((cut + (atEnd ? 1 - t : t) * M) / k) };
+  for (let i = 1; i < p.length; i++) { walked += Math.hypot(p[i][0] - p[i - 1][0], p[i][1] - p[i - 1][1]); if (walked > d0 && walked < d1) out.push(p[i]); }
+  out.push(along(p, d1));
+  return out;
 }
 // the point d mm along p
 function along(p, d) {

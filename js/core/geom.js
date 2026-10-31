@@ -109,15 +109,24 @@ export function followRun(p, length = 1.6, tol = 0.1, min = 0.8) {
 // apart, spaced by the outer edge so curves don't gap; where the inner edge crowds, every other stitch is shortened.
 // (Until 2026-10-29 stations were `density` apart: 0.8 mm per edge, half the coverage of sold designs.)
 // (`wAt`, optional: the column's width at a fraction t of the way along, never over `width`: a tapered column)
-export function satin(p, width, density = 0.4, pullComp = 0.2, closed = false, fold = false, wAt = null) {
+// (`shape`, optional: (mm along, length) -> null, or [a, b, k]: the half-widths on the normal's side and the other,
+// never over width / 2, and the stitch's slant: it runs along normal + k x tangent, so its ends stay a and b off
+// the line. A stroke end the font cuts on a slant ends on that slant instead of square.)
+export function satin(p, width, density = 0.4, pullComp = 0.2, closed = false, fold = false, wAt = null, shape = null) {
   const station = density / 2;
   let c = resample(p, 0.02, closed);
   let n = normals(c, closed);
   if (closed) { c = [...c, c[0]]; n = [...n, n[0]]; }
-  const at = wAt && arclen(c), halves = wAt && c.map((_, i) => (Math.min(width, wAt(at[i] / (at[at.length - 1] || 1))) + pullComp) / 2);
+  const at = (wAt || shape) && arclen(c), Lc = at && at[at.length - 1];
+  const halves = wAt && c.map((_, i) => (Math.min(width, wAt(at[i] / (Lc || 1))) + pullComp) / 2);
   const hf = wAt ? (i) => halves[i] : () => (width + pullComp) / 2;
-  let A = c.map((q, i) => [q[0] + n[i][0] * hf(i), q[1] + n[i][1] * hf(i)]);
-  let B = c.map((q, i) => [q[0] - n[i][0] * hf(i), q[1] - n[i][1] * hf(i)]);
+  const sh = shape && c.map((_, i) => shape(at[i], Lc));
+  // each side's half-width and the stitch's direction (the normal unless slanted)
+  const ha = sh ? (i) => (sh[i] ? Math.min(width / 2, sh[i][0]) + pullComp / 2 : hf(i)) : hf;
+  const hb = sh ? (i) => (sh[i] ? Math.min(width / 2, sh[i][1]) + pullComp / 2 : hf(i)) : hf;
+  if (sh) n = n.map((v, i) => (sh[i] && sh[i][2] ? [v[0] + v[1] * sh[i][2], v[1] - v[0] * sh[i][2]] : v));   // (tangent = [n1, -n0])
+  let A = c.map((q, i) => [q[0] + n[i][0] * ha(i), q[1] + n[i][1] * ha(i)]);
+  let B = c.map((q, i) => [q[0] - n[i][0] * hb(i), q[1] - n[i][1] * hb(i)]);
   if (fold) { A = unfold(A, c); B = unfold(B, c); }
   const lens = [arclen(A), arclen(B), arclen(c)];
   const idx = [0];
@@ -130,7 +139,7 @@ export function satin(p, width, density = 0.4, pullComp = 0.2, closed = false, f
   if (idx[idx.length - 1] !== c.length - 1) idx.push(c.length - 1);
   const out = [];
   idx.forEach((i, j) => {
-    const sgn = j % 2 === 0 ? 1 : -1, half = hf(i);
+    const sgn = j % 2 === 0 ? 1 : -1, half = sgn > 0 ? ha(i) : hb(i);
     let r = half;
     if (j > 0 && j < idx.length - 1) {
       const thisSide = sgn > 0 ? A : B, other = sgn > 0 ? B : A, k = idx[j - 1];
