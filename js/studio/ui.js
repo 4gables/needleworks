@@ -379,7 +379,7 @@ export function initStudio(api) {
     if (f.some((p) => p.quilt === "stipple" || p.quilt === "echo")) return "Quilting is sewn through a quilt sandwich (see Have ready)";
     return "";
   }
-  const lettered = () => pieces.some((p) => p.kind === "text" || p.kind === "monogram");
+  function lettered() { return pieces.some((p) => p.kind === "text" || p.kind === "monogram"); }
   function fabricTip() {
     const base = ownBase(); if (!base) return FABRICS[fabric].tip;
     const what = [(fabric === "knit" || fabric === "towel") && lettered() ? "the lettering" : "", fabric === "knit" && pieces.some((p) => p.kind === "frame" && p.border === "patch") ? "the patch's fill" : ""].filter(Boolean);
