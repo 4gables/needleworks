@@ -10,7 +10,7 @@ import { CLOTHS, colorBlocks, draw } from "./render.js";
 import { FINISH, FIRST_STEP, cutSVG, nextThread, sewSheet, youHtml } from "./sheet.js";
 import { zip } from "./zip.js";
 import { blockThreads, checkup, fewerBlocks, fix, heat, landJumps, pauses, shortJumps, sortedChanges } from "./doctor.js";
-import { MAX_BLOCKS, denseWords, endsEarly, moves, stopWords, verdictOf } from "./quality.js";
+import { HARD, MAX_BLOCKS, denseWords, endsEarly, moves, stopWords, verdictOf } from "./quality.js";
 import { BRANDS, chartSpools, exampleSpools, lab, nearestSpool, spools } from "./core/brands.js";
 import { COLORS as LINE_THREADS, initStudio } from "./studio/ui.js";
 
@@ -163,7 +163,8 @@ function setView(v) {
   // (the file's own verdict, as tests/pe900_check.py would give it, a moment later: not on every frame of a drag)
   clearTimeout(qTimer);
   if (fits && !v.split && !v.verdict) qTimer = setTimeout(() => { if (state.view === v) { v.verdict = verdictOf(v.bytes); warnUI(v); } }, 250);
-  if (state.mode === "open" && state.opened) openInfo(v, st, fits);
+  // (and the size controls: "Largest that fits the 5x7" stayed after the hoop was changed to 4x4 on another tab)
+  if (state.mode === "open" && state.opened) { openInfo(v, st, fits); if ($("doc-scale")) sizeUI(); }
   $("download").textContent = v.split ? `Download ${v.split.length} files (.zip)` : !fits ? "Too big for this hoop" : v.block ? v.blockLabel || "Fix the lettering first" : v.action || `Download ${v.filename}`;
   paint();
 }
@@ -464,7 +465,7 @@ function badReport(el, files, zipName) {
   // (what the fix does, from what's wrong)
   const keys = new Set(bad.flatMap((b) => b.problems.map((q) => q.key))), does = [keys.has("dense") && "thins the crowded spots",
     keys.has("long") && "splits the long stitches", (keys.has("tiny") || keys.has("same")) && "drops the tiny stitches", keys.has("sparse") && "evens out the satin stitches",
-    keys.has("colours") && "lists one thread per colour", keys.has("block") && "makes what PE-DESIGN shows match what the machine sews"].filter(Boolean);
+    keys.has("colours") && "lists one thread per colour", keys.has("block") && "makes what PE-DESIGN shows match what the machine sews", keys.has("applique") && "uses threads where it had appliqué codes"].filter(Boolean);
   const fixable = bad.every((b) => b.fixed), p = document.createElement("p");
   p.textContent = fixable ? `A fixed copy ${does.join(", ").replace(/, ([^,]*)$/, " and $1")}, without changing the design. Use ${many ? "the fixed files" : "it"} instead.`
     : keys.has("blocks") ? "It has too many thread changes for the machine, and sewing each thread's parts together doesn't bring it under. Ask where it came from for a version with fewer colours."
@@ -496,7 +497,10 @@ function downloaded(v, zipped, files = []) {
   // ("Checked" only when the stitches pass too: it said so for files tests/pe900_check.py fails; and not for a file cut
   // short, which holds only part of the design)
   const part = state.mode === "open" && state.opened?.short;
-  $("done-checked").textContent = bad.length ? `It opens ${what}, but ${bad.length > 1 ? `${bad.length} of the files` : zipped ? "one of the files" : "it"} may not sew well:`
+  // (a rule the machine itself needs, broken: never "It opens on a Brother PE900")
+  const hardBad = bad.some((b) => b.problems.some((q) => HARD.has(q.key)));
+  $("done-checked").textContent = hardBad ? `It may not open or sew right ${what}: ${bad.length > 1 ? `${bad.length} of the files break` : zipped ? "one of the files breaks" : "it breaks"} a rule the machine needs.`
+    : bad.length ? `It opens ${what}, but ${bad.length > 1 ? `${bad.length} of the files` : zipped ? "one of the files" : "it"} may not sew well:`
     : part ? `It opens ${what}, but only part of the design is in it: the file it came from ends early. Download that file again if you can.` : `Checked: it opens ${what}.`;
   $("done-checked").className = bad.length || part ? "warn" : "good";
   $("done-zip").hidden = !zipped;
@@ -884,6 +888,8 @@ function setMode(mode, push = true) {
   if (push) history.replaceState(null, "", "#" + mode);
   showError(""); busy(false);   // (a picture still stitching from the last tab)
   $("empty").textContent = mode === "picture" ? "Choose a picture to see it as stitches." : mode === "open" ? "Open a PES, PEC or DST file to see it here." : mode === "design" ? "Nothing to stitch yet: type some words, or pick a starting idea." : "";
+  // (the file chooser in the preview too: at 960 x 540 the panel's was below the fold, under an empty hoop)
+  if (mode === "open") $("empty").append(Object.assign(document.createElement("button"), { type: "button", className: "primary", textContent: "Choose a design file", onclick: () => $("open-file").click() }));
   state.zoom = 1; state.pan = [0, 0];
   if (mode === "picture" && !state.pic.bitmap) loadSample();
   else if (mode === "picture" && !state.views.picture) makePicture();
@@ -1296,12 +1302,15 @@ async function openDesign(file) {
     const blocks = d.stitches.filter((s) => s[2] === COLOR_CHANGE).length + 1, colourless = d.threads.length < blocks;
     if (colourless) d.threads = Array.from({ length: blocks }, (_, i) => d.threads[i] || brother(DST_COLOURS[i % DST_COLOURS.length]));
     d = blockThreads(d);
-    const misplaced = d.format === "pes" && !!d.misplaced, repair = misplaced || (d.format === "pes" && (short || disagree));
+    // A PES that breaks a rule the machine itself needs (a thread list that isn't one per colour, appliqué codes for
+    // threads, too many thread changes) is never saved as it came: it's written again, or not saved at all. It was
+    // "Save a copy", byte for byte, then "It opens on a Brother PE900" (pec_count_ff.pes, colours_121.pes).
+    const hard = d.format === "pes" && !short ? verdictOf(bytes).filter((q) => HARD.has(q.key)) : [];
+    const misplaced = d.format === "pes" && !!d.misplaced, repair = misplaced || (d.format === "pes" && (short || disagree || hard.length > 0));
     const isPes = d.format === "pes" && !repair;
     // More colour blocks than the machine steps through (99; the PES writer refuses over 127: colors150.pes has 150,
     // and was called damaged): each thread's parts sewn together if that brings it under (`fewer`), else it's shown
-    // but not written again (`stuck`). A PES of its own still saves as it is; its fixes start from `fewer`, or there
-    // are none (`noFix`).
+    // but not saved (`stuck`; a PES too, since round 8: colours_121.pes was saved as it came).
     // (its stops as the facts beside the preview count them: thread changes, and pauses in the same thread)
     const same = Math.min(blocks - 1, pauses(d)), stops = stopWords(blocks - 1 - same, same);
     const tooMany = blocks > MAX_BLOCKS, fewer = tooMany ? fewerBlocks(d) : null, stuck = tooMany && !fewer && !isPes;
@@ -1314,7 +1323,7 @@ async function openDesign(file) {
     // is ticked. dense_k.pes was saved as "_fixed" with only its box mended, still 40 hits/mm².
     const need = new Set(isPes || stuck ? [] : check.verdict.map((q) => q.key));
     const base = safeName(file.name.replace(/\.[^.]+$/, ""), "design"), st = designStats(d);
-    state.opened = { d, bytes, out, isPes, repair, misplaced, short, disagree, colourless, name: file.name, base, tooMany, blocks, stops, merged, stuck, noFix: stuck || (tooMany && !fewer), fixBase: isPes && fewer ? fewer : null,
+    state.opened = { d, bytes, out, isPes, repair, hard, misplaced, short, disagree, colourless, name: file.name, base, tooMany, blocks, stops, merged, stuck, noFix: stuck || (tooMany && !fewer), fixBase: isPes && fewer ? fewer : null,
       opts: { scale: 1, tiny: need.has("tiny") || need.has("same"), thin: need.has("dense"), sort: false, split: need.has("long"), satin: need.has("sparse") },
       sorted: tooMany ? null : sortedChanges(d, colourless), needed: need.size ? check.verdict : null, pick: 0, srcLong: moves(d.stitches),
       check, longer: Math.max(st.widthMm, st.heightMm), size: [st.widthMm, st.heightMm], auto: false };
@@ -1374,7 +1383,8 @@ function showOpened(p, bytes, check, changed) {
     action: fixed ? "Save fixed copy" : scale !== 1 ? "Save resized copy" : o.d.format === "pes" ? "Save a copy" : "Save as PES",
     // (the checkup read the file as it will be saved: the same verdict beside Download)
     // (a file too full of thread changes to save already says so: not twice)
-    verdict: o.stuck ? check.verdict.filter((q) => q.key !== "blocks") : check.verdict,
+    // (nor the machine's other rules for a file that isn't saved: it isn't written, so there's nothing to break them)
+    verdict: o.stuck ? check.verdict.filter((q) => !HARD.has(q.key)) : check.verdict,
     warn: o.short ? "This file ends early: only part of the design is in it." : o.disagree ? "The file you opened holds two different designs, one for PE-DESIGN and one for the machine: the copy saved here is the one the machine sews, so both show the same." : "",
     // (the machine's name, then what the file calls it: a design made here names its threads after its pieces)
     threadLabel: (b, t) => `Brother ${t.name}${fileCalls(b.name, t.name, b.color)}` };
@@ -1411,8 +1421,16 @@ function openInfo(v, st, fits) {
     ${o.short ? `<span class="warn">This file ends early: it may be damaged (cut short when it was downloaded or copied), so only part of the design is here. Download it again from where it came from if you can. A copy saved here is complete for the part that's left.</span>` : ""}
     ${o.stuck ? `<span class="warn">This design has ${o.stops}. Brother machines stop ${MAX_BLOCKS - 1} times at most in one design, and sewing each thread's parts together doesn't bring it under, so it can't be saved for your machine here${o.misplaced ? " (as it is, this file would also load cut off on a Brother machine)" : ""}. Ask where it came from for a version with fewer colours.</span>` : ""}
     ${o.merged ? `<span>It had ${o.stops}, more stops than the machine handles (${MAX_BLOCKS - 1}). The copy here sews each thread's parts together where nothing in between is in the way: ${o.merged[1]} thread changes, and it looks the same.</span>` : ""}
+    ${o.stuck ? "" : hardWords(o) ? `<span class="warn">As it came, this file ${hardWords(o)}, which Brother machines don't take as it is. The copy saved here is fixed.</span>` : ""}
     ${o.stuck ? "" : o.misplaced && !o.short ? `<span class="warn">As it is, this file would load cut off on a Brother machine (shifted, about half shown). The download here is fixed.</span>`
-      : o.isPes || o.short ? "" : `<span>You can download it as a PES file for your machine.</span>`}`;
+      : o.isPes || o.short || hardWords(o) ? "" : `<span>You can download it as a PES file for your machine.</span>`}`;
+}
+// what an opened file broke of the machine's own rules, as it came (too many thread changes and two designs in one
+// file say so on their own)
+function hardWords(o) {
+  const k = new Set((o.hard || []).map((q) => q.key));
+  return [k.has("colours") && "listed the wrong number of threads for its colours", k.has("applique") && "asked for appliqué steps where it meant threads"]
+    .filter(Boolean).join(" and ");
 }
 // the largest size that fits the hoop (field less the margin), as a scale and a whole percent, a little under so the
 // re-stitched copy's rounding can't take it over
