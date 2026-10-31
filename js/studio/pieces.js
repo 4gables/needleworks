@@ -840,10 +840,19 @@ function lettersOn(laid, satinW, fab, xh = Infinity) {
 }
 
 const loop = (q) => [...q, q[0]];
+// the outline the other way round from the same start (a plain reverse started at its last point: on a square that
+// was a whole side away, two trims and two 55-61 mm jumps in a bold frame)
+const back = (e) => [e[0], ...e.slice(1).reverse()];
 // a tack-down: round the outline and back again
-const tack = (e) => [loop(run(e, 2.0, true)), loop(run(e.slice().reverse(), 2.0, true))];
+const tack = (e) => [loop(run(e, 2.0, true)), loop(run(back(e), 2.0, true))];
 // the 3.6 mm satin border of appliqué, patch and in-the-hoop edges: edge walk, zigzag, satin
 const satinBorder = (e) => [edgeWalk(e, 3.6, true), loop(zigzag(e, 2.6, 2.0, true)), loop(satin(e, 3.6, sd(0.4), 0.3, true))];
+// a frame that's only a border: satin (3 mm), bold (a triple run) or a line
+// (the edge walk isn't closed: it ends on the side the zigzag starts. Closing it stepped 2.2 mm back across the
+// border, a trim and two locks on every satin frame, until 2026-10-31)
+const plainBorder = (e, border) => border === "satin" ? [edgeWalk(e, 3.0, true), loop(zigzag(e, 2.1, 2.0, true)), loop(satin(e, 3.0, sd(0.4), 0.3, true))]
+  : border === "bold" ? [run(e, 2.0, true), run(back(e), 2.0, true), run(e, 2.0, true)].map(loop)
+  : [loop(run(e, 2.2, true))];
 
 // motifs that face one way (1: to the right, -1: to the left), for lettering's motif either side
 const FACING = { bird: 1, dog: 1, bunny: 1, cat: 1, leaf: 1, moon: 1, fish: -1, horse: -1 };
@@ -875,7 +884,7 @@ function localStages(p, fab = "cotton") {
         { color: p.color, pause: true, paths: tack(edge),
           you: `Lay the appliqué fabric over the ${name} outline, right side up, covering it by ½ in. Press Start. Then take the hoop off the machine (leave the fabric in the hoop), trim the appliqué fabric close to the stitching, and put the hoop back.`,
           sews: "Tacks the appliqué fabric down.", under: true },
-        { color: p.color, pause: true, paths: satinBorder(edge), you: "Press Start.", sews: "Covers the raw edge with a satin border." },
+        { color: p.color, pause: true, paths: satinBorder(edge), you: "Press Start.", sews: "Covers the raw edge with a satin border.", border: true },
       ];
     } else if (p.border === "zip") {
       // in-the-hoop zipper pouch: zipper across the top, the front in two folded pieces either side of it, whatever
@@ -930,10 +939,7 @@ function localStages(p, fab = "cotton") {
       stages = [...fill, { color: p.color, edge: true, solid: [edge], paths: satinBorder(edge), sews: `Sews the patch's satin edge.`,
         after: `Take it out of the hoop, trim or tear the stabilizer away and cut the patch out close to the satin edge without nicking it. To put it on, iron patch adhesive (or fusible web) on the back and press it on, or sew it on by hand or machine just inside the edge.` }];
     } else {
-      const paths = p.border === "satin" ? [edgeWalk(edge, 3.0, true), zigzag(edge, 2.1, 2.0, true), satin(edge, 3.0, sd(0.4), 0.3, true)]
-        : p.border === "bold" ? [run(edge, 2.0, true), run(edge.slice().reverse(), 2.0, true), run(edge, 2.0, true)]
-        : [run(edge, 2.2, true)];
-      stages = [{ color: p.color, paths: paths.map(loop), sews: `Sews the ${name} frame.` }];
+      stages = [{ color: p.color, paths: plainBorder(edge, p.border), sews: `Sews the ${name} frame.`, border: true }];
     }
   } else if (p.kind === "letters") {
     // appliqué letters: one piece of fabric for the whole word, outlined letter by letter (holes too)
@@ -1584,7 +1590,83 @@ function withQuilt(p, stages, others, dragging = false) {
     before: "A quilt sandwich big enough to hoop: top fabric, thin batting and backing (too thick to hoop: float it on hooped tear-away stabilizer with basting spray).",
     after: "Take it out of the hoop, snip any loose threads and tear away the stabilizer if you floated it on some." });
   const at = stages.findIndex((s) => s.last);
-  return at < 0 ? [...stages, q] : [...stages.slice(0, at), q, ...stages.slice(at)];
+  if (at >= 0) return [...stages.slice(0, at), q, ...stages.slice(at)];
+  // the border sews after the quilting (a quilter's order) and covers where it starts and stops: each end of the
+  // quilting near the frame runs on to the frame line and the border starts where it stops, one block with no trim
+  // (it was the border, a trim and a 7 mm jump into the quilting, its first and last locks in the open, until 2026-10-31)
+  const b = stages.findIndex((s) => s.border);
+  if (b < 0) return [...stages, q];
+  // (after an appliqué's tack-down the needle is on the frame line where it began: the quilting starts there if it can)
+  const led = toFrame(paths, edge, obstacles, p.border === "applique" ? edge[0] : null);
+  q.paths = led.paths;
+  const border = !led.at ? stages[b] : { ...stages[b], paths: p.border === "applique" ? satinBorder(startAt(edge, led.at)) : plainBorder(startAt(edge, led.at), p.border) };
+  return [...stages.slice(0, b), q, border, ...stages.slice(b + 1)];
+}
+
+// The nearest point to `pt` on a closed outline: [distance, segment index, point]
+function onOutline(e, pt) {
+  let best = [Infinity, 0, e[0]];
+  for (let i = 0; i < e.length; i++) {
+    const a = e[i], c = e[(i + 1) % e.length], dx = c[0] - a[0], dy = c[1] - a[1], L = dx * dx + dy * dy;
+    const t = L ? Math.max(0, Math.min(1, ((pt[0] - a[0]) * dx + (pt[1] - a[1]) * dy) / L)) : 0, q = [a[0] + dx * t, a[1] + dy * t];
+    const d = Math.hypot(pt[0] - q[0], pt[1] - q[1]);
+    if (d < best[0]) best = [d, i, q];
+  }
+  return best;
+}
+// a closed outline starting at a point on it
+function startAt(e, pt) {
+  const [, i, q] = onOutline(e, pt), rest = [...e.slice(i + 1), ...e.slice(0, i + 1)];
+  return [q, ...rest.filter((r, k) => k < rest.length - 1 || Math.hypot(r[0] - q[0], r[1] - q[1]) > 0.05)].filter((r, k) => !k || Math.hypot(r[0] - q[0], r[1] - q[1]) > 0.05);
+}
+// Quilting led on to the frame line at its ends (within 8 mm of it, by a straight run that keeps 1.5 mm clear of
+// every other piece's stitches): a closed loop (stipple) is entered and left at its point nearest the frame, out and
+// back along one run; an open line (echo, sewn inside out) only at an end that's already near. `from`: where on the
+// frame line the needle already is, to start from. Returns the paths and where on the frame line the quilting ends
+// (null if it doesn't).
+function toFrame(paths, edge, obstacles, from = null) {
+  const pts = obstacles.flat();
+  const clear = (a, c) => {
+    const dx = c[0] - a[0], dy = c[1] - a[1], L = dx * dx + dy * dy || 1;
+    return pts.every(([x, y]) => { const t = Math.max(0, Math.min(1, ((x - a[0]) * dx + (y - a[1]) * dy) / L)); return Math.hypot(x - a[0] - dx * t, y - a[1] - dy * t) >= 1.5; });
+  };
+  const lead = (pt, to) => { const q = to || onOutline(edge, pt)[2]; return Math.hypot(pt[0] - q[0], pt[1] - q[1]) <= 8 && clear(pt, q) ? q : null; };
+  const closed = (l) => l.length > 2 && Math.hypot(l[0][0] - l[l.length - 1][0], l[0][1] - l[l.length - 1][1]) < 0.01;
+  const leg = (a, c) => run([a, c], 2.5);   // a to c in stitches up to 2.5 mm
+  // a closed loop turned to start at its nearest point to the frame (or to `to`) that has a clear run to it
+  const turn = (l, to) => {
+    const order = l.slice(0, -1).map((pt, i) => [to ? Math.hypot(pt[0] - to[0], pt[1] - to[1]) : onOutline(edge, pt)[0], i]).sort((u, v) => u[0] - v[0]);
+    for (const [d, i] of order.slice(0, 40)) {
+      if (d > 8) break;
+      const q = lead(l[i], to);
+      if (q) return [[...l.slice(i, -1), ...l.slice(0, i + 1)], q];
+    }
+    return to ? turn(l, null) : [l, null];
+  };
+  // from `from` along the frame line to q (the shorter way, up to 20 mm; the border covers it), ending just before q
+  const along = (q) => {
+    if (!from || Math.hypot(q[0] - from[0], q[1] - from[1]) < 0.3) return [];
+    const e = startAt(edge, from), k = onOutline(e, q)[1], fwd = [...e.slice(0, k + 1)], bwd = [e[0], ...e.slice(k + 1).reverse()];
+    const len = (l) => l.reduce((s, r, i) => s + (i ? Math.hypot(r[0] - l[i - 1][0], r[1] - l[i - 1][1]) : 0), 0) + Math.hypot(q[0] - l[l.length - 1][0], q[1] - l[l.length - 1][1]);
+    const w = len(fwd) <= len(bwd) ? fwd : bwd;
+    return len(w) <= 20 ? run([...w, q], 2.0).slice(0, -1) : [];
+  };
+  const out = paths.slice();
+  let at = null;
+  const n = out.length - 1;
+  if (closed(out[n])) {
+    const [l, q] = turn(out[n], n === 0 ? from : null);
+    if (q) { out[n] = [...l, ...leg(l[l.length - 1], q).slice(1)]; at = q; }
+    if (q && n === 0) out[0] = [...along(q), ...leg(q, l[0]).slice(1), ...out[0].slice(1)];
+  } else {
+    const q = lead(out[n][out[n].length - 1]);
+    if (q) { out[n] = [...out[n], ...leg(out[n][out[n].length - 1], q).slice(1)]; at = q; }
+  }
+  if (n > 0) {
+    if (closed(out[0])) { const [l, q] = turn(out[0], from); out[0] = q ? [...along(q), ...leg(q, l[0]).slice(1), ...l.slice(1)] : l; }
+    else { const q = lead(out[0][0]); if (q) out[0] = [...leg(q, out[0][0]), ...out[0].slice(1)]; }
+  }
+  return { paths: out, at };
 }
 
 // A patch's fill cut away under what's sewn on top of it (lettering, a motif, a file): a name in satin on a full
