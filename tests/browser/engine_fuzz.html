@@ -18,7 +18,7 @@ to stitch are counted, not problems.</p>
 <pre id="log"></pre>
 <script type="module">
 import { hoop as getHoop } from "../../js/core/machines.js";
-import { readEmbroidery, writePES, validatePES } from "../../js/core/formats.js";
+import { designStats, readEmbroidery, writePES, validatePES } from "../../js/core/formats.js";
 import { APPLIQUE_FONTS, FONTS } from "../../js/core/fonts.js";
 import { BORDERS, FABRICS, SHAPES, TEXT_SHAPES, THREADS, cleanPiece, compose, fileBlocks, followFrame } from "../../js/studio/pieces.js";
 import { STARTERS } from "../../js/studio/ui.js";
@@ -115,7 +115,10 @@ async function build(s) {
   if (s.engine === "bookmark") return { pattern: buildBookmark({ name: s.name, blank: !s.name, family: s.family, color: s.color, hoop: getHoop("brother-pe900", "5x7"), lead: s.lead, tail: s.tail, print: s.print }).pattern(), hoop: getHoop("brother-pe900", "5x7") };
   if (s.engine === "doctor") {
     // (as the Open tab does: what the file fails is ticked, and shrinking ticks Remove tiny stitches and Thin)
-    const d = readEmbroidery(files.get(s.file), s.file), need = new Set(verdictOf(writePES(d)).map((q) => q.key)), small = s.scale < 1;
+    const d = readEmbroidery(files.get(s.file), s.file), st = designStats(d);
+    // (a size past the 5x7 field: the Open tab says so and offers the largest that fits; not re-stitched here, it takes seconds)
+    if (Math.max(st.widthMm * s.scale / 126, st.heightMm * s.scale / 176) > 1.02) throw Object.assign(new Error("too big"), { overBy: 1 });
+    const need = new Set(verdictOf(writePES(d)).map((q) => q.key)), small = s.scale < 1;
     const o = { ...s, tiny: s.tiny || small || need.has("tiny") || need.has("same"), thin: s.thin || small || need.has("dense"), satin: s.satin || need.has("sparse") };
     return { pattern: fix(d, o), hoop: getHoop("brother-pe900", "5x7"), fitOnly: true };
   }
@@ -152,6 +155,7 @@ let n = 0;
 for (const k of which) {
   const s = cases[k], tag = `fz_${SEED}_${String(k).padStart(4, "0")}_${s.engine}`, t0 = performance.now();
   const note = (kind, msg) => { counts[kind] = (counts[kind] || 0) + 1; if (msg) (s.engine === "picture" ? picBad : bad).push({ k, tag, kind, msg, spec: s }); if (msg) log(`${kind.toUpperCase()} ${tag}: ${msg}`); };
+  if (ONLY != null) log(JSON.stringify(s));
   await new Promise((res) => setTimeout(res, 0));
   let built;
   try { built = await build(s); }
