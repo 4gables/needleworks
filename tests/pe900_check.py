@@ -282,7 +282,8 @@ def check(path):
         v1, v2 = (b2[0] - a[0], b2[1] - a[1]), (c2[0] - b2[0], c2[1] - b2[1])
         l1, l2 = math.hypot(*v1), math.hypot(*v2)
         if 1.2 <= l1 <= 6 and 1.2 <= l2 <= 6 and (v1[0] * v2[0] + v1[1] * v2[1]) / (l1 * l2) < -0.85:
-            run_gaps.append(math.hypot(c2[0] - a[0], c2[1] - a[1]))
+            # (along the edge, across the stitch: a short stitch's step in on a tight curve isn't a gap; 2026-10-31)
+            run_gaps.append(abs((c2[0] - a[0]) * v1[1] - (c2[1] - a[1]) * v1[0]) / l1)
         else:
             if len(run_gaps) >= 6:
                 same += run_gaps

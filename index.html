@@ -13,7 +13,7 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=IBM+Plex+Mono:wght@500&display=swap">
 <!-- the module graph is three deep; fetch it all at once -->
 <link rel="modulepreload" href="js/app.js"><link rel="modulepreload" href="js/studio/ui.js"><link rel="modulepreload" href="js/studio/pieces.js">
-<link rel="modulepreload" href="js/core/formats.js"><link rel="modulepreload" href="js/core/digitize.js"><link rel="modulepreload" href="js/core/text.js"><link rel="modulepreload" href="js/core/words.js">
+<link rel="modulepreload" href="js/core/formats.js"><link rel="modulepreload" href="js/core/digitize.js"><link rel="modulepreload" href="js/core/text.js"><link rel="modulepreload" href="js/core/typed.js">
 <link rel="modulepreload" href="js/core/raster.js"><link rel="modulepreload" href="js/core/geom.js"><link rel="modulepreload" href="js/core/design.js">
 <link rel="modulepreload" href="js/render.js"><link rel="modulepreload" href="js/core/bookmark.js"><link rel="modulepreload" href="js/core/brandcharts.js">
 <link rel="stylesheet" href="css/app.css">
@@ -334,6 +334,7 @@
   <canvas id="along-view" aria-hidden="true"></canvas>
   <div class="along-body">
     <h2 id="along-title"></h2>
+    <div id="along-look" class="along-ready along-look" hidden></div>
     <div id="along-ready" class="along-ready" hidden><h3>Have ready</h3><ul></ul></div>
     <p id="along-turn" class="along-turn" hidden></p>
     <div id="along-you"></div>

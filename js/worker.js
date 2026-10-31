@@ -22,12 +22,12 @@ self.onmessage = (e) => {
     if (labelled?.key !== lk) labelled = { key: lk, analysis: labelWith(img, m, crop) };
     const analysis = labelled.analysis;
     const a = opts.palette?.length ? toPalette(analysis, opts.palette) : analysis;
-    const { design, summary, fine } = digitize(img, a, opts);
+    const { design, summary, fine, res } = digitize(img, a, opts);
     // digitized in the sideways hoop when turned; the file always loads in the machine's orientation
     const pattern = opts.turn ? turnForMachine(design.pattern()) : design.pattern();
     const bytes = writePES(pattern);
     self.postMessage({ id, ok: true, pattern, bytes, summary, fine,
-      colors: a.colors, merged: analysis.merged, owned: a.owned, labels: a.labels, w: a.w, h: a.h }, [bytes.buffer]);
+      colors: a.colors, merged: analysis.merged, owned: a.owned, labels: a.labels, w: a.w, h: a.h, res }, [bytes.buffer]);
   } catch (err) {
     self.postMessage({ id, ok: false, error: err.message || String(err), code: err.code });
   }

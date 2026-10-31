@@ -1,7 +1,7 @@
 // Text input outside the happy path (category 9), the app side: strings from tests/text_corpus.mjs typed (pasted) into
 // every place the app takes text, in the real page, checking what each place does with them:
 // - Words (Design tab lettering), Initials (monogram), Letters (appliqué), the bookmark Name: the field holds the text
-//   tidied (`tidy` in js/core/words.js: composed accents, plain spaces, no invisible characters, the field's length),
+//   tidied (`tidy` in js/core/typed.js: composed accents, plain spaces, no invisible characters, the field's length),
 //   the editor and the note beside Download name exactly the letters the font lacks (`lacks`, the font's own glyph
 //   map, NFD input included), the file name is plain ASCII and never a Windows device name, nothing throws, and the
 //   design settles within 15 s;
@@ -25,7 +25,7 @@
 //     [--only words,initials,letters,fonts,bookmark,names,saved,share,marks,layout]
 //   (about 15 min, quick about 5; prints "DONE <checks> <problems>" and exits 1 on a problem)
 import { FONTS, APPLIQUE_FONTS } from "../js/core/fonts.js";
-import { initials, lackList, lacks, safeName, tidy } from "../js/core/words.js";
+import { initials, lackList, lacks, safeName, tidy } from "../js/core/typed.js";
 import { FIXED, LONG, VARIANTS, corpus, rng } from "./text_corpus.mjs";
 
 const [CDP, HTTP] = process.argv.slice(2);

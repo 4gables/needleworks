@@ -1,7 +1,7 @@
 // Text input outside the happy path (category 9), the engine side: every string in tests/text_corpus.mjs (every script
 // sample, NFC and NFD accents, combining marks, right-to-left, emoji and ZWJ sequences, variation selectors, zero-width
 // and control characters, odd spaces and line breaks, quotes, reserved names, 0-5000 characters, plus 400 seeded
-// random mixes) through js/core/words.js and what's built on it:
+// random mixes) through js/core/typed.js and what's built on it:
 // - `tidy` (the one clean-up at input): well-formed, composed (NFC), no control or invisible characters, plain spaces,
 //   at most the lines and length asked, never a letter cut in two, and tidying twice changes nothing;
 // - `lacks` (the one glyph check, used by the editor, Download note, names batch and bookmark) agrees with each
@@ -15,7 +15,7 @@
 import assert from "node:assert/strict";
 import { glyphs } from "../js/core/glyphs.js";
 import { APPLIQUE_FONTS, FONTS } from "../js/core/fonts.js";
-import { graphemes, initials, lacks, latin, safeName, tidy, uniqueName } from "../js/core/words.js";
+import { graphemes, initials, lacks, latin, safeName, tidy, uniqueName } from "../js/core/typed.js";
 import { cleanPiece, label } from "../js/studio/pieces.js";
 import { FIXED, VARIANTS, corpus } from "./text_corpus.mjs";
 

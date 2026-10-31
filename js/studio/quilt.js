@@ -5,6 +5,8 @@ import { followRun, resample, smooth } from "../core/geom.js";
 import { distanceTransform } from "../core/raster.js";
 
 const RES = 4;
+// one frame's quilting (`withQuilt` in pieces.js, and js/quilt-worker.js off the page: the same code, the same stitches)
+export const quiltOf = ({ kind, edge, obstacles, opts }) => (kind === "echo" ? echo : stipple)(edge, obstacles, opts);
 
 // free space: inside `edge` (closed polygon) by `inset` mm, at least `clear` mm from every point of `obstacles` and
 // from every filled shape in `solids` (each a list of closed loops, even-odd: an appliqué's fabric, a patch, a filled
@@ -154,7 +156,9 @@ function relax(loops, F, space, rounds = 600) {
   for (let it = 0; it < rounds; it++) {
     if (calm < 0 && it >= rounds - CALM) calm = it;
     if (calm >= 0 && it >= calm + CALM) break;
-    loops = loops.map((p) => resample(p, STEP, true));
+    // (a loop squeezed under 3 points is gone: its neighbours' indices wrapped to undefined, a TypeError that left
+    // the whole design unbuilt; tests/browser/engine_fuzz.html)
+    loops = loops.map((p) => resample(p, STEP, true)).filter((p) => p.length >= 3);
     const N = loops.reduce((a, p) => a + p.length, 0), X = new Float64Array(N), Y = new Float64Array(N), L = new Int32Array(N), I = new Int32Array(N), nxt = new Int32Array(N);
     head.fill(-1);
     let k = 0;

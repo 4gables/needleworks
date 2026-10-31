@@ -66,6 +66,50 @@ export function normals(p, closed = false) {
 
 export const run = (p, length = 2.0, closed = false) => resample(p, length, closed);
 
+// What a move between two runs costs, by its length (mm): up to 2 mm Design.path stitches it (nothing); over 5 mm the
+// machine trims it (a trim and two locks); 2-5 mm the PE900 leaves as a loose thread to snip by hand, which is worse.
+export const moveCost = (d) => (d <= 2 ? 0 : d <= 5 ? 1.5 : 1);
+
+// Closed outlines sewn without wasted motion (tests/flow_lint.mjs measures it). A closed run/zigzag/satin from
+// `resample(.., true)` stops one step short of where it began: `loop` sews that last step home, so the next pass
+// round the same outline starts where the needle is (the bookmark's border zigzag ended a column away from its satin:
+// a trim and a 3.3 mm jump on every bookmark; its back tack-down left the last 2 mm of the outline unsewn).
+export const loop = (q) => [...q, q[0]];
+// the outline the other way round from the same start (a plain reverse started at its last point: on a square frame
+// that was a whole side away, two trims and two 55-61 mm jumps in a bold frame; 8 mm on every bookmark's tack-down)
+export const back = (e) => [e[0], ...e.slice(1).reverse()];
+
+// Closed outlines sewn one after another (a motif's outline and its holes), the cheapest move first (`moveCost`, then
+// the nearest), each started at that point (from `from`, then where the last one ended): make(outline) gives one
+// outline's paths, ending where they began. Without `from` the first keeps its own start. Each outline started at its
+// first point left a trim and a jump between a filled motif's fill and its edge, and between the edge and each hole.
+export function rings(loops, make, from = null) {
+  const left = loops.filter((l) => l.length), out = [];
+  let at = from;
+  while (left.length) {
+    let bi = 0, bk = 0, bd = Infinity;
+    if (at) left.forEach((l, i) => l.forEach((q, k) => { const r = Math.hypot(q[0] - at[0], q[1] - at[1]), d = moveCost(r) + r * 1e-4; if (d < bd) { bd = d; bi = i; bk = k; } }));
+    const l = left.splice(bi, 1)[0], paths = make(bk ? [...l.slice(bk), ...l.slice(0, bk)] : l).filter((q) => q.length);
+    out.push(...paths);
+    if (paths.length) { const q = paths[paths.length - 1]; at = q[q.length - 1]; }
+  }
+  return out;
+}
+
+// A closed path (first point = last) started at its point nearest `at`, when that's within `near` mm and its own start
+// isn't: the same stitches, entered where the needle is instead of a trim and a jump to the old start (a filled
+// motif's edge satin started across the shape from where its fill ended). Anything else is returned as it is.
+export function enter(q, at, near = 2.0) {
+  const n = q.length;
+  if (!at || n < 4 || q[0][0] !== q[n - 1][0] || q[0][1] !== q[n - 1][1]) return q;
+  const d = (p) => Math.hypot(p[0] - at[0], p[1] - at[1]);
+  if (d(q[0]) <= near) return q;
+  let k = 0;
+  for (let i = 1; i < n - 1; i++) if (d(q[i]) < d(q[k])) k = i;
+  if (d(q[k]) > near) return q;
+  return [...q.slice(k, n - 1), ...q.slice(0, k + 1)];
+}
+
 // [x0, y0, x1, y1] of points (a loop: Math.min(...pts) overflows the stack on big designs)
 export function bounds(pts) {
   let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;

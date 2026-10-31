@@ -28,6 +28,7 @@ const FILES = [
   "fonts/Satisfy-Regular.woff2",
   "fonts/Yellowtail-Regular.woff2",
   "js/app.js",
+  "js/words.js",
   "js/core/bookmark.js",
   "js/core/brandcharts.js",
   "js/core/brands.js",
@@ -40,7 +41,7 @@ const FILES = [
   "js/core/machines.js",
   "js/core/raster.js",
   "js/core/text.js",
-  "js/core/words.js",
+  "js/core/typed.js",
   "js/core/threads.js",
   "js/doctor.js",
   "js/quality.js",
@@ -52,8 +53,10 @@ const FILES = [
   "js/studio/quilt.js",
   "js/studio/ui.js",
   "js/doctor-worker.js",
+  "js/quilt-worker.js",
   "js/worker.js",
   "js/zip.js",
+  "js/gate.js",
 ];
 self.addEventListener("install", (e) => { e.waitUntil(caches.open(CACHE).then((c) => c.addAll(FILES)).then(() => self.skipWaiting())); });
 self.addEventListener("activate", (e) => {

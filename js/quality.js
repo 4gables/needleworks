@@ -3,6 +3,7 @@
 // written (decoded from its bytes, so the writer's splits and rounding count), so "Checked" means what the checker
 // means. Until 2026-10-30 the download dialog said "Checked: it opens on a Brother PE900" for files the checker
 // failed (density 25, a 12.7 mm stitch). Stitch units 0.1 mm.
+import { stopWords } from "./words.js";
 import { COLOR_CHANGE, JUMP, STITCH, STOP, TRIM, designBlockAgrees, readEmbroidery } from "./core/formats.js";
 
 export const LIMIT = 24;       // needle hits per mm² per colour block (pe900_check MAX_PER_MM2)
@@ -42,7 +43,11 @@ export function peak(pattern) {
 }
 
 // satin coverage as pe900_check measures it: in long zigzags (stitches 1.2-6 mm, each turning back on the last), the
-// gap between hits on the same edge (mm, median); null with under 200 such gaps
+// gap between hits on the same edge (mm, median); null with under 200 such gaps. Measured along the edge, across the
+// stitch (since 2026-10-31): a satin round a tight curve shortens every other stitch to 60 % on its inner edge, and
+// the straight-line distance between a full and a short hit read that step in as a gap (a 10 mm appliqué star "far
+// apart", 0.61 mm, its hits 0.35 mm apart along the edge). Sparse files read as before (rosacea 0.86 -> 0.85,
+// Ashley v1-3 0.80-0.85; the batch moves 0-0.1, all under 0.45).
 export function satinGap(st) {
   // (in mm, as the checker works)
   const pts = st.filter((s) => s[2] === STITCH).map(([x, y]) => [x / 10, y / 10]), same = [];
@@ -50,7 +55,7 @@ export function satinGap(st) {
   for (let k = 2; k < pts.length; k++) {
     const [a, b, c] = [pts[k - 2], pts[k - 1], pts[k]], v1 = [b[0] - a[0], b[1] - a[1]], v2 = [c[0] - b[0], c[1] - b[1]];
     const l1 = Math.hypot(...v1), l2 = Math.hypot(...v2);
-    if (l1 >= 1.2 && l1 <= 6 && l2 >= 1.2 && l2 <= 6 && (v1[0] * v2[0] + v1[1] * v2[1]) / (l1 * l2) < -0.85) run.push(Math.hypot(c[0] - a[0], c[1] - a[1]));
+    if (l1 >= 1.2 && l1 <= 6 && l2 >= 1.2 && l2 <= 6 && (v1[0] * v2[0] + v1[1] * v2[1]) / (l1 * l2) < -0.85) run.push(Math.abs((c[0] - a[0]) * v1[1] - (c[1] - a[1]) * v1[0]) / l1);
     else { if (run.length >= 6) same.push(...run); run = []; }
   }
   if (run.length >= 6) same.push(...run);
@@ -110,12 +115,8 @@ export const HARD = new Set(["blocks", "colours", "block", "applique"]);
 
 export const denseWords = (max) => `up to ${max} stitches in one square millimetre, about a pinhead; sold designs have ${LIMIT} at most`;
 
-// "195 thread changes and 4 pauses", as the facts beside the preview count a design's stops (a 200-colour file said
-// "changes thread 199 times" beside "195 thread changes · 4 pauses")
-export function stopWords(changes, pauses) {
-  const c = `${changes} thread ${changes === 1 ? "change" : "changes"}`, p = `${pauses} ${pauses === 1 ? "pause" : "pauses"}`;
-  return changes && pauses ? `${c} and ${p}` : pauses ? p : c;
-}
+// (the words for stops live in words.js, one vocabulary for every surface)
+export { stopWords };
 
 // a thread change to the same PEC thread is a machine pause (pyembroidery's interpolate_duplicate_color_as_stop)
 function withStops(pattern) {

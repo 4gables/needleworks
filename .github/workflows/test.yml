@@ -13,6 +13,10 @@ jobs:
       - run: node tests/sw.test.mjs
       # text people type, outside the happy path: tidy, glyph coverage, file names, saved designs (category 9)
       - run: node tests/text.test.mjs
+      # every file leaves through js/gate.js; damaged files through Open never offer a file the gate refuses
+      - run: node tests/gate.test.mjs
+      - run: node tests/open_fuzz.test.mjs
+      - run: node tests/flow_lint.test.mjs
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
