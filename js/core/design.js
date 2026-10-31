@@ -78,6 +78,15 @@ export class Design {
     this.tieOff();
     this.stitches.push([0, 0, END]);
     this.stitches = relieve(dedupe(drop ? untiny(this.stitches) : this.stitches));
+    // A design that ends up over 200 mm from the hoop's centre (a piece placed far out, a word on a 400 mm curve from a
+    // saved design) is moved onto it, as the machine centres it anyway: a PES design box holds 204.8 mm either way,
+    // and past that the file read back shifted and was refused at Download (tests/browser/engine_fuzz.html). Designs
+    // nearer the centre stay exactly where they are.
+    const [x0, y0, x1, y1] = this.bounds();
+    if (Math.max(-x0, x1, -y0, y1) > 200) {
+      const cx = Math.round((x0 + x1) * 5), cy = Math.round((y0 + y1) * 5);
+      this.stitches = this.stitches.map(([x, y, c]) => [x - cx, y - cy, c]);
+    }
     this.check();
     return this;
   }
