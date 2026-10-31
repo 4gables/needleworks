@@ -581,6 +581,14 @@ function bulk(p) {
   return p.kind === "text" ? letters(p.text, p.font, p.size, p.style) : letters(chars[1] || p.letters, p.font, chars.length === 3 ? p.size * 0.68 : p.size, p.style);
 }
 
+// whether bulk(p) is worked out already: a long text drawn again as one line takes a while (0.3-0.7 s for three
+// lines), so what only needs it for a tip or a label can say so a moment later instead of holding up the preview
+export function bulkReady(p) {
+  if (p.kind !== "text" && p.kind !== "monogram") return true;
+  const chars = [...(p.letters || "")], text = ((p.kind === "text" ? p.text : chars[1] || p.letters) || "").replace(/\s*\n\s*/g, " ").trim();
+  return !text || lettering.has(p.font + "\n" + text + "\n0");
+}
+
 // Automatic lettering this small sews as a fine line (its satin would be under 1 mm): said, since a name shrunk by
 // Fit to hoop or a long name in a batch turned thin without a word.
 export function fineLine(p) {
@@ -1597,17 +1605,18 @@ function withQuilt(p, stages, others, dragging = false) {
 // sections (trims 3 -> 9 on a name); fine lines are never carved. (Until 2026-10-30 each part was decided on its own,
 // cut where it was somewhere 4 mm across: the junctions of a thin "m" qualified, so in "Sam" only the m was carved
 // and sat flatter than S and a.) `above` is one list of stages per piece. Worked in the patch's own (unturned) frame.
-const carved = new Map(), CARVE_W = 3.4;
+// Cached in three layers, so a change that leaves the holes as they were (typing in thin lettering on the patch, a
+// font change, dragging a piece that isn't carved) never refills the patch, the slowest thing in compose: the patch's
+// own grids (by its shape), each piece's hole (by its stitches) and the fill (by the holes it ends up with).
+const carved = new Map(), grids = new Map(), CARVE_W = 3.4;
 function carve(p, stages, above, fab) {
   const a = ((p.rot || 0) * Math.PI) / 180, c = Math.cos(a), sn = Math.sin(a), f = p.flip ? -1 : 1;
   const local = above.map((sts) => sts.flatMap((s) => s.paths).map((q) => q.map(([x, y]) => [((x - p.x) * c + (y - p.y) * sn) * f, -(x - p.x) * sn + (y - p.y) * c])))
     .filter((g) => g.length);
   if (!local.length) return stages;
-  let h = local.length;
-  for (const g of local) { h = Math.imul(h ^ g.length, 16777619) | 0; for (const q of g) for (const [x, y] of q) h = (Math.imul(h ^ Math.round(x * 10), 16777619) ^ Math.round(y * 10)) | 0; }
-  const key = JSON.stringify([{ ...p, x: 0, y: 0, rot: 0 }, h, fab, wt]);
-  if (!carved.has(key)) {
-    const R = 4, edge = inset(shapeOf(p).path(p.w, p.h), 1.0), [x0, y0, x1, y1] = bounds(edge);
+  const shape = JSON.stringify({ ...p, x: 0, y: 0, rot: 0 }), R = 4;
+  if (!grids.has(shape)) {
+    const edge = inset(shapeOf(p).path(p.w, p.h), 1.0), [x0, y0, x1, y1] = bounds(edge);
     const w = Math.ceil((x1 - x0) * R) + 2, hh = Math.ceil((y1 - y0) * R) + 2, n = w * hh;
     // only well inside the patch's outline (a hole crossing it would add fill outside it, even-odd)
     const inside = { w, h: hh, data: new Uint8Array(n) };
@@ -1617,8 +1626,15 @@ function carve(p, stages, above, fab) {
       cut.sort((u, v) => u - v);
       for (let k = 0; k + 1 < cut.length; k += 2) for (let x = Math.max(0, Math.ceil((cut[k] - x0) * R)); x <= Math.min(w - 1, Math.floor((cut[k + 1] - x0) * R)); x++) inside.data[y * w + x] = 1;
     }
-    const room = distanceTransform(inside), hole = { w, h: hh, data: new Uint8Array(n) };
-    for (const g of local) {
+    grids.set(shape, { edge, x0, y0, w, hh, n, room: distanceTransform(inside), bits: new Map() });
+    if (grids.size > 4) grids.delete(grids.keys().next().value);
+  }
+  const { edge, x0, y0, w, hh, n, room, bits: carvedBits } = grids.get(shape), hole = { w, h: hh, data: new Uint8Array(n) };
+  for (const g of local) {
+    let h = g.length;
+    for (const q of g) for (const [x, y] of q) h = (Math.imul(h ^ Math.round(x * 10), 16777619) ^ Math.round(y * 10)) | 0;
+    const gk = h + ":" + g.reduce((t, q) => t + q.length, 0);
+    if (!carvedBits.has(gk)) {
       const m = { w, h: hh, data: new Uint8Array(n) };
       const dot = (x, y) => { const X = Math.round((x - x0) * R), Y = Math.round((y - y0) * R); if (X >= 0 && Y >= 0 && X < w && Y < hh) m.data[Y * w + X] = 1; };
       for (const q of g) for (let i = 1; i < q.length; i++) {
@@ -1636,11 +1652,24 @@ function carve(p, stages, above, fab) {
         if (d > 0 && d >= deep[i - 1] && d >= deep[i + 1] && d >= deep[i - w] && d >= deep[i + w]) mid.push(d);
       }
       mid.sort((u, v) => u - v);
-      if (!mid.length || (2 * mid[mid.length >> 1]) / R - 0.8 < CARVE_W) continue;
-      for (let i = 0; i < n; i++) if (deep[i] > 0.8 * R && room[i] > 1.5 * R) hole.data[i] = 1;
+      let bits = null;
+      if (mid.length && (2 * mid[mid.length >> 1]) / R - 0.8 >= CARVE_W) {
+        const on = [];
+        for (let i = 0; i < n; i++) if (deep[i] > 0.8 * R && room[i] > 1.5 * R) on.push(i);
+        bits = Int32Array.from(on);
+      }
+      carvedBits.set(gk, bits);
+      if (carvedBits.size > 64) carvedBits.delete(carvedBits.keys().next().value);
     }
-    const holes = contours(hole).map((l) => l.map(([x, y]) => [x0 + x / R, y0 + y / R]))
-      .filter((l) => l.length > 8 && Math.abs(l.reduce((s, q, i) => s + q[0] * l[(i + 1) % l.length][1] - l[(i + 1) % l.length][0] * q[1], 0)) / 2 >= 20);
+    const bits = carvedBits.get(gk);
+    if (bits) for (const i of bits) hole.data[i] = 1;
+  }
+  let h = 0, cnt = 0;
+  for (let i = 0; i < n; i++) if (hole.data[i]) { h = Math.imul(h ^ i, 16777619) | 0; cnt++; }
+  const key = JSON.stringify([shape, h, cnt, fab, wt]);
+  if (!carved.has(key)) {
+    const holes = cnt ? contours(hole).map((l) => l.map(([x, y]) => [x0 + x / R, y0 + y / R]))
+      .filter((l) => l.length > 8 && Math.abs(l.reduce((s, q, i) => s + q[0] * l[(i + 1) % l.length][1] - l[(i + 1) % l.length][0] * q[1], 0)) / 2 >= 20) : [];
     carved.set(key, holes.length ? patchFill(p, [edge, ...holes], fab) : null);
     if (carved.size > 12) carved.delete(carved.keys().next().value);
   }
