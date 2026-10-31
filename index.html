@@ -20,6 +20,7 @@
 <link rel="apple-touch-icon" href="assets/icon-192.png">
 </head>
 <body>
+<nav class="skips" aria-label="Skip links"><a class="skip" href="#controls">Skip to the settings</a><a class="skip" href="#preview">Skip to the preview and Download</a></nav>
 <header class="top">
   <div class="brand">
     <span class="logo">Needleworks</span>
@@ -41,7 +42,46 @@
 </header>
 
 <main class="work">
-  <section class="controls">
+  <section class="stage" id="preview" aria-label="Preview" tabindex="-1">
+    <div class="canvas-wrap">
+      <canvas id="view" tabindex="0" aria-label="Stitch preview. In Design your own, the arrow keys move the selected piece."></canvas>
+      <div class="facts" id="facts"></div>
+      <div class="zoom">
+        <button type="button" id="zoom-out" aria-label="Zoom out">−</button>
+        <button type="button" id="zoom-fit">Fit</button>
+        <button type="button" id="zoom-in" aria-label="Zoom in">+</button>
+      </div>
+      <div class="busy" id="busy" hidden><span class="spinner"></span><span id="busy-text">Stitching…</span></div>
+      <div class="empty" id="empty" hidden></div>
+      <div class="error" id="error" role="alert" hidden></div>
+    </div>
+    <div class="sew">
+      <button type="button" id="play" class="ghost" aria-label="Watch it sew">▶︎ Watch it sew</button>
+      <input id="progress" autocomplete="off" type="range" min="0" max="1000" value="1000" aria-label="Sewing progress">
+      <details class="views">
+        <summary class="ghost">View</summary>
+        <div class="views-menu">
+          <label class="check small"><input id="show-hoop" type="checkbox" checked> Hoop</label>
+          <label class="check small" title="Shows where the needle goes in most often: yellow is busy, red is too dense (more than 24 per mm²)"><input id="show-heat" type="checkbox"> Thickness</label>
+          <label class="check small" title="Zoom in to see each thread's twist"><input id="show-real" type="checkbox"> Realistic thread</label>
+          <button type="button" id="item-open" class="ghost" title="See the design at its real size on a photo of the bib, towel or shirt">On my item</button>
+        </div>
+      </details>
+      <button type="button" id="turn" class="ghost turn" aria-pressed="false" title="Turn the hoop sideways, so a long design can use the hoop's long side."><span aria-hidden="true">⟲</span> Turn hoop</button>
+    </div>
+    <div class="bottom">
+      <p class="hint warn dl-warn" id="dl-warn" role="status" hidden></p>
+      <ul class="threads" id="threads" aria-label="Threads"></ul>
+      <div class="actions">
+        <label class="ghost pick" id="pick-picture" for="pic-file">Choose a picture</label>
+        <label class="ghost pick" id="pick-design" for="open-file">Open a design file</label>
+        <button type="button" id="share" class="ghost share" hidden>Send by text or email</button>
+        <button type="button" id="download" class="primary" disabled>Download PES</button>
+        <p class="extras"><button type="button" id="along-open" class="link" disabled>Sew along</button><button type="button" id="sheet-print" class="link" disabled>Print a sew sheet</button><button type="button" id="names-open" class="link" hidden>One for each name</button><button type="button" id="cut-file" class="link" hidden title="The appliqué fabric shapes at actual size, for a Cricut or ScanNCut">Cut file for the fabric (SVG)</button></p>
+      </div>
+    </div>
+  </section>
+  <section class="controls" id="controls" aria-label="Settings" tabindex="-1">
     <!-- name bookmark -->
     <!-- reached from the Name bookmark card in Design your own (and #bookmark) -->
     <div class="panel" id="panel-bookmark" role="tabpanel" aria-labelledby="tab-design" hidden>
@@ -167,8 +207,12 @@
         </ul>
         <button type="button" class="link" id="st-appl-close">Got it</button>
       </div>
-      <fieldset class="field">
+      <fieldset class="field pieces-box">
         <legend role="heading" aria-level="2">Pieces <span class="hint inline">(sewn top to bottom)</span></legend>
+        <div class="pieces-tools">
+          <button type="button" class="ghost" id="st-undo" disabled title="Undo (⌘Z)"><span aria-hidden="true">↶</span> Undo</button>
+          <button type="button" class="ghost" id="st-redo" disabled title="Redo (⇧⌘Z)"><span aria-hidden="true">↷</span> Redo</button>
+        </div>
         <ul id="st-pieces" class="pieces"></ul>
         <div id="st-add" class="add">
           <button type="button" class="ghost" data-add="text">+ Lettering</button>
@@ -181,8 +225,6 @@
         </div>
         <div class="add">
           <button type="button" class="ghost" id="st-fit" title="Make the whole design as big as the hoop allows">Fit to hoop</button>
-          <button type="button" class="ghost" id="st-undo" disabled title="Undo (⌘Z)"><span aria-hidden="true">↶</span> Undo</button>
-          <button type="button" class="ghost" id="st-redo" disabled title="Redo (⇧⌘Z)"><span aria-hidden="true">↷</span> Redo</button>
           <button type="button" class="ghost" id="st-save" title="Keep this design to change it later (not for the machine: use Download PES for that)">Save design</button>
           <label class="ghost st-load" for="st-load" title="Open a design saved from here">Open saved</label>
           <input type="file" id="st-load" accept=".json,application/json" class="sr-file">
@@ -191,7 +233,7 @@
       <fieldset class="field">
         <legend role="heading" aria-level="2">Selected piece <button type="button" id="st-center" class="link">Centre it</button></legend>
         <div id="st-edit" class="edit"></div>
-        <p class="hint">Drag on the preview to move it<span class="keys">, or use the arrow keys (Shift for bigger steps)</span>.</p>
+        <p class="hint" id="st-drag-hint">Drag on the preview to move it<span class="keys">, or use the arrow keys (Shift for bigger steps)</span>.</p>
       </fieldset>
       <details class="field sewn-on" id="st-sewn">
         <summary>Sewing on: <b id="st-fabric-name">Cotton</b><span id="st-thread-name"></span></summary>
@@ -225,45 +267,6 @@
     </div>
   </section>
 
-  <section class="stage" aria-label="Preview">
-    <div class="canvas-wrap">
-      <canvas id="view" tabindex="0" aria-label="Stitch preview. In Design your own, the arrow keys move the selected piece."></canvas>
-      <div class="facts" id="facts"></div>
-      <div class="zoom">
-        <button type="button" id="zoom-out" aria-label="Zoom out">−</button>
-        <button type="button" id="zoom-fit">Fit</button>
-        <button type="button" id="zoom-in" aria-label="Zoom in">+</button>
-      </div>
-      <div class="busy" id="busy" hidden><span class="spinner"></span><span id="busy-text">Stitching…</span></div>
-      <div class="empty" id="empty" hidden></div>
-      <div class="error" id="error" role="alert" hidden></div>
-    </div>
-    <div class="sew">
-      <button type="button" id="play" class="ghost" aria-label="Watch it sew">▶︎ Watch it sew</button>
-      <input id="progress" autocomplete="off" type="range" min="0" max="1000" value="1000" aria-label="Sewing progress">
-      <details class="views">
-        <summary class="ghost">View</summary>
-        <div class="views-menu">
-          <label class="check small"><input id="show-hoop" type="checkbox" checked> Hoop</label>
-          <label class="check small" title="Shows where the needle goes in most often: yellow is busy, red is too dense (more than 24 per mm²)"><input id="show-heat" type="checkbox"> Thickness</label>
-          <label class="check small" title="Zoom in to see each thread's twist"><input id="show-real" type="checkbox"> Realistic thread</label>
-          <button type="button" id="item-open" class="ghost" title="See the design at its real size on a photo of the bib, towel or shirt">On my item</button>
-        </div>
-      </details>
-      <button type="button" id="turn" class="ghost turn" aria-pressed="false" title="Turn the hoop sideways, so a long design can use the hoop's long side."><span aria-hidden="true">⟲</span> Turn hoop</button>
-    </div>
-    <div class="bottom">
-      <ul class="threads" id="threads" aria-label="Threads"></ul>
-      <div class="actions">
-        <label class="ghost pick" id="pick-picture" for="pic-file">Choose a picture</label>
-        <label class="ghost pick" id="pick-design" for="open-file">Open a design file</label>
-        <button type="button" id="share" class="ghost share" hidden>Send by text or email</button>
-        <button type="button" id="download" class="primary" disabled>Download PES</button>
-        <p class="hint warn dl-warn" id="dl-warn" role="status" hidden></p>
-        <p class="extras"><button type="button" id="along-open" class="link" disabled>Sew along</button><button type="button" id="sheet-print" class="link" disabled>Print a sew sheet</button><button type="button" id="names-open" class="link" hidden>One for each name</button><button type="button" id="cut-file" class="link" hidden title="The appliqué fabric shapes at actual size, for a Cricut or ScanNCut">Cut file for the fabric (SVG)</button></p>
-      </div>
-    </div>
-  </section>
 </main>
 
 <footer class="foot">

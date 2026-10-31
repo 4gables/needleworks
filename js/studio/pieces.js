@@ -507,10 +507,10 @@ function localStages(p, fab = "cotton") {
       paths = [...side(x0 - gap - s / 2), ...paths, ...side(x1 + gap + s / 2)];
     }
     const words = (p.text || "").replace(/\s*\n\s*/g, " / ").trim();
-    if (paths.length) stages = [{ color: p.color, paths, sews: fab === "towel" ? `Sews a light base to flatten the towel loops, then “${words}” on it.` : `Sews “${words}”.` }];
+    if (paths.length) stages = [{ color: p.color, paths, sews: fab === "towel" ? `Sews a light base to flatten the pile, then “${words}” on it.` : `Sews “${words}”.` }];
   } else if (p.kind === "monogram") {
     const paths = monogram(p, fab);
-    if (paths.length) stages = [{ color: p.color, paths, sews: fab === "towel" ? `Sews a light base to flatten the towel loops, then the monogram ${p.letters}.` : `Sews the monogram ${p.letters}.` }];
+    if (paths.length) stages = [{ color: p.color, paths, sews: fab === "towel" ? `Sews a light base to flatten the pile, then the monogram ${p.letters}.` : `Sews the monogram ${p.letters}.` }];
   } else if (p.kind === "frame") {
     const edge = shapeOf(p).path(p.w, p.h), name = shapeOf(p).name.toLowerCase();
     if (p.border === "applique") {
@@ -986,13 +986,15 @@ export function followFrame(p, pieces) {
 // what the design is sewn on: changes the stitches (knit, towel) and the stabilizer advice
 const ascii = (s) => (s || "").normalize("NFKD").replace(/[\u0300-\u036f]/g, "").replace(/[‘’]/g, "'").replace(/[“”]/g, "\"").replace(/[^\x20-\x7e]/g, "");
 
+// (`ready` is what "Have ready" lists and `tip` what "Sewing on" says: one place per fabric, so they agree)
 export const FABRICS = {
-  cotton: { name: "Cotton", tip: "On woven cotton, hoop it with tear-away stabilizer underneath." },
-  knit: { name: "Knit", ready: "Cut-away stabilizer (fusible no-show mesh is easiest) and a 75/11 ballpoint needle.", tip: "Knits stretch: hoop them with cut-away stabilizer (fusible no-show mesh is easiest) and use a 75/11 ballpoint needle. Don't stretch the fabric while hooping." },
-  towel: { name: "Towel", tip: "Lay a water-soluble topper on the towel and hoop tear-away (or cut-away) stabilizer under it. The light base sewn under the letters flattens the loops; tear the topper off afterwards.",
+  cotton: { name: "Cotton", ready: "Tear-away stabilizer.", tip: "On woven cotton, hoop it with tear-away stabilizer underneath. On a pillowcase or bag, hoop only the front layer (turn it inside out) so it isn't sewn shut." },
+  knit: { name: "Knit / T-shirt", ready: "Cut-away stabilizer (fusible no-show mesh is easiest) and a 75/11 ballpoint needle.", tip: "Knits stretch: hoop them with cut-away stabilizer (fusible no-show mesh is easiest) and use a 75/11 ballpoint needle. Don't stretch the fabric while hooping." },
+  towel: { name: "Towel / fleece", tip: "Lay a water-soluble topper on the towel or fleece and hoop tear-away (or cut-away) stabilizer under it. The light base sewn under the letters flattens the pile; tear the topper off afterwards.",
     ready: "A water-soluble topper (like Solvy) and tear-away or cut-away stabilizer.", after: "Tear the topper away (a damp cloth melts the bits left in the letters) and tear or cut away the stabilizer." },
-  felt: { name: "Felt", tip: "Felt is firm: tear-away stabilizer is enough. Use a sharp 75/11 needle." },
-  denim: { name: "Denim", tip: "On denim use a 75/11 sharp or 80/12 needle (90/14 only for heavy denim and canvas) and cut-away or heavy tear-away stabilizer." },
+  felt: { name: "Felt", ready: "Tear-away stabilizer and a sharp 75/11 needle.", tip: "Felt is firm: tear-away stabilizer is enough. Use a sharp 75/11 needle." },
+  denim: { name: "Denim", ready: "Cut-away or heavy tear-away stabilizer and a 75/11 sharp or 80/12 needle (90/14 for heavy denim).", tip: "On denim use a 75/11 sharp or 80/12 needle (90/14 only for heavy denim) and cut-away or heavy tear-away stabilizer." },
+  canvas: { name: "Canvas / tote", ready: "Medium tear-away stabilizer (cut-away if it'll be washed a lot) and a 90/14 sharp needle.", tip: "Canvas is firm: medium tear-away stabilizer underneath (cut-away if it'll be washed a lot) and a 90/14 sharp needle. On a tote, hoop only the front layer (turn it inside out)." },
 };
 
 // thread weight (compose opts `thread`): satin and fill spacing follow the thread's thickness. Automatic is what the

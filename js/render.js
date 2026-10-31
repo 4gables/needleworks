@@ -26,6 +26,12 @@ function shade(hex, f) {
   return `rgb(${c.map((v) => Math.round(v)).join(",")})`;
 }
 
+// thread pale enough to vanish on light fabric
+function pale(hex) {
+  const n = parseInt(hex.slice(1), 16);
+  return 0.3 * (n >> 16) + 0.59 * ((n >> 8) & 255) + 0.11 * (n & 255) > 0.85 * 255;
+}
+
 function bbox(blocks) {
   let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
   for (const b of blocks) for (const s of b.segs) for (const [x, y] of s) {
@@ -55,7 +61,7 @@ export const CLOTHS = {
 };
 
 // opts: { fabric (CLOTHS key), fabricShapeBlock, hide: Set, upto, ghost (stitches after upto drawn faint), heat (Map "cx,cy" -> hits per mm²), backdrop ({ bmp, unit, center }: a photo under it), hoop: {w,h} (mm), showHoop, zoom, pan: [x,y], center: [x,y] (0.1 mm),
-//         pad, padTop (px kept clear), cache (colorBlocks result), showNeedle (a needle at upto), fieldColor (fill inside the hoop), real (thread twist when zoomed in) }
+//         pad, padTop, padBottom (px kept clear), cache (colorBlocks result), showNeedle (a needle at upto), fieldColor (fill inside the hoop), real (thread twist when zoomed in) }
 export function draw(canvas, design, opts = {}) {
   const dpr = window.devicePixelRatio || 1;
   const W = canvas.clientWidth, H = canvas.clientHeight;
@@ -65,8 +71,9 @@ export function draw(canvas, design, opts = {}) {
   const ctx = canvas.getContext("2d");
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.clearRect(0, 0, W, H);
-  if (!design) return null;
-  const { blocks, total } = opts.cache || colorBlocks(design);
+  // (nothing to stitch yet still shows the hoop it would go in)
+  if (!design && !(opts.hoop && opts.showHoop !== false)) return null;
+  const { blocks, total } = design ? opts.cache || colorBlocks(design) : { blocks: [], total: 0 };
   const [x0, y0, x1, y1] = bbox(blocks);
   // centred on the design, or on a fixed point (the Design tab keeps the hoop centre still while pieces move)
   const cxd = opts.center ? opts.center[0] : (x0 + x1) / 2, cyd = opts.center ? opts.center[1] : (y0 + y1) / 2;
@@ -74,9 +81,10 @@ export function draw(canvas, design, opts = {}) {
   const bd = opts.backdrop, bw = bd ? bd.bmp.width * bd.unit : 0, bh = bd ? bd.bmp.height * bd.unit : 0;
   const spanW = Math.max(x1 - x0, hoop ? hoop.w * 10 : 0, bw * 0.9), spanH = Math.max(y1 - y0, hoop ? hoop.h * 10 : 0, bh * 0.9);
   // leave room at the top for the info chips (they wrap to more rows on a phone)
-  const pad = opts.pad ?? 24, top = opts.padTop ?? pad, fit = Math.min((W - pad * 2) / spanW, (H - pad - top) / spanH);
+  // (and at the bottom for a message over the preview: the too-big note covered the hoop on a phone)
+  const pad = opts.pad ?? 24, top = opts.padTop ?? pad, bot = Math.max(pad, opts.padBottom ?? pad), fit = Math.min((W - pad * 2) / spanW, (H - bot - top) / spanH);
   const s = fit * (opts.zoom || 1), pan = opts.pan || [0, 0];
-  const ox = W / 2 - cxd * s + pan[0], oy = top + (H - pad - top) / 2 - cyd * s + pan[1];
+  const ox = W / 2 - cxd * s + pan[0], oy = top + (H - bot - top) / 2 - cyd * s + pan[1];
   const X = (x) => x * s + ox, Y = (y) => y * s + oy;
 
   if (bd) {   // a photo of the item at true size (bd.unit: 0.1 mm per photo pixel), its centre at bd.center
@@ -84,7 +92,7 @@ export function draw(canvas, design, opts = {}) {
   }
   if (hoop) {   // hoop: wooden ring around the sewable field
     const hw = hoop.w * 10 * s, hh = hoop.h * 10 * s, r = Math.min(hw, hh) * 0.12;
-    const hx = W / 2 - hw / 2 + pan[0], hy = top + (H - pad - top) / 2 - hh / 2 + pan[1];
+    const hx = W / 2 - hw / 2 + pan[0], hy = top + (H - bot - top) / 2 - hh / 2 + pan[1];
     ctx.save();
     // a light field inside the hoop when asked (dark mode: navy and black thread vanished on the dark stage)
     if (opts.fieldColor) { ctx.fillStyle = opts.fieldColor; roundRect(ctx, hx, hy, hw, hh, r * 0.6); ctx.fill(); }
@@ -130,9 +138,11 @@ export function draw(canvas, design, opts = {}) {
   for (const b of blocks) {
     if (opts.hide && opts.hide.has(b.index)) continue;
     const base = b.color, dark = shade(base, -0.42), light = shade(base, 0.38);
-    // soft drop shadow under the whole colour block
+    // soft drop shadow under the whole colour block; white and cream thread get an edge too (they vanished on the
+    // off-white fabric)
     ctx.strokeStyle = "rgba(40,20,20,0.18)"; ctx.lineWidth = tw * 1.15;
     strokeSegs(ctx, b.segs, X, Y, upto, tw * 0.35);
+    if (pale(base)) { ctx.strokeStyle = "rgba(60,45,45,0.5)"; ctx.lineWidth = tw + 1.6; strokeSegs(ctx, b.segs, X, Y, upto, 0); }
     for (const seg of b.segs) {
       for (let i = 1; i < seg.length; i++) {
         if (seg[i][2] >= upto) break;
