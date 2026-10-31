@@ -754,7 +754,8 @@ export function initStudio(api) {
     const long = pieces.filter((p) => p.kind === "text" && (p.shape || "straight") === "straight" && !p.text.includes("\n") && !fit.has(p.id) && !(p.rot || 0) && !p.deco && / /.test(p.text.trim()))
       .sort((a, b) => wide(b) - wide(a))[0];
     if (long) {
-      const t = long.text.trim(), gaps = [...t.matchAll(/ +/g)].map((m) => [m.index, m.index + m[0].length]);
+      // (the two gaps nearest the middle: each try draws both halves' lettering, and this runs as the words are typed)
+      const t = long.text.trim(), gaps = [...t.matchAll(/ +/g)].map((m) => [m.index, m.index + m[0].length]).sort((a, b) => Math.abs(a[0] - t.length / 2) - Math.abs(b[0] - t.length / 2)).slice(0, 2);
       const b0 = pieceBounds({ ...long, x: 0, y: 0 }), h0 = inkHeight(t, long.font), m0 = letterMetrics(t, long.font, long.size, long.style);
       // (each word at the same letter scale, its baseline and outer end where they were)
       const part = (text, end) => {
@@ -887,13 +888,16 @@ export function initStudio(api) {
     // when it's the first; a later one in free space too. No room: said so, and nothing is added (pieces piled up on
     // one spot with one warning, or went outside a patch until the design quietly became two hoopings).
     const ith = pieces.find((f) => f.kind === "frame" && (f.border === "zip" || f.border === "ith") && !(f.rot || 0));
-    const placing = !at && pieces.length && (p.kind === "frame" ? pieces.some((f) => f.kind === "frame") : ith || touching(p, pieces) || !fitsWith(p));
+    // (a design already too big for one hooping, two hoopings on purpose, takes it below what's there as before)
+    const over = !fitsWith(null);
+    const placing = !at && pieces.length && !(over && !ith) && (p.kind === "frame" ? pieces.some((f) => f.kind === "frame") : ith || touching(p, pieces) || !fitsWith(p));
+    if (over && !ith && !at && p.kind !== "frame" && touching(p, pieces)) freeSpot(p, "down");
     if (placing) {
       const room = freeRoom(p, ith);
       if (!room) { noRoom(p, ith); return; }
       Object.assign(p, room);
     }
-    const moved = !!placing && !ith;
+    const moved = (!!placing || over) && !ith;
     pieces.push(p); sel = p.id;
     // in a thread that shows on a patch it's sewn on, wherever it landed (+ Lettering on the patch starter came in
     // navy on the navy fill)
@@ -1151,6 +1155,10 @@ export function initStudio(api) {
       // the hoop (when this machine has it) and the turn it was saved with
       if (typeof data.hoop === "string") api.setHoop(data.hoop);
       api.setTurn(data.turned === true);
+      // (a size past what any hoop holds, cut down to the biggest piece there can be, is then fitted to this hoop:
+      // `size: 1e9` opened as a 486 mm "Emma")
+      const huge = pairs.some(([p, q]) => q && ["size", "w", "h"].some((k) => typeof p[k] === "number" && q[k] < p[k]));
+      if (huge) try { compose(pieces, api.hoop(), { fabric, baste, thread }); } catch (err) { if (err.overBy) fitHoop(false); }
       settle(); save(); ui(); make();
       const left = data.pieces.length - loaded.length;
       if (left || changed || cut) toast([left ? `${left} ${left === 1 ? "piece" : "pieces"} in that file couldn't be read and ${left === 1 ? "was" : "were"} left out.` : "",
@@ -1245,7 +1253,7 @@ export function initStudio(api) {
   }
   // does the layout with p added still fit the hoop's field (as boxes, at the sizes they're sewn)?
   function fitsWith(p) {
-    const [w, h] = layoutSize([...pieces, p]), hp = api.hoop();
+    const [w, h] = layoutSize(p ? [...pieces, p] : pieces), hp = api.hoop();
     return w <= hp.w - 5 && h <= hp.h - 5;
   }
   // The nearest free space for a new piece where a frame had no room (`spotIn`): its box 2 mm clear of every other
@@ -1279,7 +1287,8 @@ export function initStudio(api) {
         const q = { ...q0, x: Math.round(x * 2) / 2, y: Math.round(y * 2) / 2 };
         if (ith && !inFrame(q, ith, 4)) continue;
         if (p.kind !== "frame" && touching(q, pieces)) continue;
-        return { x: q.x, y: q.y, ...(p.size == null ? {} : { size }) };
+        // (at the size a frame it lands in then sews it, as `spotIn` does)
+        return { x: q.x, y: q.y, ...(p.size == null ? {} : { size: fittedSizes([...pieces, q]).get(p.id) ?? size }) };
       }
     }
     return null;
