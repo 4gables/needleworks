@@ -140,6 +140,17 @@ export function archFit(p) {
   }
   return null;
 }
+// The other way round: the letter size (whole mm, down to the smallest that stitches cleanly) that fits the curve as
+// it is, or 0. (Widening the curve can make the design bigger than the hoop: a 4-word arch at radius 80, 198 mm.)
+export function archShrink(p) {
+  if (p.kind !== "text" || (p.shape !== "up" && p.shape !== "down") || (!archTight(p) && !archRoom(p))) return 0;
+  for (let s = Math.ceil(p.size) - 1; s >= 5; s--) {
+    const q = { ...p, size: s };
+    if (minSize(q)) return 0;
+    if (!archTight(q) && !archRoom(q)) return s;
+  }
+  return 0;
+}
 // Arched lettering that wraps more than ~55% of the way round its curve (a long name on the bib's small arch) reads
 // as a ring and runs into what's under it: the curve size that brings it to 45%, or null when it's fine.
 export function archRoom(p) {
@@ -153,20 +164,69 @@ export function archRoom(p) {
   // (`full`: more than the whole way round, so the ends overlap; not a curve setting)
   return Object.defineProperty({ radius: Math.round(a * k), ry: Math.round(b * k) }, "full", { value: span > per * 0.95 });
 }
-// The first other piece whose stitches come within 1 mm of p's (lettering run into a heart, say), or null. Patches
+// The first other piece whose stitches come within CLEAR of p's (lettering run into a heart, say), or null. Patches
 // are left out: lettering on a filled patch is meant to sit on it.
+// Measured between the needle points, every 0.5 mm along the stitch lines, at the size each piece is sewn (lettering
+// fitted into a frame at its fitted size). 1.5 mm between needle points leaves ~1 mm of fabric between the threads:
+// a bib name 1.0 mm from the heart's satin looked sewn into it, 2 mm reads clear. (Until 2026-10-30 points were
+// rounded to whole mm and the cells either side checked: anything up to ~2.8 mm away "ran into" it, a key fob R the
+// app had just fitted, 2 mm clear of the satin.)
+const CLEAR = 1.5;
 export function touching(p, pieces) {
   if (p.kind === "frame") return null;
-  const mine = new Set();
-  for (const q of pieceStitches(p)) for (const [x, y] of q) mine.add(Math.round(x) + "," + Math.round(y));
+  const fit = fittedSizes(pieces), sewn = (o) => (fit.has(o.id) ? { ...o, size: fit.get(o.id) } : o);
+  const mine = cloud(pieceStitches(p));
   for (const o of pieces) {
     if (o === p || o.id === p.id || (o.kind === "frame" && o.border === "patch")) continue;
-    for (const q of pieceStitches(o)) for (const [x, y] of q) {
-      const X = Math.round(x), Y = Math.round(y);
-      for (let dx = -1; dx <= 1; dx++) for (let dy = -1; dy <= 1; dy++) if (mine.has(X + dx + "," + (Y + dy))) return o;
-    }
+    if (near(mine, pieceStitches(sewn(o)), CLEAR)) return o;
   }
   return null;
+}
+// the first piece that runs into another, and what it runs into ([p, q]), or null
+export function collision(pieces) {
+  const fit = fittedSizes(pieces);
+  for (const p of pieces) { const q = touching(fit.has(p.id) ? { ...p, size: fit.get(p.id) } : p, pieces); if (q) return [p, q]; }
+  return null;
+}
+// the biggest size (0.5 mm steps, down to 60 %, never too small to stitch) at which p clears `other`, or 0
+export function clearSize(p, pieces, other) {
+  const from = fittedSizes(pieces).get(p.id) ?? p.size;
+  for (let s = Math.ceil(from * 2) / 2 - 0.5; s >= Math.max(5, from * 0.6); s -= 0.5) {
+    const q = { ...p, size: s };
+    if (minSize(q)) return 0;
+    if (!near(cloud(pieceStitches(q)), pieceStitches(other), CLEAR)) return s;
+  }
+  return 0;
+}
+// points every 0.5 mm along stitch paths, in 1 mm cells
+function cloud(paths) {
+  const m = new Map();
+  for (const q of paths) for (let i = 0; i < q.length; i++) {
+    const [ax, ay] = q[i], [bx, by] = q[i + 1] || q[i], n = i + 1 < q.length ? Math.max(1, Math.ceil(Math.hypot(bx - ax, by - ay) / 0.5)) : 1;
+    for (let k = 0; k < n; k++) {
+      const x = ax + ((bx - ax) * k) / n, y = ay + ((by - ay) * k) / n, key = Math.floor(x) * 8192 + Math.floor(y);
+      let c = m.get(key); if (!c) m.set(key, (c = [])); c.push(x, y);
+    }
+  }
+  return m;
+}
+// do any of `paths` come within d mm of the points in cloud `c`?
+function near(c, paths, d) {
+  const r = Math.ceil(d);
+  for (const pts of cloud(paths).values()) for (let i = 0; i < pts.length; i += 2) {
+    const x = pts[i], y = pts[i + 1], X = Math.floor(x), Y = Math.floor(y);
+    for (let dx = -r; dx <= r; dx++) for (let dy = -r; dy <= r; dy++) {
+      const o = c.get((X + dx) * 8192 + Y + dy); if (!o) continue;
+      for (let j = 0; j < o.length; j += 2) if ((o[j] - x) ** 2 + (o[j + 1] - y) ** 2 < d * d) return true;
+    }
+  }
+  return false;
+}
+// width and height (mm) of everything sewn, at the sizes it's sewn
+export function layoutSize(pieces) {
+  const fit = fittedSizes(pieces), bs = pieces.map((p) => pieceBounds(fit.has(p.id) ? { ...p, size: fit.get(p.id) } : p)).filter(Boolean);
+  if (!bs.length) return [0, 0];
+  return [Math.max(...bs.map((b) => b[2])) - Math.min(...bs.map((b) => b[0])), Math.max(...bs.map((b) => b[3])) - Math.min(...bs.map((b) => b[1]))];
 }
 
 // extra points so long straight runs follow the curve
@@ -952,9 +1012,24 @@ export function fittedSizes(pieces) {
       const roomH = frameH(frame) * fill - gap / 2 - 2 * Math.abs(p.y - frame.y), h = b[3] - b[1];
       if (h > roomH && roomH > 5) k = Math.min(k, roomH / h);
     }
-    if (k < 1) out.set(p.id, Math.max(5, Math.floor(p.size * k * 2) / 2));
+    if (k < 1) out.set(p.id, clearOf(p, frame, Math.max(5, Math.floor(p.size * k * 2) / 2)));
   });
   return out;
+}
+// The fitted size, made smaller (0.5 mm steps, down to 60 %) until the stitches clear the frame's (CLEAR): the room
+// above is the frame's outline, so a scallop's valleys or a satin border's inner edge could still meet the letters
+// (a Great Vibes JMK in a scallop, after Circle -> Scallop). Left as it was when no smaller size clears.
+const cleared = new Map();
+function clearOf(p, frame, size) {
+  const { x, y, id, ...shape } = p, key = JSON.stringify([shape, x - frame.x, y - frame.y, { ...frame, x: 0, y: 0, id: 0 }, size, wt]);
+  if (!cleared.has(key)) {
+    const edge = pieceStitches(frame);
+    let s = size;
+    for (let t = size; t >= Math.max(5, size * 0.6); t -= 0.5) if (!near(cloud(pieceStitches({ ...p, size: t })), edge, CLEAR)) { s = t; break; }
+    cleared.set(key, s);
+    if (cleared.size > 200) cleared.delete(cleared.keys().next().value);
+  }
+  return cleared.get(key);
 }
 
 // The earlier round frame arched lettering sits in, and the curve that runs it just inside that frame's border
@@ -1092,10 +1167,44 @@ export function splitPieces(pieces, hoop) {
       if (!best || Math.max(spanA, spanB) < best.worst) best = { worst: Math.max(spanA, spanB), A, B, m };
     }
     if (!best) continue;
-    const at = (u, v) => (ax ? [v, u] : [u, v]), marks = [at(best.m, c0 + (c1 - c0) * 0.25), at(best.m, c0 + (c1 - c0) * 0.75)];
+    const at = (u, v) => (ax ? [v, u] : [u, v]);
+    const marks = crossSpots(items, best, at, { lo, hi, L, C, c0, c1 }) || [at(best.m, c0 + (c1 - c0) * 0.25), at(best.m, c0 + (c1 - c0) * 0.75)];
     return [{ pieces: best.A.map((i) => i.p), marks, end: true }, { pieces: best.B.map((i) => i.p), marks, end: false }];
   }
   return null;
+}
+// Where the two crosses go: on a line between the halves (u, as near the middle of the gap as both hoopings allow),
+// each 1.5 mm clear of every stitch (a cross sewn on the "e" of one half, or under the next half's satin, can't be
+// pulled out), near a quarter and three quarters of the way across, at least 20 mm apart when the hooping allows
+// (the further apart, the truer the second hooping lines up). null when no line has two clear spots.
+function crossSpots(items, best, at, { lo, hi, L, C, c0, c1 }) {
+  const ink = cloud(items.flatMap((i) => pieceStitches(i.p)));
+  const ext = (g) => [Math.min(...g.map((i) => i.b[lo])), Math.max(...g.map((i) => i.b[hi]))];
+  const [aLo, aHi] = ext(best.A), [bLo, bHi] = ext(best.B);
+  const vLo = c1 - C + 5, vHi = c0 + C - 5, mid = (c0 + c1) / 2, half = Math.max((c1 - c0) / 4, Math.min(20, (vHi - vLo) / 2));
+  const t1 = Math.max(vLo, mid - half), t2 = Math.min(vHi, mid + half), apart = Math.min(20, t2 - t1);
+  let pick = null;
+  for (let du = 0; du <= L && !(pick && 2 * du > pick.cost); du++) {
+    for (const u of du ? [best.m + du, best.m - du] : [best.m]) {
+      if (Math.max(aHi, u + 5) - Math.min(aLo, u - 5) > L || Math.max(bHi, u + 5) - Math.min(bLo, u - 5) > L) continue;
+      const clear = [];
+      for (let v = Math.ceil(vLo); v <= vHi; v++) if (!near(ink, crosses([at(u, v)]), 1.5)) clear.push(v);
+      let v1 = null, v2 = null;
+      for (const v of clear) if (v1 == null || Math.abs(v - t1) < Math.abs(v1 - t1)) v1 = v;
+      for (const v of clear) if (v1 != null && Math.abs(v - v1) >= Math.max(12, apart) && (v2 == null || Math.abs(v - t2) < Math.abs(v2 - t2))) v2 = v;
+      if (v2 == null) continue;
+      const cost = Math.abs(v1 - t1) + Math.abs(v2 - t2) + 2 * du;
+      if (!pick || cost < pick.cost) pick = { cost, marks: [at(u, v1), at(u, v2)] };
+    }
+  }
+  return pick?.marks || null;
+}
+// The cross the second hooping lines up on (the first mark), named as the machine shows it: "top", "bottom", "left" or
+// "right" ("the left cross" was said even when the crosses sat one above the other). With the hoop turned the machine
+// shows the layout a quarter turn clockwise: the preview's top is the machine's right.
+export function crossName(marks, turned = false) {
+  const [a, b] = turned ? marks.map(([x, y]) => [-y, x]) : marks;
+  return Math.abs(a[1] - b[1]) >= Math.abs(a[0] - b[0]) ? (a[1] < b[1] ? "top" : "bottom") : a[0] < b[0] ? "left" : "right";
 }
 // basting crosses (long stitches, easy to pull out), each starting and ending at its centre
 const crosses = (marks) => marks.map(([x, y]) => [[x, y], [x + 5, y], [x - 5, y], [x, y], [x, y + 5], [x, y - 5], [x, y]]);
@@ -1146,7 +1255,8 @@ function build(pieces, hoop, opts) {
     const color = opts.marks.end ? order[order.length - 1].color : order[0].color, paths = crosses(opts.marks.pts);
     if (opts.marks.end) order.push({ color, paths, label: "Alignment crosses", sews: "Sews two alignment crosses where the next hooping lines up." });
     else order.unshift({ color, paths, label: "Alignment crosses", pause: true,
-      you: "Hoop the fabric again, as straight as you can, with both crosses from the first hooping inside the hoop. Before you press Start, use the machine's layout arrows to move the design until the needle comes down on the centre of the left cross (turn the handwheel to check). Press Start: the crosses should sew right on top of the old ones. If they don't, stop, move the design and try again.",
+      // (`which`: the cross named as the machine shows it, said by the caller when the hoop is turned)
+      you: `Hoop the fabric again, as straight as you can, with both crosses from the first hooping inside the hoop. Before you press Start, use the machine's layout arrows to move the design until the needle comes down on the centre of the ${opts.marks.which || crossName(opts.marks.pts) + " cross"} (turn the handwheel to check). Press Start: the crosses should sew right on top of the old ones. If they don't, stop, move the design and try again.`,
       sews: "Sews the alignment crosses again, on top of the first ones.", after: "Pull out the alignment crosses (they're long stitches; snip and pull)." });
   }
   if (opts.baste && order.length) {
