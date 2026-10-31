@@ -142,12 +142,16 @@ function setView(v) {
     snips ? `<span${tip("The machine only trims jumps longer than its “jump stitch not to trim” setting (5 mm at the lowest). The thread is locked at both ends, so these are safe to snip after stitching.")}>${snips} loose ${snips === 1 ? "thread" : "threads"} to snip after</span>` : "",
   ].join("");
   const seen = new Set(), mt = machineThreadList(v);
+  // (a thread the design comes back to gets a chip again where it's sewn: White, Red, Blue, Gold, Blue read White, Red,
+  // Blue, Gold. Only blocks in a row in one thread (pauses) share one, and past 12 changes each thread is listed once)
+  const again = v.cache.blocks.filter((b, i, all) => !i || b.color !== all[i - 1].color).length <= 12;
+  let lastKey = "";
   // (every thread in the order it's sewn, hidden placement lines too: an ornament's chips read Blue, Red while its
   // steps and Have ready said Red, Blue, because its first red block is a placement line hidden in the preview)
   $("threads").innerHTML = v.cache.blocks
     .map((b) => {
       const t = mt[b.index] || nearestBrotherThread(b.color), label = v.threadLabel ? v.threadLabel(b, t) : `Brother ${t.name}`;
-      const k = b.color + label; if (seen.has(k)) return ""; seen.add(k);
+      const k = b.color + label; if (again ? k === lastKey : seen.has(k)) return ""; seen.add(k); lastKey = k;
       return `<li><i style="background:${b.color}"></i><span>${label}${spool(b.color) ? `<br><small>${spool(b.color)}</small>` : ""}</span></li>`;
     }).join("");
   v.facts = [`${st.widthMm.toFixed(0)} × ${st.heightMm.toFixed(0)} mm (${inch(st.widthMm)} × ${inch(st.heightMm)} in)`, `${st.stitches.toLocaleString()} stitches`,

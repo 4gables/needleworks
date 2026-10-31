@@ -603,6 +603,7 @@ export function minSize(p) {
 // open under that column, or 0 when it already does. Arched down, the counters close up by the bend at mid x-height.
 // (Until 2026-10-30 only the 8 mm x-height: "Oliver" in Great Vibes at the suggested 17 mm was unreadable.)
 export function towelMin(p) {
+  if (p.kind === "monogram") return eachInitial(p, towelMin);
   const l = bulk(p);
   if (!l || !l.parts.length) return 0;
   const ok = (size) => {
@@ -622,11 +623,22 @@ export function towelMin(p) {
 // do. Said with "Thin line" as the other fix (Alex Brush "Abbie" at 12 mm sewed as "Avvie", with no word).
 // (Bold chosen by hand too: Allura and Meow Script in Bold at their smallest size sewed as blobs with no word)
 export function loopsFill(p) {
+  if (p.kind === "monogram") return eachInitial(p, loopsFill);
   if ((p.style || "auto") === "line") return 0;
   const l = bulk(p);
   if (!l || !l.parts.length || !l.satinW) return 0;
   const shut = l.pockets.filter((c) => c.peak >= Math.max(0.45, 0.1 * l.xh) && Math.max(c.saddle - 0.2, c.peak - OPEN / 2) < 0.45);
   return shut.length ? Math.ceil((p.size * 0.86) / Math.min(...shut.map((c) => c.peak))) : 0;
+}
+
+// A monogram's size where every initial passes `test` (each sewn at its own size, as `monogram` sews it): the middle
+// letter alone was measured, so RMK's M said nothing while the R's bowl filled in on a towel. 0 when they all pass.
+function eachInitial(p, test) {
+  const chars = [...(p.letters || "").replace(/\s+/g, "")].slice(0, 3), f = (i) => (chars.length === 3 && i !== 1 ? 0.68 : 1);
+  return chars.reduce((need, c, i) => {
+    const n = test({ kind: "text", text: c, font: p.font, size: p.size * f(i), style: p.style, shape: "straight" });
+    return n ? Math.max(need, n > 150 ? n : Math.ceil(n / f(i))) : need;
+  }, 0);
 }
 
 // Lettering under ~6 mm (x-height, or caps) stitches cleanest with thinner thread and needle (Ink/Stitch's small
