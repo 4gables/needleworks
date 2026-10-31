@@ -341,7 +341,9 @@ $("turn").onclick = () => {
 const LATIN = { Ł: "L", ł: "l", Ø: "O", ø: "o", ß: "ss", Æ: "AE", æ: "ae", Œ: "OE", œ: "oe", Đ: "D", đ: "d", Ð: "D", ð: "d", Þ: "Th", þ: "th", ı: "i", Ħ: "H", ħ: "h", Ŧ: "T", ŧ: "t", Ŋ: "N", ŋ: "n", ĸ: "k" };
 function safeName(s, fallback) {
   const t = s.replace(/[ŁłØøßÆæŒœĐđÐðÞþıĦħŦŧŊŋĸ]/g, (c) => LATIN[c]).normalize("NFKD").replace(/[\u0300-\u036f]/g, "").replace(/[^A-Za-z0-9_-]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 40);
-  return t || fallback;
+  // (Windows can't save a file called CON, PRN, AUX, NUL, COM1-9 or LPT1-9, in any case, with any extension: what's
+  // added after the name here always follows a dot or an underscore, so only the bare word needs one)
+  return /^(con|prn|aux|nul|com[1-9]|lpt[1-9])$/i.test(t) ? t + "_" : t || fallback;
 }
 // a file handed to the browser's downloads
 function saveFile(blob, name) {
@@ -457,7 +459,11 @@ function downloaded(v, zipped, files = []) {
   if (store.get("doneSeen", false) && !bad.length) return;
   // (the size as the preview shows it: a turned bookmark is 169 × 54, not 54 × 169)
   const h = hoop(), s = v.shown && designStats(v.shown);
-  const what = `on a ${h.machineName} in the ${h.name}${s ? `, ${s.widthMm.toFixed(0)} × ${s.heightMm.toFixed(0)} mm, ${s.colorChanges ? (state.mode === "picture" || state.mode === "open" ? `${s.colorChanges} thread ${s.colorChanges === 1 ? "change" : "changes"}` : `${s.colorChanges} ${s.colorChanges === 1 ? "pause" : "pauses"}`) : "no pauses"}` : ""}`;
+  // (a design in two hoopings: each hooping's size, not the whole design's 136 × 170 that the hoop can't take)
+  const parts = v.split?.map((p) => designStats(turned() ? turnPattern(p.pattern, false) : p.pattern));
+  const size = parts ? `in ${parts.length} hoopings, ${parts.map((q) => `${q.widthMm.toFixed(0)} × ${q.heightMm.toFixed(0)} mm`).join(" and ")}, each fitting the hoop` : s ? `${s.widthMm.toFixed(0)} × ${s.heightMm.toFixed(0)} mm` : "";
+  const cc = parts ? parts.reduce((a, q) => a + q.colorChanges, 0) : s?.colorChanges;
+  const what = `on a ${h.machineName} in the ${h.name}${s ? `, ${size}, ${cc ? (state.mode === "picture" || state.mode === "open" ? `${cc} thread ${cc === 1 ? "change" : "changes"}` : `${cc} ${cc === 1 ? "pause" : "pauses"}${parts ? " in all" : ""}`) : "no pauses"}` : ""}`;
   // ("Checked" only when the stitches pass too: it said so for files tests/pe900_check.py fails; and not for a file cut
   // short, which holds only part of the design)
   const part = state.mode === "open" && state.opened?.short;
@@ -628,10 +634,18 @@ $("names-open").onclick = () => {
   $("names-thumbs").innerHTML = ""; $("names-cancel").textContent = "Cancel";
   $("names").showModal();
 };
+// (the last run's result goes once the list is changed: it described names no longer there)
+$("names-list").addEventListener("input", () => {
+  if (!$("names-thumbs").innerHTML && !$("names-note").classList.contains("warn")) return;
+  const n = namesFor(); $("names-thumbs").innerHTML = ""; $("names-note").classList.remove("warn"); if ($("names-bad")) $("names-bad").hidden = true;
+  $("names-note").textContent = n?.monogram ? "One set of initials per line, up to 40. You get one file for each, in a single .zip." : "One name per line, up to 40. You get one file for each, in a single .zip.";
+  $("names-cancel").textContent = "Cancel";
+});
 $("names-make").onclick = async () => {
   const n = namesFor(); if (!n) return;
-  const list = [...new Set($("names-list").value.split("\n").map((s) => s.trim()).filter(Boolean))].slice(0, 40);
-  store.set(n.monogram ? "names.initials" : "names", list.join("\n"));
+  // (past 40, the rest are said as left out: the 41st was dropped without a word)
+  const all = [...new Set($("names-list").value.split("\n").map((s) => s.trim()).filter(Boolean))], list = all.slice(0, 40), left = all.slice(40);
+  store.set(n.monogram ? "names.initials" : "names", all.join("\n"));
   if (!list.length) { $("names-note").textContent = "Type at least one name."; return; }
   $("names-make").disabled = true; $("names-note").textContent = "Making the files…";
   // (file names compared ignoring case: emma.pes and Emma.pes are one file on a Mac, Windows or the USB stick)
@@ -664,11 +678,13 @@ $("names-make").onclick = async () => {
   const poor = files.length ? badReport(box, files, zipName) : (box.hidden = true, []);
   // (a turned file needs the fabric hooped a quarter turn round: said per file, since only the long names are)
   const side = made.filter((m) => m.sideways), runs = made.filter((m) => m.runs);
-  $("names-note").classList.toggle("warn", bad.length > 0 || runs.length > 0 || poor.length > 0);
+  $("names-note").classList.toggle("warn", bad.length > 0 || runs.length > 0 || poor.length > 0 || left.length > 0);
   $("names-note").textContent = `${files.length ? `Made ${files.length} ${files.length === 1 ? "file" : "files"}, saved as one .zip (open it and copy the .pes files to the USB stick). ` : ""}`
-    + (side.length ? `Hoop the fabric a quarter turn round for ${side.map((m) => m.file).join(", ")}: the machine shows ${side.length === 1 ? "it" : "them"} on ${side.length === 1 ? "its" : "their"} side, with the top of the name toward the right of the hoop. ` : "")
+    + (side.length === made.length && side.length > 1 ? `Every file is turned like the design: hoop the fabric a quarter turn round for each, with the top of the name toward the right of the hoop (the machine shows them on their side). `
+      : side.length ? `Hoop the fabric a quarter turn round for ${side.map((m) => m.file).join(", ")}: the machine shows ${side.length === 1 ? "it" : "them"} on ${side.length === 1 ? "its" : "their"} side, with the top of the name toward the right of the hoop. ` : "")
     + (runs.length ? `Runs into another piece: ${runs.map((m) => m.name).join(", ")} (${$("names-shrink").checked ? "even at half size: shorten" : `tick "Make long names smaller", or shorten`} ${runs.length === 1 ? "it" : "them"}). ` : "")
-    + (bad.length ? `Couldn't make: ${bad.join(", ")}.` : "")
+    + (bad.length ? `Couldn't make: ${bad.join(", ")}. ` : "")
+    + (left.length ? `Left out (40 at a time): ${left.join(", ")}. Make them in a second batch.` : "")
     + (poor.length ? ` ${poor.length === 1 ? "One file" : `${poor.length} files`} may not sew well:` : "");
 };
 
