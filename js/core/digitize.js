@@ -440,8 +440,9 @@ export function learnColours(img, opts = {}) {
     else if (C.every((c) => e76(c, C[bg >= 0 ? bg : 0]) < 15)) empty = "This picture is all one colour, so there's nothing in it to stitch.";
     else empty = "Everything in this picture is close to its background colour. Untick “Leave the background unstitched” to stitch it all.";
   }
+  const lost = groups.length ? lostLines(P, labels.map((l) => (l >= 0 ? map[l] : -1)), colors) / Math.max(w, h) : 0;
   return { w, h, C, map, colors, bg: bg >= 0 ? colors.length - 1 : -1, frame, boxes, hasAlpha,
-    merged: Math.max(0, o.colors - groups.length), empty };
+    merged: Math.max(0, o.colors - groups.length), empty, lost };
 }
 
 // Label a picture's pixels with the colours learned from it (possibly from a copy at another size). `crop`
@@ -493,7 +494,34 @@ export function labelWith(img, model, crop = [0, 0, 1, 1]) {
   const area = new Array(G).fill(0);
   for (let i = 0; i < n; i++) if (labels[i] >= 0) area[labels[i]]++;
   const colors = model.colors.map((c) => ({ ...c, area: area[c.id] }));
-  return { w, h, labels, colors, merged: model.merged, frame: !!model.frame, empty: model.empty };
+  return { w, h, labels, colors, merged: model.merged, frame: !!model.frame, empty: model.empty, lost: model.lost || 0 };
+}
+
+// The longest line in the picture too thin to keep (px along it): a pixel or two wide, unlike the fabric (ΔE over 20)
+// yet read as fabric, 2 px clear of anything sewn (not the blend round a shape's edge). A logo's 1 px grey rule
+// vanished without a word. (`labels`: colour ids)
+function lostLines(P, labels, colors) {
+  const { w, h, n, lab } = P, bg = colors.find((c) => c.background);
+  if (!bg) return 0;
+  const B = srgbToLab(...hexToRgb(bg.picture || bg.hex)), m = { w, h, data: new Uint8Array(n) }, ink = { w, h, data: new Uint8Array(n) };
+  for (let i = 0; i < n; i++) ink.data[i] = labels[i] >= 0 && labels[i] !== bg.id ? 0 : 1;
+  const away = distanceTransform(ink);
+  for (let i = 0; i < n; i++)
+    if (labels[i] === bg.id && away[i] > 2 && Math.hypot(lab[i * 3] - B[0], lab[i * 3 + 1] - B[1], lab[i * 3 + 2] - B[2]) > 20) m.data[i] = 1;
+  const { labels: cl, count } = label(m);
+  if (!count) return 0;
+  const x0 = new Int32Array(count + 1).fill(w), x1 = new Int32Array(count + 1), y0 = new Int32Array(count + 1).fill(h), y1 = new Int32Array(count + 1), size = new Int32Array(count + 1);
+  for (let i = 0; i < n; i++) {
+    const c = cl[i]; if (!c) continue;
+    const x = i % w, y = (i - x) / w;
+    size[c]++; if (x < x0[c]) x0[c] = x; if (x > x1[c]) x1[c] = x; if (y < y0[c]) y0[c] = y; if (y > y1[c]) y1[c] = y;
+  }
+  let best = 0;
+  for (let c = 1; c <= count; c++) {
+    const L = Math.hypot(x1[c] - x0[c] + 1, y1[c] - y0[c] + 1);
+    if (size[c] <= 2.5 * L && L > best) best = L;
+  }
+  return best;
 }
 
 export function analyze(img, opts = {}) {
@@ -824,7 +852,12 @@ export function digitize(img, analysis, opts = {}) {
   let res = opts.res || DEFAULTS.res;
   const make = opts.style === "line" ? lineArt : opts.style === "cross" ? crossStitch : build;
   for (let tries = 0; ; tries++) {
-    try { return make(img, analysis, { ...opts, res }); }
+    try {
+      const r = make(img, analysis, { ...opts, res });
+      // (the longest line too thin to keep, as a share of the picture's longer side: the page says so)
+      r.fine.lost = analysis.lost || 0;
+      return r;
+    }
     catch (e) { if (!e.overBy || tries === 3) throw e; res *= e.overBy * 1.01; }
   }
 }
@@ -883,7 +916,15 @@ function build(img, analysis, opts) {
       if (x < bx0[c]) bx0[c] = x; if (x > bx1[c]) bx1[c] = x; if (y < by0[c]) by0[c] = y; if (y > by1[c]) by1[c] = y;
     }
     const thinC = (c) => (2 * wide[c]) / res < 1.0;
-    const speck = (c) => size[c] < minPx || (size[c] < dotPx && bx1[c] - bx0[c] < dotW && by1[c] - by0[c] < dotW);
+    const dot = (c) => size[c] < minPx || (size[c] < dotPx && bx1[c] - bx0[c] < dotW && by1[c] - by0[c] < dotW);
+    // (a mark at least 2 mm long and half as long again as it's wide, within 2 mm of a bigger piece of its colour, is
+    // no dot: KENJI'S apostrophe at 60 mm went. Marks out on their own still go: each is a trim and two locks)
+    const away = { w, h, data: new Uint8Array(w * h) };
+    for (let i = 0; i < w * h; i++) away.data[i] = cl[i] && !dot(cl[i]) ? 0 : 1;
+    const toBig = distanceTransform(away), near = new Uint8Array(count + 1);
+    for (let i = 0; i < w * h; i++) if (cl[i] && toBig[i] <= 2 * res) near[cl[i]] = 1;
+    const mark = (c) => { const a = bx1[c] - bx0[c] + 1, b = by1[c] - by0[c] + 1; return near[c] && Math.max(a, b) >= 2 * res && Math.max(a, b) >= 1.5 * Math.min(a, b); };
+    const speck = (c) => dot(c) && !mark(c);
     // A thin piece lying between the fabric and another colour, in a colour between theirs, is the blend along that
     // colour's edge (a dark letter's anti-aliasing read as green), not a line of its own.
     const touch = new Map();
@@ -1140,8 +1181,31 @@ function closeSlivers(labels, w, h, mine, res) {
   return out;
 }
 
-// Line drawing (redwork): every shape's outline and every thin line's centre, in the picture's darkest colour. The
-// lines are walked like lettering (each one out and back), so a connected drawing sews without a trim.
+// Thinning stops a line's loose end about half its width short of the ink's end: each loose end of the skeleton edges
+// `es` (px) goes on straight while there's ink in `mask`, up to `far` px (a crayon sun's rays came out a third short, a
+// 2.3 mm apostrophe as a 0.9 mm speck, dropped)
+function lineEnds(es, mask, far) {
+  const { w, h } = mask, deg = new Map(), ink = (x, y) => { const X = Math.round(x), Y = Math.round(y); return X >= 0 && Y >= 0 && X < w && Y < h && mask.data[Y * w + X]; };
+  for (const [a, b] of es) { deg.set(a, (deg.get(a) || 0) + 1); deg.set(b, (deg.get(b) || 0) + 1); }
+  const on = (p) => {   // p runs toward the loose end
+    const e = p[p.length - 1], q = p[Math.max(0, p.length - 1 - Math.max(3, Math.round(far / 2)))], L = Math.hypot(e[0] - q[0], e[1] - q[1]);
+    if (L < 1) return p;
+    const u = [(e[0] - q[0]) / L, (e[1] - q[1]) / L];
+    let t = 0;
+    while (t < far && ink(e[0] + u[0] * (t + 0.5), e[1] + u[1] * (t + 0.5))) t += 0.5;
+    t -= 0.5;
+    return t >= 1 ? [...p, [e[0] + u[0] * t, e[1] + u[1] * t]] : p;
+  };
+  for (const ed of es) {
+    if (ed[0] === ed[1]) continue;
+    if (deg.get(ed[1]) === 1) ed[2] = on(ed[2]);
+    if (deg.get(ed[0]) === 1) ed[2] = on(ed[2].slice().reverse()).reverse();
+  }
+  return es;
+}
+
+// Line drawing (redwork): every shape's outline and every line's or even stroke's centre, in the picture's darkest
+// colour. The lines are walked like lettering (each one out and back), so a connected drawing sews without a trim.
 function lineArt(img, analysis, opts) {
   const o = { ...DEFAULTS, ...opts }, { w, h, colors } = analysis, res = o.res;
   const used = colors.filter((c) => !c.background && c.area > 0 && !(o.skip || []).includes(c.id));
@@ -1189,13 +1253,52 @@ function lineArt(img, analysis, opts) {
   // across reaches into are such bands (a filled ear stays a shape, the outline running from it a line); a small dark
   // shape on its own (an eye, a nose) is outlined.
   const BAND = 3, dark = (c) => c.lightness <= Math.max(35, ink.lightness + 15);
+  // A whole piece that is one stroke of an even width (a crayon or marker line, a logo's letters) is sewn once along
+  // its centre whatever its colour, up to STROKE of the drawing's longer side (3-6 mm). Deciding by parts drew the
+  // corners of a 3 mm crayon line, where a BAND disc just fits, as little outlines and cut the line there (a house's
+  // lumps and broken door), and 4 mm letters as half outlines, half centre lines (KENJI'S at 120 mm).
+  const STROKE = 0.04, wMax = Math.min(6, Math.max(BAND, (STROKE * Math.max(w, h)) / res)) * res;
   const lines = { w, h, data: new Uint8Array(w * h) }, bands = { w, h, data: new Uint8Array(w * h) }, wideAt = new Uint8Array(w * h);
-  const widths = [];
+  const strokes = { w, h, data: new Uint8Array(w * h) }, widths = [], sw = [];
   for (const col of used) {
     const mask = { w, h, data: new Uint8Array(w * h) };
     for (let i = 0; i < w * h; i++) mask.data[i] = labels[i] === col.id ? 1 : 0;
     const dt = distanceTransform(mask), { labels: cl, count } = label(mask), wide = new Uint8Array(count + 1);
     for (let i = 0; i < w * h; i++) if (cl[i] && dt[i] > 0.75 * res) wide[cl[i]] = 1;   // over 1.5 mm across somewhere
+    // each wide piece's depths along its middle (the ridge of its distance to the edge), deepest point, area and what
+    // its edge touches (fabric, or another colour of the drawing)
+    const ridge = Array.from({ length: count + 1 }, () => []), top = new Float32Array(count + 1), area = new Int32Array(count + 1);
+    const open = new Int32Array(count + 1), shut = new Int32Array(count + 1);
+    for (let i = 0; i < w * h; i++) {
+      const c = cl[i]; if (!c || !wide[c]) continue;
+      area[c]++; if (dt[i] > top[c]) top[c] = dt[i];
+      const x = i % w;
+      let peak = dt[i] >= 1.5;
+      for (const j of [x > 0 ? i - 1 : -1, x < w - 1 ? i + 1 : -1, i - w, i + w]) {
+        if (j < 0 || j >= w * h || !mine.has(labels[j])) open[c]++;
+        else if (labels[j] !== col.id) shut[c]++;
+        if (j >= 0 && j < w * h && dt[j] > dt[i]) peak = false;
+      }
+      if (peak) ridge[c].push(dt[i]);
+    }
+    const stroke = new Uint8Array(count + 1), across = new Float32Array(count + 1);
+    for (let c = 1; c <= count; c++) {
+      const d = ridge[c].sort((a, b) => a - b);
+      if (!wide[c] || d.length < 3) continue;
+      const W = 2 * d[d.length >> 1];
+      // (even: along most of its middle (a fifth to four fifths) within 0.6 of itself, a leaf tapers; its deepest
+      // point, at a corner or a join, under twice its half-width, a filled ear on an outline isn't; long: three widths
+      // at least, a dot or a square is under 2; on the fabric: a coloured shape inside a drawing's outlines stays one)
+      across[c] = W;
+      if (W <= wMax && d[Math.floor(d.length * 0.2)] >= 0.6 * d[Math.floor(d.length * 0.8)] && top[c] <= W && open[c] >= 4 * shut[c])
+        stroke[c] = area[c] >= 3 * W * W ? 1 : 2;
+    }
+    // (a short piece as wide as this colour's strokes, an apostrophe among the letters, is one too; on its own, an
+    // outline)
+    const ws = [];
+    for (let c = 1; c <= count; c++) if (stroke[c] === 1) ws.push(across[c]);
+    ws.sort((a, b) => a - b);
+    for (let c = 1; c <= count; c++) if (stroke[c] === 2) stroke[c] = ws.length && across[c] <= 1.3 * ws[ws.length >> 1] && area[c] >= 1.6 * across[c] ** 2 ? 1 : 0;
     let band = null;
     if (dark(col)) {
       const r = (BAND / 2) * res, core = { w, h, data: new Uint8Array(w * h) }, small = 2 * BAND * res;
@@ -1212,6 +1315,7 @@ function lineArt(img, analysis, opts) {
     for (let i = 0; i < w * h; i++) {
       if (!cl[i]) continue;
       if (!wide[cl[i]]) lines.data[i] = 1;   // a thin line: its centre comes from the skeleton
+      else if (stroke[cl[i]]) { strokes.data[i] = 1; bands.data[i] = 1; sw.push(across[cl[i]]); }
       else if (band && band(i)) { bands.data[i] = 1; widths.push(dt[i]); }
       else wideAt[i] = 1;
     }
@@ -1230,15 +1334,21 @@ function lineArt(img, analysis, opts) {
   const thick = { w, h, data: lines.data.slice() };
   for (let i = 0; i < w * h; i++) if (lines.data[i]) { const x = i % w; if (x < w - 1) thick.data[i + 1] = 1; if (i + w < w * h) thick.data[i + w] = 1; }
   // (pruning dead ends under 2 mm too took the strokes off small lettering)
-  const edges = skeletonEdges(thick, 3, { spur: 1 });
+  const edges = lineEnds(skeletonEdges(thick, 3, { spur: 1 }), thick, res);
   if (widths.length) {
     // (the bands' own skeleton, pruned at their width: corners of a wide stroke grow short spurs)
     widths.sort((a, b) => a - b);
     const stroke = Math.max(3, Math.min(BAND * res, 2 * widths[Math.floor(widths.length * 0.9)]));
-    for (const [a, b, p] of skeletonEdges(bands, stroke, { spur: 1 })) edges.push([`b${a}`, `b${b}`, p]);
+    const part = { w, h, data: bands.data.map((v, i) => v && !strokes.data[i]) };
+    for (const [a, b, p] of skeletonEdges(part, stroke, { spur: 1 })) edges.push([`b${a}`, `b${b}`, p]);
+  }
+  if (sw.length) {
+    sw.sort((a, b) => a - b);
+    const W = Math.max(3, sw[Math.floor(sw.length * 0.9)]);
+    for (const [a, b, p] of lineEnds(skeletonEdges(strokes, W, { spur: 1 }), strokes, W)) edges.push([`s${a}`, `s${b}`, p]);
   }
   // each connected drawing walked out and back: a closed tour (mm) that ends where it starts; pieces under 2 mm long
-  // in all are specks (each one a trim, two locks and often a loose thread)
+  // in all, and not joined to another drawing, are specks (each one a trim, two locks and often a loose thread)
   // (stitches that keep to the curve, not 2 mm chords across a small flower's petals; points under 0.4 mm apart, where
   // short skeleton edges meet, are merged: tiny stitches nest and break thread)
   const tours = order(edges).map((comp) => {
@@ -1248,7 +1358,7 @@ function lineArt(img, analysis, opts) {
     const s = comp[0][0][0], e = comp.at(-1)[0].at(-1);
     if (Math.hypot(s[0] - e[0], s[1] - e[1]) < 0.01 && t.length > 1) t[t.length - 1] = t[0];   // (still ends where it began)
     return t;
-  }).filter((t) => t.length > 1 && arclen(t).at(-1) >= 4);
+  }).filter((t) => t.length > 1);
   // A line end within 2 mm of another drawing is joined to it: the needle steps across, sews that drawing and steps
   // back over the same stitch, instead of jumping (a gap that short is a loose thread the machine never trims; 3 mm
   // drew visible bars between small letters)
@@ -1286,7 +1396,16 @@ function lineArt(img, analysis, opts) {
     rotate(t, k).forEach((q, r) => { out.push(q); for (const [j, kb] of at.get(r) || []) out.push(...nest(j, kb, i), q); });
     return out;
   };
-  let left = tours.map((_, i) => i).filter((i) => find(i) === i).map((i) => nest(i, 0, -1));
+  // (a short one joined to a drawing costs no trim: KENJI'S apostrophe at 60 mm, 1.6 mm long, was left out)
+  const total = new Map();
+  tours.forEach((t, i) => total.set(find(i), (total.get(find(i)) || 0) + arclen(t).at(-1)));
+  // (the step onto a joined drawing can be a tenth of a mm: points under 0.4 mm after the last are dropped again)
+  const spaced = (t) => {
+    const o = [t[0]];
+    for (let k = 1; k < t.length; k++) if (k === t.length - 1 || Math.hypot(t[k][0] - o.at(-1)[0], t[k][1] - o.at(-1)[1]) >= 0.4) o.push(t[k]);
+    return o;
+  };
+  let left = tours.map((_, i) => i).filter((i) => find(i) === i && total.get(i) >= 4).map((i) => spaced(nest(i, 0, -1)));
   const d = new Design(o.hoop);
   // (sewn in the darkest colour, or the thread picked for the lines)
   const line = o.line ? { hex: o.line, thread: nearestBrotherThread(o.line) } : ink;
