@@ -87,14 +87,14 @@ export function draw(canvas, design, opts = {}) {
   // leave room at the top for the info chips (they wrap to more rows on a phone)
   // (and at the bottom for a message over the preview: the too-big note covered the hoop on a phone)
   const pad = opts.pad ?? 24, bot = Math.max(pad, opts.padBottom ?? pad);
-  let top = opts.padTop ?? pad, fit = Math.min((W - pad * 2) / spanW, (H - bot - top) / spanH);
+  let top = opts.padTop ?? pad, fit = Math.max(1e-3, Math.min((W - pad * 2) / spanW, (H - bot - top) / spanH));
   // a control over the top-right corner ([w, h] px: the zoom pad) is kept clear of what's drawn, by moving it down or
   // in, whichever loses less (it sat over the empty hoop's corner)
   if (opts.corner) {
     const [cw, ch] = opts.corner, ring = 14;
     if (W / 2 + (spanW * fit) / 2 + ring > W - cw && top + (H - bot - top - spanH * fit) / 2 - ring < ch) {
       const t = Math.max(top, ch + ring), down = Math.min((W - pad * 2) / spanW, (H - bot - t) / spanH), inward = Math.min((W - (cw + ring) * 2) / spanW, (H - bot - top) / spanH);
-      if (down >= inward) { top = t; fit = down; } else fit = inward;
+      if (down >= inward) { top = t; fit = Math.max(1e-3, down); } else fit = Math.max(1e-3, inward);
     }
   }
   // a drag holds the fit and centre it began with (`opts.base`, from the last result): the view refitted to "too big"
@@ -252,7 +252,9 @@ function strokeSegs(ctx, segs, X, Y, upto, off) {
   ctx.stroke();
 }
 
+// (r clamped: a preview squeezed to nothing by its chips and message gave a negative radius, and arcTo throws on one)
 function roundRect(ctx, x, y, w, h, r) {
+  w = Math.max(0, w); h = Math.max(0, h); r = Math.max(0, Math.min(r, w / 2, h / 2));
   ctx.beginPath(); ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r);
   ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath();
 }

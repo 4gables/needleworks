@@ -11,7 +11,7 @@ import { FINISH, FIRST_STEP, cutSVG, nextThread, sewSheet, youHtml } from "./she
 import { zip } from "./zip.js";
 import { blockThreads, checkup, fewerBlocks, fix, heat, landJumps, pauses, shortJumps, sortedChanges } from "./doctor.js";
 import { MAX_BLOCKS, denseWords, endsEarly, moves, stopWords, verdictOf } from "./quality.js";
-import { BRANDS, exampleSpools, lab, nearestSpool, spools } from "./core/brands.js";
+import { BRANDS, chartSpools, exampleSpools, lab, nearestSpool, spools } from "./core/brands.js";
 import { COLORS as LINE_THREADS, initStudio } from "./studio/ui.js";
 
 const $ = (id) => document.getElementById(id);
@@ -773,19 +773,66 @@ function openSpools() {
   $("spools-brand").innerHTML = Object.entries(BRANDS).map(([k, n]) => `<option value="${k}">${n}</option>`).join("");
   $("spools-brand").value = state.brand || "brother";   // (a Brother machine's owner mostly has Brother spools)
   $("spools-list").value = (state.spools[$("spools-brand").value] || []).join(" ");
-  spoolsPreview(); $("spools").showModal();
+  $("spools-find").value = "";
+  spoolsGrid(); $("spools").showModal();
 }
 // (examples in the brand's own numbers: Brother's showed Isacord-like "0020 1902 3541")
 const spoolsHint = () => { $("spools-list").placeholder = `The numbers on your spools, e.g. ${exampleSpools($("spools-brand").value)}`; };
+// Every spool in the brand's chart as a swatch to tick, in colour-card order, with a search by number or name: a list
+// of numbers typed from memory was the only way in, and Isacord's chart has no names to guess from. The numbers box
+// (for pasting a list) stays the record; ticking adds or takes a number from it.
+function spoolsGrid() {
+  const b = $("spools-brand").value, all = chartSpools(b);
+  $("spools-grid").innerHTML = all.map((s) => `<button type="button" data-spool="${s.num}" aria-pressed="false" tabindex="-1" title="${escapeHtml(s.label)}" aria-label="${escapeHtml(s.label)}"><i style="background:${s.hex}"></i><span>${s.num}</span></button>`).join("");
+  spoolsFind(); spoolsPreview();
+}
+function spoolsFind() {
+  const q = $("spools-find").value.trim().toLowerCase(), b = $("spools-brand").value, nz = q.replace(/^0+(?=\d)/, "");
+  const names = Object.fromEntries(chartSpools(b).map((s) => [s.num, s.name.toLowerCase()]));
+  let first = null;
+  for (const el of $("spools-grid").children) {
+    const n = el.dataset.spool, show = !q || n.replace(/^0+(?=\d)/, "").startsWith(nz) || n.startsWith(q) || names[n].includes(q);
+    el.hidden = !show; if (show && !first) first = el;
+  }
+  roveSpool($("spools-grid").querySelector("button:not([hidden])[tabindex='0']") || first);
+  $("spools-none").hidden = !!first || !q;
+}
+function roveSpool(el) { for (const x of $("spools-grid").querySelectorAll("[tabindex='0']")) x.tabIndex = -1; if (el) el.tabIndex = 0; }
 function spoolsPreview() {
   const b = $("spools-brand").value, typed = $("spools-list").value.split(/[\s,;]+/).filter(Boolean), got = spools(b, $("spools-list").value);
   spoolsHint();
-  const missing = typed.filter((t) => !spools(b, t).length);
-  $("spools-note").textContent = (got.length ? `${got.length} ${BRANDS[b]} ${got.length === 1 ? "spool" : "spools"} found.` : "Type the numbers printed on your spools, separated by spaces.")
+  const missing = typed.filter((t) => !spools(b, t).length), have = new Set(got);
+  for (const el of $("spools-grid").children) el.setAttribute("aria-pressed", have.has(el.dataset.spool));
+  $("spools-note").textContent = (got.length ? `${got.length} ${BRANDS[b]} ${got.length === 1 ? "spool" : "spools"} ticked.` : "None ticked yet.")
     + (missing.length ? ` Not in our ${BRANDS[b]} chart: ${missing.join(", ")}.` : "");
   $("spools-chips").innerHTML = got.map((n) => { const s = nearestSpool(b, "#000000", [n]); return `<span><i style="background:${s.hex}"></i>${n}${s.name ? ` ${escapeHtml(s.name)}` : ""}</span>`; }).join("");
 }
-$("spools-brand").onchange = () => { $("spools-list").value = (state.spools[$("spools-brand").value] || []).join(" "); spoolsPreview(); };
+$("spools-grid").onclick = (e) => {
+  const el = e.target.closest("[data-spool]"); if (!el) return;
+  const b = $("spools-brand").value, n = el.dataset.spool, got = spools(b, $("spools-list").value);
+  const next = got.includes(n) ? got.filter((x) => x !== n) : [...got, n];
+  // (anything typed that isn't in the chart stays, so the note can still say so)
+  const odd = $("spools-list").value.split(/[\s,;]+/).filter((t) => t && !spools(b, t).length);
+  $("spools-list").value = [...next, ...odd].join(" ");
+  roveSpool(el); spoolsPreview();
+};
+// arrow keys go between the swatches (one Tab stop for the whole chart: 391 Isacord spools)
+$("spools-grid").onkeydown = (e) => {
+  const el = e.target.closest("[data-spool]"); if (!el) return;
+  const shown = [...$("spools-grid").children].filter((x) => !x.hidden), i = shown.indexOf(el);
+  const cols = Math.max(1, shown.filter((x) => x.offsetTop === shown[0].offsetTop).length);
+  const to = { ArrowLeft: i - 1, ArrowRight: i + 1, ArrowUp: i - cols, ArrowDown: i + cols, Home: 0, End: shown.length - 1 }[e.key];
+  if (to == null || !shown[to]) return;
+  e.preventDefault(); roveSpool(shown[to]); shown[to].focus();
+};
+$("spools-find").oninput = spoolsFind;
+// (Enter in the search box ticks the only spool left, rather than closing the dialog)
+$("spools-find").onkeydown = (e) => {
+  if (e.key !== "Enter") return; e.preventDefault();
+  const shown = [...$("spools-grid").children].filter((x) => !x.hidden);
+  if (shown.length === 1) shown[0].click(); else shown[0]?.focus();
+};
+$("spools-brand").onchange = () => { $("spools-list").value = (state.spools[$("spools-brand").value] || []).join(" "); $("spools-find").value = ""; spoolsGrid(); };
 $("spools-list").oninput = spoolsPreview;
 $("spools-save").onclick = () => {
   const b = $("spools-brand").value;
@@ -794,6 +841,11 @@ $("spools-save").onclick = () => {
   if (state.mode === "picture" && state.pic.mine) makePicture();
 };
 $("pic-mine").onchange = (e) => { state.pic.mine = e.target.checked; store.set("pic.mine", state.pic.mine); state.pic.skip = []; makePicture(); };
+// the spools they own in the brand shown, in colour-card order, for the Design tab's thread swatches
+function ownedSpools() {
+  const own = state.brand && state.spools[state.brand];
+  return own?.length ? chartSpools(state.brand).filter((s) => own.includes(s.num)) : [];
+}
 // the owned spools' colours, for "Use only threads I own"
 function ownedPalette() {
   const own = state.brand && state.spools[state.brand];
@@ -1559,7 +1611,7 @@ function showStep(i) {
   state.step = i; document.dispatchEvent(new CustomEvent("nw:step", { detail: i })); paint();
 }
 const studio = initStudio({
-  hoop: designHoop, machineHoop: hoop, turned: designTurned, unturn: () => { if (state.turn.design) { state.turn.design = false; store.set("turn", state.turn); $("turn").setAttribute("aria-pressed", false); } }, fit: () => { state.zoom = 1; state.pan = [0, 0]; }, store, showError, busy, safeName, escapeHtml, saveFile, keepFocus, showStep, step: () => state.step, setMode, spool, ownSpool, threadList,
+  hoop: designHoop, machineHoop: hoop, turned: designTurned, unturn: () => { if (state.turn.design) { state.turn.design = false; store.set("turn", state.turn); $("turn").setAttribute("aria-pressed", false); } }, fit: () => { state.zoom = 1; state.pan = [0, 0]; }, store, showError, busy, safeName, escapeHtml, saveFile, keepFocus, showStep, step: () => state.step, setMode, spool, ownSpool, threadList, ownedSpools,
   // (undo, redo and Open saved put the hoop's turn back as it was; the caller rebuilds)
   setTurn: (on) => { state.turn.design = !!on; store.set("turn", state.turn); $("turn").setAttribute("aria-pressed", designTurned()); },
   hoopId: () => hoop().id,

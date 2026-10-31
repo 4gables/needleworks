@@ -66,3 +66,11 @@ export function nearestSpool(brand, hex, owned = null) {
 export function exampleSpools(brand) {
   return chart(brand) ? ["#ffffff", "#e0201c", "#000000"].map((h) => nearestSpool(brand, h).num).join(" ") : "";
 }
+
+// every spool in a brand's chart in colour-card order, for "Threads I own" to tick: whites to blacks, then the hues
+// round from red, each light to dark (in number order Isacord's 391 swatches jumped about in colour)
+export function chartSpools(brand) {
+  const c = chart(brand); if (!c) return [];
+  const key = (s) => { const [L, a, b] = s.lab, C = Math.hypot(a, b); return C < 8 ? [0, -L] : [1 + Math.floor((((Math.atan2(b, a) * 180) / Math.PI + 370) % 360) / 20), -L]; };
+  return c.map((s) => ({ s, k: key(s) })).sort((x, y) => x.k[0] - y.k[0] || x.k[1] - y.k[1]).map(({ s }) => ({ hex: s.hex, num: s.num, name: s.name || "", label: `${BRANDS[brand]} ${s.num}${s.name ? ` ${s.name}` : ""}` }));
+}

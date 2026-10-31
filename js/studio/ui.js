@@ -230,8 +230,12 @@ export function initStudio(api) {
     e.preventDefault();
     if (n) { roving(n); n.focus(); }
   });
+  // the spools they own ("Threads I own") as swatches of their own, after Brother's: the piece takes the spool's colour
+  // and the file the nearest Brother colour as always (only Any colour's hex reached a spool, and the machine named it
+  // Dark Fuchsia)
   const swatches = (p, k = "color") => COLORS.map((c) => `<button type="button" data-${k}="${c}" style="background:${c}" aria-pressed="${c === p[k]}" title="Brother ${nearestBrotherThread(c).name}"></button>`).join("")
-    + `<span class="custom"><input type="color" data-${k}-any value="${p[k]}" aria-label="Any colour"></span>`;
+    + `<span class="custom"><input type="color" data-${k}-any value="${p[k]}" aria-label="Any colour"></span>`
+    + ((own) => own.length ? `<span class="own-swatches" role="group" aria-label="Your threads"><span class="hint">Yours:</span>${own.map((s) => `<button type="button" data-${k}="${s.hex}" style="background:${s.hex}" aria-pressed="${s.hex === p[k]}" title="Your ${api.escapeHtml(s.label)} (the machine calls it ${nearestBrotherThread(s.hex).name})" aria-label="Your ${api.escapeHtml(s.label)}"></button>`).join("")}</span>` : "")(api.ownedSpools?.() || []);
   const fontSelect = (p) => `<select data-k="font">${FONTS.map((f) => `<option value="${f.family}" ${f.family === p.font ? "selected" : ""}>${f.name}${f.print ? " (print)" : ""}</option>`).join("")}</select>`;
   // (a size set past the slider's end, by Fit to hoop, stretches it: Fit set 67 mm on a slider that stopped at 60)
   const range = (k, lab, min, max, v, unit = "mm", step = 1) => `<label class="range"><span>${lab}</span><input type="range" data-k="${k}" data-unit="${unit}" min="${Number.isFinite(v) ? Math.min(min, Math.floor(v)) : min}" max="${Number.isFinite(v) ? Math.max(max, Math.ceil(v)) : max}" step="${step}" value="${v}"><output>${shown(v, unit)}</output></label>`;
@@ -620,7 +624,7 @@ export function initStudio(api) {
   async function make(dragging = false) {
     thumbs();
     const s = ++seq;
-    api.showError("");
+    api.showError(""); $("st-big").hidden = true;
     try {
       const fonts = [...new Set(pieces.filter((p) => p.font).map((p) => p.font))];
       await Promise.all(fonts.map(loadFont));
@@ -701,6 +705,12 @@ export function initStudio(api) {
   // picked by hand gets its own tip (the quilt label said "60 wt" while 30 wt was picked)
   const threadTip = (small) => thread === "auto" ? (small ? SMALL_TIP : "")
     : THREADS[thread].tip + (small && thread !== "60" ? ` These letters are small for ${THREADS[thread].name}: 60 wt sews them crisper.` : "");
+  // the too-big message, over the preview and under the selected piece's controls (with a second fix there too)
+  function tooBig(msg, fix, alt) {
+    api.showError(msg, fix);
+    const n = $("st-big"); n.hidden = false; n.textContent = msg;
+    for (const f of [fix, alt]) if (f) { const b = document.createElement("button"); b.type = "button"; b.className = "link"; b.textContent = f.label; b.onclick = f.run; n.append(" ", b); }
+  }
   // too big for the hoop: two hoopings if whole pieces can be shared out, else say how much to shrink
   function split(err) {
     const hoop = api.hoop(), parts = splitPieces(pieces, hoop);
@@ -727,12 +737,16 @@ export function initStudio(api) {
         for (const b of $("st-steps").querySelectorAll("[data-step]")) b.disabled = true;
         api.setView(big.pattern(), `${api.safeName(firstWords(), "design")}.pes`, { fabric: "linen", steps: 0 });
       } catch { api.setView(null); }
-      if (turn) { api.showError(msg + " It fits with the hoop turned:", { label: "Turn the hoop", run: () => $("turn").click() }); return; }
+      // (said over the preview and again under the piece's own controls: on a phone a size slider pushed past the hoop
+      // showed nothing near it, the message was a screen up. Fit to hoop runs in place: clicking the Pieces box's button
+      // for it scrolled the page 1185 px down to that button.)
+      const fitNow = { label: "Fit to hoop", run: () => { remember(); fitHoop(); } };
+      if (turn) { tooBig(msg + " It fits with the hoop turned:", { label: "Turn the hoop", run: () => $("turn").click() }); return; }
       // two hoopings, when they're possible: with the hoop turned, or with long lettering split between two words
       const two = twoHoopings(hoop);
-      if (two.ok) api.showError(`${msg} ${two.ok} the machine sews one half, then you hoop the fabric again for the other (crosses line them up). Or Fit to hoop for one hooping, smaller.`,
-        { label: "Sew it in two hoopings", run: () => { remember(); fitted = false; if (two.pieces) pieces = two.pieces; if (two.turn) { api.setTurn(!api.turned()); api.fit(); } save(); ui(); make(); } });
-      else api.showError(`${msg}${two.why ? ` ${two.why}` : ""} Make the biggest piece smaller, or`, { label: "Fit to hoop", run: () => $("st-fit").click() });
+      if (two.ok) tooBig(`${msg} ${two.ok} the machine sews one half, then you hoop the fabric again for the other (crosses line them up). Or Fit to hoop for one hooping, smaller.`,
+        { label: "Sew it in two hoopings", run: () => { remember(); fitted = false; if (two.pieces) pieces = two.pieces; if (two.turn) { api.setTurn(!api.turned()); api.fit(); } save(); ui(); make(); } }, fitNow);
+      else tooBig(`${msg}${two.why ? ` ${two.why}` : ""} Make the biggest piece smaller, or`, fitNow);
       return;
     }
     const opts = { fabric, baste, thread }, base = api.safeName(firstWords(), "design");
@@ -803,8 +817,8 @@ export function initStudio(api) {
     // why not: one piece bigger than the hoop by itself, either way round
     const big = pieces.find((p) => { const b = pieceBounds(fit.has(p.id) ? { ...p, size: fit.get(p.id) } : p); if (!b) return false; const w = b[2] - b[0], hh = b[3] - b[1];
       return !ways.some(([h]) => w <= h.w - 6 && hh <= h.h - 6); });
-    if (big) return { why: `Two hoopings can't help: ${label(big)} is bigger than the hoop by itself${big.kind === "text" && !/ /.test(big.text.trim()) ? " (lettering is shared out between words, never through one)" : ""}.` };
-    return { why: pieces.length > 1 ? "It can't be shared out between two hoopings either: it's too big across, as well as along." : "" };
+    if (big) return { why: `Two hoopings can't help: ${label(big)} is bigger than the hoop by itself${big.kind === "text" && !/ /.test(big.text.trim()) ? " (lettering can only be split at a space between words)" : ""}.` };
+    return { why: pieces.length > 1 ? "Two hoopings can't help either: it's too big both ways." : "" };
   }
   // appliqué tips: shown the first time a design has fabric to lay on, then on request
   // real appliqué (shapes cut from fabric and satined), not the front of an in-the-hoop project: its fabric is in its
