@@ -2,13 +2,13 @@
 // hairlines get a double running stitch along their centre; every shape with width gets a solid tatami fill.
 // Other styles: line drawing (`lineArt`) and cross-stitch (`crossStitch`).
 import { Design } from "./design.js";
-import { arclen, followRun, run } from "./geom.js";
+import { arclen, followRun } from "./geom.js";
 import { MARGIN } from "./machines.js";
 import { distanceTransform, label, order, skeletonEdges } from "./raster.js";
 import { PEC_MATCH, hexToRgb, nearestBrotherThread, pecThread, rgbToHex } from "./threads.js";
 
 export const DEFAULTS = {
-  colors: 4,          // thread colours (not counting background)
+  colors: 6,          // thread colours (not counting background)
   sizeMm: 100,        // longest side of the finished design
   removeBackground: true,
   fillAngle: 45,      // degrees
@@ -62,7 +62,7 @@ function srgbToLab(r, g, b) {
 
 // CIEDE2000 colour difference of two Lab colours (Sharma, Wu & Dalal 2005). Plain Lab distance overweights chroma:
 // it sent an olive green to Russet Brown and a teal to Pewter.
-function deltaE2000([L1, a1, b1], [L2, a2, b2]) {
+function deltaE2000([L1, a1, b1], [L2, a2, b2], kL = 1, kH = 1) {
   const rad = Math.PI / 180, C1 = Math.hypot(a1, b1), C2 = Math.hypot(a2, b2), Cm = (C1 + C2) / 2;
   const G = 0.5 * (1 - Math.sqrt(Cm ** 7 / (Cm ** 7 + 25 ** 7)));
   const p1 = (1 + G) * a1, p2 = (1 + G) * a2, c1 = Math.hypot(p1, b1), c2 = Math.hypot(p2, b2);
@@ -74,8 +74,9 @@ function deltaE2000([L1, a1, b1], [L2, a2, b2]) {
   let hm = h1 + h2;
   if (c1 * c2) { if (Math.abs(h1 - h2) > 180) hm += hm < 360 ? 360 : -360; hm /= 2; }
   const T = 1 - 0.17 * Math.cos((hm - 30) * rad) + 0.24 * Math.cos(2 * hm * rad) + 0.32 * Math.cos((3 * hm + 6) * rad) - 0.2 * Math.cos((4 * hm - 63) * rad);
-  const SL = 1 + (0.015 * (Lm - 50) ** 2) / Math.sqrt(20 + (Lm - 50) ** 2), SC = 1 + 0.045 * cm, SH = 1 + 0.015 * cm * T;
+  let SL = 1 + (0.015 * (Lm - 50) ** 2) / Math.sqrt(20 + (Lm - 50) ** 2), SC = 1 + 0.045 * cm, SH = 1 + 0.015 * cm * T;
   const RT = -2 * Math.sqrt(cm ** 7 / (cm ** 7 + 25 ** 7)) * Math.sin(60 * Math.exp(-(((hm - 275) / 25) ** 2)) * rad);
+  SL *= kL; SH *= kH;
   return Math.sqrt((dL / SL) ** 2 + (dC / SC) ** 2 + (dH / SH) ** 2 + RT * (dC / SC) * (dH / SH));
 }
 
@@ -156,52 +157,81 @@ function findFrame(labels, w, h, C) {
   return any ? { frame, inset: k * 0.005 } : null;
 }
 
-export function analyze(img, opts = {}) {
-  const o = { ...DEFAULTS, ...opts };
-  let q = quantize(img, o, null), frame = null;
-  if (o.removeBackground && !q.hasAlpha) {
-    // learn the colours again without the frame: it took a thread of its own
-    frame = findFrame(q.labels, q.w, q.h, q.C);
-    if (frame) q = quantize(img, o, frame.frame);
+// The picture's colours are learned once per picture (`learnColours`) from a copy at a fixed size, so the threads
+// don't change with Size or Turn hoop (a turned etsy_1 swapped its olive greens for Warm Gray and Lavender: k-means
+// had seen different pixels). FINE clusters are learned, the background's shades set aside, and the rest merged two
+// at a time, cheapest first, down to the threads asked for. Each count's threads are the next count's with one split
+// in two, so asking for more colours never loses one that fewer had.
+const FINE = 24;
+// colours closer than this (CIEDE2000) are one thread whatever was asked for
+const SAME = 7;
+
+// Lab of every opaque pixel (-1: see-through)
+function pixels(img) {
+  const { width: w, height: h, data } = img, n = w * h, lab = new Float32Array(n * 3), opaque = [];
+  let clear = 0;
+  for (let i = 0; i < n; i++) {
+    if (data[i * 4 + 3] < 128) { clear++; continue; }
+    const L = srgbToLab(data[i * 4], data[i * 4 + 1], data[i * 4 + 2]);
+    lab[i * 3] = L[0]; lab[i * 3 + 1] = L[1]; lab[i * 3 + 2] = L[2];
+    opaque.push(i);
   }
-  // (the frame's blended inner edge, read as a colour of its own once the frame is gone, is the frame too)
-  // Pixels within 2 px of the frame, in the band it was found in (to the end of the clean rings), that aren't the
-  // band's own colour go.
-  const cut = (q) => {
-    if (!frame) return q;
-    const { w, h, labels } = q, L = labels.slice(), b = Math.ceil((frame.inset + 0.025) * Math.max(w, h)), cnt = new Map();
-    const inBand = (x, y) => x < b || y < b || x >= w - b || y >= h - b;
-    for (let i = 0; i < w * h; i++) { const x = i % w; if (labels[i] >= 0 && inBand(x, (i - x) / w)) cnt.set(labels[i], (cnt.get(labels[i]) || 0) + 1); }
-    const own = [...cnt.entries()].sort((p, r) => r[1] - p[1])[0]?.[0];
-    for (let i = 0; i < w * h; i++) {
-      const x = i % w, y = (i - x) / w;
-      if (L[i] < 0 || L[i] === own || !inBand(x, y)) continue;
-      search: for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) {
-        const X = x + dx, Y = y + dy;
-        if (X >= 0 && Y >= 0 && X < w && Y < h && L[Y * w + X] < 0) { labels[i] = -1; break search; }
-      }
+  return { w, h, n, lab, opaque, hasAlpha: clear > n * 0.02 };
+}
+const nearestOf = (lab, i, C) => {
+  let best = 0, bd = Infinity;
+  for (let j = 0; j < C.length; j++) {
+    const a = lab[i * 3] - C[j][0], b = lab[i * 3 + 1] - C[j][1], e = lab[i * 3 + 2] - C[j][2], v = a * a + b * b + e * e;
+    if (v < bd) { bd = v; best = j; }
+  }
+  return best;
+};
+
+// k-means clusters of the pixels not in `skip`, learned from flat pixels only (anti-aliased edges blend two colours
+// and would steal a thread), and each pixel's cluster
+function cluster(P, k, skip) {
+  const { w, n, lab } = P, opaque = skip ? P.opaque.filter((i) => !skip[i]) : P.opaque;
+  const flat = opaque.filter((i) => {
+    const x = i % w;
+    if (x === 0 || x === w - 1 || i < w || i >= n - w) return true;
+    let m = 0;
+    for (const j of [i - 1, i + 1, i - w, i + w]) {
+      const a = lab[i * 3] - lab[j * 3], b = lab[i * 3 + 1] - lab[j * 3 + 1], e = lab[i * 3 + 2] - lab[j * 3 + 2];
+      m = Math.max(m, a * a + b * b + e * e);
     }
-    return q;
-  };
-  q = cut(q);
-  let a = background(img, o, q, frame);
-  // a backdrop in two or three shades took threads that were asked for: learn the colours again with as many more
-  const extra = a.colors.filter((c) => c.background && c.area > 0).length - 1;
-  if (extra > 0) {
-    const b = background(img, o, cut(quantize(img, o, frame?.frame, Math.min(3, extra))), frame);
-    if (b.merged < a.merged) a = b;
-  }
-  return a;
+    return m < 36;   // ΔE < 6 to every neighbour
+  });
+  const train = flat.length > opaque.length * 0.2 ? flat : opaque, C = [];
+  if (train.length) for (const c of kmeans(lab, train, Math.min(k, train.length)))
+    if (!C.some((d) => (c[0] - d[0]) ** 2 + (c[1] - d[1]) ** 2 + (c[2] - d[2]) ** 2 < 4)) C.push(c);
+  const labels = new Int16Array(n).fill(-1);
+  for (const i of opaque) labels[i] = nearestOf(lab, i, C);
+  return { C, labels };
 }
 
-// which colours are background, and the colours as threads
-function background(img, o, q, frame) {
-  const { w, h, labels, C, hasAlpha } = q, { data } = img, n = w * h;
-  // background = most common colour along the border, or just inside a frame (only when the picture has no
-  // transparency)
+// The picture's threads, learned from `img` (any size: the Picture tab sends the same copy whatever the Size).
+// Returns { C: fine clusters (Lab), map: fine cluster -> colour id, colors, bg (the background's id, or -1), frame
+// (a mask over img, or null), boxes: each colour's extent as fractions of img [x0, y0, x1, y1], merged, empty }.
+export function learnColours(img, opts = {}) {
+  const o = { ...DEFAULTS, ...opts }, P = pixels(img), { w, h, n, opaque, hasAlpha } = P, { data } = img;
+  const cut = o.removeBackground && !hasAlpha;
+  let { C, labels } = cluster(P, FINE, null), frame = null;
+  // a frame (a band at the picture's edge) isn't part of the design, and isn't the background: learn again without it
+  // (found on a coarse clustering: fine clusters chain a backdrop's shades into the frame's colour family)
+  if (cut && C.length) {
+    const q = cluster(P, 5, null);
+    frame = findFrame(q.labels, w, h, q.C);
+    if (frame) ({ C, labels } = cluster(P, FINE, frame.frame));
+  }
+  const K = C.length, area = new Array(K).fill(0), rgb = C.map(() => [0, 0, 0]);
+  for (let i = 0; i < n; i++) {
+    const l = labels[i]; if (l < 0) continue;
+    area[l]++; rgb[l][0] += data[i * 4]; rgb[l][1] += data[i * 4 + 1]; rgb[l][2] += data[i * 4 + 2];
+  }
+  // background = the most common colour along the border, or just inside a frame (the five clean rings: the first
+  // can run along the frame's blended inner edge); only when the picture has no transparency
   let bg = -1, ring = () => 0;
-  if (o.removeBackground && !hasAlpha) {
-    // (inside a frame, the five clean rings: the first can run along the frame's blended inner edge)
+  if (cut && K) {
     const cnt = new Map(), add = (i) => { if (labels[i] >= 0) cnt.set(labels[i], (cnt.get(labels[i]) || 0) + 1); };
     for (let r = 0; r < (frame ? 5 : 1); r++) {
       const f = frame ? frame.inset + r * 0.005 : 0;
@@ -213,124 +243,160 @@ function background(img, o, q, frame) {
     bg = [...cnt.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? -1;
     ring = (j) => (cnt.get(j) || 0) / Math.max(1, all);
   }
-  // shades of the background (a white box on an off-white page, paper texture) are background too: within ΔE 8 (a
-  // pale design colour is further off), or within 15 and over a quarter of the border (a lit backdrop's other shade)
-  const isBg = (j) => {
-    if (bg < 0) return false;
-    const e = Math.hypot(C[j][0] - C[bg][0], C[j][1] - C[bg][1], C[j][2] - C[bg][2]);
-    return j === bg || e < 8 || (e < 15 && ring(j) >= 0.25);
+  // shades of the background (a white box on an off-white page, paper texture, a lit backdrop's weave) are background
+  // too: within ΔE 8 (a pale design colour is further off), within 15 and a tenth of the border, or within 20 and 3%
+  // of it (a shadow across the backdrop)
+  const e76 = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
+  const isBg = (j) => bg >= 0 && (j === bg || e76(C[j], C[bg]) < 8 || (e76(C[j], C[bg]) < 15 && ring(j) >= 0.1) || (e76(C[j], C[bg]) < 20 && ring(j) >= 0.03));
+  // Merge the design's clusters, cheapest first: the colour difference, made cheaper for a cluster that is small or
+  // mostly edge (anti-aliasing, JPEG noise) so it joins its nearest colour first. A small colour of its own (a pink
+  // flower, a yellow bird) outlasts the shades of one dark outline. The difference weighs hue more (kH 0.6), so
+  // distinct hues beat light and dark shades of one, and dark colours' hue fades out below L 30 (thread that dark
+  // reads as black: etsy_5's outline took Dark Gray, Dark Brown, Black and Dark Olive).
+  const dim = ([L, a, b]) => { const f = Math.min(1, L / 30); return [L, a * f, b * f]; };
+  const apart = (p, q) => deltaE2000(dim(p), dim(q), 1, 0.6);
+  const ink = [];
+  for (let j = 0; j < K; j++) if (area[j] && !isBg(j)) ink.push(j);
+  const A = ink.reduce((s, j) => s + area[j], 0) || 1;
+  // A group's solid pixels are those whose 4 neighbours are in it too (a textured white splits into shades none of
+  // which is solid on its own): pixels counted by the set of clusters round them, as bit masks
+  const sets = new Map();
+  for (let i = w; i < n - w; i++) {
+    const x = i % w; if (x === 0 || x === w - 1) continue;
+    const q = [labels[i], labels[i - 1], labels[i + 1], labels[i - w], labels[i + w]];
+    if (q.some((v) => v < 0)) continue;
+    const m = q.reduce((s, v) => (s | (1 << v)) >>> 0, 0) * 32 + labels[i];
+    sets.set(m, (sets.get(m) || 0) + 1);
+  }
+  const effOf = (g) => {
+    const gm = g.members.reduce((s, v) => (s | (1 << v)) >>> 0, 0);
+    let k = 0; for (const [m, c] of sets) if (!(Math.floor(m / 32) & ~gm)) k += c;
+    return g.area * Math.min(1, Math.max(0.05, k / g.area / 0.5));
   };
-  const area = new Array(C.length).fill(0), rgb = C.map(() => [0, 0, 0]);
-  for (let i = 0; i < n; i++) {
-    const l = labels[i]; if (l < 0) continue;
-    area[l]++; rgb[l][0] += data[i * 4]; rgb[l][1] += data[i * 4 + 1]; rgb[l][2] += data[i * 4 + 2];
-  }
-  const colors = C.map((c, j) => {
-    const col = area[j] ? rgb[j].map((v) => Math.round(v / area[j])) : [0, 0, 0];
-    const hex = rgbToHex(col);
-    return { id: j, hex, lightness: c[0], area: area[j], background: isBg(j), thread: nearestBrotherThread(hex) };
-  });
-  snapToThreads(colors);
-  // how many of the asked-for colours came out as the same thread as another (too alike to each other or to the
-  // background, or only anti-aliased edges), so the page can say why there are fewer threads than asked
-  const threads = colors.filter((c) => !c.background && c.area > 0).length;
-  return { w, h, labels, colors, merged: Math.max(0, o.colors - threads), frame: !!frame };
-}
-
-// Each colour to be sewn becomes exactly a Brother thread, the nearest by CIELAB that no bigger colour took. The PES
-// writer matches colours to threads by pyembroidery's red-mean distance, which named a green "Pewter", a pink
-// "Silver" and a black "Olive Green"; given the thread's own colour it picks that thread (distance 0), so the swatch,
-// its name and the machine's screen agree. `picture` keeps the colour the picture had.
-function snapToThreads(colors) {
-  const pec = PEC_MATCH.map((t) => (t ? srgbToLab(t[1], t[2], t[3]) : null)), taken = new Set();
-  for (const c of colors.filter((k) => !k.background && k.area > 0).sort((a, b) => b.area - a.area)) {
-    const lab = srgbToLab(...hexToRgb(c.hex));
-    let best = -1, bd = Infinity;
-    pec.forEach((q, i) => {
-      if (!q || taken.has(i)) return;
-      const v = deltaE2000(lab, q);
-      if (v < bd) { bd = v; best = i; }
-    });
-    if (best < 0) continue;
-    taken.add(best);
-    const t = pecThread(best);
-    Object.assign(c, { picture: c.hex, hex: t.hex, thread: t });
-  }
-}
-
-// k-means colours and a label per pixel (-1: transparent, or the frame's pixels in `skip`)
-function quantize(img, o, skip, extra = 0) {
-  const { width: w, height: h, data } = img;
-  const n = w * h, lab = new Float32Array(n * 3), opaque = [];
-  let clear = 0;
-  for (let i = 0; i < n; i++) {
-    if (data[i * 4 + 3] < 128) { clear++; continue; }
-    if (skip && skip[i]) continue;
-    const L = srgbToLab(data[i * 4], data[i * 4 + 1], data[i * 4 + 2]);
-    lab[i * 3] = L[0]; lab[i * 3 + 1] = L[1]; lab[i * 3 + 2] = L[2];
-    opaque.push(i);
-  }
-  const hasAlpha = clear > n * 0.02;
-  const k = Math.max(1, o.colors + (o.removeBackground && !hasAlpha ? 1 + extra : 0));
-  // learn colours from flat pixels only: anti-aliased edges blend two colours and would steal a thread
-  const flat = opaque.filter((i) => {
-    const x = i % w;
-    if (x === 0 || x === w - 1 || i < w || i >= n - w) return true;
-    let m = 0;
-    for (const j of [i - 1, i + 1, i - w, i + w]) {
-      const a = lab[i * 3] - lab[j * 3], b = lab[i * 3 + 1] - lab[j * 3 + 1], e = lab[i * 3 + 2] - lab[j * 3 + 2];
-      m = Math.max(m, a * a + b * b + e * e);
+  let groups = ink.map((j) => ({ lab: C[j].slice(), area: area[j], members: [j] }));
+  for (const g of groups) g.eff = effOf(g);
+  const weight = (g) => Math.min(1, Math.sqrt(g.eff / (0.005 * A))), bgLab = bg >= 0 ? C[bg] : null;
+  const join = (a, b) => {   // b into a
+    const t = a.area + b.area;
+    a.lab = a.lab.map((v, q) => (v * a.area + b.lab[q] * b.area) / t);
+    a.area = t; a.members.push(...b.members); a.eff = effOf(a);
+  };
+  const toBg = [];
+  for (;;) {
+    let best = null;
+    for (let a = 0; a < groups.length; a++) {
+      for (let b = a + 1; b < groups.length; b++) {
+        const c = apart(groups[a].lab, groups[b].lab) * Math.min(weight(groups[a]), weight(groups[b]));
+        if (!best || c < best.c) best = { c, a, b };
+      }
+      // (into the background only when it's that close: a white dog on a pale blue backdrop stays)
+      if (bgLab) { const c = apart(groups[a].lab, bgLab) * weight(groups[a]); if (c < SAME && (!best || c < best.c)) best = { c, a, b: -1 }; }
     }
-    return m < 36;   // ΔE < 6 to every neighbour
+    if (!best || (groups.length <= o.colors && best.c >= SAME)) break;
+    if (best.b < 0) { toBg.push(...groups[best.a].members); groups.splice(best.a, 1); continue; }
+    const [a, b] = groups[best.a].area >= groups[best.b].area ? [best.a, best.b] : [best.b, best.a];
+    join(groups[a], groups[b]); groups.splice(b, 1);
+  }
+  // Threads: each colour the nearest Brother thread no bigger colour took. A colour whose own thread was taken and whose
+  // next is far off (a pale green given "Russet Brown") joins the colour that took it: one thread fewer, but none wrong.
+  const pec = PEC_MATCH.map((t) => (t ? srgbToLab(t[1], t[2], t[3]) : null));
+  // (the colour of its solid parts: edge pixels blend into their neighbours, and turned a yellow "Light Brown")
+  const pictureOf = (g) => {
+    const s = [0, 0, 0]; let k = 0;
+    const gm = g.members.reduce((t, v) => (t | (1 << v)) >>> 0, 0), sol = new Map();
+    for (const [m, c] of sets) if (!(Math.floor(m / 32) & ~gm)) sol.set(m % 32, (sol.get(m % 32) || 0) + c);
+    for (const j of g.members) { const f = (sol.get(j) || 0) / area[j]; s[0] += rgb[j][0] * f; s[1] += rgb[j][1] * f; s[2] += rgb[j][2] * f; k += sol.get(j) || 0; }
+    if (!k) for (const j of g.members) { s[0] += rgb[j][0]; s[1] += rgb[j][1]; s[2] += rgb[j][2]; k += area[j]; }
+    return s.map((v) => Math.round(v / Math.max(1, k)));
+  };
+  for (;;) {
+    groups.sort((a, b) => b.area - a.area);
+    const taken = new Map();
+    let worse = null;
+    for (const g of groups) {
+      g.picture = rgbToHex(pictureOf(g));
+      const lab = srgbToLab(...hexToRgb(g.picture));
+      let best = -1, bd = Infinity, own = -1, od = Infinity;
+      pec.forEach((q, i) => {
+        if (!q) return;
+        const v = deltaE2000(lab, q);
+        if (v < od) { od = v; own = i; }
+        if (!taken.has(i) && v < bd) { bd = v; best = i; }
+      });
+      if (best < 0) continue;
+      if (best !== own && bd > Math.max(15, od + 10) && !worse) worse = [g, taken.get(own)];
+      taken.set(best, g); g.thread = pecThread(best);
+    }
+    if (!worse) break;
+    join(worse[1], worse[0]); groups.splice(groups.indexOf(worse[0]), 1);
+  }
+  groups.sort((a, b) => b.area - a.area);
+  const map = new Int16Array(K).fill(-1), colors = groups.map((g, id) => {
+    for (const j of g.members) map[j] = id;
+    return { id, hex: g.thread.hex, picture: g.picture, thread: g.thread, lightness: g.lab[0], background: false };
   });
-  const train = flat.length > opaque.length * 0.2 ? flat : opaque;
-  // more clusters than the picture has colours split one colour into near-identical shades: merge those
-  // (ΔE < 6). Shades of one big area (a backdrop's weave) can take several clusters while a small colour gets none:
-  // then the clusters are learned again with as many more, twice at most.
-  let C = [];
-  for (let kk = k, tries = 0; tries < 3; tries++) {
-    C = [];
-    for (const c of kmeans(lab, train, Math.min(kk, Math.max(1, train.length))))
-      if (!C.some((d) => (c[0] - d[0]) ** 2 + (c[1] - d[1]) ** 2 + (c[2] - d[2]) ** 2 < 36)) C.push(c);
-    if (C.length >= k || kk >= train.length) break;
-    kk += k - C.length;
+  if (bg >= 0) {
+    const id = colors.length;
+    for (let j = 0; j < K; j++) if (map[j] < 0) map[j] = id;
+    const hex = rgbToHex(rgb[bg].map((v) => Math.round(v / Math.max(1, area[bg]))));
+    colors.push({ id, hex, picture: hex, thread: nearestBrotherThread(hex), lightness: C[bg][0], background: true });
   }
-  let labels = new Int16Array(n).fill(-1);
-  for (const i of opaque) {
-    let best = 0, bd = Infinity;
-    C.forEach((c, j) => {
-      const a = lab[i * 3] - c[0], b = lab[i * 3 + 1] - c[1], e = lab[i * 3 + 2] - c[2], v = a * a + b * b + e * e;
-      if (v < bd) { bd = v; best = j; }
-    });
-    labels[i] = best;
-  }
-  // fold sliver clusters (usually anti-aliased edges) into the nearest real colour
+  // each colour's extent (pieces over 0.02% of the picture: a stray speck doesn't make the design bigger)
+  const boxes = colors.map(() => [1, 1, 0, 0]);
   {
-    // a fringe cluster is almost all edge: few of its pixels have 4 neighbours of the same colour
-    const cnt = new Array(C.length).fill(0), inner = new Array(C.length).fill(0);
-    for (const i of opaque) {
-      const l = labels[i], x = i % w;
-      cnt[l]++;
-      if (x > 0 && x < w - 1 && i >= w && i < n - w &&
-        labels[i - 1] === l && labels[i + 1] === l && labels[i - w] === l && labels[i + w] === l) inner[l]++;
+    const seen = new Uint8Array(n), min = n * 0.0002;
+    for (let s = 0; s < n; s++) {
+      if (seen[s] || labels[s] < 0) continue;
+      const id = map[labels[s]], st = [s];
+      let k = 0, x0 = w, y0 = h, x1 = 0, y1 = 0;
+      seen[s] = 1;
+      while (st.length) {
+        const i = st.pop(), x = i % w, y = (i - x) / w;
+        k++; if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y;
+        for (const j of [x > 0 ? i - 1 : -1, x < w - 1 ? i + 1 : -1, y > 0 ? i - w : -1, y < h - 1 ? i + w : -1])
+          if (j >= 0 && !seen[j] && labels[j] >= 0 && map[labels[j]] === id) { seen[j] = 1; st.push(j); }
+      }
+      if (k < min) continue;
+      const b = boxes[id];
+      b[0] = Math.min(b[0], x0 / w); b[1] = Math.min(b[1], y0 / h); b[2] = Math.max(b[2], (x1 + 1) / w); b[3] = Math.max(b[3], (y1 + 1) / h);
     }
-    const tiny = new Set(cnt.map((c, j) => (c < opaque.length * 0.0005 || inner[j] < c * 0.2 ? j : -1)).filter((j) => j >= 0));
-    if (tiny.size && tiny.size < C.length) {
-      const keep = C.map((_, j) => j).filter((j) => !tiny.has(j));
-      for (const i of opaque) {
-        if (!tiny.has(labels[i])) continue;
-        let best = keep[0], bd = Infinity;
-        for (const j of keep) {
-          const a = lab[i * 3] - C[j][0], b = lab[i * 3 + 1] - C[j][1], e = lab[i * 3 + 2] - C[j][2], v = a * a + b * b + e * e;
-          if (v < bd) { bd = v; best = j; }
-        }
-        labels[i] = best;
+  }
+  // nothing to sew: say why, in words that point at something the user can still do
+  let empty = "";
+  if (!groups.length) {
+    if (!opaque.length) empty = "This picture is empty (it's all see-through), so there's nothing in it to stitch.";
+    else if (C.every((c) => e76(c, C[bg >= 0 ? bg : 0]) < 15)) empty = "This picture is all one colour, so there's nothing in it to stitch.";
+    else empty = "Everything in this picture is close to its background colour. Untick “Leave the background unstitched” to stitch it all.";
+  }
+  return { w, h, C, map, colors, bg: bg >= 0 ? colors.length - 1 : -1, frame, boxes, hasAlpha,
+    merged: Math.max(0, o.colors - groups.length), empty };
+}
+
+// Label a picture's pixels with the colours learned from it (possibly from a copy at another size). `crop`
+// [x0, y0, x1, y1] is the part of the learned copy img shows (fractions; default the whole).
+export function labelWith(img, model, crop = [0, 0, 1, 1]) {
+  const P = pixels(img), { w, h, n, lab, opaque } = P;
+  let labels = new Int16Array(n).fill(-1);
+  // the frame's pixels, found in the learned copy
+  let frame = null;
+  if (model.frame) {
+    const F = model.frame.frame, fw = model.w, fh = model.h;
+    frame = new Uint8Array(n);
+    for (let y = 0; y < h; y++) {
+      const fy = Math.min(fh - 1, Math.floor((crop[1] + ((y + 0.5) / h) * (crop[3] - crop[1])) * fh));
+      for (let x = 0; x < w; x++) {
+        const fx = Math.min(fw - 1, Math.floor((crop[0] + ((x + 0.5) / w) * (crop[2] - crop[0])) * fw));
+        if (F[fy * fw + fx]) frame[y * w + x] = 1;
       }
     }
   }
+  // (no folding of colours that are mostly edge into their neighbours, as raw k-means clusters needed: the colours
+  // here are merged already, and folding sent etsy_7's thin pastel doodles into the background)
+  const G = model.colors.length;
+  for (const i of opaque) if (!(frame && frame[i])) labels[i] = model.map[nearestOf(lab, i, model.C)];
   // majority filter cleans anti-aliased fringes and speckle
   for (let pass = 0; pass < 2; pass++) {
-    const out = labels.slice(), cnt = new Int16Array(C.length + 1);
+    const out = labels.slice(), cnt = new Int16Array(G + 1);
     for (let y = 1; y < h - 1; y++) for (let x = 1; x < w - 1; x++) {
       cnt.fill(0);
       for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) cnt[labels[(y + dy) * w + x + dx] + 1]++;
@@ -339,8 +405,27 @@ function quantize(img, o, skip, extra = 0) {
     }
     labels = out;
   }
-  if (skip) for (let i = 0; i < n; i++) if (skip[i]) labels[i] = -1;
-  return { w, h, labels, C, hasAlpha };
+  if (frame) {
+    // (the frame's blended inner edge, read as a colour of its own once the frame is gone, is the frame too)
+    for (let i = 0; i < n; i++) if (frame[i]) labels[i] = -1;
+    const L = labels.slice();
+    for (let i = 0; i < n; i++) {
+      if (L[i] < 0 || L[i] === model.bg) continue;
+      const x = i % w, y = (i - x) / w;
+      search: for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) {
+        const X = x + dx, Y = y + dy;
+        if (X >= 0 && Y >= 0 && X < w && Y < h && frame[Y * w + X]) { labels[i] = -1; break search; }
+      }
+    }
+  }
+  const area = new Array(G).fill(0);
+  for (let i = 0; i < n; i++) if (labels[i] >= 0) area[labels[i]]++;
+  const colors = model.colors.map((c) => ({ ...c, area: area[c.id] }));
+  return { w, h, labels, colors, merged: model.merged, frame: !!model.frame, empty: model.empty };
+}
+
+export function analyze(img, opts = {}) {
+  return labelWith(img, learnColours(img, opts));
 }
 
 // ---------- fills ----------
@@ -658,6 +743,7 @@ export function toPalette(analysis, palette) {
 // Fill edges and satin outlines reach a little past the picture, so a picture sized to the hoop's edge can land
 // just over it; shrink to fit (more pixels per mm) rather than refuse.
 export function digitize(img, analysis, opts = {}) {
+  if (analysis.empty) throw Object.assign(new Error(analysis.empty), { code: "empty" });
   let res = opts.res || DEFAULTS.res;
   const make = opts.style === "line" ? lineArt : opts.style === "cross" ? crossStitch : build;
   for (let tries = 0; ; tries++) {
@@ -817,7 +903,9 @@ function build(img, analysis, opts) {
       const walks = order(skeletonEdges(thick, 2, { spur: 1 })).map((seq) => {
         const mm = seq.map(([p, kind]) => [toMm(p), kind]);
         return { mm, len: mm.reduce((a, [p, kind]) => a + (kind === "run" ? arclen(p).at(-1) : 0), 0) };
-      }).filter((t) => t.len >= 0.5);
+      // (a piece under 1.5 mm of line is a dot: sewn four times over with two locks and a trim, beside a bigger piece
+      // too; 17-43 per picture were kept for being within LINK of one)
+      }).filter((t) => t.len >= 1.5);
       // A piece counts with the pieces of this line colour within LINK of it (the letters of a word, the dashes of a
       // broken stem): a group under GROUP mm of line in all is a speck (each one a trim and two locks), dropped.
       const LINK = 2, GROUP = 6;
@@ -921,31 +1009,142 @@ function build(img, analysis, opts) {
     }
     summary.push({ ...col, shapes: ordered.length, kinds: [...new Set(ordered.map((b) => b.kind))] });
   }
-  if (!d.stitches.length) throw new Error("Nothing to stitch. Try more colours or turn off background removal.");
+  if (!d.stitches.length) throw nothing(used, o);
   d.finish();
   return { design: d, summary, fine };
+}
+
+// why a picture with colours to sew came out empty (code: what the page can offer to change)
+function nothing(used, o) {
+  return !used.length && (o.skip || []).length ? Object.assign(new Error("Every thread is left out, so there's nothing to stitch."), { code: "skipped" })
+    : Object.assign(new Error("Nothing in this picture is big enough to stitch at this size."), { code: "small" });
+}
+
+// Fabric-coloured specks and slivers inside a drawing (the blend between a white fill and its black outline, read as
+// background; a textured fill's lighter flecks) would each be outlined: they take the colour round them. Fabric that
+// reaches the picture's edge, or is 0.5 mm² and over 0.6 mm across somewhere (a letter's counter), stays.
+function closeSlivers(labels, w, h, mine, res) {
+  const n = w * h, m = { w, h, data: new Uint8Array(n) };
+  for (let i = 0; i < n; i++) m.data[i] = mine.has(labels[i]) ? 0 : 1;
+  const dt = distanceTransform(m), { labels: cl, count } = label(m);
+  const edge = new Uint8Array(count + 1), area = new Int32Array(count + 1), wide = new Float32Array(count + 1);
+  for (let i = 0; i < n; i++) {
+    const c = cl[i]; if (!c) continue;
+    const x = i % w, y = (i - x) / w;
+    area[c]++; if (dt[i] > wide[c]) wide[c] = dt[i];
+    if (x === 0 || y === 0 || x === w - 1 || y === h - 1) edge[c] = 1;
+  }
+  const out = labels.slice(), open = new Uint8Array(n);
+  let front = [];
+  const near = (i) => { const x = i % w; return [x > 0 ? i - 1 : -1, x < w - 1 ? i + 1 : -1, i >= w ? i - w : -1, i + w < n ? i + w : -1]; };
+  // Slivers: fabric under 0.6 mm across, as a closing finds it (a sliver can run on to open fabric), lying between two
+  // different colours. Between parts of one colour (the gaps between letters) it stays.
+  const r = 0.3 * res, dil = { w, h, data: new Uint8Array(n) }, thin = { w, h, data: new Uint8Array(n) };
+  for (let i = 0; i < n; i++) dil.data[i] = !m.data[i] || dt[i] <= r ? 1 : 0;
+  const shut = distanceTransform(dil);
+  for (let i = 0; i < n; i++) thin.data[i] = cl[i] && (shut[i] > r || (!edge[cl[i]] && wide[cl[i]] <= r)) ? 1 : 0;
+  const { labels: sl, count: sc } = label(thin), sides = Array.from({ length: sc + 1 }, () => new Set());
+  for (let i = 0; i < n; i++) if (sl[i]) for (const j of near(i)) if (j >= 0 && !m.data[j]) sides[sl[i]].add(labels[j]);
+  for (let i = 0; i < n; i++) if (cl[i] && ((!edge[cl[i]] && area[cl[i]] < 0.5 * res * res) || (sl[i] && sides[sl[i]].size >= 2))) open[i] = 1;
+  for (let i = 0; i < n; i++) if (open[i] && near(i).some((j) => j >= 0 && !open[j] && mine.has(out[j]))) front.push(i);
+  while (front.length) {
+    const next = [];
+    for (const i of front) {
+      if (!open[i]) continue;
+      const j = near(i).find((q) => q >= 0 && !open[q] && mine.has(out[q]));
+      if (j === undefined) continue;
+      out[i] = out[j]; open[i] = 0;
+      for (const q of near(i)) if (q >= 0 && open[q]) next.push(q);
+    }
+    front = next;
+  }
+  return out;
 }
 
 // Line drawing (redwork): every shape's outline and every thin line's centre, in the picture's darkest colour. The
 // lines are walked like lettering (each one out and back), so a connected drawing sews without a trim.
 function lineArt(img, analysis, opts) {
-  const o = { ...DEFAULTS, ...opts }, { w, h, labels, colors } = analysis, res = o.res;
+  const o = { ...DEFAULTS, ...opts }, { w, h, colors } = analysis, res = o.res;
   const used = colors.filter((c) => !c.background && c.area > 0 && !(o.skip || []).includes(c.id));
-  if (!used.length) throw new Error("Nothing to stitch. Try more colours or turn off background removal.");
+  if (!used.length) throw nothing(used, o);
   const ink = used.reduce((a, c) => (c.lightness < a.lightness ? c : a)), mine = new Set(used.map((c) => c.id));
+  const labels = closeSlivers(analysis.labels, w, h, mine, res);
   const cx = w / 2, cy = h / 2, toMm = (p) => p.map(([x, y]) => [(x - cx) / res, (y - cy) / res]);
-  const lines = { w, h, data: new Uint8Array(w * h) };
+  // Only a change of colour draws a line: two shades of one (a textured lawn in two greens) don't, and a thin piece that
+  // is a shade of the colour round it, or the blend between two colours (a yellow bird's edge against its black
+  // outline), takes the neighbouring colour instead of being drawn as a line beside the outline.
+  const fabric = colors.find((c) => c.background), labOf = new Map(colors.map((c) => [c.id, srgbToLab(...hexToRgb(c.picture || c.hex))]));
+  const colOf = (l) => (mine.has(l) ? labOf.get(l) : fabric ? labOf.get(fabric.id) : null);
+  const alike = (a, b) => !!a && !!b && deltaE2000(a, b) < 15;
+  const toFabric = fabric ? fabric.id : -1, before = labels.slice(), moves = [];
+  for (const col of used) {
+    const mask = { w, h, data: new Uint8Array(w * h) };
+    for (let i = 0; i < w * h; i++) mask.data[i] = before[i] === col.id ? 1 : 0;
+    const dt = distanceTransform(mask), { labels: cl, count } = label(mask), wide = new Uint8Array(count + 1), size = new Int32Array(count + 1);
+    for (let i = 0; i < w * h; i++) if (cl[i]) { size[cl[i]]++; if (dt[i] > 0.75 * res) wide[cl[i]] = 1; }
+    const nb = new Map();
+    for (let i = 0; i < w * h; i++) {
+      const c = cl[i]; if (!c || wide[c]) continue;
+      const x = i % w;
+      for (const j of [x > 0 ? i - 1 : -1, x < w - 1 ? i + 1 : -1, i - w, i + w]) {
+        if (j < 0 || j >= w * h || cl[j] === c) continue;
+        const l = mine.has(before[j]) ? before[j] : toFabric, m = nb.get(c) || new Map();
+        m.set(l, (m.get(l) || 0) + 1); nb.set(c, m);
+      }
+    }
+    const me = labOf.get(col.id), to = new Map();
+    for (const [c, m] of nb) {
+      const [[A] = [], [B] = []] = [...m.entries()].sort((p, q) => q[1] - p[1]), a = colOf(A), b = colOf(B);
+      // (into the fabric only a speck: a pale line on white is still a line)
+      if (alike(me, a) && (A !== toFabric || size[c] < 0.5 * res * res)) to.set(c, A);
+      // (a blend with the fabric is the edge of the colour it blends into: thin dark lettering anti-aliased to grey
+      // stays lettering)
+      else if (a && b && deltaE2000(a, me) + deltaE2000(me, b) <= 1.25 * deltaE2000(a, b)) to.set(c, A === toFabric ? B : B === toFabric ? A : deltaE2000(a, me) <= deltaE2000(me, b) ? A : B);
+    }
+    if (to.size) moves.push([cl, to]);
+  }
+  // (all at once, from the colours as they were: one piece's move can't pass another on to the fabric)
+  for (const [cl, to] of moves) for (let i = 0; i < w * h; i++) if (to.has(cl[i])) labels[i] = to.get(cl[i]);
+  // Outlines drawn in the picture (a dark band under BAND mm wide) are lines already: sewn once along their centre.
+  // Tracing both their edges drew two parallel lines round Snoopy. Parts of a dark colour's shapes no disc BAND/2 mm
+  // across reaches into are such bands (a filled ear stays a shape, the outline running from it a line); a small dark
+  // shape on its own (an eye, a nose) is outlined.
+  const BAND = 3, dark = (c) => c.lightness <= Math.max(35, ink.lightness + 15);
+  const lines = { w, h, data: new Uint8Array(w * h) }, bands = { w, h, data: new Uint8Array(w * h) }, wideAt = new Uint8Array(w * h);
+  const widths = [];
   for (const col of used) {
     const mask = { w, h, data: new Uint8Array(w * h) };
     for (let i = 0; i < w * h; i++) mask.data[i] = labels[i] === col.id ? 1 : 0;
     const dt = distanceTransform(mask), { labels: cl, count } = label(mask), wide = new Uint8Array(count + 1);
     for (let i = 0; i < w * h; i++) if (cl[i] && dt[i] > 0.75 * res) wide[cl[i]] = 1;   // over 1.5 mm across somewhere
+    let band = null;
+    if (dark(col)) {
+      const r = (BAND / 2) * res, core = { w, h, data: new Uint8Array(w * h) }, small = 2 * BAND * res;
+      const x0 = new Int32Array(count + 1).fill(w), x1 = new Int32Array(count + 1), y0 = new Int32Array(count + 1).fill(h), y1 = new Int32Array(count + 1);
+      for (let i = 0; i < w * h; i++) {
+        const c = cl[i]; if (!c) continue;
+        const x = i % w, y = (i - x) / w;
+        if (x < x0[c]) x0[c] = x; if (x > x1[c]) x1[c] = x; if (y < y0[c]) y0[c] = y; if (y > y1[c]) y1[c] = y;
+      }
+      for (let i = 0; i < w * h; i++) core.data[i] = cl[i] && dt[i] > r ? 0 : 1;
+      const toCore = distanceTransform(core);
+      band = (i) => toCore[i] > r + 0.5 && (x1[cl[i]] - x0[cl[i]] > small || y1[cl[i]] - y0[cl[i]] > small);
+    }
     for (let i = 0; i < w * h; i++) {
       if (!cl[i]) continue;
-      if (!wide[cl[i]]) { lines.data[i] = 1; continue; }   // a thin line: its centre comes from the skeleton
-      // an outline, drawn on one side only where two colours meet (the lower id), so it isn't doubled
-      const x = i % w, nb = [x > 0 ? i - 1 : -1, x < w - 1 ? i + 1 : -1, i - w, i + w];
-      if (nb.some((j) => j < 0 || j >= w * h || (labels[j] !== col.id && (!mine.has(labels[j]) || labels[j] > col.id)))) lines.data[i] = 1;
+      if (!wide[cl[i]]) lines.data[i] = 1;   // a thin line: its centre comes from the skeleton
+      else if (band && band(i)) { bands.data[i] = 1; widths.push(dt[i]); }
+      else wideAt[i] = 1;
+    }
+  }
+  // an outline, drawn on one side only where two colours meet (the lower id), so it isn't doubled, and not along a
+  // band (its centre line is the line)
+  for (let i = 0; i < w * h; i++) {
+    if (!wideAt[i]) continue;
+    const x = i % w, l = labels[i];
+    for (const j of [x > 0 ? i - 1 : -1, x < w - 1 ? i + 1 : -1, i - w, i + w]) {
+      if (j < 0 || j >= w * h || !mine.has(labels[j])) { lines.data[i] = 1; break; }
+      if (labels[j] !== l && labels[j] > l && !bands.data[j] && !lines.data[j] && !alike(labOf.get(l), labOf.get(labels[j]))) { lines.data[i] = 1; break; }
     }
   }
   // thicken the 1 px outlines so the skeleton follows them smoothly
@@ -953,10 +1152,24 @@ function lineArt(img, analysis, opts) {
   for (let i = 0; i < w * h; i++) if (lines.data[i]) { const x = i % w; if (x < w - 1) thick.data[i + 1] = 1; if (i + w < w * h) thick.data[i + w] = 1; }
   // (pruning dead ends under 2 mm too took the strokes off small lettering)
   const edges = skeletonEdges(thick, 3, { spur: 1 });
+  if (widths.length) {
+    // (the bands' own skeleton, pruned at their width: corners of a wide stroke grow short spurs)
+    widths.sort((a, b) => a - b);
+    const stroke = Math.max(3, Math.min(BAND * res, 2 * widths[Math.floor(widths.length * 0.9)]));
+    for (const [a, b, p] of skeletonEdges(bands, stroke, { spur: 1 })) edges.push([`b${a}`, `b${b}`, p]);
+  }
   // each connected drawing walked out and back: a closed tour (mm) that ends where it starts; pieces under 2 mm long
   // in all are specks (each one a trim, two locks and often a loose thread)
-  const tours = order(edges).map((comp) => comp.flatMap(([p], k) => run(toMm(p), 2.0).slice(k ? 1 : 0)))
-    .filter((t) => t.length > 1 && arclen(t).at(-1) >= 4);
+  // (stitches that keep to the curve, not 2 mm chords across a small flower's petals; points under 0.4 mm apart, where
+  // short skeleton edges meet, are merged: tiny stitches nest and break thread)
+  const tours = order(edges).map((comp) => {
+    const t = [];
+    for (const q of comp.flatMap(([p], k) => followRun(toMm(p), 2.0, 0.1).slice(k ? 1 : 0)))
+      if (!t.length || Math.hypot(q[0] - t.at(-1)[0], q[1] - t.at(-1)[1]) >= 0.4) t.push(q);
+    const s = comp[0][0][0], e = comp.at(-1)[0].at(-1);
+    if (Math.hypot(s[0] - e[0], s[1] - e[1]) < 0.01 && t.length > 1) t[t.length - 1] = t[0];   // (still ends where it began)
+    return t;
+  }).filter((t) => t.length > 1 && arclen(t).at(-1) >= 4);
   // A line end within 2 mm of another drawing is joined to it: the needle steps across, sews that drawing and steps
   // back over the same stitch, instead of jumping (a gap that short is a loose thread the machine never trims; 3 mm
   // drew visible bars between small letters)
@@ -1009,7 +1222,7 @@ function lineArt(img, analysis, opts) {
     d.path(rotate(left[bi], bk));
     left.splice(bi, 1);
   }
-  if (!d.stitches.length) throw new Error("No lines found to stitch. Try more colours.");
+  if (!d.stitches.length) throw Object.assign(new Error("No lines in this picture are big enough to stitch."), { code: "small" });
   d.finish();
   return { design: d, summary: [{ ...ink, shapes, kinds: ["run"] }], fine: { narrowMm2: 0, hairlines: 0 } };
 }
@@ -1044,7 +1257,7 @@ function crossStitch(img, analysis, opts) {
   }
   for (const i of lone) grid[i] = -1;
   const used = colors.filter((k) => grid.includes(k.id)).sort((a, b) => b.lightness - a.lightness);
-  if (!used.length) throw new Error("Nothing to stitch. Try more colours or bigger crosses.");
+  if (!used.length) throw Object.assign(new Error("No square of the grid is mostly picture, so there's nothing to cross-stitch."), { code: "cross" });
   const ox = (gw * c) / 2, oy = (gh * c) / 2, mm = ([gx, gy]) => [(gx * c - ox) / res, (gy * c - oy) / res];
   // cell corners are the vertices, v = gy * W + gx
   const W = gw + 1, V = W * (gh + 1), X = (v) => v % W, Y = (v) => Math.floor(v / W);
@@ -1130,6 +1343,27 @@ function crossStitch(img, analysis, opts) {
   }
   d.finish();
   return { design: d, summary, fine: { narrowMm2: 0, hairlines: 0 } };
+}
+
+// Size is the sewn design's longer side, not the picture's: a framed photo at "174 mm" sewed 84 x 58 mm, and a
+// picture could never fill the hoop. box: the part of the picture whose colours were learned ({ sx, sy, sw, sh },
+// picture px); boxes: the extent of each colour to be sewn, fractions of box ([x0, y0, x1, y1], from learnColours).
+// Returns where to cut the picture (`crop`, picture px, and `frac`, fractions of box), the working size in px to draw
+// it at, and `max`: the largest longer side (mm) that fits the hoop field.
+export function picturePlan(box, boxes, sizeMm, hoop, res = DEFAULTS.res) {
+  let x0 = 1, y0 = 1, x1 = 0, y1 = 0;
+  for (const b of boxes) if (b[2] > b[0] && b[3] > b[1]) { x0 = Math.min(x0, b[0]); y0 = Math.min(y0, b[1]); x1 = Math.max(x1, b[2]); y1 = Math.max(y1, b[3]); }
+  if (x1 <= x0 || y1 <= y0) { x0 = y0 = 0; x1 = y1 = 1; }
+  const cw = (x1 - x0) * box.sw, ch = (y1 - y0) * box.sh, L = Math.max(cw, ch);
+  const maxW = hoop.w - 2 * MARGIN - 2, maxH = hoop.h - 2 * MARGIN - 2, max = L * Math.min(maxW / cw, maxH / ch);
+  const s = Math.min(sizeMm, max) / L;   // mm per picture px
+  // (a little room round it: 2% and 3 working px)
+  const m = 0.02 * L + 3 / (s * res);
+  const sx = Math.max(box.sx, box.sx + x0 * box.sw - m), sy = Math.max(box.sy, box.sy + y0 * box.sh - m);
+  const ex = Math.min(box.sx + box.sw, box.sx + x1 * box.sw + m), ey = Math.min(box.sy + box.sh, box.sy + y1 * box.sh + m);
+  const crop = { sx, sy, sw: ex - sx, sh: ey - sy };
+  return { crop, frac: [(sx - box.sx) / box.sw, (sy - box.sy) / box.sh, (ex - box.sx) / box.sw, (ey - box.sy) / box.sh],
+    w: Math.max(8, Math.round(crop.sw * s * res)), h: Math.max(8, Math.round(crop.sh * s * res)), max: Math.floor(max), sizeMm: Math.min(sizeMm, max) };
 }
 
 // fit the picture's longest side to sizeMm, capped by the hoop
