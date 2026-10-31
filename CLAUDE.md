@@ -644,6 +644,47 @@ Embroidery-file tools for home machines. Two implementations of the same engine:
     sew the white and pink flowers they lost), peak density 24 -> 24. Harness sweep, 6 colours at 120 mm: trims down
     on 8 of 9 pictures (etsy_8 379 -> 259, etsy_3 365 -> 303, etsy_2 174 -> 117; etsy_5 41 -> 84 because it's now
     sewn 120 mm wide, not 81). The batch page still sizes by the whole image (`workingSize`), not `picturePlan`.
+- Round 5 persona tests (2026-10-30, new tasks: onesie/tote/patch/owned spools/Sew along on a phone; coasters,
+  On my item, quilt block + appliqué motif, DST colours, Chevron blend patch, copy/paste + save; bad files, letter pairs,
+  big lettering, owned-thread pictures, offline, a11y, sheet 1:1). Scores 7/8/7, no P0. Fixed in 5 worktree streams:
+  - Open tab: `readPES` with a misplaced box: two long-form values are pyembroidery's opening jump (as before), anything
+    else is the first stitches of a file starting at the origin (dense.pes `00 00 01 80` read as 276 x 253 mm of
+    garbage); `endsEarly` tries both. Reader only, writer bytes unchanged. A copy is "Save fixed copy"/`_fixed` only when
+    it passes quality.js; `fixedCopy` tries up to 3 times adding what still failed (never `_fixed_fixed`); `fix()` drops
+    zero-length stitches at any size (long15's hid behind its long stitches). The PE900 steps through 99 colour blocks
+    at most (quality.js `blocks`): `fewerBlocks` joins consecutive same-colour blocks then sorts; a file still over is
+    shown but not saved. DST parts get Brother swatches + Any colour; colour sort is recomputed after colour changes.
+  - Design tab: `cleanPiece` checks/clamps every field on Open saved, paste and the saved state (a crafted file threw a
+    raw TypeError and survived reload). New pieces go inside the biggest frame they fit (`inFrame`) and, on a patch, in a
+    thread that shows (`against`; contrast < 1.6 or the same thread is "hard to see"). `underPatch`: a patch later in
+    the list covers the piece (one-tap "Sew it after the patch"). Initials take up to 12 characters; a name typed there
+    ("Max", or > 3 letters) gets "Sew it as lettering" (`asText`). `main()` (biggest text or monogram) names the file and
+    is what One for each name swaps (initials for monograms); names ZIP `<starter or file>_<N>_names|monograms.zip`, file
+    names deduplicated ignoring case (emma/Emma collide on macOS, Windows and FAT). Letter pairs that push letters into
+    each other warn (`overlapping`: first letter grown by half the satin + 0.3 mm). Copy/paste anywhere but text
+    fields/selects/dialogs; nothing selected copies the whole design. `FACING` motifs are mirrored on one side for deco.
+  - Guide: step 1 says how to hoop, which thread and Start (`compose` returns `hoop`: bare stabilizer for ITH/zip,
+    felt/twill for a patch, the quilt sandwich, else `FABRICS[fab].hoop`); every fabric has ready/hoop/tip/after (knit:
+    trim the cut-away, don't tear it). Patch supplies and finishing (cut out, iron-on or sew on). Owned spools: `far`
+    when > 25 apart or hue/saturation differs > max(15, 0.25 x sat) (white -> Light Blue wasn't flagged); Have ready
+    splits "Your threads" from "To buy". Picture tab says which colours owned threads merged (`owned` from `toPalette`).
+    Brand menu: "Thread names" + "Add spool numbers for"; Threads I own placeholder per brand (`exampleSpools`).
+  - Layout: side by side needs 700 wide AND 560 tall (200 % of 1920x1080 is 960x540: the preview was a 130 px strip);
+    short side-by-side screens (700-1365 x 560-760) are slimmer (1024x600 preview 293 -> 344); header: tabs on row 2 up
+    to 1259 px, one row without the MACHINE label at 1260-1365, no tagline at 1366-1480. The piece list is one Tab stop
+    (`rove`: arrows, Home/End, Delete); touch shows a word under each row button. The View menu closes after a choice.
+    `tests/cdp.mjs forced on|off`.
+  - Stitches (37 studio files changed, stitches -2.6 %, no file gained stitches or trims, peak <= 24; pe900 batch and
+    bookmarks byte-identical): stages carry `solid` (closed loops, even-odd) and quilting keeps 2.5 mm clear of them
+    (rings ran under an appliqué heart; a solid the quilted frame sits on is ignored); `pieceStages` places `cut` with
+    the piece (cut outlines stayed in local coordinates). Carving is per piece: all of it only when its median column
+    width is >= `CARVE_W` 3.4 mm ("Sam" at 16.5 mm had only its m carved; Zoe blend trims 10 -> 3). Print corners
+    (Design tab, gated on `knots`): junction self-loops under one stroke dropped; a corner stroke (others > 120° away,
+    <= 2.6 strokes, narrowing) is shrunk by satin / stroke and sewn as wide as the point is across (`geom.satin` `wAt`),
+    centre-run underlay: Quicksand WILD at 43.5 mm had 4-5 mm square stubs (covers the old "M apex" item).
+  VM: FITS 24/24; PE-DESIGN opened the blend patch, arched Quicksand, JKM coaster, Max patch, quilt label, dense_k and
+  long15 fixed copies. Skipped (owner's rule): 1 px source lines in Filled pictures, On my item photo kept across
+  starters, undo history across reloads. Open: on the unchanged Patch starter + Lettering still lands below JD.
 - The preview is the file: `setView` decodes `v.bytes` with `readEmbroidery` and draws/counts/fit-checks that, and
   thread labels come from the file's own PEC palette.
 
