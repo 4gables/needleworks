@@ -345,9 +345,15 @@ function reachEnds(edges, mask, stroke, corners = false) {
   // before it, that went the way the stroke before it did (not a curve, nor the bend into a junction) and it ends in a
   // corner of the ink, it goes straight on instead. q runs toward the loose end.
   const decurl = (q) => {
-    // (a short stroke, an X's arm from its crossing: the 0.6 stroke before is from wherever it starts)
-    const n = q.length, i1 = n - 1 - Math.round(stroke * 0.9), i0 = Math.max(0, n - 1 - Math.round(stroke * 1.5)), ih = n - 1 - Math.round(stroke * 2.1);
-    if (i1 - i0 < stroke * 0.4) return q;
+    // (a short stroke, an X's arm from its crossing or a v's from its point: the stroke before is measured from 0.4
+    // stroke along it, past the bend into its junction, and its last 0.6 stroke is the curl when 0.9 leaves no room;
+    // the straight-before check also leaves out the half stroke at the start. Until round 7 that bend read as a curve,
+    // and Josefin's v and w kept a curl 2.4 mm long along their flat tops at 40 mm.)
+    const n = q.length, ih0 = n - 1 - Math.round(stroke * 2.1), j0 = Math.round(stroke * 0.4);
+    let i1 = n - 1 - Math.round(stroke * 0.9), i0 = Math.max(0, n - 1 - Math.round(stroke * 1.5));
+    if (i0 < j0) { i0 = j0; if (i1 - i0 < stroke * 0.4) i1 = n - 1 - Math.round(stroke * 0.6); }
+    if (i1 - i0 < stroke * 0.3) return q;
+    const ih = ih0 < 0 ? -1 : Math.max(ih0, Math.round(stroke * 0.5)) <= i0 - stroke * 0.3 ? Math.max(ih0, Math.round(stroke * 0.5)) : -1;
     const dir = (p, r) => { const L = Math.hypot(r[0] - p[0], r[1] - p[1]); return L < 1 ? null : [(r[0] - p[0]) / L, (r[1] - p[1]) / L]; };
     const turn = (u, v) => Math.abs(Math.atan2(u[0] * v[1] - u[1] * v[0], u[0] * v[0] + u[1] * v[1]));
     const m = q[i1], e = q[n - 1], u = dir(q[i0], m), ue = dir(m, e), uh = ih >= 0 ? dir(q[ih], q[i0]) : null, deg6 = (6 * Math.PI) / 180;
@@ -441,7 +447,11 @@ function reachEnds(edges, mask, stroke, corners = false) {
     let d = 0, plain = !k;
     for (let m = n - 1; m >= 0 && d <= reach; m--) {
       if (m < n - 1) d += Math.hypot(q[m][0] - q[m + 1][0], q[m][1] - q[m + 1][1]);
-      const kk = k * Math.max(0, 1 - d / ramp), v = [nv[0] + u[0] * kk, nv[1] + u[1] * kk], [x, y] = q[m];
+      // (along the line's own normal there, as the satin sews it: a line still curving into its end had each side
+      // measured square to the end's direction, and its stitches stuck 0.4-0.5 mm out of Josefin's flat v tops)
+      const a = q[Math.max(0, m - 3)], b = q[Math.min(n - 1, m + 3)], Lm = Math.hypot(b[0] - a[0], b[1] - a[1]);
+      const ul = Lm > 1 ? [(b[0] - a[0]) / Lm, (b[1] - a[1]) / Lm] : u, nl = [-ul[1], ul[0]];
+      const kk = k * Math.max(0, 1 - d / ramp), v = [nl[0] + ul[0] * kk, nl[1] + ul[1] * kk], [x, y] = q[m];
       const sa = ink(x, y) ? side(x, y, v) : 0, sb = ink(x, y) ? side(x, y, [-v[0], -v[1]]) : 0;
       rows.push([d, kk, sa, sb]);
     }

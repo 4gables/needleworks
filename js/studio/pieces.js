@@ -80,7 +80,8 @@ function letters(text, family, size, style = "auto", spacing = 0, kern = null) {
     idx.forEach((i, m) => { if (m) d += Math.hypot(q[i][0] - q[idx[m - 1]][0], q[i][1] - q[idx[m - 1]][1]) * s; prof.push([d, w[i] * s]); });
     // (cut: how much narrower the point is across where the strokes into it are sewn narrower than the font's: each
     // stroke's edge comes in by half the difference, which across the point is that over the cosine of its angle)
-    return { atEnd: same ? t.atEnd : !t.atEnd, prof, cut: satinW ? Math.max(0, stroke - satinW) / Math.max(0.5, t.cos || 1) : 0 };
+    // (a fine line has no column: cut by the whole stroke, its run stops where the strokes' centre lines meet)
+    return { atEnd: same ? t.atEnd : !t.atEnd, prof, cut: Math.max(0, stroke - satinW) / Math.max(0.5, t.cos || 1) };
   };
   // (the sixth entry: the stroke's ends, { first, last }: [[mm from the end, slant, side, other side], ...] with the
   // sides as the stroke's own path runs (its normal's side first), or null)
@@ -343,9 +344,10 @@ function stitchLetters(parts, satinW, fab = "cotton", small = false) {
   const zz = fab === "knit" ? 1.5 : 2.5, pull = fab === "knit" ? 0.3 : 0;
   const density = wt === "auto" ? (fab === "knit" ? 0.42 : small ? 0.34 : 0.38) : THREADS[wt].satin + (fab === "knit" ? 0.04 : 0);
   let gap = false;   // (a skipped stroke hands its jump on to the next one sewn)
+  if (!satinW) parts = pointed(parts);
   return parts.map(([p0, mode, g, cap, taper, ends, sides]) => {
     // (a corner is narrowed to the ink, and stops where that's under the narrowest column: not on a towel, which
-    // keeps its wide columns, nor in a fine line; its centre run goes on to where the point is)
+    // keeps its wide columns, nor in a fine line (`pointed`); its centre run goes on to where the point is)
     const w = cap && fab !== "towel" ? Math.min(cap, satinW) : satinW;   // (a towel keeps its wide column)
     const tp = taper && satinW && fab !== "towel" ? tapered(p0, taper) : null, p = tp ? (mode === "run" ? tp.run : tp.p) : p0;
     const shaped = satinW && fab !== "towel" && !tp, clip = shaped && sides ? sideClip(p, sides, w) : null;
@@ -405,6 +407,46 @@ function stitchLetters(parts, satinW, fab = "cotton", small = false) {
     const r = spaced(followRun(p, 1.6, 0.1, 0.8)), back = r.slice().reverse();   // the walk's way back: back, forth and back again
     return r.length > 1 ? [...r, ...back.slice(1), ...r.slice(1)] : r;
   }
+}
+// A fine line's corners (an A's apex, a V's point): the strokes into the point are carried on to where their centre
+// lines meet (`tapered`'s tip with the whole stroke as its cut), bending over their last stretch, and the corner stroke
+// itself isn't sewn. Sewn out and back to the font's tip, it stood 1-1.3 mm above where the strokes met (Josefin's
+// and Quicksand's A at 6 mm read as a Y); stopped at the meeting point, it was still a 0.6 mm stub over a junction that
+// thinning puts lower.
+function pointed(parts) {
+  const moves = [];
+  for (const [p, , , , taper] of parts) {
+    if (!taper || p.length < 2) continue;
+    const q = taper.atEnd ? p.slice().reverse() : p, L = length(q);   // (from the point in)
+    let tip = 0;
+    for (const [d, w] of taper.prof) { if (w - taper.cut > 0) break; tip = d; }
+    const J = q[q.length - 1], M = along(q, Math.min(tip, L));
+    if (!moves.some((m) => m.J[0] === J[0] && m.J[1] === J[1])) moves.push({ J, M });
+  }
+  const at = (a, b) => Math.abs(a[0] - b[0]) < 1e-9 && Math.abs(a[1] - b[1]) < 1e-9;
+  // (only where other strokes end at the junction, to carry on)
+  const ok = moves.filter((m) => parts.some(([p, , , , t]) => !t && p.length > 1 && (at(p[0], m.J) || at(p[p.length - 1], m.J))));
+  if (!ok.length) return parts;
+  // (each point within R of the junction along the stroke moves by (M - J), less linearly with the distance)
+  const bend = (p, { J, M }) => {
+    const D = [M[0] - J[0], M[1] - J[1]], R = Math.min(length(p) * 0.6, Math.max(2 * Math.hypot(...D), 0.8));
+    let d = 0;
+    return p.map((v, i) => { if (i) d += Math.hypot(v[0] - p[i - 1][0], v[1] - p[i - 1][1]); const f = Math.max(0, 1 - d / R); return [v[0] + D[0] * f, v[1] + D[1] * f]; });
+  };
+  let gap = false;   // (a dropped corner that started a separate piece hands its jump on)
+  return parts.flatMap((part) => {
+    const [p, , g, , taper] = part;
+    if (taper && p.length > 1 && ok.some((m) => at(m.J, taper.atEnd ? p[0] : p[p.length - 1]))) { gap ||= !!g; return []; }
+    let r = p;
+    for (const m of ok) {
+      if (r.length < 2) break;
+      if (at(r[0], m.J)) r = bend(r, m);
+      else if (at(r[r.length - 1], m.J)) r = bend(r.slice().reverse(), m).reverse();
+    }
+    const out = r === p && !gap ? part : [r, part[1], part[2] || gap, ...part.slice(3)];
+    gap = false;
+    return [out];
+  });
 }
 // A corner (`taper` from letters): the font's point, sewn as a column as wide as the point is across less `cut` (the
 // strokes into it are sewn narrower than the font's, so their edges meet that much nearer the junction), trimmed where

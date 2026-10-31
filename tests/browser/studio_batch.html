@@ -117,8 +117,10 @@ for (const [tag, ps] of [
   }
 }
 log("split: done");
-for (const f of APPLIQUE_FONTS) for (const [text, size] of [["AB", 60], ["Mia", 35], ["Q&8", 44], ["BABY", 30]]) {
+for (const f of APPLIQUE_FONTS) for (let [text, size] of [["AB", 60], ["Mia", 35], ["Q&8", 44], ["BABY", 30]]) {
   const tag = f.family.slice(3).replace(/ /g, "");
+  // (Alfa Slab One's letters are spaced for their satins since round 7, so these no longer fit the 5x7 at full size)
+  if (tag === "AlfaSlabOne") size = { AB: 58, "Q&8": 42, BABY: 27 }[text] || size;
   await save(`st_appl_${tag}_${text.replace(/[^A-Za-z0-9]/g, "")}_${size}`, [P({ kind: "letters", text, font: f.family, size })]);
 }
 // (a round 4 tester's: "BABY" in Lilita One fitted to the 5x7 hoop)

@@ -21,9 +21,62 @@ function trace(text, family, size) {
   probe.font = `${PX}px "${family}"`;
   const m = probe.measureText(text), inkH = m.actualBoundingBoxAscent + m.actualBoundingBoxDescent;
   const r = (CLOSE * inkH) / size, pad = 4 + Math.ceil(r);
-  const w = Math.ceil(m.actualBoundingBoxLeft + m.actualBoundingBoxRight) + 2 * pad, h = Math.ceil(inkH) + 2 * pad;
-  return { loops: traceDrawn(w, h, (ctx) => { ctx.font = probe.font; ctx.fillText(text, pad + m.actualBoundingBoxLeft, pad + m.actualBoundingBoxAscent); }, r),
-    inkH, w, h };
+  const shift = spread(text, probe, (GAP * inkH) / size + 1), extra = shift ? shift[shift.length - 1] : 0;
+  const w = Math.ceil(m.actualBoundingBoxLeft + m.actualBoundingBoxRight + extra) + 2 * pad, h = Math.ceil(inkH) + 2 * pad;
+  const x0 = pad + m.actualBoundingBoxLeft, y0 = pad + m.actualBoundingBoxAscent;
+  return { loops: traceDrawn(w, h, (ctx) => {
+    ctx.font = probe.font;
+    if (!shift) { ctx.fillText(text, x0, y0); return; }
+    // (letter by letter, each where the whole word puts it plus the room it was given)
+    const ch = [...text];
+    ch.forEach((c, i) => ctx.fillText(c, x0 + probe.measureText(ch.slice(0, i + 1).join("")).width - probe.measureText(c).width + shift[i], y0));
+  }, r), inkH, w, h };
+}
+// Neighbouring letters at least GAP mm apart: each one's satin reaches 1.95 mm past its cut line (0.4 mm out, 2.8 mm
+// wide plus 0.3 mm pull), so that leaves 1 mm of fabric between them. Alfa Slab One's letters are ~2 mm apart at
+// 50 mm and their satins ran into each other; Graduate's and Lilita's are 5-6 mm apart there and stay as they are.
+const GAP = 4.9;
+// how far each letter moves right (px), or null when every pair is already far enough apart (gap: between ink pixels'
+// centres, so a px more than the traced outlines' gap)
+function spread(text, ctx, gap) {
+  const ch = [...text];
+  if (ch.length < 2) return null;
+  // each letter's ink edge (px, about its drawing point) and mask
+  const ink = ch.map((c) => {
+    const mm = ctx.measureText(c), l = Math.ceil(mm.actualBoundingBoxLeft) + 2, t = Math.ceil(mm.actualBoundingBoxAscent) + 2;
+    const w = l + Math.ceil(mm.actualBoundingBoxRight) + 4, h = t + Math.ceil(mm.actualBoundingBoxDescent) + 4;
+    if (!c.trim() || w < 3 || h < 3) return null;
+    const cv = canvas(w, h), g = cv.getContext("2d", { willReadFrequently: true });
+    g.font = ctx.font; g.fillText(c, l, t);
+    const a = g.getImageData(0, 0, w, h).data, on = (x, y) => x >= 0 && y >= 0 && x < w && y < h && a[(y * w + x) * 4 + 3] > 127, edge = [];
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) if (on(x, y) && (!on(x - 1, y) || !on(x + 1, y) || !on(x, y - 1) || !on(x, y + 1))) edge.push([x - l, y - t]);
+    return edge.length ? { edge, on: (x, y) => on(Math.round(x) + l, Math.round(y) + t) } : null;
+  });
+  const at = ch.map((c, i) => ctx.measureText(ch.slice(0, i + 1).join("")).width - ctx.measureText(c).width);
+  const dist = (A, B, dx) => {   // B drawn dx px right of A
+    // (only the sides that face each other, within the gap: the rest can't be nearer)
+    const ax = Math.max(...A.edge.map((p) => p[0])), bx = Math.min(...B.edge.map((p) => p[0])) + dx;
+    const a = A.edge.filter(([u]) => u >= bx - gap - 1), b = B.edge.filter(([x]) => x + dx <= ax + gap + 1);
+    let d = (gap + 1) ** 2;
+    for (const [x, y] of b) { if (A.on(x + dx, y)) return 0; for (const [u, v] of a) { const e = (x + dx - u) ** 2 + (y - v) ** 2; if (e < d) d = e; } }
+    return Math.sqrt(d);
+  };
+  const shift = ch.map(() => 0);
+  let moved = false, prev = -1;
+  for (let i = 0; i < ch.length; i++) {
+    if (i) shift[i] = shift[i - 1];
+    if (!ink[i]) continue;
+    if (prev >= 0) {
+      // (a horizontal move widens the gap by at most itself: again until it's enough)
+      for (let k = 0; k < 6; k++) {
+        const d = dist(ink[prev], ink[i], at[i] + shift[i] - at[prev] - shift[prev]);
+        if (d >= gap - 0.25) break;
+        shift[i] += Math.max(1, gap - d); moved = true;
+      }
+    }
+    prev = i;
+  }
+  return moved ? shift : null;
 }
 // morphological closing (grown by r px, then shrunk by r px), each piece of ink on its own: closing them together
 // joined letters that nearly touch and an i to its dot ("Mia" in Alfa Slab came out as one blob)
