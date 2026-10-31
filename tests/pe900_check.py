@@ -183,7 +183,13 @@ def check(path):
         return errs + ["pyembroidery could not read it"], info
     buf = io.BytesIO()
     pe.write_pes(p, buf, {"version": 6})
-    info["identical_to_pyembroidery"] = buf.getvalue() == bytes(nb)
+    w = buf.getvalue()
+    # A pause between two blocks of one thread (the bookmark's and appliqué's fabric steps) keeps that thread's palette
+    # index in our files, as Brother's in-the-hoop files do; pyembroidery reads it as a STOP and writes another index
+    # there, so those bytes (in the PEC palette and the v6 colour list) always differ: reported as "except pauses".
+    dup = {c for c in r["pec_palette"] if r["pec_palette"].count(c) > 1}
+    diff = [i for i in range(len(w)) if w[i] != nb[i]] if len(w) == len(nb) else None
+    info["identical_to_pyembroidery"] = (w == bytes(nb)) or ("except pauses" if diff and all(nb[i] in dup for i in diff) else False)
     sts = [(x / 10, y / 10, c & pe.COMMAND_MASK) for x, y, c in p.stitches]
 
     # 3. size against the hoop, and the PEC header's own size field
@@ -205,7 +211,10 @@ def check(path):
             d = math.hypot(x - prev[0], y - prev[1])
             longest = max(longest, d)
             # tie-ins after a jump and tie-offs repeat 0.3-0.5 mm on purpose; count tiny ones elsewhere
-            if 0 < d < TINY and after_jump > 6:
+            # (measured in whole 0.1 mm units, the file's own: in float mm an exact 0.3 mm stitch came out 0.29999999999999893
+            # about half the time and counted, so a square-wave satin's 0.3 mm steps read as 48 tiny stitches on star_badge)
+            d10 = math.hypot(round(x * 10) - round(prev[0] * 10), round(y * 10) - round(prev[1] * 10))
+            if 0 < d10 < round(TINY * 10) and after_jump > 6:
                 tiny += 1
             # a second hit in the same hole (line drawings had a quarter of their stitches doubled until 2026-10-30)
             if d == 0 and after_jump > 6:
@@ -251,11 +260,11 @@ def check(path):
         group = [(b, cx + i, cy + j) for i in (0, 1) for j in (0, 1)]
         if sum(cells.get(g, 0) for g in group) <= MAX_PER_MM2:
             continue
-        pts = [q for g in group for q in pts_in.get(g, [])]
+        near = [q for g in group for q in pts_in.get(g, [])]   # (not `pts`: that is every stitch, reported below)
         for ox in range(10):
             for oy in range(10):
                 x0, y0 = cx * 10 + ox, cy * 10 + oy
-                m = sum(1 for X, Y in pts if x0 <= X < x0 + 10 and y0 <= Y < y0 + 10)
+                m = sum(1 for X, Y in near if x0 <= X < x0 + 10 and y0 <= Y < y0 + 10)
                 worst = max(worst, m)
                 if m > MAX_PER_MM2:
                     hot.add((b, cx, cy))

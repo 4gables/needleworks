@@ -459,6 +459,37 @@ Embroidery-file tools for home machines. Two implementations of the same engine:
     spiral (each ring glides over its last 3 gaps onto the next; a ring reached by glide stops halfway round);
     straight steps only under 2.5 gaps crossing nothing. Batch quilting: trims 105 -> 84, stitches -0.3%, density
     unchanged. Open: narrow heart/diamond tips stay empty; quilt label with stipple sews as 3 lines.
+  Re-run fixes (2026-10-30): Open tab, checkup and the app's own verdict:
+  - `js/quality.js` is pe900_check.py's stitch rules in JS (longest > 12.1 mm, tiny under 0.3 mm > 2 % bar the first 6
+    after a jump/trim/thread change, same hole > 1 %, > 24 hits/mm² at any 0.1 mm offset per block, satin same-edge gap
+    > 0.6), run on the bytes decoded back. Agrees with the checker on all 416 batch + sample files (max density under
+    24 can read higher: it scans more windows; misplaced pyembroidery-style files decode differently, and are rewritten
+    anyway). `setView` runs it 250 ms after a view settles (not per drag frame; 60 ms on a 326 kB picture) and says
+    what's wrong beside Download; every download, split ZIP and names ZIP is judged: the dialog says "Checked" only
+    when it passes, else lists the problems and offers "Save a fixed copy" (`fixedCopy`: the doctor's `fix` with thin /
+    tiny / satin as needed, validated and judged again; `<name>_fixed.pes` or `<zip>_fixed.zip`), and it shows even
+    after "Don't show this again". All failing samples (peace, gnome, flower_rl, rosacea, wreath, Ashley v1-3) fix.
+  - The checkup reads the file as it will be saved (`checkup(readEmbroidery(bytes))`, in the worker too): it described
+    the pattern before the writer, "11 spots up to 26" at 50 % thinned where the file had 24; gnome.pes's 12.66 mm
+    stitch (a jump stopping short: `landJumps` hid it) wasn't flagged. Its counts come from quality.js.
+  - Colour sort is off for files whose consecutive blocks share a thread (`pauses` in doctor.js): those are fabric
+    steps; merging the bookmark's four took its copy to 25 hits/mm². The Open facts say "N pauses in the same thread".
+  - `fix` ends with `dropTiny` (whole 0.1 mm, the checker's rule) when tiny is ticked and always after a re-stitch:
+    gnome 70 % 23 -> 0, 150 % 43 -> 0, ufront 150 % 44 -> 0, peace 150 % 25 -> 0. The rest of what testers counted
+    (star_badge 80 %: 48) were exact 0.3 mm square-wave steps the checker read as 0.29999 in float; it counts tiny in
+    0.1 mm units now (39 batch/sample files lower by <= 9, no verdict changed). Not done: trims after re-stitching at
+    70 % (gnome 17 -> 28; the checker doesn't fail trims and the re-stitch's refills are where they come from).
+  - Open tab: the file card follows the current copy (stitches, fits / too big with "Make it the largest that fits");
+    "Largest that fits the hoop: N % (mm)" under Size; a typed longer side that overflows the other side stops at the
+    largest and says so (ursula 170 mm -> 144). Fixed copies are `<name>[_Npct]_fixed.pes`. A PES whose stitch block
+    runs past the end of the file or has no end marker, or a DST without its end code (`endsEarly`), says it ends
+    early and is saved rewritten. DST (no colours) gets a colour per block (navy, red, green, gold...) with a colour
+    picker each. Malformed .needleworks.json says it isn't a saved design (it showed the JSON parser's error).
+  - File pieces (Design tab): blocks named Placement/Tackdown/Cutting get appliqué words at their pauses, and a block
+    in the same thread as the one before keeps its pause (`compose` merged them).
+  - pe900_check: `stitches` was the last dense window's count (`pts` reused); `identical_to_pyembroidery` is
+    "except pauses" for files with same-thread pauses (pyembroidery reads them as STOPs and writes another palette
+    index: every bookmark and appliqué file, single or zipped; only those bytes differ).
 - The preview is the file: `setView` decodes `v.bytes` with `readEmbroidery` and draws/counts/fit-checks that, and
   thread labels come from the file's own PEC palette.
 

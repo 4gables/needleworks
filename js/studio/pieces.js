@@ -584,6 +584,20 @@ function localStages(p, fab = "cotton") {
     // (each block keeps the thread name the file gives it: all named after the piece, a combined gnome.pes listed
     // "gnome" for every thread)
     stages = p.blocks.map((b) => ({ color: b.color, paths: b.paths, label: b.name || p.name, sews: `Sews ${p.name}${p.blocks.length > 1 ? ` (${b.name || "colour " + (p.blocks.indexOf(b) + 1)})` : ""}.` }));
+    // (appliqué files name their blocks Placement Line / Tackdown / Cutting Line: the fabric steps said nothing at
+    // those pauses. A block in the same thread as the one before is the file's own pause and stays one.)
+    const kind = (b) => /placement|position/i.test(b.name) ? "place" : /tack/i.test(b.name) ? "tack" : /cut/i.test(b.name) ? "cut" : "";
+    stages.forEach((s, k) => {
+      const b = p.blocks[k], prev = p.blocks[k - 1], was = prev && kind(prev);
+      if (prev && prev.color === b.color) s.pause = true;
+      if (kind(b) === "place") Object.assign(s, { fabric: true, nocut: true, sews: `Sews the placement line (${b.name}): where the appliqué fabric goes.` });
+      if (kind(b) === "cut") s.sews = `Sews the cutting line (${b.name}).`;
+      if (kind(b) === "tack") s.sews = `Tacks the appliqué fabric down (${b.name}).`;
+      if (was === "place") s.you = "Lay the appliqué fabric over the placement line, right side up, covering it by ½ in. Press Start.";
+      else if (was === "tack") s.you = "Take the hoop off (leave everything hooped), trim the appliqué fabric close to the tack-down stitching, put the hoop back and press Start.";
+      else if (was === "cut") s.you = "If the design's own instructions say to cut here, cut along that line (leave everything hooped). Then press Start.";
+      if (s.you) s.pause = true;
+    });
   }
   return stages.map((st) => ({ ...st, paths: st.paths.filter((q) => q.length) }));
 }
