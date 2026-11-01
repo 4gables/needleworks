@@ -110,7 +110,8 @@ export function draw(canvas, design, opts = {}) {
   // start on the same one (each tab used to show its own: linen, pink gingham, nothing)
   const bg = CLOTHS[opts.field];
   const cloth = (c) => c.solid || gingham(ctx, c, Math.max(3, 26 * s));
-  if (bg && !bd && !(hoop && opts.showHoop !== false)) { ctx.fillStyle = cloth(bg); ctx.fillRect(0, 0, W, H); }
+  // (the whole view, round the hoop too: the beige stage read as a background of its own)
+  if (bg && !bd) { ctx.fillStyle = cloth(bg); ctx.fillRect(0, 0, W, H); }
   if (bd) {   // a photo of the item at true size (bd.unit: 0.1 mm per photo pixel), its centre at bd.center
     ctx.drawImage(bd.bmp, X(cxd + bd.center[0] - bw / 2), Y(cyd + bd.center[1] - bh / 2), bw * s, bh * s);
   }
@@ -147,7 +148,8 @@ export function draw(canvas, design, opts = {}) {
     ctx.save();
     ctx.beginPath();
     for (const outline of outlines) { outline.forEach(([x, y], i) => (i ? ctx.lineTo(X(x), Y(y)) : ctx.moveTo(X(x), Y(y)))); ctx.closePath(); }
-    ctx.shadowColor = "rgba(60,30,30,0.22)"; ctx.shadowBlur = 18; ctx.shadowOffsetY = 6;
+    // (a fabric patch on top, appliqué, casts a shadow; an in-the-hoop front that's the background, or white, doesn't)
+    if (opts.fabric && opts.fabric !== "white" && opts.fabric !== opts.field) { ctx.shadowColor = "rgba(60,30,30,0.22)"; ctx.shadowBlur = 18; ctx.shadowOffsetY = 6; }
     ctx.fillStyle = fab.solid || gingham(ctx, fab, Math.max(3, 26 * s)); ctx.fill("evenodd");
     ctx.restore();
   }

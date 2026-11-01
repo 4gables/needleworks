@@ -1384,11 +1384,11 @@ function inset(pts, d) {
 }
 
 // preview options for composed steps: appliqué fabric under its satin, placement and tack-down lines hidden beneath it
-// (an in-the-hoop front, `bare`: the background chosen under View, like every other design; pink gingham only for
-// real appliqué, where the fabric patch is the point)
+// (every fabric piece, appliqué too, is shown in the background chosen under View, white unless changed: the pink
+// gingham patches read as a background of their own; the satin edge shows the shape)
 export function previewLook(steps) {
   const fab = steps.findIndex((st) => st.fabric);
-  return { fabricShapeBlock: fab >= 0 ? fab : undefined, fabric: fab >= 0 && steps[fab].bare ? undefined : "pink", hide: new Set(steps.flatMap((st, i) => (st.under ? [i] : []))) };
+  return { fabricShapeBlock: fab >= 0 ? fab : undefined, fabric: undefined, hide: new Set(steps.flatMap((st, i) => (st.under ? [i] : []))) };
 }
 
 export const pieceStitches = (p) => pieceStages(p).flatMap((st) => st.paths);
@@ -2005,6 +2005,38 @@ const crosses = (marks) => marks.map(([x, y]) => [[x, y], [x + 5, y], [x - 5, y]
 // opts: { fabric: key of FABRICS, thread: key of THREADS, baste: a basting box round everything first (floating, towels), dragging (a piece
 //         is mid-drag: quilting stays as it was, for speed; the drop composes it properly),
 //         marks: { pts, end } alignment crosses for a split design (end: after everything, else first) }
+// Several of one in-the-hoop project in the hoop (two bookmarks, "Make two in the hoop"): frames alike (same border,
+// shape, thread and stages) that don't overlap sew each stage together, so the fabric steps stay one pause each: both
+// outlines, one stop to lay the fronts, both tack-downs, what's on each, one stop for the backs, both edges. Sewn one
+// after the other, each would add its own two stops (2 bookmarks: 6 pauses, not 3). The later frames' stages are
+// emptied into the first's (`staged` changed in place); what's on each frame is untouched.
+const GANG = ["ith", "zip"];
+function gang(pieces, staged) {
+  const box = (p) => { const [x0, y0, x1, y1] = bounds(shapeOf(p).path(p.w, p.h).map(placer(p))); return [x0, y0, x1, y1]; };
+  const apart = (a, b) => a[2] < b[0] || b[2] < a[0] || a[3] < b[1] || b[3] < a[1];
+  const twin = (a, b) => a.border === b.border && a.shape === b.shape && a.color === b.color && !!a.quilt === !!b.quilt && !!a.eyelet === !!b.eyelet;
+  const done = new Set();
+  pieces.forEach((p, i) => {
+    if (p.kind !== "frame" || !GANG.includes(p.border) || done.has(i)) return;
+    const group = [i];
+    pieces.forEach((q, j) => {
+      if (j <= i || done.has(j) || q.kind !== "frame" || !twin(p, q) || staged[j].length !== staged[i].length) return;
+      if (group.every((k) => apart(box(pieces[k]), box(q)))) group.push(j);
+    });
+    if (group.length < 2) return;
+    const n = group.length, all = n === 2 ? "both" : `all ${n}`, name = shapeOf(p).name.toLowerCase();
+    staged[i] = staged[i].map((st, k) => {
+      const mates = group.slice(1).map((j) => staged[j][k]);
+      const out = { ...st, paths: [...st.paths, ...mates.flatMap((m) => m.paths)], sews: st.sews ? `${st.sews.replace(/\.$/, "")}, on ${all}.` : st.sews };
+      for (const key of ["cut", "solid"]) if (st[key]) out[key] = [...st[key], ...mates.flatMap((m) => m[key] || [])];
+      if (st.before) out.before = `${st.before} That's for each ${name}: ${n} of everything, or pieces big enough to cover ${all}.`;
+      if (st.pause && st.you) out.you = st.you.replace(/\b(the|each) (front|backing) fabric\b/, (m) => `${m} (one piece over ${all} ${name}s, or one each)`);
+      return out;
+    });
+    for (const j of group.slice(1)) { staged[j] = []; done.add(j); }
+    done.add(i);
+  });
+}
 export function compose(pieces, hoop, opts = {}) {
   const was = wt;
   wt = THREADS[opts.thread] ? String(opts.thread) : "auto";
@@ -2024,6 +2056,7 @@ function build(pieces, hoop, opts) {
     const above = pieces.slice(i + 1).map((q, k) => (q.kind === "frame" || q.style === "line" ? [] : staged[i + 1 + k].filter((s) => !s.under && !s.fabric)));
     staged[i] = carve(p, staged[i], above, fab);
   });
+  gang(pieces, staged);
   for (const st of staged.flat()) {
     if (!st.paths.length) continue;
     const s = { ...st, box: box(st.paths) };

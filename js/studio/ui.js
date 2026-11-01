@@ -1,6 +1,5 @@
 /*! Needleworks (c) 2026 4Gables. All rights reserved. Proprietary, see LICENSE. https://4gables.com/needleworks/ */
 // Design tab UI: start from a card, edit pieces in a short list, drag them on the preview.
-import { turnPattern } from "../core/design.js";
 import { APPLIQUE_FONTS, FONTS, loadFont } from "../core/fonts.js";
 import { initials, lackList, lacks, swashes, tidy, tidyField, unswashed, withSwash } from "../core/typed.js";
 import { nearestBrotherThread } from "../core/threads.js";
@@ -228,12 +227,9 @@ export function initStudio(api) {
       const c = $("st-cards").querySelector(`[data-start="${s.id}"] canvas`);
       try {
         const { design, steps } = compose(s.make(), { w: 1000, h: 1000, name: "" });
-        // (a tall design, the bookmark, lies down so it isn't a sliver in the card)
-        const pat = design.pattern(), sewn = pat.stitches.filter((q) => q[2] === 0);
-        let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
-        for (const [x, y] of sewn) { x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y); }
-        const tall = sewn.length && y1 - y0 > 1.6 * (x1 - x0);
-        draw(c, tall ? turnPattern(pat, false) : pat, { pad: 4, field: "white", ...previewLook(steps) });
+        // (no background: the card is the background; an in-the-hoop front white like it)
+        const look = previewLook(steps);
+        draw(c, design.pattern(), { pad: 4, ...look, fabric: look.fabric || "white" });
       } catch { c.remove(); }
     }
   }
@@ -410,7 +406,9 @@ export function initStudio(api) {
       if (p.border !== "patch") h += `<div class="field"><span>Quilting</span>${seg("quilt", QUILTS, p.quilt || "none")}</div>`
         + (p.quilt && p.quilt !== "none" ? `<p class="hint">Fills the frame around everything on it, in the frame's thread.</p>` : "");
       if (p.border === "ith") h += `<p class="hint">Two-sided, made in the hoop: an appliqué front, then the pieces below it in the list, then backing fabric under the hoop and a satin-stitch edge through everything. The steps are under “How to stitch it”.</p>`
-        + `<label class="check small"><input type="checkbox" data-eyelet ${p.eyelet ? "checked" : ""}> Ribbon hole at the top (a bookmark, a tag)</label>`;
+        + `<label class="check small"><input type="checkbox" data-eyelet ${p.eyelet ? "checked" : ""}> Ribbon hole at the end (a bookmark, a tag)</label>`;
+      // several of one in-the-hoop project at once: the same fabric steps, sewn together (`gang` in pieces.js)
+      if (p.border === "ith" || p.border === "zip") h += `<button type="button" class="link" data-two-up>Make another in the hoop</button> <span class="hint">Copies it and what's on it beside it: both sew in the same steps.</span>`;
       if (p.border === "applique") h += `<p class="hint">Sews an outline, pauses for you to lay fabric on and trim it, then covers the edge in satin stitch. The steps are under “How to stitch it”.</p>`;
     } else {
       // a design file is resized as Open a design resizes it: re-stitched at the new size (`resizeFile`), so it can
@@ -1479,6 +1477,7 @@ export function initStudio(api) {
     const mt = e.target.closest("[data-move-to]");
     if (mt) { const [x, y] = mt.dataset.moveTo.split(",").map(Number); change((p) => { Object.assign(p, { x, y }); recentre(); }, true); turnToo(mt); editor(); return; }
     if (e.target.closest("[data-move]")) { const to = spotIn(current(), true); if (to) change((p) => Object.assign(p, { x: to.x, y: to.y, size: to.size }), true); editor(); return; }
+    if (e.target.closest("[data-two-up]")) { twoUp(current()); return; }
     if (e.target.closest("[data-follow]")) { change((p) => Object.assign(p, followFrame(p, pieces)), true); editor(); return; }
     const sw = e.target.closest("[data-swash]");
     if (sw) { const on = sw.getAttribute("aria-pressed") !== "true"; change((p) => { const t = withSwash(p.text, sw.dataset.swash, on); if (p.kern) p.kern = rekern(p.kern, p.text, t); p.text = t; }, true); editor(); return; }
@@ -1804,6 +1803,27 @@ export function initStudio(api) {
     return spots.find(([cx, cy]) => fits(cx, cy)) || (anyway ? spots[0] : null);
   }
   // the whole layout back to the middle of the hoop (the machine centres it anyway; the preview should too)
+  // another of in-the-hoop frame f and everything on it, beside it across its short side (two bookmarks fit a 5x7
+  // that way), the layout recentred; said and undone if it doesn't fit the hoop (turned when that's what fits)
+  function twoUp(f) {
+    if (!f || f.kind !== "frame") return;
+    const on = pieces.filter((q) => q === f || (q.kind !== "frame" && inFrame(q, f, -2)));
+    const twins = pieces.filter((q) => q.kind === "frame" && q.border === f.border && q.shape === f.shape);
+    const across = f.w >= (f.shape === "circle" ? f.w : f.h), step = (across ? (f.shape === "circle" ? f.w : f.h) : f.w) + 8;
+    // (past the last one already there: a third goes beside the second)
+    const far = twins.reduce((m, q) => Math.max(m, across ? q.y - f.y : q.x - f.x), 0);
+    const copies = on.map((q) => ({ ...structuredClone(q), id: nextId++, ...(across ? { y: q.y + far + step } : { x: q.x + far + step }) }));
+    remember(); pieces = [...pieces, ...copies]; recentre();
+    const fit = (() => { try { compose(pieces, api.hoop(), { fabric, baste, thread, later: [] }); return "fits"; } catch (err) { if (!err.overBy) throw err; }
+      if (api.hoop().w !== api.hoop().h) { api.setTurn(!api.turned()); try { compose(pieces, api.hoop(), { fabric, baste, thread, later: [] }); return "turned"; } catch (err) { api.setTurn(!api.turned()); if (!err.overBy) throw err; } }
+      return ""; })();
+    // (recentre moved the originals too: put everything back as it was, with no redo left behind)
+    if (!fit) { undo(); future.length = 0; buttons(); toast(`Another ${shapeLabel(f)} doesn't fit this hoop beside the first. Make it smaller first, or pick a bigger hoop.`); return; }
+    if (fit === "turned") api.fit();
+    sel = copies[0].id; save(); ui(); make();
+    toast(`Two ${shapeLabel(f)}s in the hoop${fit === "turned" ? " (hoop turned to fit)" : ""}: they sew in the same steps.`, { label: "Undo", run: undo });
+  }
+  const shapeLabel = (f) => label(f).toLowerCase();
   function recentre() {
     const all = pieces.map(pieceBounds).filter(Boolean);
     if (!all.length) return;

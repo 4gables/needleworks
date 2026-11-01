@@ -330,8 +330,16 @@ measurements behind each number are in the code's comments.
   long names shrink.
 - Batches build the bookmark in the turned field, then `turnForMachine` (studio_batch `opts.turn`, pe900 `bm_*`,
   engine fuzz `turned: true`).
-- Preview fabric (`previewLook`): an in-the-hoop front (`bare` fabric step) is white like every other design; pink
-  gingham only for real appliqué.
+- Background (View > Background, `state.bg`, saved as `bg`, default White, `CLOTHS` in render.js): `draw(..., { field })`
+  fills the whole view, round the hoop too, on every tab; every fabric piece (appliqué, in-the-hoop fronts, the pouch)
+  is drawn in it with no shadow (`previewLook` gives no fabric), so the satin edge shows the shape. Card thumbnails
+  have no background (the card is it). Until 2026-10-31 each view picked its own (linen stage, pink gingham patches),
+  which read as backgrounds.
+- Several of one in-the-hoop project (`gang` in pieces.js; "Make another in the hoop" on an ITH or zip frame,
+  `twoUp` in ui.js): frames alike (border, shape, thread, eyelet, quilt) that don't overlap sew each stage together, so
+  two bookmarks are still 3 steps / 2 pauses (sewn one after the other: 6). The copy goes beside the first across its
+  short side; the hoop is turned if that's what fits, else it's undone and said. studio_batch: two_bookmarks_5x7,
+  two_tags_5x7, two_keyfobs_4x4.
 - Old `#bookmark` links (README, the skill, bookmarks people saved) open the starter with the old panel's saved
   `nw:bm.*` name/font/colour/swashes (`oldBookmark` in app.js), then those keys are dropped.
 - Changed from the old engine: the name joins the tack-down block (3 blocks / 2 pauses, was 5 / 4), the satin width
@@ -458,7 +466,7 @@ measurements behind each number are in the code's comments.
 - Sew along (`#along`): a step per screen, minutes = stitches / 550, own Have ready, Screen Wake Lock (retaken on
   visibilitychange). Share text carries the steps (`shareText`). On my item (`#item`): a measured photo under the
   design at true size (`state.backdrop`), never uploaded or saved.
-- Offline (`sw.js`, `needleworks-v2`): precaches `FILES`, network first, cache after 3 s; add every new file to
+- Offline (`sw.js`, `needleworks-v4`): precaches `FILES`, network first, cache after 3 s; add every new file to
   `FILES`. https only. Share target: POST `./?share` -> `needleworks-shared` cache -> `./?shared` -> `route()`.
 - A hoop change drops other tabs' designs. Min/max over stitches uses loops (`Math.min(...pts)` overflows past ~110k).
 
@@ -531,6 +539,9 @@ Automated checks that each guard a bug class (add a line with every new guard):
     sizes; open cases in its `KNOWN` list with a reason; `?ext=etsy_N` renders the external samples).
 
 ## Hosting
+- After a push, GitHub Pages serves files with `max-age=600`: for up to 10 minutes a browser can run new and old
+  modules together (2026-10-31: new ui.js with old pieces.js drew the bookmark squashed, its hole on top). Say so when
+  asking someone to look; Cmd+Shift+R clears it. Bump `CACHE` in sw.js with each release.
 - 4gables.com is the `4gables/website` repo's custom domain (a project site). Other repos appear under
   4gables.com/<repo>/ only if the org site repo is `4gables.github.io` with the custom domain.
 
