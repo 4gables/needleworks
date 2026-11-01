@@ -6,7 +6,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Needleworks</title>
-<meta name="description" content="Make embroidery files for your machine in the browser: name bookmarks, pictures to stitches, and a PES viewer.">
+<meta name="description" content="Make embroidery files for your machine in the browser: names, monograms, bookmarks, pictures to stitches, and a PES viewer.">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='13' fill='none' stroke='%23b3133a' stroke-width='3'/%3E%3Cpath d='M9 20c4-9 10-9 14 0' fill='none' stroke='%23b3133a' stroke-width='2.4' stroke-linecap='round'/%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -15,7 +15,7 @@
 <link rel="modulepreload" href="js/app.js"><link rel="modulepreload" href="js/studio/ui.js"><link rel="modulepreload" href="js/studio/pieces.js">
 <link rel="modulepreload" href="js/core/formats.js"><link rel="modulepreload" href="js/core/digitize.js"><link rel="modulepreload" href="js/core/text.js"><link rel="modulepreload" href="js/core/typed.js">
 <link rel="modulepreload" href="js/core/raster.js"><link rel="modulepreload" href="js/core/geom.js"><link rel="modulepreload" href="js/core/design.js">
-<link rel="modulepreload" href="js/render.js"><link rel="modulepreload" href="js/core/bookmark.js"><link rel="modulepreload" href="js/core/brandcharts.js">
+<link rel="modulepreload" href="js/render.js"><link rel="modulepreload" href="js/core/brandcharts.js">
 <link rel="stylesheet" href="css/app.css">
 <link rel="manifest" href="manifest.webmanifest">
 <meta name="copyright" content="(c) 2026 4Gables. All rights reserved.">
@@ -86,43 +86,6 @@
     </div>
   </section>
   <section class="controls" id="controls" aria-label="Settings" tabindex="-1">
-    <!-- name bookmark -->
-    <!-- reached from the Name bookmark card in Design your own (and #bookmark) -->
-    <div class="panel" id="panel-bookmark" role="tabpanel" aria-labelledby="tab-design" hidden>
-      <button type="button" class="link back" id="bm-back">← All starting ideas</button>
-      <h1>A bookmark with any name</h1>
-      <p class="lede">An in-the-hoop fabric bookmark with a satin border, a ribbon hole, and the name in flowing script or print, or no name at all.</p>
-      <div class="field">
-        <label for="bm-name">Name</label>
-        <input id="bm-name" type="text" value="ashley" maxlength="14" autocomplete="off" spellcheck="false">
-        <p class="hint">One word works best. Type it the way you want it stitched: all lowercase flows most gracefully in script.</p>
-      </div>
-      <label class="check"><input id="bm-blank" autocomplete="off" type="checkbox"> Blank bookmark, no name</label>
-      <fieldset class="field" id="bm-lettering">
-        <legend>Lettering</legend>
-        <div id="bm-fonts" class="fonts"></div>
-        <div class="checks">
-          <label class="check"><input id="bm-lead" autocomplete="off" type="checkbox" checked> <span id="bm-lead-text">Swash before the name</span></label>
-          <label class="check"><input id="bm-tail" autocomplete="off" type="checkbox" checked> <span id="bm-tail-text">Swash after the name</span></label>
-        </div>
-      </fieldset>
-      <fieldset class="field">
-        <legend>Thread</legend>
-        <div id="bm-colors" class="swatches"></div>
-      </fieldset>
-      <fieldset class="field">
-        <legend>Fabric <span class="hint inline">(preview only)</span></legend>
-        <div id="bm-fabrics" class="chips"></div>
-      </fieldset>
-      <details class="steps">
-        <summary>How to stitch it <span class="hint inline" id="bm-steps-count">· 5 steps, 4 pauses</span></summary>
-        <p class="hint" id="bm-steps-lede">Keep the same thread in the whole time. The machine pauses 4 times. Each pause is a fabric step.</p>
-        <p class="hint"><b>Have ready:</b> tear-away stabilizer, cotton for the front and felt for the back (each about 3 × 8 in), tape, Fray Check and a ribbon.</p>
-        <ol id="bm-steps"></ol>
-        <p class="hint">Finish: tear away the stabilizer and snip any fuzz. Dab Fray Check inside the ribbon ring, let it dry, then cut out the hole and loop a ribbon through.</p>
-      </details>
-    </div>
-
     <!-- picture -->
     <div class="panel" id="panel-picture" role="tabpanel" aria-labelledby="tab-picture">
       <h1>Turn a picture into stitches</h1>

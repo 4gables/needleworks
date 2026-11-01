@@ -27,7 +27,6 @@ import { STARTERS } from "../../js/studio/ui.js";
 import { MOTIFS } from "../../js/studio/motifs.js";
 import { QUILTS } from "../../js/studio/quilt.js";
 import { DENSITY, FILL_PATTERNS, analyze, digitize, workingSize } from "../../js/core/digitize.js";
-import { buildBookmark } from "../../js/core/bookmark.js";
 import { turnForMachine } from "../../js/core/design.js";
 import { fix } from "../../js/doctor.js";
 import { verdictOf } from "../../js/quality.js";
@@ -90,7 +89,10 @@ function spec(r, k) {
     applique: () => studio("applique", [appl()]),
     layout: () => studio("layout", Array.from({ length: ri(2, 4) }, () => ({ ...pick([text, mono, motif, frame, appl])(), x: ri(-45, 45), y: ri(-60, 60), rot: pick([0, 0, 0, 15, -30, 90, 180]) }))),
     starter: () => { const s = pick(STARTERS.filter((x) => x.make)); return { engine: "starter", starter: s.id, hoopId, turned, opts: { fabric: s.fabric || opts.fabric, thread: opts.thread, baste: s.baste ?? opts.baste } }; },
-    bookmark: () => { const f = font(); return { engine: "bookmark", name: chance(0.1) ? "" : pick(WORDS.filter((w) => w.length < 14)), family: f.family, print: !!f.print, lead: chance(0.6), tail: chance(0.6), color: pick(COLOURS) }; },
+    // (the Bookmark starter with any name, font and swashes: it had an engine of its own until 2026-10-31)
+    bookmark: () => { const f = font(), w = chance(0.1) ? "" : pick(WORDS.filter((w) => w.length < 14)), t = (chance(0.6) ? "~" : "") + w + (chance(0.6) ? "~" : "");
+      const c = pick(COLOURS), ps = STARTERS.find((x) => x.id === "bookmark").make().map((p) => ({ ...p, color: c, ...(p.kind === "text" ? { text: t, font: f.family } : {}) })).filter((p) => p.kind !== "text" || w);
+      return { ...studio("bookmark", ps), hoopId: "5x7", turned: false }; },
     doctor: () => files.size ? { engine: "doctor", file: pick([...files.keys()]), scale: Math.round((0.5 + r() * 2) * 100) / 100, tiny: chance(0.5), thin: chance(0.5), sort: chance(0.3), satin: chance(0.3) } : engines.lettering(),
     filepiece: () => files.size ? { ...studio("filepiece", [P({ kind: "file", file: pick([...files.keys()].filter((f) => f.endsWith(".pes"))), rot: pick([0, 10, 90]) }), ...(chance(0.6) ? [{ ...text(), size: logu(6, 20), y: 50 }] : [])]) } : engines.lettering(),
     json: () => { const s = engines[pick(["lettering", "monogram", "frame", "motif", "patch", "applique", "layout"])](); s.engine = "json"; s.pieces = hostile(r, s.pieces); s.opts = chance(0.3) ? { fabric: pick(["", "silk", null, 3]), thread: pick(["15", null, {}]), baste: pick(["yes", 1]) } : s.opts; return s; },
@@ -114,7 +116,6 @@ function hostile(r, pieces) {
 // ---- building a spec the way the app does ----
 const picCache = new Map();
 async function build(s) {
-  if (s.engine === "bookmark") return { pattern: buildBookmark({ name: s.name, blank: !s.name, family: s.family, color: s.color, hoop: getHoop("brother-pe900", "5x7"), lead: s.lead, tail: s.tail, print: s.print }).pattern(), hoop: getHoop("brother-pe900", "5x7") };
   if (s.engine === "doctor") {
     // (as the Open tab does: what the file fails is ticked, and shrinking ticks Remove tiny stitches and Thin)
     const d = readEmbroidery(files.get(s.file), s.file), st = designStats(d);

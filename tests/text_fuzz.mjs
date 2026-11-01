@@ -1,11 +1,11 @@
 // Text input outside the happy path (category 9), the app side: strings from tests/text_corpus.mjs typed (pasted) into
 // every place the app takes text, in the real page, checking what each place does with them:
-// - Words (Design tab lettering), Initials (monogram), Letters (appliqué), the bookmark Name: the field holds the text
+// - Words (Design tab lettering, the Bookmark starter's name with ~ swashes), Initials (monogram), Letters (appliqué): the field holds the text
 //   tidied (`tidy` in js/core/typed.js: composed accents, plain spaces, no invisible characters, the field's length),
 //   the editor and the note beside Download name exactly the letters the font lacks (`lacks`, the font's own glyph
 //   map, NFD input included), the file name is plain ASCII and never a Windows device name, nothing throws, and the
 //   design settles within 15 s;
-// - One for each name (Design tab words, monogram initials, bookmark): one file per name in the ZIP, names ASCII,
+// - One for each name (Design tab words, monogram initials, the Bookmark starter): one file per name in the ZIP, names ASCII,
 //   unique ignoring case (and accents), never empty, letters the font lacks refused with a reason, every name accounted for;
 // - Save design / Open saved: the words come back as they were; Send by text or email: the share text carries no
 //   control or invisible characters and stays under ~1900 characters;
@@ -182,24 +182,8 @@ async function field(kind, starter, sel, opts, fonts, strings) {
   }
 }
 
-// ---- the bookmark's name
-async function bookmark(strings) {
-  await load("#bookmark");
-  for (const s of strings) {
-    const font = pickFont(FONTS), what = `Bookmark ${font.replace("NW ", "")} ${show(s)}`;
-    const got = await ev(`(async () => {
-      const b = document.querySelector('#bm-fonts [data-f="${font}"]'); if (b && b.getAttribute("aria-pressed") !== "true") { b.click(); await __tf.settle(300); }
-      __tf.set(document.getElementById("bm-name"), ${JSON.stringify(s)}); return { value: document.getElementById("bm-name").value };
-    })()`);
-    const seen = await settled(), want = tidy(s.replace(/[\r\n]/g, ""), { max: 14 });   // (a one-line field drops line breaks itself)
-    check("Bookmark field holds the tidied text", got.value === want, `${what}: ${show(got.value)} not ${show(want)}`);
-    check("Bookmark: nothing throws", !seen.errors.length, `${what}: ${seen.errors.join(" ")}`);
-    if (!want.trim()) continue;
-    if (!seen.disabled) lackSaid("Bookmark Download note", seen.dl, want.trim(), font, what);
-    const file = /^Download (.*)$/.exec(seen.download)?.[1];
-    if (file && !seen.disabled) check("Bookmark file name", fileOk(file) && file === `${safeName(want, "name")}_bookmark.pes`, `${what}: ${file}`);
-  }
-}
+// ---- the Bookmark starter's name (an ordinary Words field since 2026-10-31), with swashes typed as ~
+const bookmark = (strings) => field("Bookmark", "bookmark", '#st-edit textarea[data-k="text"]', { lines: 3, max: 60 }, FONTS, strings);
 
 // ---- One for each name
 async function names(where, names, family) {
@@ -291,8 +275,8 @@ async function layout(size) {
     check(`layout ${where}`, !got.length, `${show(s)}: ${got.join("; ")}`);
     if (SHOTS && s === LONG[4]) await cdp("shot", `${SHOTS}/text_${where}.png`);
   }
-  await load("#bookmark");
-  const bm = await ev(`(async () => { __tf.set(document.getElementById("bm-name"), "WWWWWWWWWWWWWW"); await __tf.settle(800); return __tf.overflow(["#panel-bookmark", ".bottom", "#bm-fonts"]); })()`);
+  await load("#design"); await start("bookmark");
+  const bm = await ev(`(async () => { __tf.set(document.querySelector('#st-edit textarea[data-k="text"]'), "~WWWWWWWWWWWWWW~"); await __tf.settle(800); return __tf.overflow(["#panel-design", ".bottom"]); })()`);
   check(`layout ${where} bookmark`, !bm.length, bm.join("; "));
   if (SHOTS) await cdp("shot", `${SHOTS}/bookmark_${where}.png`);
 }
@@ -370,7 +354,7 @@ await part("fonts", async () => {
     }
   }
 });
-await part("bookmark", () => bookmark(QUICK ? sample(12) : [...sample(50), "Анна", "Jose\u0301", "CON", "Zoë", "שרה", "❤\ufe0f", ".", "Jo."]));
+await part("bookmark", () => bookmark(QUICK ? sample(12) : [...sample(50), "Анна", "Jose\u0301", "CON", "Zoë", "שרה", "❤\ufe0f", ".", "Jo.", "~", "~Emma~", "~ Emma ~", "Em~ma", "~~Jo", "~Ann\nLee~", "Hi!~"]));
 // names batches: corpus names plus names differing only by case or accent
 const batch = (n) => [...VARIANTS, "CON", "con", "nul", "Łukasz", "Søren", "Анна", "Σοφία", "שרה", "李明", "❤\ufe0f", "O'Neil", ".", ...sample(n)];
 await part("names", async () => {
@@ -378,8 +362,7 @@ await part("names", async () => {
   await names("Words", batch(QUICK ? 6 : 20), "NW Great Vibes");
   await start("monogram");
   await names("Initials", ["JKM", "jkm", "ÉMJ", "E\u0301MJ", "A", "AB", "ABCD", "Ł Ø Ž", "АБВ", "李", "❤", "  ", "J K M"], "NW Great Vibes");
-  await load("#bookmark");
-  await ev(`(async () => { document.querySelector('#bm-fonts [data-f="NW Sacramento"]').click(); await __tf.settle(500); return true; })()`);
+  await start("bookmark");
   await names("Bookmark", batch(QUICK ? 4 : 10), "NW Sacramento");
 });
 await part("saved", () => roundTrip(QUICK ? ["Jose\u0301", "Line one\nLine two", "Em\u200bma"] : ["Jose\u0301", "Line one\nLine two\nLine three\nLine four", "\n\nEmma", "Em\u200bma", "O’Neil & Co", "Анна", "❤\ufe0f Emma", "<b>x</b>", "W".repeat(5000), "e\u0301".repeat(40), ...sample(12)]));

@@ -1,18 +1,17 @@
 /*! Needleworks (c) 2026 4Gables. All rights reserved. Proprietary, see LICENSE. https://4gables.com/needleworks/ */
-import { buildBookmark, DONE, hiddenBlocks, READY, RED, stepsFor } from "./core/bookmark.js";
 import { turnForMachine, turnPattern } from "./core/design.js";
-import { FONTS, fontOf, loadFont } from "./core/fonts.js";
+import { FONTS } from "./core/fonts.js";
 import { COLOR_CHANGE, STITCH, designStats, machineThreads, readEmbroidery, validatePES, writePES } from "./core/formats.js";
 import { DEFAULT_MACHINE, MACHINES, MARGIN, hoop as getHoop } from "./core/machines.js";
 import { DENSITY, LEARN, contentBox, picturePlan, pictureImage } from "./core/digitize.js";
 import { hexToRgb, nearestBrotherThread, pecThread } from "./core/threads.js";
-import { CLOTHS, colorBlocks, draw } from "./render.js";
+import { colorBlocks, draw } from "./render.js";
 import { FINISH, FIRST_STEP, TURN_PIC, cutSVG, nextThread, sewSheet, youHtml } from "./sheet.js";
 import { handOut, judge } from "./gate.js";
 import { DST_COLOURS, checkup, fewerBlocks, fix, heat, openedFile, pauses, shortJumps, sortedChanges } from "./doctor.js";
 import { HARD, MAX_BLOCKS, denseWords, moves, verdictOf } from "./quality.js";
 import { BLOCK, LOOK, LOOK_HEAD, TIP, TIP_HEAD, problemsHtml, problemsInline, problemsItems, problemsOf, shownOn, stopWords, stopsAt } from "./words.js";
-import { lackList, lacks, safeName, tidy, tidyField, uniqueName } from "./core/typed.js";
+import { safeName, tidy, uniqueName, withSwash } from "./core/typed.js";
 import { BRANDS, chartSpools, exampleSpools, lab, nearestSpool, spools } from "./core/brands.js";
 import { COLORS as LINE_THREADS, initStudio } from "./studio/ui.js";
 
@@ -23,10 +22,11 @@ const store = {
     try { localStorage.setItem("nw:" + k, JSON.stringify(v)); }
     catch { if (k === "studio" && !store.warned) { store.warned = true; showError("This design is too big to keep in the browser between visits. Use Save design to keep it."); } }
   },
+  del(k) { try { localStorage.removeItem("nw:" + k); } catch {} },
 };
 
-// exact Brother PEC colours, so the name on the machine's screen is the swatch's (#1a1a1a showed as "Olive Green")
-const THREADS = ["#ed171f", "#c70156", "#f64a8a", "#770176", "#0e1f7c", "#00673e", "#e8a900", "#000000"];
+// the old bookmark panel's colours as saved, mapped to the exact Brother PEC colours (#1a1a1a showed as "Olive Green"),
+// for an old #bookmark link opening the Bookmark starter
 const OLD_THREADS = { "#c8102e": "#ed171f", "#e1252f": "#ed171f", "#f06292": "#f64a8a", "#7b2d8e": "#770176",
   "#1f3a68": "#0e1f7c", "#2e6b3a": "#00673e", "#c99a2e": "#e8a900", "#1a1a1a": "#000000" };
 
@@ -40,9 +40,8 @@ const state = {
   zoom: 1, pan: [0, 0], upto: null,
   step: null,   // Design tab: show the design as it is after that colour block
   showHoop: store.get("showHoop", true),
-  // hoop turned sideways on screen, per tab; the bookmark reads best lying down
-  turn: { picture: false, bookmark: true, design: false, open: false, ...store.get("turn", {}) },
-  bm: { name: tidy(store.get("bm.name", "Emma"), { max: 14 }), font: store.get("bm.font", FONTS[0].family), color: (c => OLD_THREADS[c] || c)(store.get("bm.color", RED)), fabric: store.get("bm.fabric", "pink"), lead: store.get("bm.lead", true), tail: store.get("bm.tail", true), blank: store.get("bm.blank", false) },
+  // hoop turned sideways on screen, per tab
+  turn: { picture: false, design: false, open: false, ...store.get("turn", {}) },
   brand: BRANDS[store.get("brand", "")] ? store.get("brand", "") : "",   // thread brand for spool numbers ("" = Brother only)
   spools: store.get("spools", {}),   // { brand: [spool numbers owned] }
   pic: { mine: store.get("pic.mine", false), style: "fill", cross: 2.5, file: null, bitmap: null, key: 0, skip: [], colors: 6, size: 100, angle: 45, bg: true, density: store.get("pic.density", "standard"), req: 0, colorsInfo: [], line: "" },
@@ -518,14 +517,14 @@ function downloaded(v, zipped, files = [], saved = true) {
   const warns = shownOn(problemsOf(v), "done").filter((q) => !q.file && !(part && q.id === "short"));
   $("done-warn").hidden = !warns.length; $("done-warn").innerHTML = warns.length ? `${LOOK_HEAD}: ${problemsInline(warns)}` : "";
   if (warns.length && !bad.length && !part) { $("done-checked").textContent = `The file is checked: it opens ${what}.`; $("done-checked").className = ""; }
-  // (only the Design tab and the bookmark have “How to stitch it”)
+  // (only the Design tab has “How to stitch it”)
   // (and a design with no pauses has none to follow)
   // (two hoopings: which file first, and the rehooping between them; it said "Pick the design and press Start")
   // (stops named as they are: "at each pause, thread the next colour" on a picture with thread changes only)
   const at = stopsAt(ch, same);
   $("done-sew").textContent = parts ? `Sew ${v.split[0].filename} first${ch + same ? `, following “How to stitch it” ${at}` : ""}. Then hoop the fabric again as “How to stitch it” says (it lines up on the two crosses) and sew ${v.split[1].filename}.`
     : !(ch + same) ? "Pick the design and press Start."
-    : state.mode === "design" || state.mode === "bookmark" ? `Pick the design, then follow “How to stitch it” (or Sew along) ${at}.`
+    : state.mode === "design" ? `Pick the design, then follow “How to stitch it” (or Sew along) ${at}.`
     : `Pick the design and press Start. ${ch ? `At each thread change, put on the next thread listed with the preview${same ? "; at a pause, keep the same thread on" : ""}` : "At each pause, keep the same thread on"} (Sew along shows each step).`;
   $("done").showModal();
 }
@@ -660,22 +659,14 @@ document.addEventListener("visibilitychange", async () => {
 });
 new ResizeObserver(() => { if ($("along").open) alongShow(); }).observe($("along-view"));
 
-// one file per name, in a zip: the Design tab swaps its lettering, the bookmark its name
+// one file per name, in a zip: the Design tab swaps its lettering
 function namesFor() {
   if (state.mode === "design") {   // (studio is set up further down)
     // (only the names that need the turned hoop are turned into the machine's orientation)
     try { const n = studio.forNames(); return n && { ...n, build: (...a) => { const m = n.build(...a); return { ...m, pattern: m.turned ? turnForMachine(m.pattern) : m.pattern, shown: m.pattern }; } }; }
     catch { return null; }
   }
-  if (state.mode !== "bookmark" || state.bm.blank) return null;
-  // (a letter the font lacks is refused, as in the Design tab: Анна in Sacramento stitched stand-in letters)
-  return { what: state.bm.name, bookmark: true, build: (name) => {
-    if (!/[\p{L}\p{N}]/u.test(name)) throw new Error("no letters to stitch");
-    const gone = lacks(name, state.bm.font);
-    if (gone.length) throw new Error(`the font has no ${lackList(gone)}`);
-    return { name, pattern: buildBookmark({ name, family: state.bm.font, color: state.bm.color, hoop: hoop(),
-      lead: state.bm.lead, tail: state.bm.tail, print: !!fontOf(state.bm.font).print }).pattern() };
-  } };
+  return null;
 }
 $("names-open").onclick = () => {
   const n = namesFor(); if (!n) return;
@@ -685,7 +676,7 @@ $("names-open").onclick = () => {
   $("names-list").value = store.get(n.monogram ? "names.initials" : "names", ""); $("names-note").classList.remove("warn"); if ($("names-bad")) $("names-bad").hidden = true;
   $("names-list").placeholder = n.monogram ? "JKM\nALB\nR" : "Emma\nLiam\nOlivia"; $("names-list").setAttribute("aria-label", n.monogram ? "Initials, one set per line" : "Names, one per line");
   $("names-note").textContent = n.monogram ? "One set of initials per line, up to 40. You get one file for each, in a single .zip." : "One name per line, up to 40. You get one file for each, in a single .zip.";
-  $("names-shrink-row").hidden = !!n.bookmark;   // (the bookmark shrinks a long name by itself)
+  $("names-shrink-row").hidden = false;
   $("names-thumbs").innerHTML = ""; $("names-cancel").textContent = "Cancel";
   $("names").showModal();
   // (last time's list, all selected: typing replaces it. The caret at its end glued "Ava" onto "Name35")
@@ -711,7 +702,7 @@ $("names-make").onclick = async () => {
     await new Promise((r) => setTimeout(r, 0));
     try {
       const { pattern, shown, smaller, thin, turned: sideways, runs } = n.build(name, $("names-shrink").checked);
-      const f = uniqueName(safeName(name, "name") + (n.bookmark ? "_bookmark" : ""), used);
+      const f = uniqueName(safeName(name, "name"), used);
       // (judged as the zip will be: a name the gate would refuse is left out and said so, not the whole zip)
       const j = judge({ name: f + ".pes", bytes: writePES(pattern), against: pattern }, hoop());
       if (!j.ok) { used.delete(f.toLowerCase()); throw new Error(j.error); }
@@ -724,9 +715,9 @@ $("names-make").onclick = async () => {
   const notes = (m) => [m.smaller ? "smaller" : "", m.sideways ? "hoop turned" : "", m.runs ? `runs into ${m.runs}` : ""].filter(Boolean).join(", ");
   $("names-thumbs").innerHTML = made.map((m, i) => `<figure><canvas data-i="${i}"></canvas><figcaption>${escapeHtml(m.name)}${notes(m) ? ` (${escapeHtml(notes(m))})` : ""}${m.thin ? `<br><strong class="names-thin">Thin line, not bold</strong>` : ""}</figcaption></figure>`).join("");
   for (const c of $("names-thumbs").querySelectorAll("canvas")) {
-    const m = made[+c.dataset.i]; draw(c, m.shown || (n.bookmark ? turnPattern(m.pattern, false) : m.pattern), { pad: 6, fabric: "white" });   // (3 px: an arched name's top sat on the edge)
+    const m = made[+c.dataset.i]; draw(c, m.shown || m.pattern, { pad: 6, fabric: "white" });   // (3 px: an arched name's top sat on the edge)
   }
-  const zipName = n.bookmark ? `bookmarks_${files.length}.zip` : `${n.zip || "names"}_${files.length}_${n.monogram ? "monograms" : "names"}.zip`;
+  const zipName = `${n.zip || "names"}_${files.length}_${n.monogram ? "monograms" : "names"}.zip`;
   if (files.length) {
     const r = handOut(files, { hoop: hoop(), zip: zipName });
     if (!r.ok) { bad.push(r.error); files.length = 0; } else $("names-cancel").textContent = "Done";
@@ -891,21 +882,22 @@ function fillMachines() {
   if (state.pic.size > max) { state.pic.size = max; $("pic-size").value = max; $("pic-size-out").textContent = sizeLabel(max); }
 }
 const sizeLabel = (v) => `${v} mm · ${(v / 25.4).toFixed(1)} in`;
-function hoopChanged() { if (state.mode !== "picture") state.pic.req++; for (const m of ["picture", "bookmark", "design"]) if (m !== state.mode) state.views[m] = null; fillMachines(); refresh(); }
+function hoopChanged() { if (state.mode !== "picture") state.pic.req++; for (const m of ["picture", "design"]) if (m !== state.mode) state.views[m] = null; fillMachines(); refresh(); }
 $("machine").onchange = (e) => { state.machine = e.target.value; state.hoopId = null; store.set("machine", state.machine); hoopChanged(); };
 $("hoop").onchange = (e) => { state.hoopId = e.target.value; store.set("hoop", state.hoopId); hoopChanged(); };
-function refresh() { if (state.mode === "bookmark") makeBookmark(); else if (state.mode === "picture") makePicture(); else if (state.mode === "design") studio.make(); else if (state.view) setView(state.view); }
+function refresh() { if (state.mode === "picture") makePicture(); else if (state.mode === "design") studio.make(); else if (state.view) setView(state.view); }
 
 // ---------- tabs ----------
-const MODES = ["picture", "bookmark", "design", "open"];
+const MODES = ["picture", "design", "open"];
 function setMode(mode, push = true) {
+  // (#bookmark: the bookmark had a panel of its own until 2026-10-31; old links open the Bookmark starter)
+  if (mode === "bookmark") { setMode("design", false); history.replaceState(null, "", "#design"); oldBookmark(); return; }
   if (!MODES.includes(mode)) mode = "design";
   state.mode = mode;
   document.body.dataset.mode = mode;
   for (const m of MODES) $("panel-" + m).hidden = m !== mode;
-  // the bookmark is a starting idea inside Design your own, not a tab of its own
   // (one tab stop for the tab bar; the arrow keys move between tabs)
-  for (const m of TABS) { const on = m === mode || (m === "design" && mode === "bookmark"); $("tab-" + m).setAttribute("aria-selected", on); $("tab-" + m).tabIndex = on ? 0 : -1; }
+  for (const m of TABS) { const on = m === mode; $("tab-" + m).setAttribute("aria-selected", on); $("tab-" + m).tabIndex = on ? 0 : -1; }
   if (push) history.replaceState(null, "", "#" + mode);
   showError(""); busy(false);   // (a picture still stitching from the last tab)
   $("empty").textContent = mode === "picture" ? "Choose a picture to see it as stitches." : mode === "open" ? "Open a PES, PEC or DST file to see it here." : mode === "design" ? "Nothing to stitch yet: type some words, or pick a starting idea." : "";
@@ -914,13 +906,11 @@ function setMode(mode, push = true) {
   state.zoom = 1; state.pan = [0, 0];
   if (mode === "picture" && !state.pic.bitmap) loadSample();
   else if (mode === "picture" && !state.views.picture) makePicture();
-  else if (mode === "bookmark" && !state.views.bookmark) makeBookmark();
   else if (mode === "design" && !state.views.design) studio.make();
   else setView(state.views[mode] || null);
 }
-const TABS = MODES.filter((m) => m !== "bookmark");
+const TABS = MODES;
 for (const m of TABS) $("tab-" + m).onclick = () => setMode(m);
-$("bm-back").onclick = () => setMode("design");
 document.querySelector(".tabs").addEventListener("keydown", (e) => {
   // (in the order they're shown: MODES' order sent → from Design back to Picture)
   const tabs = [...document.querySelectorAll(".tabs [role=tab]")], i = tabs.findIndex((t) => t.getAttribute("aria-selected") === "true");
@@ -985,73 +975,23 @@ new MutationObserver(refocus).observe(document.body, { childList: true, subtree:
 // (redraws that check where focus is straight after can have it put back at once)
 function keepFocus(root, render) { render(); refocus(); }
 
-// ---------- bookmark ----------
-let bmTimer = 0, bmSeq = 0;
-function bookmarkUI() { keepFocus($("panel-bookmark"), drawBookmarkUI); }
-function drawBookmarkUI() {
-  $("bm-name").value = state.bm.name;
-  $("bm-lead").checked = state.bm.lead; $("bm-tail").checked = state.bm.tail; $("bm-blank").checked = state.bm.blank;
-  const kind = fontOf(state.bm.font).print ? "Dash" : "Swash";
-  $("bm-lead-text").textContent = `${kind} before the name`; $("bm-tail-text").textContent = `${kind} after the name`;
-  $("bm-name").disabled = state.bm.blank; $("bm-lettering").classList.toggle("off", state.bm.blank);
-  $("bm-fonts").innerHTML = FONTS.map((f) => `<button type="button" data-f="${f.family}" title="${f.name}${f.note ? " · " + f.note : ""}" aria-pressed="${f.family === state.bm.font}">
-    <span class="sample" style="font-family:'${f.family}'">${escapeHtml(stitchedName() || "Emma")}</span>
-    <span class="fname">${f.name}${f.note ? " · " + f.note : ""}</span></button>`).join("");
-  const custom = !THREADS.includes(state.bm.color);
-  $("bm-colors").innerHTML = THREADS.map((c) => `<button type="button" data-c="${c}" style="background:${c}" aria-pressed="${c === state.bm.color}" aria-label="Brother ${nearestBrotherThread(c).name}" title="Brother ${nearestBrotherThread(c).name}"></button>`).join("")
-    + `<span class="custom" style="box-shadow:0 0 0 ${custom ? "2.5px var(--ink)" : "1.5px var(--line)"}" title="Any colour"><input type="color" id="bm-custom" value="${state.bm.color}" aria-label="Any colour"></span>`
-    + `<span class="swatch-name">Closest Brother thread: <b>${nearestBrotherThread(state.bm.color).name}</b></span>`;
-  $("bm-fabrics").innerHTML = Object.entries(CLOTHS).map(([k, f]) => `<button type="button" data-fab="${k}" aria-pressed="${k === state.bm.fabric}"><i style="background:${f.solid || `repeating-conic-gradient(${f.cross} 0 25%, ${f.base} 0 50%) 0 0/8px 8px`}"></i>${f.label}</button>`).join("");
-  const steps = stepsFor(state.bm.blank), pauses = steps.length - 1;
-  $("bm-steps-count").textContent = `· ${steps.length} steps, ${stopWords(0, pauses)}`;
-  $("bm-steps-lede").textContent = `Keep the same thread in the whole time. The machine pauses ${pauses} times. Each pause is a fabric step.`;
-  $("bm-steps").innerHTML = steps.map((s) => `<li><b>${s.title}</b>${youHtml(s.you || s.machine, (t) => t)}</li>`).join("");
-}
-// stitched exactly as typed
-const stitchedName = () => state.bm.name.trim();
 function escapeHtml(s) { return s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]); }
-$("bm-name").addEventListener("compositionend", (e) => e.target.dispatchEvent(new Event("input")));
-$("bm-name").addEventListener("input", (e) => {
-  state.bm.name = e.isComposing ? e.target.value : tidyField(e.target, { max: 14 }); store.set("bm.name", state.bm.name);
-  document.querySelectorAll("#bm-fonts .sample").forEach((s) => (s.textContent = stitchedName() || "Emma"));
-  clearTimeout(bmTimer); bmTimer = setTimeout(makeBookmark, 350);
-});
-$("bm-fonts").onclick = (e) => { const b = e.target.closest("button"); if (!b) return; state.bm.font = b.dataset.f; store.set("bm.font", b.dataset.f); bookmarkUI(); makeBookmark(); };
-for (const k of ["lead", "tail", "blank"]) $("bm-" + k).onchange = (e) => { state.bm[k] = e.target.checked; store.set("bm." + k, state.bm[k]); bookmarkUI(); makeBookmark(); };
-$("bm-colors").addEventListener("click", (e) => { const b = e.target.closest("button[data-c]"); if (!b) return; state.bm.color = b.dataset.c; store.set("bm.color", b.dataset.c); bookmarkUI(); makeBookmark(); });
-$("bm-colors").addEventListener("change", (e) => { if (e.target.id !== "bm-custom") return; state.bm.color = e.target.value; store.set("bm.color", e.target.value); bookmarkUI(); makeBookmark(); });
-$("bm-fabrics").onclick = (e) => {
-  const b = e.target.closest("button"); if (!b) return; state.bm.fabric = b.dataset.fab; store.set("bm.fabric", b.dataset.fab); bookmarkUI();
-  if (state.views.bookmark) { state.views.bookmark.fabric = state.bm.fabric; if (state.mode === "bookmark") paint(); }
-};
 
-async function makeBookmark() {
-  const seq = ++bmSeq, name = stitchedName(), blank = state.bm.blank;
-  showError("");
-  if (!name && !blank) { setView(null); $("empty").textContent = "Type a name to see the bookmark."; return; }
-  busy(true, "Lettering…");
-  try {
-    await loadFont(state.bm.font);
-    await new Promise((r) => setTimeout(r, 0));
-    if (seq !== bmSeq) return;
-    const d = buildBookmark({ name, family: state.bm.font, color: state.bm.color, hoop: hoop(), lead: state.bm.lead, tail: state.bm.tail,
-      print: !!fontOf(state.bm.font).print, blank });
-    const pattern = d.pattern();
-    if (seq !== bmSeq || state.mode !== "bookmark") { state.views.bookmark = null; return; }
-    // (letters the font doesn't have: one of its problems (words.js), said beside Download and after as the Design tab says them)
-    const gone = blank ? [] : lacks(name, state.bm.font);
-    setView({ pattern, verifyAgainst: pattern, bytes: writePES(pattern), filename: blank ? "blank_bookmark.pes" : `${safeName(state.bm.name, "name")}_bookmark.pes`,
-      problems: gone.length ? [{ id: "missing", level: LOOK, text: `The ${fontOf(state.bm.font).name} font has no ${lackList(gone)}: ${gone.length === 1 ? "it" : "they"} would be stitched in a stand-in letter. Take ${gone.length === 1 ? "it" : "them"} out or pick another font.` }] : [],
-      fabricShapeBlock: 0, hide: hiddenBlocks(blank), fabric: state.bm.fabric,
-      sheet: { steps: stepsFor(blank).map((s) => ({ title: s.title, you: s.you, sews: s.machine })), cut: d.cut, ready: [READY], after: [DONE] }, threadLabel: () => `Brother ${nearestBrotherThread(state.bm.color).name} · whole bookmark` });
-  } catch (err) {
-    setView(null); $("empty").hidden = true;
-    const big = Object.keys(MACHINES[state.machine].hoops).find((k) => { const h = getHoop(state.machine, k); return h.w >= 130 && h.h >= 180; });
-    if (/needs the 5/.test(err.message) && big) showError(err.message.replace(/ Pick it at the top\.?$/, ""), { label: "Use the 5\" × 7\" hoop", run: () => { $("hoop").value = big; $("hoop").dispatchEvent(new Event("change")); } });
-    else if (err.font) showError(err.message, { label: "Try again", run: makeBookmark });
-    else { console.error(err); showError(err.message); }
-  }
-  finally { if (seq === bmSeq) busy(false); }
+// ---------- an old #bookmark link ----------
+// The Bookmark starter, with the name, font, colour and swashes the old bookmark panel saved (its keys are then
+// dropped, so the next #bookmark link is the plain starter)
+function oldBookmark() {
+  const name = store.get("bm.name", null), font = store.get("bm.font", null), color = store.get("bm.color", null);
+  const lead = store.get("bm.lead", true), tail = store.get("bm.tail", true);
+  studio.starter("bookmark", (ps) => {
+    const t = ps.find((p) => p.kind === "text"), fr = ps.find((p) => p.kind === "frame");
+    if (!t) return;
+    const word = tidy(name ?? "", { max: 14 }).trim();
+    if (word) t.text = withSwash(withSwash(word, "lead", lead), "tail", tail);
+    if (font && FONTS.some((f) => f.family === font)) t.font = font;
+    if (color && /^#[0-9a-f]{6}$/i.test(color)) t.color = fr.color = OLD_THREADS[color] || color;
+  });
+  for (const k of ["name", "font", "color", "fabric", "lead", "tail", "blank"]) store.del("bm." + k);
 }
 
 // ---------- picture ----------
@@ -1649,7 +1589,6 @@ for (const a of document.querySelectorAll(".skip")) a.onclick = (e) => { e.preve
 // ---------- start ----------
 fillMachines();
 brandUI();
-bookmarkUI();
 // ---------- design your own ----------
 // Design tab: show the design as it stands after one step (null = all of it)
 function showStep(i) {
@@ -1689,7 +1628,7 @@ if (new URLSearchParams(location.search).has("shared")) (async () => {
   } catch {}
   history.replaceState(null, "", location.pathname + location.hash);
 })();
-// a link to another tab on this page (#bookmark, #design...) switches to it
-addEventListener("hashchange", () => { const m = location.hash.slice(1); if (m !== state.mode && MODES.includes(m)) setMode(m, false); });
+// a link to another tab on this page (#design, #open...) switches to it; #bookmark opens the Bookmark starter
+addEventListener("hashchange", () => { const m = location.hash.slice(1); if (m === "bookmark" || (m !== state.mode && MODES.includes(m))) setMode(m, false); });
 // for tests/surfaces.mjs: the view on screen, its problems and its share text (what every surface should agree on)
 globalThis.nwTest = { view: () => state.view, problems: () => problemsOf(state.view), share: () => state.view && shareText(state.view) };

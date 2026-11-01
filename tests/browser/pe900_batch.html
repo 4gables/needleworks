@@ -1,12 +1,13 @@
 <!doctype html><meta charset="utf-8"><title>PE900 batch</title>
 <link rel="stylesheet" href="../../css/app.css">
 <style>body{display:block;padding:12px;font:13px monospace} pre{white-space:pre-wrap}</style>
-<p>Builds a sample (~110 files) with the site's own code: every bookmark font × 3 names × decorations on/off, a blank bookmark, and 4 pictures at a small, a large and a turned setting, then POSTs each
+<p>Builds a sample (~110 files) with the site's own code: the Bookmark starter in every font × 3 names × swashes (~) on/off, a blank bookmark, and 4 pictures at a small, a large and a turned setting, then POSTs each
 PES to <code>/save/&lt;name&gt;</code>. Serve with <code>tests/batch_server.py</code>, then run
 <code>tests/pe900_check.py</code> on the saved files.</p>
 <pre id="log"></pre>
 <script type="module">
-import { buildBookmark } from "../../js/core/bookmark.js";
+import { compose } from "../../js/studio/pieces.js";
+import { STARTERS } from "../../js/studio/ui.js";
 import { hoop as getHoop } from "../../js/core/machines.js";
 import { writePES, validatePES } from "../../js/core/formats.js";
 import { DENSITY, analyze, digitize, workingSize } from "../../js/core/digitize.js";
@@ -22,12 +23,14 @@ async function save(name, pattern) {
   await fetch(`/save/${encodeURIComponent(name)}.pes`, { method: "POST", body: bytes });
   n++;
 }
-await save("bm_blank", buildBookmark({ blank: true, hoop }).pattern());
-for (const { family: f, print } of FONTS) {
+// the Bookmark starter (a Design-tab frame and lettering since 2026-10-31; the files keep their bm_ names)
+const bookmark = (text, font) => compose(STARTERS.find((s) => s.id === "bookmark").make().map((p) => (p.kind === "text" ? { ...p, text, font } : p)).filter((p) => p.kind !== "text" || text), hoop).design.pattern();
+await save("bm_blank", bookmark("", FONTS[0].family));
+for (const { family: f } of FONTS) {
   await document.fonts.load(`40px "${f}"`);
   for (const name of names) for (const deco of [true, false]) {
     const tag = `bm_${f.slice(3).replace(/ /g, "")}_${name.normalize("NFKD").replace(/[^A-Za-z]/g, "")}${deco ? "_deco" : ""}`;
-    try { await save(tag, buildBookmark({ name, family: f, hoop, lead: deco, tail: deco, print }).pattern()); }
+    try { await save(tag, bookmark(deco ? `~${name}~` : name, f)); }
     catch (e) { bad++; log(`ERROR ${tag}: ${e.message}`); }
   }
   log(`${f}: done`);

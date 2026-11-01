@@ -3,12 +3,13 @@
 <style>body{display:block} .grid{display:grid;grid-template-columns:repeat(6,1fr);gap:8px;padding:8px} canvas{width:100%;height:560px;background:#f3eeec;border-radius:8px} p{margin:0;font:12px monospace}</style>
 <div class="grid" id="g"></div>
 <script type="module">
-import { buildBookmark } from "../../js/core/bookmark.js";
 import { hoop } from "../../js/core/machines.js";
+import { compose, previewLook } from "../../js/studio/pieces.js";
+import { STARTERS } from "../../js/studio/ui.js";
 import { designStats } from "../../js/core/formats.js";
 import { draw, colorBlocks } from "../../js/render.js";
 import { FONTS } from "../../js/core/fonts.js";
-// ?name=<word>&lead=0&tail=0 (decorations on by default)
+// ?name=<word>&lead=0&tail=0 (swashes on by default), as the Bookmark starter
 const q = new URLSearchParams(location.search), name = q.get("name") || "Josephine";
 const lead = q.get("lead") !== "0", tail = q.get("tail") !== "0";
 for (const { family: f, print } of FONTS) {
@@ -17,10 +18,11 @@ for (const { family: f, print } of FONTS) {
   div.append(c, p); g.append(div);
   const t0 = performance.now();
   try {
-    const d = buildBookmark({ name, family: f, hoop: hoop(), lead, tail, print }).pattern();
+    const ps = STARTERS.find((s) => s.id === "bookmark").make().map((p) => (p.kind === "text" ? { ...p, font: f, text: (lead ? "~" : "") + name + (tail ? "~" : "") } : p));
+    const { design, steps } = compose(ps, hoop()), d = design.pattern();
     const st = designStats(d);
     p.textContent = `${f.slice(3)}: ${st.stitches} st, ${(performance.now()-t0).toFixed(0)} ms`;
-    draw(c, d, { fabric: "pink", fabricShapeBlock: 0, hide: new Set([0,1,3]), cache: colorBlocks(d) });
+    draw(c, d, { ...previewLook(steps), cache: colorBlocks(d) });
   } catch (e) { p.textContent = f + " ERROR " + e.message; console.error(e); }
 }
 </script>

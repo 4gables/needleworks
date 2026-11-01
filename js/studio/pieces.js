@@ -8,10 +8,10 @@ import { DENSITY, FILL_PATTERNS, fillPolygon } from "../core/digitize.js";
 import { APPLIQUE_FONTS, FONTS, fontOf } from "../core/fonts.js";
 import { machineThreads } from "../core/formats.js";
 import { MARGIN } from "../core/machines.js";
-import { back, bounds, edgeWalk, enter, filletPolygon, followRun, loop, moveCost, normals, rings, run, satin, zigzag } from "../core/geom.js";
+import { back, bounds, circle, edgeWalk, enter, filletPolygon, followRun, loop, moveCost, normals, rings, run, satin, zigzag } from "../core/geom.js";
 import { counterPockets, distanceTransform, order } from "../core/raster.js";
 import { strokes } from "../core/text.js";
-import { initials, latin, tidy } from "../core/typed.js";
+import { initials, latin, swashes, tidy, unswashed } from "../core/typed.js";
 import { PEC_MATCH, pecThread } from "../core/threads.js";
 import { MOTIFS } from "./motifs.js";
 import { letterOutlines, motifOutlines } from "./outline.js";
@@ -27,12 +27,16 @@ const lettering = new Map();   // font + text -> centre-line strokes (rendering 
 // kept that lettering after the font arrived.
 // (a family name the CSS parser can't read, from a crafted saved design, is a font that isn't ready, not a DOMException)
 const fontReady = (family) => { try { return !family || typeof document === "undefined" || document.fonts.check(`40px "${family}"`); } catch { return false; } };
-function letterStrokes(text, family, spacing = 0, kern = null) {
-  const key = family + "\n" + text + "\n" + spacing + (kern ? "\n" + kern.join() : "");
+// Swashes: lengths in x-heights, as the bookmark had them (a script tail longer than its lead-in; print fonts get
+// straight dashes either side instead)
+const SWASH = { lead: 1.8, tail: 2.6, dash: 2.2 };
+function letterStrokes(text, family, spacing = 0, kern = null, lead = false, tail = false) {
+  const key = family + "\n" + text + "\n" + spacing + (kern ? "\n" + kern.join() : "") + (lead || tail ? `\n~${+lead}${+tail}` : "");
   if (lettering.has(key)) return lettering.get(key);
   const print = !!fontOf(family).print;
+  const curls = lead || tail ? { leadIn: lead ? (print ? SWASH.dash : SWASH.lead) : 0, tail: tail ? (print ? SWASH.dash : SWASH.tail) : 0 } : {};
   // (knots: junctions joined by a stroke shorter than 0.75 of its width become one; `skeletonEdges`)
-  const { edges, info } = strokes(text, family, { knots: 0.75, ...(print ? { deco: "dash", join: false } : { tongues: true }), ...(spacing ? { spacing } : {}), ...(kern ? { kern } : {}) });
+  const { edges, info } = strokes(text, family, { knots: 0.75, ...(print ? { deco: "dash", join: false } : { tongues: true }), ...(spacing ? { spacing } : {}), ...(kern ? { kern } : {}), ...curls });
   // (each counter with the strokes round its widest spot: the ones within a pixel and a half of that circle)
   const lines = edges.map((e) => e[2]), near = (p, [x, y]) => Math.min(...p.map((q) => Math.hypot(q[0] - x, q[1] - y)));
   const counters = counterPockets(info.mask, lines, info.stroke).map((c) => ({ ...c, edges: lines.flatMap((p, i) => (near(p, c.at) <= c.peak + 1.5 ? [i] : [])) }));
@@ -51,17 +55,26 @@ function letterStrokes(text, family, spacing = 0, kern = null) {
 
 // Letters as [pts, "run"|"satin"] in mm: `size` is the height of the lettering, baseline at y = 0, centred across.
 // `kern`: room after each letter (fractions of the size), for the text as given (one line, already trimmed)
+// `~` at the start or end of the words is a swash there (`swashes` in typed.js; kern entries for the `~`s are dropped
+// with them)
 function letters(text, family, size, style = "auto", spacing = 0, kern = null, chain = true) {
   text = (text || "").replace(/\s*\n\s*/g, " ").trim();
+  const sw = swashes(text);
+  if (kern && (sw.cut[0] || sw.cut[1])) kern = kern.slice(sw.cut[0], kern.length - sw.cut[1]);
+  text = sw.text;
   if (!text) return { parts: [], satinW: 0 };
-  const { edges, info, counters, notches, tapers, ends, sides, ...ls } = letterStrokes(text, family, spacing, kern && kern.some((v) => v) ? kern : null);
+  const { edges, info, counters, notches, tapers, ends, sides, ...ls } = letterStrokes(text, family, spacing, kern && kern.some((v) => v) ? kern : null, sw.lead, sw.tail);
   let comps = ls.comps;
   const all = comps.flatMap((c) => c.flatMap(([p]) => p));
   if (!all.length) return { parts: [], satinW: 0 };
+  // (sized by the letters alone: a swash dips under the baseline and a tail curls up, and the name keeps its size
+  // with or without them)
+  let sized = info.sized;
+  if (sw.lead || sw.tail) { const body = sized.filter((q) => q[0] >= info.firstX && q[0] <= info.lastX); if (body.length) sized = body; }
   // (sized by the strokes before their loose ends reached out to the ink's edge, so a word keeps its size)
   // (strokes never count as less than half the x-height tall, a whole one for marks alone: a "." 20 mm tall was
   // 5880000000000 mm wide, and a stand-in keycap emoji thinned to a point in Meow Script; any word's strokes are taller)
-  const [x0, y0, x1, y1] = bounds(info.sized), s = size / Math.max(y1 - y0, (/[\p{L}\p{N}]/u.test(text) ? 0.5 : 1) * info.mid), cx = (x0 + x1) / 2;
+  const [x0, y0, x1, y1] = bounds(sized), s = size / Math.max(y1 - y0, (/[\p{L}\p{N}]/u.test(text) ? 0.5 : 1) * info.mid), cx = sized === info.sized ? (x0 + x1) / 2 : (() => { const b = bounds(info.sized); return (b[0] + b[2]) / 2; })();
   // (print letters: the third entry marks the first stroke of each separate piece after the first, so the needle jumps
   // to it and never stitches across, however close: an i's stem reaching up to its dot was sewn to it)
   const print = !!fontOf(family).print;
@@ -235,7 +248,7 @@ export function archStart(p) {
 // drawn at the same scale have sizes in this ratio ("emma" has no capital: at Emma's size its letters came out twice
 // as big)
 export function inkHeight(text, family) {
-  const t = (text || "").replace(/\s*\n\s*/g, " ").trim();
+  const t = swashes((text || "").replace(/\s*\n\s*/g, " ").trim()).text;
   if (!t) return 0;
   const { info } = letterStrokes(t, family);
   if (!info.sized?.length) return 0;
@@ -715,7 +728,15 @@ export const SHAPES = {
   diamond: { name: "Diamond", path: (w, h) => filletPolygon([[0, -h / 2], [w / 2, 0], [0, h / 2], [-w / 2, 0]], Math.min(w, h) * 0.05, 8) },
   heart: { name: "Heart", path: heart },
   scallop: { name: "Scallop", path: (w, h) => scallop(w / 2, h / 2) },
+  // a bookmark's outline: tall, its top corners cut off (9 mm on a 50 mm bookmark) and every corner rounded 3 mm
+  bookmark: { name: "Bookmark", path: (w, h) => { const c = Math.min(w * 0.18, h * 0.2), t = -h / 2, b = h / 2, x = w / 2;
+    return filletPolygon([[-x + c, t], [x - c, t], [x, t + c], [x, b], [-x, b], [-x, t + c]], Math.min(3, w * 0.06), 10); } },
 };
+// A ribbon hole near the top (`eyelet` on an in-the-hoop frame: a bookmark, a luggage tag): a 4.2 mm ring of 2.2 mm
+// satin 13 mm below the top edge, sewn through every layer with the border; cut out after Fray Check.
+const EYE = { r: 4.2, w: 2.2, down: 13 };
+const eyeAt = (f, top) => [0, top + Math.min(EYE.down, frameH(f) * 0.2)];
+const eyeRing = (c) => { const ring = circle(c, EYE.r, 64); return [loop(run(ring, 1.0, true)), loop(zigzag(ring, EYE.w * 0.6, 1.2, true)), loop(satin(ring, EYE.w, sd(0.35), 0.2, true))]; };
 function ellipse(rx, ry, n = 160) {
   return Array.from({ length: n }, (_, i) => { const t = (i / n) * Math.PI * 2; return [rx * Math.sin(t), -ry * Math.cos(t)]; });
 }
@@ -764,6 +785,7 @@ function fitBox(pts, w, h) {
 const shapeOf = (p) => SHAPES[p.shape] || SHAPES.circle;
 // a circle frame is w across both ways
 const frameH = (f) => (f.shape === "circle" ? f.w : f.h);
+const hasEye = (f) => !!f.eyelet && f.border === "ith";
 // a zipper pouch's zipper line (frame-relative y, from the outline's top); its tack lines run 5 mm and its topstitch
 // 7 mm either side
 const zipY = (f, top) => top + Math.max(14, f.h * 0.2);
@@ -772,7 +794,7 @@ const zipY = (f, top) => top + Math.max(14, f.h * 0.2);
 // other frame the whole height.
 export function frontPanel(f) {
   const [, top, , bot] = bounds(shapeOf(f).path(f.w, f.h));
-  return f.border === "zip" ? [f.y + zipY(f, top) + 7, f.y + bot] : [f.y + top, f.y + bot];
+  return f.border === "zip" ? [f.y + zipY(f, top) + 7, f.y + bot] : hasEye(f) ? [f.y + eyeAt(f, top)[1] + EYE.r + EYE.w / 2 + 2, f.y + bot] : [f.y + top, f.y + bot];
 }
 export const BORDERS = { line: "Thin line", bold: "Bold line", satin: "Satin border", patch: "Filled patch", applique: "Appliqué", ith: "In the hoop (two-sided)", zip: "Zipper pouch (in the hoop)" };
 // fabric to cut for a w x h mm in-the-hoop piece, with 2.5 cm (1 in) spare all round to trim off
@@ -953,7 +975,7 @@ function localStages(p, fab = "cotton") {
       const side = (dx, f) => motifStitches(motifOutlines(MOTIFS[p.deco].d, s), "fill").map((q) => q.map(([x, y]) => [f * x + dx, y + (y0 + y1) / 2]));
       paths = [...side(x0 - gap - s / 2, face < 0 ? -1 : 1), ...paths, ...side(x1 + gap + s / 2, face > 0 ? -1 : 1)];
     }
-    const words = (p.text || "").replace(/\s*\n\s*/g, " / ").trim();
+    const words = unswashed(p.text).replace(/\s*\n\s*/g, " / ").trim();
     // (a motif either side is said: "Sews “Leo”." sewed two bunnies as well)
     const both = paths.length && MOTIFS[p.deco] ? ` with ${/^[aeiou]/i.test(MOTIFS[p.deco].name) ? "an" : "a"} ${MOTIFS[p.deco].name.toLowerCase()} either side` : "";
     if (paths.length) stages = [{ color: p.color, paths, sews: fab === "towel" ? `Sews a light base to flatten the loops, then “${words}”${both} on it.` : `Sews “${words}”${both}.` }];
@@ -997,20 +1019,20 @@ function localStages(p, fab = "cotton") {
       // then backing fabric taped under the hoop and one satin edge through every layer; cut out when it's done.
       // Only something that hangs (`hang`: the ornament and key fob starters; a quilted frame is a coaster or mug rug)
       // gets the ribbon loop
-      const hang = p.hang ?? !QUILTED(p);
+      const hang = p.hang ?? !QUILTED(p), eye = hasEye(p) ? eyeAt(p, bounds(edge)[1]) : null;
       stages = [
         { color: p.color, paths: [loop(run(edge, 2.5, true))], sews: `Sews the ${name} outline on the stabilizer.`, fabric: true, bare: true, solid: [edge],
-          before: `Fabric: front and back pieces, each ${cut(p.w, p.h)}${p.quilt ? `, thin batting the same size` : ""}, tear-away stabilizer and tape${hang ? ", and a 6 in (15 cm) ribbon for the loop" : ""}.` },
+          before: `Fabric: front and back pieces, each ${cut(p.w, p.h)}${p.quilt ? `, thin batting the same size` : ""}, tear-away stabilizer and tape${hang ? ", and a 6 in (15 cm) ribbon for the loop" : ""}${eye ? ", Fray Check and a ribbon for the hole" : ""}.` },
         { color: p.color, pause: true, paths: tack(edge),
           you: `Lay ${p.quilt ? "the batting, then " : ""}the front fabric over the ${name} outline, right side up, covering it by ½ in. Press Start. Then take the hoop off the machine (leave the fabric in the hoop), trim the fabric${p.quilt ? " and batting" : ""} close to the stitching, and put the hoop back.`,
           sews: "Tacks the front fabric down.", under: true },
         { color: p.color, pause: true, last: true,
-          paths: [loop(run(edge, 2.0, true)), ...satinBorder(edge)],
+          paths: [loop(run(edge, 2.0, true)), ...(eye ? eyeRing(eye) : []), ...satinBorder(edge)],
           // (one sentence per action: the steps show them numbered. "On the front" was read while the hoop was upside
           // down, so the ribbon goes on once it's back on the machine, the embroidered side up)
           you: `Take the hoop off the machine (leave the fabric in the hoop) and turn it upside down. Tape the backing fabric over the stabilizer, right side facing you, covering the ${name} by ½ in. Turn the hoop back over and put it back on the machine.${hang ? ` For the loop, fold the ribbon in half and tape it on the embroidered side at the top of the ${name}, loop pointing in toward the middle, ends ½ in past the outline.` : ""} Press Start.`,
-          sews: "Tacks the backing on and covers the edge with satin stitch through every layer.",
-          after: `Take it out of the hoop, tear the stabilizer away and cut round the ${name} as close to the satin stitches as you can without nicking them${hang ? " (keep the ribbon loop clear of the scissors). Flip the ribbon loop up." : "."}` },
+          sews: `Tacks the backing on and covers the edge${eye ? " and a ribbon ring" : ""} with satin stitch through every layer.`,
+          after: `Take it out of the hoop, tear the stabilizer away and cut round the ${name} as close to the satin stitches as you can without nicking them${hang ? " (keep the ribbon loop clear of the scissors). Flip the ribbon loop up." : "."}${eye ? " Dab Fray Check inside the ribbon ring and let it dry, then snip out the hole inside it and loop a ribbon through." : ""}` },
       ];
     } else if (p.border === "patch") {
       // solid tatami fill (inset so the satin edge covers its ragged ends), then the satin edge over it; `compose`
@@ -1433,7 +1455,7 @@ function edgeGap([x, y], poly) {
   return d;
 }
 
-export const label = (p) => p.kind === "motif" ? `${(MOTIFS[p.motif] || MOTIFS.heart).name}` : p.kind === "text" ? `“${p.text.replace(/\s*\n\s*/g, " / ")}”` : p.kind === "letters" ? `Appliqué ${p.text}` : p.kind === "monogram" ? `Monogram ${p.letters}`
+export const label = (p) => p.kind === "motif" ? `${(MOTIFS[p.motif] || MOTIFS.heart).name}` : p.kind === "text" ? `“${unswashed(p.text).replace(/\s*\n\s*/g, " / ")}”` : p.kind === "letters" ? `Appliqué ${p.text}` : p.kind === "monogram" ? `Monogram ${p.letters}`
   : p.kind === "file" ? p.name : `${shapeOf(p).name}${p.border === "applique" ? " appliqué" : ""}`;
 
 // A piece read from a saved design, the clipboard or the page's own storage, made safe to build: every field checked
@@ -1490,6 +1512,7 @@ export function cleanPiece(p) {
     if (q.pattern != null && !own(FILL_PATTERNS, q.pattern)) delete q.pattern;
     if (q.quilt != null && !own(QUILTS, q.quilt)) delete q.quilt;
     if (q.hang != null) q.hang = q.hang === true;
+    if (q.eyelet != null) q.eyelet = q.eyelet === true;
   } else if (p.kind === "file") {
     const pt = (v) => Array.isArray(v) && v.length >= 2 && Number.isFinite(v[0]) && Number.isFinite(v[1]) && Math.abs(v[0]) < 1000 && Math.abs(v[1]) < 1000;
     const clean = (bs) => (Array.isArray(bs) ? bs.filter((b) => b && Array.isArray(b.paths)).map((b) => ({
@@ -1570,20 +1593,26 @@ function frameAround(p, pieces, shapes) {
 export function fittedSizes(pieces) {
   const out = new Map();
   pieces.forEach((p) => {
-    const mono = p.kind === "monogram";
-    if ((p.kind !== "text" && !mono) || (p.shape && p.shape !== "straight") || (p.rot || 0) % 180) return;
+    const mono = p.kind === "monogram", r = (((p.rot || 0) % 360) + 360) % 360, side = r === 90 || r === 270;
+    if ((p.kind !== "text" && !mono) || (p.shape && p.shape !== "straight") || (r % 180 && !side)) return;
     const frame = frameAround(p, pieces.filter((f) => f === p || !(f.rot || 0)));
     if (!frame) return;
-    const b = pieceBounds({ ...p, x: 0, y: 0 }); if (!b) return;
+    const b = pieceBounds({ ...p, x: 0, y: 0, rot: 0 }); if (!b) return;
     const dy = (p.y - frame.y) / (frameH(frame) / 2), gap = frame.border === "line" ? 4 : 8, [pt, pb] = frontPanel(frame);
     // room across the frame at the lettering's height (narrower toward the top and bottom of round shapes)
     const round = ["circle", "oval", "scallop", "heart"].includes(frame.shape) ? Math.sqrt(Math.max(0.2, 1 - dy * dy)) : 1;
     // (a monogram only shrinks when it would reach the border: the starters' monograms fill their frames on purpose)
-    const fill = frame.shape === "diamond" ? 0.55 : mono ? 0.92 : 0.82, room = frame.w * round * fill - (mono ? gap / 2 : gap);
+    const fill = frame.shape === "diamond" ? 0.55 : mono ? 0.92 : 0.82;
+    // Turned a quarter (a name running down a bookmark): its length fits the frame's front lengthwise less 4 mm at the
+    // top and the border plus 6 mm at the bottom (the old bookmark's box), about where it sits, and its height the
+    // frame's width
+    const lt = pt + 4, lb = pb - 7.8;
+    const room = side ? lb - lt - 2 * Math.abs(p.y - (lt + lb) / 2) : frame.w * round * fill - (mono ? gap / 2 : gap);
     const w = b[2] - b[0];
     let k = w > room && room > 5 ? room / w : 1;
+    if (side) { const across = frame.w * fill - gap, h = b[3] - b[1]; if (h > across && across > 5) k = Math.min(k, across / h); }
     // a monogram is tall: it must fit up and down too (a script R overran a key fob's border)
-    if (mono) {
+    if (mono && !side) {
       // (in a zipper pouch, the front below the zipper: fitted to the whole frame, it sewed across the zipper)
       const roomH = frame.border === "zip" ? (pb - pt) * fill - gap / 2 - 2 * Math.abs(p.y - (pt + pb) / 2)
         : frameH(frame) * fill - gap / 2 - 2 * Math.abs(p.y - frame.y), h = b[3] - b[1];
@@ -1692,7 +1721,9 @@ function withQuilt(p, stages, others, dragging = false, later = null) {
   // (not a shape the frame itself sits on, a patch or appliqué under the whole frame: that would leave no room)
   const edge = shapeOf(p).path(p.w, p.h).map(placer(p)), key0 = JSON.stringify(p), frame = key0;
   const under = (loops) => edge.filter((q) => insideLoops(loops, q)).length > edge.length / 2;
-  const obstacles = others.flatMap((s) => s.paths), solids = others.filter((s) => s.solid?.length && !under(s.solid)).map((s) => s.solid);
+  // (and round the frame's own ribbon hole, which sews later in its last stage)
+  const ring = hasEye(p) ? [circle(placer(p)(eyeAt(p, bounds(shapeOf(p).path(p.w, p.h))[1])), EYE.r + EYE.w / 2, 48)] : [];
+  const obstacles = [...others.flatMap((s) => s.paths), ...ring], solids = others.filter((s) => s.solid?.length && !under(s.solid)).map((s) => s.solid);
   // keyed on every obstacle point: moving a middle piece reused the old quilting, sewn through it
   let h = obstacles.length;
   for (const o of [...obstacles, ...solids.flat()]) for (const [x, y] of o) h = (Math.imul(h ^ Math.round(x * 10), 16777619) ^ Math.round(y * 10)) | 0;

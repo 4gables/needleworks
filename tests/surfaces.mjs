@@ -74,9 +74,11 @@ const CASES = [
   design("appliqué frame + small", [F("heart", 46, 42, "applique", { color: "#f993bc" }), T("Emma", 6, { y: 0 })]),
   design("clean starter-like", [F("oval", 110, 64, "satin"), T("Emma", 22)]),
   design("quilted frame + name", [F("square", 100, 100, "satin", { quilt: "stipple" }), T("Ava", 7, { font: ROUND })]),
+  // (an old #bookmark link: the Bookmark starter with the old panel's saved name)
   { name: "bookmark", tab: "bookmark" },
   // every starter as it comes, on both hoops (pauses, appliqué, in-the-hoop, patches, quilting)
-  ...["monogram", "ring", "oval", "framed", "quilt", "bib", "towel", "ornament", "mugrug", "coaster", "quiltblock", "pouch", "keyfob", "applique", "initials", "patch", "decorated", "words"]
+  ...["monogram", "ring", "oval", "framed", "quilt", "bib", "towel", "ornament", "mugrug", "coaster", "quiltblock", "pouch", "keyfob", "applique", "initials", "patch", "decorated", "words",
+    "bookmark", "tag", "pocket", "tote", "stocking", "birth", "wedding", "bookplate", "pet", "kitchen"]
     .flatMap((s) => ["5x7", "4x4"].map((h) => ({ name: `starter ${s} ${h}`, tab: "design", starter: s, hoop: h }))),
   { name: "picture: fine logo", tab: "picture", image: "logo" },
   { name: "picture: blobs", tab: "picture", image: "blobs" },

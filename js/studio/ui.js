@@ -1,10 +1,8 @@
 /*! Needleworks (c) 2026 4Gables. All rights reserved. Proprietary, see LICENSE. https://4gables.com/needleworks/ */
 // Design tab UI: start from a card, edit pieces in a short list, drag them on the preview.
-import { buildBookmark, hiddenBlocks } from "../core/bookmark.js";
 import { turnPattern } from "../core/design.js";
 import { APPLIQUE_FONTS, FONTS, loadFont } from "../core/fonts.js";
-import { initials, lackList, lacks, tidy, tidyField } from "../core/typed.js";
-import { hoop as getHoop } from "../core/machines.js";
+import { initials, lackList, lacks, swashes, tidy, tidyField, unswashed, withSwash } from "../core/typed.js";
 import { nearestBrotherThread } from "../core/threads.js";
 import { designStats, machineThreads, readEmbroidery } from "../core/formats.js";
 import { BLOCK, LOOK, TIP, problemsItems, shownOn, stopWords } from "../words.js";
@@ -34,9 +32,16 @@ const appl = (o) => piece({ kind: "letters", text: "AB", font: APPLIQUE_FONTS[0]
 const motif = (o) => piece({ kind: "motif", motif: "heart", size: 40, style: "fill", color: RED, ...o });
 const frame = (o) => piece({ kind: "frame", shape: "circle", w: 80, h: 80, border: "satin", color: RED, ...o });
 
-// `mode` cards open another part of the page (the bookmark has its own engine and controls) instead of pieces
+// (the bookmark had its own panel and engine until 2026-10-31; it's pieces like every other starter now, and its
+// swash checkboxes became "~" typed at either end of the words)
+const SACRAMENTO = "NW Sacramento";
 export const STARTERS = [
-  { id: "bookmark", name: "Name bookmark", note: "in the hoop, with a ribbon hole", mode: "bookmark" },
+  // A name down an in-the-hoop bookmark: cotton front, felt back, one thread, a ribbon hole. The letters' height is
+  // about 72 % of the inside width, as the old bookmark sized them; a long name shrinks to fit its length.
+  { id: "bookmark", name: "Bookmark", note: "in the hoop, with a ribbon hole", make: () => [
+    frame({ shape: "bookmark", w: 50, h: 165, border: "ith", hang: false, eyelet: true, color: RED }),
+    text({ text: "~Emma~", font: SACRAMENTO, size: 26, rot: 90, y: 8, color: RED })],
+    tip: "Made in the hoop on tear-away stabilizer: cotton for the front and felt for the back, each about 3 × 8 in, plus tape, Fray Check and a ribbon. Full size needs the 5 × 7 hoop. Type ~ at either end of a name for a swash." },
   { id: "monogram", name: "Monogram", note: "3 initials in a frame", make: () => [frame({ shape: "circle", w: 90, h: 90, border: "satin" }), mono({ size: 23 })] },
   { id: "ring", name: "Name in a circle", note: "lettering around a ring", make: () => [
     frame({ shape: "circle", w: 92, h: 92, border: "bold" }),
@@ -96,6 +101,41 @@ export const STARTERS = [
     mono({ letters: "JD", size: 26, font: PRINT, color: "#f0f0f0" })] },
   { id: "decorated", name: "Name with motifs", note: "a little heart either side", make: () => [text({ text: "Emma", size: 20, deco: "heart", color: RED })] },
   { id: "words", name: "Just lettering", note: "a word or name on its own", make: () => [text({ size: 24 })] },
+  // more of what people sew most (2026-10-31), then a few of our own
+  { id: "tag", name: "Luggage tag", note: "two-sided, with a hole for the strap", make: () => [
+    frame({ shape: "square", w: 60, h: 100, border: "ith", hang: false, eyelet: true, color: NAVY }),
+    text({ text: "Emma", size: 18, y: 4, color: RED }),
+    text({ text: "555-0123", font: ROUND, size: 8, y: 26, color: NAVY })],
+    tip: "Made in the hoop like the bookmark. Felt or vinyl on the back doesn't fray; a strip of clear vinyl over the front makes it wipe clean." },
+  { id: "pocket", name: "Pocket monogram", note: "small initials for a shirt or polo", make: () => [mono({ letters: "jKm", font: PRINT, size: 20, color: NAVY })],
+    fabric: "knit", tip: "Sew it on the left chest, about 7-9 in down from the shoulder seam. Hoop cut-away stabilizer with the shirt, and a water-soluble topper on piqué." },
+  { id: "tote", name: "Tote bag", note: "two lines of words for a canvas bag", make: () => [text({ text: "Emma's\nbooks", font: ROUND, size: 18, color: NAVY })],
+    fabric: "canvas", tip: "Turn the bag inside out to hoop the front panel only, with tear-away stabilizer behind it." },
+  { id: "stocking", name: "Stocking cuff", note: "a name with swashes for the cuff", make: () => [text({ text: "~Emma~", size: 28, color: WHITE })],
+    fabric: "felt", tip: "Sew the cuff before the stocking is put together, so it can be hooped flat. White on red felt reads from across the room." },
+  { id: "birth", name: "Birth announcement", note: "name, date and weight for a keepsake", make: () => [
+    frame({ shape: "oval", w: 100, h: 140, border: "line", color: NAVY }),
+    motif({ motif: "baby", size: 25, y: -40, color: PINK }),
+    text({ text: "Emma", size: 22, y: -6, color: NAVY }),
+    text({ text: "June 1, 2026\n7 lb 2 oz · 20 in", font: ROUND, size: 7, y: 22, color: NAVY })],
+    tip: "Pretty framed in a 6 in embroidery hoop on the wall. Cotton or linen with medium tear-away stabilizer." },
+  { id: "wedding", name: "Wedding keepsake", note: "two names and the date in a scallop", make: () => [
+    frame({ shape: "scallop", w: 120, h: 120, border: "satin", color: "#e8a900" }),
+    text({ text: "Sam\n& Alex", size: 20, y: -12, leading: 115, color: NAVY }),
+    text({ text: "06.20.2026", font: ROUND, size: 8, y: 30, color: NAVY })] },
+  { id: "bookplate", name: "Book plate", note: "“from the library of”, for a book cover", make: () => [
+    frame({ shape: "square", w: 96, h: 120, border: "line", color: BLACK }),
+    text({ text: "from the library of", font: ROUND, size: 8, y: -36, color: BLACK }),
+    text({ text: "Emma", size: 22, y: -10, color: RED }),
+    motif({ motif: "book", size: 25, y: 26, color: NAVY })],
+    tip: "Sew it on linen or cotton, then glue or stitch it inside a fabric book cover. Goes with the Bookmark." },
+  { id: "pet", name: "Pet bandana", note: "a pet's name between two paws", make: () => [text({ text: "~Buddy~", size: 20, deco: "paw", color: NAVY })],
+    tip: "Sew it on one corner of a cotton square before it's folded into a bandana, with tear-away stabilizer." },
+  { id: "kitchen", name: "Kitchen sign", note: "family name and a year", make: () => [
+    frame({ shape: "oval", w: 120, h: 80, border: "bold", color: RED }),
+    text({ text: "Grandma's\nKitchen", size: 16, y: -4, color: NAVY }),
+    text({ text: "EST. 1968", font: ROUND, size: 6, y: 25, color: RED })],
+    tip: "Good on a flour-sack tea towel (pick Cotton) or an apron." },
 ];
 
 // api: { hoop(), setView(pattern, filename, look) (null pattern: nothing to show), showError(msg), busy(on, text),
@@ -105,7 +145,7 @@ export function initStudio(api) {
   const saved = api.store.get("studio", null);
   // (checked like an opened design: a crafted file's pieces stayed broken through a reload)
   let pieces = (Array.isArray(saved?.pieces) ? saved.pieces : []).map(cleanPiece).filter(Boolean);
-  if (!pieces.length) pieces = STARTERS.find((s) => s.make).make();
+  if (!pieces.length) pieces = STARTERS.find((s) => s.id === "monogram").make();
   if (new Set(pieces.map((p) => p.id)).size < pieces.length || !pieces.every((p) => Number.isInteger(p.id))) pieces.forEach((p, i) => (p.id = i + 1));
   nextId = Math.max(0, ...pieces.map((p) => p.id)) + 1;
   // (nothing selected stays so through a reload: `?? last` picked the last piece again)
@@ -185,13 +225,13 @@ export function initStudio(api) {
       await idle();
       const c = $("st-cards").querySelector(`[data-start="${s.id}"] canvas`);
       try {
-        if (s.mode === "bookmark") {   // lying down, like the bookmark tab shows it
-          const d = buildBookmark({ name: "Emma", family: SCRIPT, hoop: getHoop() });
-          draw(c, turnPattern(d.pattern(), false), { pad: 4, fabricShapeBlock: 0, fabric: "pink", hide: hiddenBlocks(false) });
-          continue;
-        }
         const { design, steps } = compose(s.make(), { w: 1000, h: 1000, name: "" });
-        draw(c, design.pattern(), { pad: 4, ...previewLook(steps) });
+        // (a tall design, the bookmark, lies down so it isn't a sliver in the card)
+        const pat = design.pattern(), sewn = pat.stitches.filter((q) => q[2] === 0);
+        let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
+        for (const [x, y] of sewn) { x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y); }
+        const tall = sewn.length && y1 - y0 > 1.6 * (x1 - x0);
+        draw(c, tall ? turnPattern(pat, false) : pat, { pad: 4, ...previewLook(steps) });
       } catch { c.remove(); }
     }
   }
@@ -305,6 +345,13 @@ export function initStudio(api) {
       // every redraw)
       h += `<label class="field"><span>Words</span><textarea data-k="text" rows="${Math.min(3, lines)}" maxlength="60" autocomplete="off" spellcheck="false">\n${api.escapeHtml(p.text)}</textarea></label>`
         + `<p class="hint" data-lines-hint aria-live="polite" hidden>Three lines is the most: that new line became a space.</p>`;
+      // swashes are typed (~ at either end of the words); these put them on or take them off
+      {
+        const ls = p.text.split("\n").filter((l) => l.trim()), lead = swashes(ls[0] || "").lead, tail = swashes(ls[ls.length - 1] || "").tail;
+        const kind = FONTS.find((f) => f.family === p.font)?.print ? "Dash" : "Swash";
+        h += `<div class="seg swash" role="group" aria-label="${kind}es" title="Or type ~ at the start or end of the words">`
+          + `<button type="button" data-swash="lead" aria-pressed="${lead}">${kind} before</button><button type="button" data-swash="tail" aria-pressed="${tail}">${kind} after</button></div>`;
+      }
       h += `<label class="field"><span>Font</span>${fontSelect(p)}</label>`;
       h += range("size", "Height", 5, 60, p.size);
       h += `<p class="hint">About 10 mm for a pocket or cuff, 15-20 mm for a T-shirt's chest, 20-30 mm for a onesie, pillow or blanket corner, 30-50 mm for a towel.</p>`;
@@ -360,7 +407,8 @@ export function initStudio(api) {
       }
       if (p.border !== "patch") h += `<div class="field"><span>Quilting</span>${seg("quilt", QUILTS, p.quilt || "none")}</div>`
         + (p.quilt && p.quilt !== "none" ? `<p class="hint">Fills the frame around everything on it, in the frame's thread.</p>` : "");
-      if (p.border === "ith") h += `<p class="hint">Two-sided, made in the hoop: an appliqué front, then the pieces below it in the list, then backing fabric under the hoop and a satin-stitch edge through everything. The steps are under “How to stitch it”.</p>`;
+      if (p.border === "ith") h += `<p class="hint">Two-sided, made in the hoop: an appliqué front, then the pieces below it in the list, then backing fabric under the hoop and a satin-stitch edge through everything. The steps are under “How to stitch it”.</p>`
+        + `<label class="check small"><input type="checkbox" data-eyelet ${p.eyelet ? "checked" : ""}> Ribbon hole at the top (a bookmark, a tag)</label>`;
       if (p.border === "applique") h += `<p class="hint">Sews an outline, pauses for you to lay fabric on and trim it, then covers the edge in satin stitch. The steps are under “How to stitch it”.</p>`;
     } else {
       // a design file is resized as Open a design resizes it: re-stitched at the new size (`resizeFile`), so it can
@@ -1171,7 +1219,7 @@ export function initStudio(api) {
   // line), else the biggest lettering (the name, not the quilt label's "Made for")
   const firstWords = () => {
     const words = pieces.filter((p) => p.kind === "text" || p.kind === "letters");
-    for (const p of words) for (const line of p.text.split("\n")) {
+    for (const p of words) for (const line of unswashed(p.text).split("\n")) {
       const m = /\bfor\s+(\S+(?:\s+\S+){0,2})\s*$/i.exec(line);
       if (m) return m[1];
     }
@@ -1183,7 +1231,7 @@ export function initStudio(api) {
     const pick = (ok) => big(pieces.filter((p) => ok(p) && p.kind === "text" && (p.shape || "straight") === "straight")) || big(pieces.filter((p) => ok(p) && p.kind === "monogram"))
       || big(pieces.filter((p) => ok(p) && (p.kind === "text" || p.kind === "monogram" || p.kind === "letters")));
     const m = pick(lettered) || pick(() => true);
-    return (m?.kind === "monogram" ? m.letters : m?.text) || from || "design";   // (else the starter: a quilt block was design.pes)
+    return (m?.kind === "monogram" ? m.letters : unswashed(m?.text)) || from || "design";   // (else the starter: a quilt block was design.pes)
   };
   // the design's main lettering: the biggest straight-or-arched words or monogram (`letters`: appliqué letters too)
   // (words with letters before a date: One for each name swapped each name in for the pillow's "06.20.27")
@@ -1195,15 +1243,18 @@ export function initStudio(api) {
   // ---------- events ----------
   $("st-cards").onclick = (e) => {
     const b = e.target.closest("[data-start]"); if (!b) return;
-    const s = STARTERS.find((x) => x.id === b.dataset.start);
+    pickStarter(STARTERS.find((x) => x.id === b.dataset.start));
+  };
+  // a starter in place of the design (`tweak` changes its pieces first: an old #bookmark link's saved name and font)
+  function pickStarter(s, tweak) {
+    if (!s) return;
     const phone = matchMedia("(max-width: 600px)").matches;
     api.store.set("studio.guideSeen", true);   // (step 1 done: the guide isn't shown on the next visit)
-    if (s.mode) { api.setMode(s.mode); if (phone) $("view").scrollIntoView({ block: "start", behavior: "smooth" }); return; }
     api.fit();   // (a new design opens whole, not at the last one's zoom)
     api.unturn();   // (and upright: the last starter's turned hoop made a bib hoop sideways; too big offers the turn)
     // (a design that was there is one Undo away, and said so: a 15-piece design went with one tap, no word)
     const had = pieces.length && snap();
-    remember(); pieces = s.make(); sel = pieces[pieces.length - 1].id;
+    remember(); pieces = s.make(); if (tweak) tweak(pieces); sel = pieces[pieces.length - 1].id;
     fabric = s.fabric || "cotton";   // (a towel left on made every later starter towel-heavy, +40-75 % stitches)
     baste = !!s.baste; fitted = false; two = false; from = s.name;
     thread = s.thread || "auto";   // (30 wt stuck to every later starter, and through a reload, while fabric reset)
@@ -1228,7 +1279,7 @@ export function initStudio(api) {
     // phones: the preview is above the cards, so the change happened off-screen (scrolled to its top, so the sewing
     // controls under it stay above the Download bar)
     if (phone) $("view").scrollIntoView({ block: "start", behavior: "smooth" });
-  };
+  }
   $("st-add").onclick = (e) => {
     const b = e.target.closest("[data-add]"); if (!b) return;
     if (b.dataset.add === "file") { $("st-file").click(); return; }
@@ -1323,6 +1374,7 @@ export function initStudio(api) {
     if (t.matches("[data-color-any]")) { change((p) => (p.color = t.value)); return; }
     if (t.matches("[data-fill-any]")) { change((p) => (p.fill = t.value)); return; }
     if (t.matches("[data-blend-any]")) { change((p) => (p.blend = t.value)); return; }
+    if (t.matches("[data-eyelet]")) { change((p) => { if (t.checked) p.eyelet = true; else delete p.eyelet; }, true); editor(); return; }
     if (t.matches("[data-blend]")) { change((p) => (t.checked ? (p.blend = p.fill === RED ? NAVY : RED) : delete p.blend), true); editor(); return; }
     if (t.matches("[data-pair]")) { pairAt = +t.value; editor(); return; }
     if (t.matches("[data-file-scale]")) { t.nextElementSibling.textContent = fileSize(current(), t.value / 100); return; }
@@ -1425,6 +1477,8 @@ export function initStudio(api) {
     if (mt) { const [x, y] = mt.dataset.moveTo.split(",").map(Number); change((p) => { Object.assign(p, { x, y }); recentre(); }, true); turnToo(mt); editor(); return; }
     if (e.target.closest("[data-move]")) { const to = spotIn(current(), true); if (to) change((p) => Object.assign(p, { x: to.x, y: to.y, size: to.size }), true); editor(); return; }
     if (e.target.closest("[data-follow]")) { change((p) => Object.assign(p, followFrame(p, pieces)), true); editor(); return; }
+    const sw = e.target.closest("[data-swash]");
+    if (sw) { const on = sw.getAttribute("aria-pressed") !== "true"; change((p) => { const t = withSwash(p.text, sw.dataset.swash, on); if (p.kern) p.kern = rekern(p.kern, p.text, t); p.text = t; }, true); editor(); return; }
     const s = e.target.closest("[data-seg] button");
     if (s) {
       change((p) => {
@@ -1783,7 +1837,7 @@ export function initStudio(api) {
     // (a design that already runs into itself isn't shrunk name by name for it: every name would come out smaller)
     const clean = !collision(pieces), opts = { fabric, baste, thread };
     return {
-      what: mono ? p.letters : p.text.replace(/\s*\n\s*/g, " / "), monogram: mono,
+      what: mono ? p.letters : unswashed(p.text).replace(/\s*\n\s*/g, " / "), monogram: mono,
       // the ZIP is named after the design (the starter or the saved file it came from), not "names_4.zip"
       zip: api.safeName(from || label(pieces.find((q) => q.kind === "frame") || p), "names"),
       // Each name is checked like the design itself: a letter the font lacks is refused (a stand-in glyph was stitched),
@@ -1799,6 +1853,8 @@ export function initStudio(api) {
         const gone = missing(name, p.font);
         if (gone.length) throw new Error(`the font has no ${lackList(gone)}`);
         if (mono && initials(name).length > 3) throw new Error("a monogram takes 3 initials at most");
+        // (each name keeps the design's swashes: "~Emma~" -> "~Lily~")
+        const ls = (p.text || "").split("\n").filter((l) => l.trim()), ends = (t) => withSwash(withSwash(t, "lead", swashes(ls[0] || "").lead), "tail", swashes(ls[ls.length - 1] || "").tail);
         const h0 = mono ? 0 : inkHeight(p.text.split("\n").find((l) => l.trim()) || p.text, p.font), h1 = mono ? 0 : inkHeight(name, p.font);
         const size0 = mono ? monoSize(p, name, pieces) : h0 && h1 ? Math.min(60, (p.size * h1) / h0) : p.size;
         // A name the design sews bold stays bold where it can. Shrinking clear of something in 10 % steps, a step that
@@ -1812,7 +1868,7 @@ export function initStudio(api) {
         let f = 1, size = step(size0), lastBold = 0, floor = 0, refined = false;
         for (;;) {
           try {
-            let q = { ...p, [mono ? "letters" : "text"]: name, size }, ps = pieces.map((r) => (r.id === p.id ? q : r));
+            let q = { ...p, [mono ? "letters" : "text"]: mono ? name : ends(name), size }, ps = pieces.map((r) => (r.id === p.id ? q : r));
             // (lettering inside a frame shrinks to fit it, so a long name can come out small without f changing)
             const now = fittedSizes(ps).get(p.id) ?? q.size, ref = mono ? was : (size0 * was) / p.size, thin = bold && fineLine({ ...q, size: now });
             if (thin && lastBold && !refined && !floor && size < lastBold - 0.5) { floor = size; size = lastBold - 0.5; continue; }
@@ -1835,5 +1891,6 @@ export function initStudio(api) {
   }
 
   cards(); ui();
-  return { make, addWords, relabel: () => { ui(); make(); }, start, move, end, nudge, deselect, forNames, remember, recentre: () => { remember(); recentre(); save(); ui(); make(); } };
+  const starter = (id, tweak) => pickStarter(STARTERS.find((x) => x.id === id), tweak);
+  return { make, addWords, starter, relabel: () => { ui(); make(); }, start, move, end, nudge, deselect, forNames, remember, recentre: () => { remember(); recentre(); save(); ui(); make(); } };
 }

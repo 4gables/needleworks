@@ -2,8 +2,9 @@
 
 Make machine-embroidery files in the browser. **Live: https://4gables.com/needleworks/**
 
-- **Name bookmark** (first card in Design your own; https://4gables.com/needleworks/#bookmark) — type a name, pick a script font and thread, download an in-the-hoop applique
-  bookmark (satin border, ribbon hole, flowing script with lead-in and tail swashes).
+- **Design your own** — names, monograms, frames, appliqué, patches, quilting and in-the-hoop projects, from about
+  30 starting ideas (Bookmark first: https://4gables.com/needleworks/#bookmark). Type `~` at either end of the words
+  for a lead-in or tail swash.
 - **Picture to stitches** — drop in a logo, clip art or drawing. It's reduced to a few thread colours
   and each shape is stitched by its width: running stitch for hairlines, satin for strokes, tatami fill
   (with underlay) for areas. Every colour is matched to the nearest Brother thread.
@@ -36,7 +37,7 @@ node tests/formats.test.mjs
 | Path | What |
 |---|---|
 | `index.html`, `css/`, `js/app.js` | the website |
-| `js/core/` | stitch engine: formats, geometry, thinning, lettering, bookmark, picture digitizer |
+| `js/core/` | stitch engine: formats, geometry, thinning, lettering, picture digitizer |
 | `js/render.js` | draws stitches like real thread from the stitch data |
 | `tests/` | format tests and fixtures (`tests/external/` holds third-party samples, not committed) |
 

@@ -12,7 +12,7 @@ measurements behind each number are in the code's comments.
 - `index.html`, `css/app.css`, `sw.js`, `manifest.webmanifest`; `js/app.js` (tabs, state, `setView`, downloads).
 - `js/core/`: `formats.js` (PES writer, readers, `validatePES`), `threads.js` (PEC palette), `design.js` (`Design`,
   locks, `finish`), `geom.js`, `raster.js` (skeleton, stroke graph), `text.js` (`renderWord`), `fonts.js`, `glyphs.js`,
-  `digitize.js` (pictures, `fillPolygon`, `contentBox`/`pictureImage`/`LEARN`), `bookmark.js`, `brands.js`/`brandcharts.js`,
+  `digitize.js` (pictures, `fillPolygon`, `contentBox`/`pictureImage`/`LEARN`), `brands.js`/`brandcharts.js`,
   `machines.js`, `typed.js` (all typed text: `tidy`, `lacks`, `safeName`, `uniqueName`, `initials`).
 - `js/studio/`: `pieces.js` (pieces, `compose`, fitting, `FABRICS`), `ui.js` (editor, starters, warnings, one-tap
   fixes), `outline.js`, `quilt.js`, `motifs.js`. `js/doctor.js` + `doctor-worker.js` (Open tab fixes), `quality.js`
@@ -102,14 +102,14 @@ measurements behind each number are in the code's comments.
   widths and a slant (ends cut on the font's angle). Measure satin by the same-edge statistic, not by eye.
 - `zigzag(p, w, spacing)` = satin with same-edge gap `spacing`, no pull. `followRun(p, length, tol, min)`: stitches up
   to `length` within `tol` of the line, a hole at every turn over 30°.
-- Continuity helpers (geom.js, shared by the Design tab and bookmark): closed outlines are always `loop`ed (`run`/
+- Continuity helpers (geom.js): closed outlines are always `loop`ed (`run`/
   `zigzag`/`satin` with `closed` stop one step short); a second pass round the same outline goes `back(e)` from the
   same start; `enter(q, at)` starts a closed path at its point nearest the needle; `rings(loops, make, from)` sews
   outlines cheapest-move first; `moveCost(d)`: up to 2 mm free, 2-5 mm 1.5 (a loose thread is worse than a trim), over
   5 mm 1.
 - `fold`/`unfold`: an edge offset round an inside corner tighter than the half-width folds over (a star); cut where it
   crosses itself. Appliqué/outline edges (`edgeSatin`) use it.
-- Satin borders 2.5-4 mm (frames, patch/appliqué edges, bookmark border): `edgeWalk` (run 0.4 mm inside each edge,
+- Satin borders 2.5-4 mm (frames, patch/appliqué and in-the-hoop edges): `edgeWalk` (run 0.4 mm inside each edge,
   open, ending where the zigzag starts), zigzag, satin: Ink/Stitch contour underlay, a firm edge on felt.
 
 ## Lettering (`text.js`, `raster.js`, `pieces.js`)
@@ -118,7 +118,7 @@ measurements behind each number are in the code's comments.
   stroke a centre run out and a satin back, every forward run satined exactly once, no jumps inside a connected word.
   Each walk ends where it began, so moves between print letters are trims whatever the order. Script pieces are
   chained by `order(edges, near, loose)`: a walk may start at any node or mid-stroke, a DP picks the starts with the
-  fewest costed moves (bookmark too); print letters and pictures keep the leftmost start; bent text keeps the chaining
+  fewest costed moves; print letters and pictures keep the leftmost start; bent text keeps the chaining
   only if it costs no more once bent (`unbent`). Satin columns carry `reach` (half width + 0.1 mm) so `Design.path`
   stitches to a start under the column instead of jumping (knit's 2.05 mm half-width: 8 trims round one junction).
   Strokes count as at least half the x-height when sizing (a whole x-height for marks alone: "." was sized
@@ -128,12 +128,19 @@ measurements behind each number are in the code's comments.
 - Swashes (lead-in, tail): one calligraphic stroke from the letter's stroke end along its tangent, a shallow cup
   under the baseline, a flick up. E, O (no low entry) join at their lowest left point. Never flat along the baseline
   (reads as a ruled line).
+- Swashes are typed: `~` at the start/end of the words (`swashes`/`unswashed`/`withSwash` in typed.js; spaces beside
+  it ignored; one in the middle is the font's tilde). `letters()` strips them per call, so each straight line has its
+  own and arches/waves/bridges take the first line's start and the last line's end; script lead 1.8 / tail 2.6
+  x-heights, print dashes 2.2 (`SWASH`, the old bookmark's). Sized by the letters alone (`info.firstX..lastX`), so a
+  name keeps its size with or without them; kern entries for the `~`s are dropped. Labels, step text, file names and
+  names batches read `unswashed`; each batch name inherits the design's ends. Editor: "Swash/Dash before/after"
+  toggles (`data-swash`) that add or remove the `~`.
 - Print fonts (`print: true`): no bridges (the machine trims between pieces); decorations are dashes on the middle of
   the x-height (cap height for all-caps); spur pruning 0.45 strokes (script 1.3) so t bars and a stems survive; dots
   get a short stroke (`dots`); stroke ends reach the ink's edge (`reachEnds`; thinning stops half a stroke short and a
   single-storey a sewed as o), sized from the strokes before that (`info.sized`). Separate pieces always jump (`gap`;
-  bookmark `print && k > 0 && j === 0`): an i stem came within 2 mm of its dot and was stitched to it.
-- Design-tab-only skeleton work (the bookmark is unchanged): `tongues` keeps short script ends (an e's tongue, a y
+  an i stem came within 2 mm of its dot and was stitched to it.
+- Skeleton work: `tongues` keeps short script ends (an e's tongue, a y
   tail); `knots` contracts edges under 0.75 stroke between junctions (each was a star of satin); `untangle` caps
   merges at 2.4 knot lengths. Print corners: self-loops under one stroke dropped; a corner stroke is sewn as wide as
   the ink less (stroke - satin) / cos(angle), stopping at 0.4 mm (`wAt`); in Thin line strokes run on to where centre
@@ -167,7 +174,7 @@ measurements behind each number are in the code's comments.
 - Fonts: `@font-face` families `NW <Font>` (WOFF2 in `fonts/`), `document.fonts.load()` before drawing; a failed
   font stays failed until reload, so `loadFont` adds a second FontFace (Try again). `glyphs.js` = each font's
   characters (regenerate with `tests/make_glyphs.py`); `typed.js` `lacks` is the only glyph check, by grapheme, NFC
-  and NFD alike, used by the editor, Download note, names batches and bookmark. Per-font `min` x-height feeds `minSize` (default
+  and NFD alike, used by the editor, Download note and names batches. Per-font `min` x-height feeds `minSize` (default
   4 mm). Fonts after Meow Script are free lookalikes of embroiderydesigns.com samples (`note`). Try a font in
   `tests/browser/fonts.html?name=<word>`; reject unjoined or spurred ones (Petit Formal, Comforter, Damion).
 
@@ -191,6 +198,9 @@ measurements behind each number are in the code's comments.
   (`tidy`) and drops `font` on non-lettering, on open, paste and the saved state (crafted files threw).
 - Starters (`ui.js`) reset fabric (cotton unless they say), thread weight and Turn hoop, are fitted to the hoop
   (`fitHoop(false)`), may carry a `tip`, draw stitched thumbnails (`draw(..., { pad })`) in one scrolling row.
+  Tall ones (over 1.6 x as tall as wide: the bookmark) lie down in their card. 2026-10-31 added Bookmark, Luggage tag,
+  Pocket monogram, Tote bag, Stocking cuff, Birth announcement, Wedding keepsake, Book plate, Pet bandana, Kitchen
+  sign (existing pieces only). `studio.starter(id, tweak)` picks one from code (old #bookmark links).
 ### Fabric (`FABRICS`) and thread weight (`THREADS`)
 - Each fabric holds `ready`, `hoop`, `tip`, `after` so supplies, step 1 and finish agree. Cotton, felt, denim, canvas
   sew alike. Knit: zigzag underlay from 1.5 mm, +0.15 mm pull a side, 0.42 satin, Lighter patch fill.
@@ -289,7 +299,7 @@ measurements behind each number are in the code's comments.
 - Not splittable: drawn in a pretend 2 m hoop, "Too big for this hoop", old file cleared. Past 204.8 mm from its
   centre the PEC box's 12 bits overflow and it reads back shifted: `unwrap()` (preview only).
 ### Turn hoop
-- Per tab; bookmark defaults on; off on a square hoop (`square()`). The Design tab lays out in the turned field
+- Per tab, off by default; off on a square hoop (`square()`). The Design tab lays out in the turned field
   (`designHoop`) and turns the file clockwise (`toMachine`, names ZIP and cut file too): the PES is always as the hoop
   clips on. Turned files (pictures too, `turnedFile`) get a hooping note (`TURN_PIC`). An undo step; saved.
 ### File pieces
@@ -303,14 +313,21 @@ measurements behind each number are in the code's comments.
   a name; past 40 are left out; turned batches turn every file. Each file validated and judged;
   `<starter or file>_<N>_names|monograms.zip`, names deduplicated ignoring case (emma/Emma collide on macOS, FAT).
 
-## Bookmark (`bookmark.js`)
-- First "Start from" card (`#bookmark`), own panel and engine. 5 blocks of one thread = 4 pauses for the in-the-hoop
-  steps (blank: 3). Needs 5x7. Name centred on the middle of the x-height (cap height all-caps), lengthwise between
-  eyelet and border; letters fill `LETTERS` 72 % of the inner width with or without decorations; only too-long words
-  shrink. Cut file: outline grown 3 mm. Texts `READY`/`DONE`/`STEPS`; `bookmarks_N.zip`. Keeps the original lettering
-  skeleton (no `tongues`, `knots`, `untiny`, print corners) but the shared continuity helpers (`loop`, `back`, satins
-  from the stroke centre, chained script pieces: trims -49 %, loose threads 660 -> 19 on the batch). Missing letters are
-  said beside Download and refuse a name in its names batch.
+## Bookmark (a starter since 2026-10-31)
+- Was its own panel and engine (`bookmark.js`, `#panel-bookmark`, `bookmarks_N.zip`); now the first "Start from" card,
+  pieces like every other starter: `SHAPES.bookmark` (tall, top corners cut 0.18 w, filleted 3 mm) with
+  `border: "ith"`, `hang: false`, `eyelet: true`, and `text "~Emma~"` Sacramento 26 mm at `rot: 90` (reads top to
+  bottom), all one thread. Font, colour, moving, fabric, names batch, Sew along etc. are the Design tab's.
+- `eyelet` (ITH frames only, `hasEye`): a 4.2 mm ring of 2.2 mm satin (run, zigzag, satin) 13 mm below the top, sewn
+  in the `last` stage before the border; `frontPanel` starts below it, and the Have ready / after texts add Fray Check
+  and the ribbon. The Luggage tag starter uses it too.
+- `fittedSizes` handles lettering turned a quarter: its length fits the frame's front lengthwise less 4 mm at the top
+  and 7.8 mm at the bottom (the old box), its height the frame's width; long names shrink.
+- Old `#bookmark` links (README, the skill, bookmarks people saved) open the starter with the old panel's saved
+  `nw:bm.*` name/font/colour/swashes (`oldBookmark` in app.js), then those keys are dropped.
+- Changed from the old engine: the name joins the tack-down block (3 blocks / 2 pauses, was 5 / 4), the satin width
+  is the lettering rule's (was a fixed 1.8 mm), the backing is the ITH's (taped under, trimmed after), print letters
+  use the Design tab's skeleton work. pe900 batch keeps the `bm_*` file names.
 
 ## Pictures (`digitize.js` in `worker.js`)
 - One job at a time, newest kept; restarted after 60 s. Styles: Filled (`build`), Line drawing (`lineArt`),

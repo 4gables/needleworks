@@ -1,6 +1,6 @@
 /*! Needleworks (c) 2026 4Gables. All rights reserved. Proprietary, see LICENSE. https://4gables.com/needleworks/ */
 // Words people type, handled once for every place they go:
-// - `tidy`: the one clean-up at input (the editor's words and initials, appliqué letters, the bookmark name, the names
+// - `tidy`: the one clean-up at input (the editor's words and initials, appliqué letters, the names
 //   list, saved and pasted designs), so the lettering, its warnings, its file name and its saved copy all see the same
 //   text;
 // - `lacks`: the letters a font doesn't have, from the font's own character map (glyphs.js);
@@ -44,6 +44,23 @@ export function tidy(s, { lines = 1, max = Infinity } = {}) {
     t = out;
   }
   return t;
+}
+
+// Swashes are typed: "~Emma~" is Emma with a lead-in and a tail (dashes in a print font). Only a "~" at either end of
+// the words counts, with any spaces beside it; one in the middle is the font's own tilde. `cut`: how many characters
+// came off each end (pair adjustments are keyed by position).
+export function swashes(s) {
+  const t = String(s ?? ""), a = /^\s*~+\s*/.exec(t), rest = a ? t.slice(a[0].length) : t, b = /\s*~+\s*$/.exec(rest);
+  const text = b ? rest.slice(0, b.index) : rest;
+  return { text, lead: !!a && !!text, tail: !!b && !!text, cut: [a ? a[0].length : 0, b ? b[0].length : 0] };
+}
+// the words as read (labels, step text, file names): each line without its swash marks
+export const unswashed = (s) => String(s ?? "").split("\n").map((l) => swashes(l).text).join("\n");
+// the words with a swash put on or taken off one end (the editor's Swash before/after)
+export function withSwash(s, end, on) {
+  const ls = String(s ?? "").split("\n"), i = end === "lead" ? 0 : ls.length - 1, w = swashes(ls[i]);
+  ls[i] = `${(end === "lead" ? on : w.lead) ? "~" : ""}${w.text}${(end === "tail" ? on : w.tail) ? "~" : ""}`;
+  return ls.join("\n");
 }
 
 // Characters the font doesn't have (the browser would draw them from a stand-in font), one per letter as a reader

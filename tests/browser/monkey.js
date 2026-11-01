@@ -64,7 +64,7 @@ async function boot(start = START, seed = SEED, keep = false) {
     await idle(30000);
     // (the page saves the design on the first change: the starter it opens with is picked, so there's one to read)
     if (start === "default" && !keep && !studio()) { D.querySelector('#st-cards [data-start="monogram"]').click(); await idle(); }
-    if (start === "random" && !keep) { const cards = all("#st-cards [data-start]").filter((b) => b.dataset.start !== "bookmark"); cards[Math.floor(rng(seed * 7919)() * cards.length)].click(); await idle(); }
+    if (start === "random" && !keep) { const cards = all("#st-cards [data-start]"); cards[Math.floor(rng(seed * 7919)() * cards.length)].click(); await idle(); }
     W.__mk.errors.length = 0; W.__mk.long.length = 0;
     return;
   }
@@ -304,7 +304,6 @@ async function exec(d) {
     }
     case "starter": {
       const cs = all("#st-cards [data-start]"), b = at(cs, d.a); act.what = b.dataset.start; b.click();
-      if (b.dataset.start === "bookmark") { await idle(); $("bm-back").click(); act.skipped = true; }
       break;
     }
     case "paste": {
