@@ -515,6 +515,9 @@ Automated checks that each guard a bug class (add a line with every new guard):
     builder change.
   - Typed text: `node tests/text.test.mjs` (CI, 617 strings x 19 fonts) and `node tests/text_fuzz.mjs CDP HP [--quick]
     [--only ...]` (browser, ~20 min, quick ~5; corpus `tests/text_corpus.mjs`).
+    Every part draws from one seeded sample, so adding, removing or `--only`-ing a part changes the strings later
+    parts get: compare failures with the same `--only` set. Open: a corpus name with a line-separator character
+    (\u2028/\v) is two names in the names batch (the app's `tidy` splits it) but one in the test's `refused` check.
   - Pictures unlike the samples: `tests/picture_corpus.sh CDP HP OUT [query]` (~1.5 min; 26 seeded drawings x styles x
     sizes; open cases in its `KNOWN` list with a reason; `?ext=etsy_N` renders the external samples).
 
