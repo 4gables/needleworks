@@ -24,7 +24,7 @@ async function save(name, pattern) {
   n++;
 }
 // the Bookmark starter (a Design-tab frame and lettering since 2026-10-31; the files keep their bm_ names)
-const bookmark = (text, font) => compose(STARTERS.find((s) => s.id === "bookmark").make().map((p) => (p.kind === "text" ? { ...p, text, font } : p)).filter((p) => p.kind !== "text" || text), hoop).design.pattern();
+const bookmark = (text, font) => turnForMachine(compose(STARTERS.find((s) => s.id === "bookmark").make().map((p) => (p.kind === "text" ? { ...p, text, font } : p)).filter((p) => p.kind !== "text" || text), { ...hoop, w: hoop.h, h: hoop.w }).design.pattern());
 await save("bm_blank", bookmark("", FONTS[0].family));
 for (const { family: f } of FONTS) {
   await document.fonts.load(`40px "${f}"`);

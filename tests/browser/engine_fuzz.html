@@ -92,7 +92,7 @@ function spec(r, k) {
     // (the Bookmark starter with any name, font and swashes: it had an engine of its own until 2026-10-31)
     bookmark: () => { const f = font(), w = chance(0.1) ? "" : pick(WORDS.filter((w) => w.length < 14)), t = (chance(0.6) ? "~" : "") + w + (chance(0.6) ? "~" : "");
       const c = pick(COLOURS), ps = STARTERS.find((x) => x.id === "bookmark").make().map((p) => ({ ...p, color: c, ...(p.kind === "text" ? { text: t, font: f.family } : {}) })).filter((p) => p.kind !== "text" || w);
-      return { ...studio("bookmark", ps), hoopId: "5x7", turned: false }; },
+      return { ...studio("bookmark", ps), hoopId: "5x7", turned: true }; },   // (it lies across, the hoop turned)
     doctor: () => files.size ? { engine: "doctor", file: pick([...files.keys()]), scale: Math.round((0.5 + r() * 2) * 100) / 100, tiny: chance(0.5), thin: chance(0.5), sort: chance(0.3), satin: chance(0.3) } : engines.lettering(),
     filepiece: () => files.size ? { ...studio("filepiece", [P({ kind: "file", file: pick([...files.keys()].filter((f) => f.endsWith(".pes"))), rot: pick([0, 10, 90]) }), ...(chance(0.6) ? [{ ...text(), size: logu(6, 20), y: 50 }] : [])]) } : engines.lettering(),
     json: () => { const s = engines[pick(["lettering", "monogram", "frame", "motif", "patch", "applique", "layout"])](); s.engine = "json"; s.pieces = hostile(r, s.pieces); s.opts = chance(0.3) ? { fabric: pick(["", "silk", null, 3]), thread: pick(["15", null, {}]), baste: pick(["yes", 1]) } : s.opts; return s; },

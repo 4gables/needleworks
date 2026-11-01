@@ -36,11 +36,13 @@ const frame = (o) => piece({ kind: "frame", shape: "circle", w: 80, h: 80, borde
 // swash checkboxes became "~" typed at either end of the words)
 const SACRAMENTO = "NW Sacramento";
 export const STARTERS = [
-  // A name down an in-the-hoop bookmark: cotton front, felt back, one thread, a ribbon hole. The letters' height is
-  // about 72 % of the inside width, as the old bookmark sized them; a long name shrinks to fit its length.
-  { id: "bookmark", name: "Bookmark", note: "in the hoop, with a ribbon hole", make: () => [
-    frame({ shape: "bookmark", w: 50, h: 165, border: "ith", hang: false, eyelet: true, color: RED }),
-    text({ text: "~Emma~", font: SACRAMENTO, size: 26, rot: 90, y: 8, color: RED })],
+  // A name along an in-the-hoop bookmark: cotton front, felt back, one thread, a ribbon hole. It lies across with the
+  // hoop turned (`turn`), so the name reads straight and still uses the 7 in side (it stood on end until 2026-10-31,
+  // hard to read). The letters' height is about 72 % of the inside height, as the old bookmark sized them; a long name
+  // shrinks to fit its length.
+  { id: "bookmark", name: "Bookmark", note: "in the hoop, with a ribbon hole", turn: true, make: () => [
+    frame({ shape: "bookmark", w: 165, h: 50, border: "ith", hang: false, eyelet: true, color: RED }),
+    text({ text: "~Emma~", font: SACRAMENTO, size: 26, x: 8, color: RED })],
     tip: "Made in the hoop on tear-away stabilizer: cotton for the front and felt for the back, each about 3 × 8 in, plus tape, Fray Check and a ribbon. Full size needs the 5 × 7 hoop. Type ~ at either end of a name for a swash." },
   { id: "monogram", name: "Monogram", note: "3 initials in a frame", make: () => [frame({ shape: "circle", w: 90, h: 90, border: "satin" }), mono({ size: 23 })] },
   { id: "ring", name: "Name in a circle", note: "lettering around a ring", make: () => [
@@ -231,7 +233,7 @@ export function initStudio(api) {
         let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
         for (const [x, y] of sewn) { x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y); }
         const tall = sewn.length && y1 - y0 > 1.6 * (x1 - x0);
-        draw(c, tall ? turnPattern(pat, false) : pat, { pad: 4, ...previewLook(steps) });
+        draw(c, tall ? turnPattern(pat, false) : pat, { pad: 4, field: "white", ...previewLook(steps) });
       } catch { c.remove(); }
     }
   }
@@ -859,7 +861,7 @@ export function initStudio(api) {
         ...look, problems, fixHint: fixHint(),
         block: resizing ? `Re-stitching ${resizing.name} at ${Math.round(resizing.scale * 100)} %…` : quilting ? "Working out the quilting…" : "",
         blockLabel: resizing ? "Re-stitching…" : quilting ? "Quilting…" : "",
-        fabric: look.fabricShapeBlock != null ? "pink" : "linen", steps: steps.length,
+        fabric: look.fabric, steps: steps.length,   // (an in-the-hoop front: the background; appliqué: pink gingham)
         sheet: { steps: steps.map((st) => ({ you: st.you, sews: st.sews.join(" ") })), after: done, ready, cut: steps.filter((st) => st.cut).map((st) => st.cut),
           notes } });
       // (whether the letters are small, when the lettering wasn't worked out yet: said a moment later, after the preview)
@@ -1252,6 +1254,7 @@ export function initStudio(api) {
     api.store.set("studio.guideSeen", true);   // (step 1 done: the guide isn't shown on the next visit)
     api.fit();   // (a new design opens whole, not at the last one's zoom)
     api.unturn();   // (and upright: the last starter's turned hoop made a bib hoop sideways; too big offers the turn)
+    if (s.turn) api.setTurn(true);   // (a starter laid out long side across, the bookmark; a square hoop ignores it)
     // (a design that was there is one Undo away, and said so: a 15-piece design went with one tap, no word)
     const had = pieces.length && snap();
     remember(); pieces = s.make(); if (tweak) tweak(pieces); sel = pieces[pieces.length - 1].id;

@@ -1,6 +1,6 @@
 <!doctype html><meta charset="utf-8"><title>font check</title>
 <link rel="stylesheet" href="../../css/app.css">
-<style>body{display:block} .grid{display:grid;grid-template-columns:repeat(6,1fr);gap:8px;padding:8px} canvas{width:100%;height:560px;background:#f3eeec;border-radius:8px} p{margin:0;font:12px monospace}</style>
+<style>body{display:block} .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;padding:8px} canvas{width:100%;height:190px;background:#f3eeec;border-radius:8px} p{margin:0;font:12px monospace}</style>
 <div class="grid" id="g"></div>
 <script type="module">
 import { hoop } from "../../js/core/machines.js";
@@ -19,7 +19,7 @@ for (const { family: f, print } of FONTS) {
   const t0 = performance.now();
   try {
     const ps = STARTERS.find((s) => s.id === "bookmark").make().map((p) => (p.kind === "text" ? { ...p, font: f, text: (lead ? "~" : "") + name + (tail ? "~" : "") } : p));
-    const { design, steps } = compose(ps, hoop()), d = design.pattern();
+    const { design, steps } = compose(ps, { ...hoop(), w: hoop().h, h: hoop().w }), d = design.pattern();
     const st = designStats(d);
     p.textContent = `${f.slice(3)}: ${st.stitches} st, ${(performance.now()-t0).toFixed(0)} ms`;
     draw(c, d, { ...previewLook(steps), cache: colorBlocks(d) });

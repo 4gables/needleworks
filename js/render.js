@@ -61,7 +61,8 @@ export const CLOTHS = {
   black: { label: "Black", solid: "#232022" },
 };
 
-// opts: { fabric (CLOTHS key), fabricShapeBlock, hide: Set, upto, ghost (stitches after upto drawn faint), heat (Map "cx,cy" -> hits per mm²), backdrop ({ bmp, unit, center }: a photo under it), hoop: {w,h} (mm), showHoop, zoom, pan: [x,y], center: [x,y] (0.1 mm),
+// opts: { field (CLOTHS key: the background the design is shown on, inside the hoop; the whole view with the hoop
+//         hidden), fabric (CLOTHS key), fabricShapeBlock, hide: Set, upto, ghost (stitches after upto drawn faint), heat (Map "cx,cy" -> hits per mm²), backdrop ({ bmp, unit, center }: a photo under it), hoop: {w,h} (mm), showHoop, zoom, pan: [x,y], center: [x,y] (0.1 mm),
 //         pad, padTop, padBottom (px kept clear), cache (colorBlocks result), showNeedle (a needle at upto), fieldColor (fill inside the hoop), real (thread twist when zoomed in),
 //         boxes ([[x0, y0, x1, y1]] mm: each hooping of a split design) }
 export function draw(canvas, design, opts = {}) {
@@ -105,6 +106,11 @@ export function draw(canvas, design, opts = {}) {
   const ox = W / 2 - cxd * s + pan[0], oy = my - cyd * s + pan[1];
   const X = (x) => x * s + ox, Y = (y) => y * s + oy;
 
+  // the background (`field`): plain white unless the person picks another; pictures, starters and opened files all
+  // start on the same one (each tab used to show its own: linen, pink gingham, nothing)
+  const bg = CLOTHS[opts.field];
+  const cloth = (c) => c.solid || gingham(ctx, c, Math.max(3, 26 * s));
+  if (bg && !bd && !(hoop && opts.showHoop !== false)) { ctx.fillStyle = cloth(bg); ctx.fillRect(0, 0, W, H); }
   if (bd) {   // a photo of the item at true size (bd.unit: 0.1 mm per photo pixel), its centre at bd.center
     ctx.drawImage(bd.bmp, X(cxd + bd.center[0] - bw / 2), Y(cyd + bd.center[1] - bh / 2), bw * s, bh * s);
   }
@@ -113,7 +119,7 @@ export function draw(canvas, design, opts = {}) {
     const hx = W / 2 - hw / 2 + pan[0], hy = my - hh / 2 + pan[1];
     ctx.save();
     // a light field inside the hoop when asked (dark mode: navy and black thread vanished on the dark stage)
-    if (opts.fieldColor) { ctx.fillStyle = opts.fieldColor; roundRect(ctx, hx, hy, hw, hh, r * 0.6); ctx.fill(); }
+    if (bg || opts.fieldColor) { ctx.fillStyle = bg ? cloth(bg) : opts.fieldColor; roundRect(ctx, hx, hy, hw, hh, r * 0.6); ctx.fill(); }
     ctx.lineWidth = Math.max(6, 3.2 * s);
     ctx.strokeStyle = opts.hoopColor || "#d9c3a5";
     roundRect(ctx, hx - 8, hy - 8, hw + 16, hh + 16, r + 6); ctx.stroke();
@@ -131,7 +137,7 @@ export function draw(canvas, design, opts = {}) {
     ctx.restore();
   }
 
-  const fab = CLOTHS[opts.fabric || "linen"];
+  const fab = CLOTHS[opts.fabric || opts.field || "linen"];
   const fabBlock = opts.fabricShapeBlock != null && blocks.find((b) => b.index === opts.fabricShapeBlock);   // (block index, as hide)
   if (fabBlock) {
     // every outline in the placement block (appliqué letters have several, and holes): fabric between them

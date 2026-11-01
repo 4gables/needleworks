@@ -728,14 +728,24 @@ export const SHAPES = {
   diamond: { name: "Diamond", path: (w, h) => filletPolygon([[0, -h / 2], [w / 2, 0], [0, h / 2], [-w / 2, 0]], Math.min(w, h) * 0.05, 8) },
   heart: { name: "Heart", path: heart },
   scallop: { name: "Scallop", path: (w, h) => scallop(w / 2, h / 2) },
-  // a bookmark's outline: tall, its top corners cut off (9 mm on a 50 mm bookmark) and every corner rounded 3 mm
-  bookmark: { name: "Bookmark", path: (w, h) => { const c = Math.min(w * 0.18, h * 0.2), t = -h / 2, b = h / 2, x = w / 2;
-    return filletPolygon([[-x + c, t], [x - c, t], [x, t + c], [x, b], [-x, b], [-x, t + c]], Math.min(3, w * 0.06), 10); } },
+  // a bookmark's outline: its narrow end's corners cut off (9 mm on a 50 mm bookmark) and every corner rounded 3 mm;
+  // the top end when it's tall, the left end when it lies across (the starter: easier to read, Turn hoop does the rest)
+  bookmark: { name: "Bookmark", path: (w, h) => {
+    const n = Math.min(w, h), c = Math.min(n * 0.18, Math.max(w, h) * 0.2), r = Math.min(3, n * 0.06), x = w / 2, y = h / 2;
+    return w > h ? filletPolygon([[-x + c, -y], [x, -y], [x, y], [-x + c, y], [-x, y - c], [-x, -y + c]], r, 10)
+      : filletPolygon([[-x + c, -y], [x - c, -y], [x, -y + c], [x, y], [-x, y], [-x, -y + c]], r, 10); } },
 };
-// A ribbon hole near the top (`eyelet` on an in-the-hoop frame: a bookmark, a luggage tag): a 4.2 mm ring of 2.2 mm
-// satin 13 mm below the top edge, sewn through every layer with the border; cut out after Fray Check.
+// A ribbon hole at the narrow end (`eyelet` on an in-the-hoop frame: a bookmark, a luggage tag): a 4.2 mm ring of
+// 2.2 mm satin 13 mm in from the top edge (from the left edge on a frame wider than tall), sewn through every layer
+// with the border; cut out after Fray Check. Frame-local mm.
 const EYE = { r: 4.2, w: 2.2, down: 13 };
-const eyeAt = (f, top) => [0, top + Math.min(EYE.down, frameH(f) * 0.2)];
+const eyeWide = (f) => f.w > frameH(f);
+const eyeAt = (f) => {
+  const [x0, y0] = bounds(shapeOf(f).path(f.w, f.h));
+  return eyeWide(f) ? [x0 + Math.min(EYE.down, f.w * 0.2), 0] : [0, y0 + Math.min(EYE.down, frameH(f) * 0.2)];
+};
+// how far past the ring's centre what's sewn on the frame keeps clear
+const EYE_CLEAR = EYE.r + EYE.w / 2 + 2;
 const eyeRing = (c) => { const ring = circle(c, EYE.r, 64); return [loop(run(ring, 1.0, true)), loop(zigzag(ring, EYE.w * 0.6, 1.2, true)), loop(satin(ring, EYE.w, sd(0.35), 0.2, true))]; };
 function ellipse(rx, ry, n = 160) {
   return Array.from({ length: n }, (_, i) => { const t = (i / n) * Math.PI * 2; return [rx * Math.sin(t), -ry * Math.cos(t)]; });
@@ -792,9 +802,14 @@ const zipY = (f, top) => top + Math.max(14, f.h * 0.2);
 // The part of frame f where what's sewn on it goes, as [top, bottom] in mm (hoop y): a zipper pouch's front below
 // its topstitch (the zipper band above is no place for a monogram: one fitted there sewed across the zipper), any
 // other frame the whole height.
+// the same across: [left, right] (hoop x), past the ribbon hole of a frame lying across
+export function frontAcross(f) {
+  const [x0, , x1] = bounds(shapeOf(f).path(f.w, f.h));
+  return hasEye(f) && eyeWide(f) ? [f.x + eyeAt(f)[0] + EYE_CLEAR, f.x + x1] : [f.x + x0, f.x + x1];
+}
 export function frontPanel(f) {
   const [, top, , bot] = bounds(shapeOf(f).path(f.w, f.h));
-  return f.border === "zip" ? [f.y + zipY(f, top) + 7, f.y + bot] : hasEye(f) ? [f.y + eyeAt(f, top)[1] + EYE.r + EYE.w / 2 + 2, f.y + bot] : [f.y + top, f.y + bot];
+  return f.border === "zip" ? [f.y + zipY(f, top) + 7, f.y + bot] : hasEye(f) && !eyeWide(f) ? [f.y + eyeAt(f)[1] + EYE_CLEAR, f.y + bot] : [f.y + top, f.y + bot];
 }
 export const BORDERS = { line: "Thin line", bold: "Bold line", satin: "Satin border", patch: "Filled patch", applique: "Appliqué", ith: "In the hoop (two-sided)", zip: "Zipper pouch (in the hoop)" };
 // fabric to cut for a w x h mm in-the-hoop piece, with 2.5 cm (1 in) spare all round to trim off
@@ -1005,7 +1020,8 @@ function localStages(p, fab = "cotton") {
         { color: p.color, pause: true, paths: [line(yz - 5), line(yz + 5).reverse()], under: true,   // (±3.5 left 0.5 mm beside a coil's teeth)
           you: "Lay the zipper face up with its teeth on the line and the ends past both sides (pull the zipper tab past the side too). Tape the ends down. Press Start.",
           sews: "Tacks the zipper down along both sides of the teeth." },
-        { color: p.color, pause: true, fabric: true, nocut: true, solid: [edge], paths: [loop(run(edge, 2.5, true))],
+        // (`bare` here only for the preview: the front is the whole pouch, shown on the background like an ITH front)
+        { color: p.color, pause: true, fabric: true, bare: true, nocut: true, solid: [edge], paths: [loop(run(edge, 2.5, true))],
           you: "Lay the top front piece above the zipper, folded edge along the teeth, and the bottom piece below it the same way, both right side up and past the outline. Tape them. Press Start.",
           sews: `Tacks the front pieces down round the ${name}.` },
         { color: p.color, paths: [line(yz - 7), line(yz + 7).reverse()], sews: "Topstitches beside the zipper." },
@@ -1019,7 +1035,7 @@ function localStages(p, fab = "cotton") {
       // then backing fabric taped under the hoop and one satin edge through every layer; cut out when it's done.
       // Only something that hangs (`hang`: the ornament and key fob starters; a quilted frame is a coaster or mug rug)
       // gets the ribbon loop
-      const hang = p.hang ?? !QUILTED(p), eye = hasEye(p) ? eyeAt(p, bounds(edge)[1]) : null;
+      const hang = p.hang ?? !QUILTED(p), eye = hasEye(p) ? eyeAt(p) : null;
       stages = [
         { color: p.color, paths: [loop(run(edge, 2.5, true))], sews: `Sews the ${name} outline on the stabilizer.`, fabric: true, bare: true, solid: [edge],
           before: `Fabric: front and back pieces, each ${cut(p.w, p.h)}${p.quilt ? `, thin batting the same size` : ""}, tear-away stabilizer and tape${hang ? ", and a 6 in (15 cm) ribbon for the loop" : ""}${eye ? ", Fray Check and a ribbon for the hole" : ""}.` },
@@ -1368,9 +1384,11 @@ function inset(pts, d) {
 }
 
 // preview options for composed steps: appliqué fabric under its satin, placement and tack-down lines hidden beneath it
+// (an in-the-hoop front, `bare`: the background chosen under View, like every other design; pink gingham only for
+// real appliqué, where the fabric patch is the point)
 export function previewLook(steps) {
   const fab = steps.findIndex((st) => st.fabric);
-  return { fabricShapeBlock: fab >= 0 ? fab : undefined, fabric: "pink", hide: new Set(steps.flatMap((st, i) => (st.under ? [i] : []))) };
+  return { fabricShapeBlock: fab >= 0 ? fab : undefined, fabric: fab >= 0 && steps[fab].bare ? undefined : "pink", hide: new Set(steps.flatMap((st, i) => (st.under ? [i] : []))) };
 }
 
 export const pieceStitches = (p) => pieceStages(p).flatMap((st) => st.paths);
@@ -1607,7 +1625,10 @@ export function fittedSizes(pieces) {
     // top and the border plus 6 mm at the bottom (the old bookmark's box), about where it sits, and its height the
     // frame's width
     const lt = pt + 4, lb = pb - 7.8;
-    const room = side ? lb - lt - 2 * Math.abs(p.y - (lt + lb) / 2) : frame.w * round * fill - (mono ? gap / 2 : gap);
+    // (a frame lying across with a ribbon hole at its left end: the room is right of the hole, as the turned case)
+    const [ax, bx] = frontAcross(frame), al = ax + 4, ar = bx - 7.8;
+    const room = side ? lb - lt - 2 * Math.abs(p.y - (lt + lb) / 2)
+      : hasEye(frame) && eyeWide(frame) ? ar - al - 2 * Math.abs(p.x - (al + ar) / 2) : frame.w * round * fill - (mono ? gap / 2 : gap);
     const w = b[2] - b[0];
     let k = w > room && room > 5 ? room / w : 1;
     if (side) { const across = frame.w * fill - gap, h = b[3] - b[1]; if (h > across && across > 5) k = Math.min(k, across / h); }
@@ -1722,7 +1743,7 @@ function withQuilt(p, stages, others, dragging = false, later = null) {
   const edge = shapeOf(p).path(p.w, p.h).map(placer(p)), key0 = JSON.stringify(p), frame = key0;
   const under = (loops) => edge.filter((q) => insideLoops(loops, q)).length > edge.length / 2;
   // (and round the frame's own ribbon hole, which sews later in its last stage)
-  const ring = hasEye(p) ? [circle(placer(p)(eyeAt(p, bounds(shapeOf(p).path(p.w, p.h))[1])), EYE.r + EYE.w / 2, 48)] : [];
+  const ring = hasEye(p) ? [circle(placer(p)(eyeAt(p)), EYE.r + EYE.w / 2, 48)] : [];
   const obstacles = [...others.flatMap((s) => s.paths), ...ring], solids = others.filter((s) => s.solid?.length && !under(s.solid)).map((s) => s.solid);
   // keyed on every obstacle point: moving a middle piece reused the old quilting, sewn through it
   let h = obstacles.length;
@@ -2055,7 +2076,7 @@ function build(pieces, hoop, opts) {
       d.color(st.color, ascii(st.label)); thread = st.color;
       // (a pause in the same thread says so: two red appliqués read "Change to the next thread" from red to red)
       steps.push({ color: st.color, sews: [], you: st.you ? (change ? `Change to the next thread. ${st.you}` : st.you) : steps.length ? (change ? "Change to the next thread and press Start." : "Keep the same thread on and press Start.") : null,
-        fabric: !!st.fabric, under: !!st.under || !!st.fabric, early: false, cut: st.fabric && !st.nocut ? st.cut || st.paths : null });
+        fabric: !!st.fabric, bare: !!st.bare, under: !!st.under || !!st.fabric, early: false, cut: st.fabric && !st.nocut ? st.cut || st.paths : null });
     }
     if (st.sews) steps[steps.length - 1].sews.push(st.sews);
     if (st.early) steps[steps.length - 1].early = true;

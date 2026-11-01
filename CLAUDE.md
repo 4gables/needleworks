@@ -315,14 +315,23 @@ measurements behind each number are in the code's comments.
 
 ## Bookmark (a starter since 2026-10-31)
 - Was its own panel and engine (`bookmark.js`, `#panel-bookmark`, `bookmarks_N.zip`); now the first "Start from" card,
-  pieces like every other starter: `SHAPES.bookmark` (tall, top corners cut 0.18 w, filleted 3 mm) with
-  `border: "ith"`, `hang: false`, `eyelet: true`, and `text "~Emma~"` Sacramento 26 mm at `rot: 90` (reads top to
-  bottom), all one thread. Font, colour, moving, fabric, names batch, Sew along etc. are the Design tab's.
-- `eyelet` (ITH frames only, `hasEye`): a 4.2 mm ring of 2.2 mm satin (run, zigzag, satin) 13 mm below the top, sewn
-  in the `last` stage before the border; `frontPanel` starts below it, and the Have ready / after texts add Fray Check
-  and the ribbon. The Luggage tag starter uses it too.
-- `fittedSizes` handles lettering turned a quarter: its length fits the frame's front lengthwise less 4 mm at the top
-  and 7.8 mm at the bottom (the old box), its height the frame's width; long names shrink.
+  pieces like every other starter: `SHAPES.bookmark` (the narrow end's corners cut 0.18 of the width, filleted 3 mm:
+  the top end when tall, the left end when it lies across) 165 x 50 with `border: "ith"`, `hang: false`,
+  `eyelet: true`, and `text "~Emma~"` Sacramento 26 mm, straight, `x: 8`, all one thread. The starter has
+  `turn: true` (`pickStarter` turns the hoop; a square hoop ignores it): it lies across so the name reads straight
+  (it stood on end at rot 90 at first, hard to read, and Turn hoop didn't turn the words). Font, colour, moving,
+  fabric, names batch, Sew along etc. are the Design tab's.
+- `eyelet` (ITH frames only, `hasEye`): a 4.2 mm ring of 2.2 mm satin (run, zigzag, satin) 13 mm in from the narrow
+  end (`eyeAt`: the left end of a frame wider than tall, else the top), sewn in the `last` stage before the border;
+  quilting keeps clear of it. `frontPanel`/`frontAcross` start past it, and the Have ready / after texts add Fray
+  Check and the ribbon. The Luggage tag starter uses it too (tall, hole at the top).
+- `fittedSizes`: lettering in a frame lying across with a ribbon hole fits right of the hole less 4 mm and the border
+  side less 7.8 mm (the old box), and lettering turned a quarter fits a tall frame's front lengthwise the same way;
+  long names shrink.
+- Batches build the bookmark in the turned field, then `turnForMachine` (studio_batch `opts.turn`, pe900 `bm_*`,
+  engine fuzz `turned: true`).
+- Preview fabric (`previewLook`): an in-the-hoop front (`bare` fabric step) is white like every other design; pink
+  gingham only for real appliqué.
 - Old `#bookmark` links (README, the skill, bookmarks people saved) open the starter with the old panel's saved
   `nw:bm.*` name/font/colour/swashes (`oldBookmark` in app.js), then those keys are dropped.
 - Changed from the old engine: the name joins the tack-down block (3 blocks / 2 pauses, was 5 / 4), the satin width

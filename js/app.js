@@ -5,7 +5,7 @@ import { COLOR_CHANGE, STITCH, designStats, machineThreads, readEmbroidery, vali
 import { DEFAULT_MACHINE, MACHINES, MARGIN, hoop as getHoop } from "./core/machines.js";
 import { DENSITY, LEARN, contentBox, picturePlan, pictureImage } from "./core/digitize.js";
 import { hexToRgb, nearestBrotherThread, pecThread } from "./core/threads.js";
-import { colorBlocks, draw } from "./render.js";
+import { CLOTHS, colorBlocks, draw } from "./render.js";
 import { FINISH, FIRST_STEP, TURN_PIC, cutSVG, nextThread, sewSheet, youHtml } from "./sheet.js";
 import { handOut, judge } from "./gate.js";
 import { DST_COLOURS, checkup, fewerBlocks, fix, heat, openedFile, pauses, shortJumps, sortedChanges } from "./doctor.js";
@@ -76,7 +76,7 @@ function paint() {
   $("empty").hidden = !!v || !$("error").hidden;   // (an error says what's wrong; "Nothing to stitch yet" under it misled)
   // (room kept clear for the chips at the top and a message at the bottom: the too-big note covered the hoop on phones)
   const err = $("error"), room = { padTop: $("facts").offsetHeight + 16, padBottom: err.hidden ? undefined : err.offsetHeight + 28, corner: zoomCorner(), base: state.hold };
-  const field = { hoop: shownHoop(), showHoop: state.showHoop && !state.backdrop, fieldColor: dark.matches && state.showHoop && !state.backdrop ? "#ece5da" : undefined };
+  const field = { hoop: shownHoop(), showHoop: state.showHoop && !state.backdrop, field: state.bg };
   // (nothing to stitch yet: the hoop stays, so there's still something to put the first piece in)
   if (!v) { state.tf = draw(canvas, null, { ...field, ...room, zoom: state.zoom, pan: state.pan }); return; }
   const block = state.step != null && state.mode === "design" && v.cache.blocks.find((b) => b.index === state.step);
@@ -332,6 +332,10 @@ $("progress").oninput = (e) => {
 };
 $("show-heat").onchange = (e) => { state.heat = e.target.checked; paint(); };
 $("show-real").checked = state.real = store.get("real", false);
+// the background the design is shown on (View > Background), the same on every tab; white unless picked
+state.bg = CLOTHS[store.get("bg", "white")] ? store.get("bg", "white") : "white";
+$("show-bg").innerHTML = Object.entries(CLOTHS).map(([k, c]) => `<option value="${k}" ${k === state.bg ? "selected" : ""}>${c.label}</option>`).join("");
+$("show-bg").onchange = (e) => { state.bg = e.target.value; store.set("bg", state.bg); paint(); };
 $("facts").addEventListener("click", (e) => { if (e.target.id === "recentre") studio.recentre(); const t = e.target.closest("[data-tip]"); if (t) factTip(t); });
 $("facts").addEventListener("keydown", (e) => { const t = e.target.closest("[data-tip]"); if (t && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); factTip(t); } });
 // a chip's explanation under the chips, tapped open and shut (touch screens have no tooltips: "1 pause" went unexplained)
@@ -642,7 +646,7 @@ function alongShow() {
     look = stepLook(v, i, s.block);
   }
   along.at = i;
-  draw($("along-view"), machine ? v.file : v.shown, { cache: machine ? (v.fileCache ||= colorBlocks(v.file)) : v.cache, fabric: v.fabric, ...look, ghost: look.upto != null, hoop: machine ? hoop() : shownHoop(), showHoop: false, pad: 12 });
+  draw($("along-view"), machine ? v.file : v.shown, { cache: machine ? (v.fileCache ||= colorBlocks(v.file)) : v.cache, fabric: v.fabric, field: state.bg, ...look, ghost: look.upto != null, hoop: machine ? hoop() : shownHoop(), showHoop: false, pad: 12 });
 }
 $("along-open").onclick = async () => {
   if (!state.view?.cache) return;
