@@ -1,5 +1,6 @@
 /*! Needleworks (c) 2026 4Gables. All rights reserved. Proprietary, see LICENSE. https://4gables.com/needleworks/ */
-// Sew sheet (printed at 1:1 to take to the machine) and appliqué cut files (SVG for Cricut / ScanNCut).
+// Sew sheet (printed at 1:1 to take to the machine) and cut files for fabric (SVG for Cricut / ScanNCut / Silhouette
+// Designer, DXF for Silhouette's free edition).
 // Stitch units are 0.1 mm, cut outlines mm; the machine centres the design in the hoop, so the template does too.
 import { colorBlocks } from "./render.js";
 import { problemsItems } from "./words.js";
@@ -67,11 +68,35 @@ export function cutSVG(groups, title = "appliqué") {
   const W = x1 - x0 + 2 * pad, H = y1 - y0 + 2 * pad;
   const path = (loops) => loops.map((l) => "M" + l.map(([x, y]) => `${f1(x - x0 + pad)},${f1(y - y0 + pad)}`).join("L") + "Z").join("");
   return `<?xml version="1.0" encoding="UTF-8"?>
-<!-- ${esc(title)}: appliqué shapes at actual size (mm), from needleworks -->
+<!-- ${esc(title)}: fabric shapes at actual size (mm), from needleworks -->
 <svg xmlns="http://www.w3.org/2000/svg" width="${f1(W)}mm" height="${f1(H)}mm" viewBox="0 0 ${f1(W)} ${f1(H)}">
 ${groups.map((g, i) => `  <g id="fabric-${i + 1}"><path d="${path(g)}" fill="none" stroke="#000" stroke-width="0.25" fill-rule="evenodd"/></g>`).join("\n")}
 </svg>
 `;
+}
+
+// The same outlines as a DXF (AutoCAD R12, ASCII: the version every cutter's software reads), for Silhouette
+// Studio's free edition, which opens DXF but not SVG. One closed POLYLINE per outline in mm, y up as DXF has it, a
+// layer per fabric. DXF keeps no page size, so Silhouette may open it scaled: `cutSize` is said beside the button.
+export function cutDXF(groups) {
+  const all = groups.flat(2), [x0, y0, x1, y1] = box(all), pad = 2, H = y1 - y0 + 2 * pad, n = (v) => (Math.round(v * 100) / 100).toFixed(2);
+  const out = ["0", "SECTION", "2", "HEADER", "9", "$ACADVER", "1", "AC1009", "9", "$INSUNITS", "70", "4", "0", "ENDSEC", "0", "SECTION", "2", "ENTITIES"];
+  groups.forEach((g, i) => {
+    for (const l of g) {
+      const pts = l.filter((q, k) => k < l.length - 1 || Math.hypot(q[0] - l[0][0], q[1] - l[0][1]) > 0.01);
+      out.push("0", "POLYLINE", "8", `FABRIC${i + 1}`, "66", "1", "70", "1", "10", "0.00", "20", "0.00", "30", "0.00");
+      for (const [x, y] of pts) out.push("0", "VERTEX", "8", `FABRIC${i + 1}`, "10", n(x - x0 + pad), "20", n(H - (y - y0 + pad)), "30", "0.00");
+      out.push("0", "SEQEND", "8", `FABRIC${i + 1}`);
+    }
+  });
+  out.push("0", "ENDSEC", "0", "EOF");
+  return out.join("\r\n") + "\r\n";
+}
+// the shapes' size as the cutter should show them, in mm and inches (the outlines themselves: both files have 2 mm
+// spare round them, which Silhouette doesn't show)
+export function cutSize(groups) {
+  const [x0, y0, x1, y1] = box(groups.flat(2)), w = x1 - x0, h = y1 - y0;
+  return `${w.toFixed(1)} × ${h.toFixed(1)} mm (${(w / 25.4).toFixed(2)} × ${(h / 25.4).toFixed(2)} in)`;
 }
 
 // sheet: { steps: [{ title?, you?, sews? }], ready: [] (one "Have ready" list), after: [], notes: [], cut: [[loop...]...] }, thread names as the machine shows them

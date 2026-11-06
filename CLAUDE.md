@@ -215,8 +215,18 @@ measurements behind each number are in the code's comments.
 ### Frames, appliqué, patches
 - Borders: line, bold, satin, patch, appliqué, `ith`, `zip`; `quilt` stipple | echo. Bold laps and tack-downs go back
   from the same start (`back(e)`; a reverse cost trims and long jumps).
-- Heart: top dip filled with a 3 mm round, bottom cusp an arc of a 1.8 mm circle (a satin can't turn a sharp inside
-  corner: underlay poked out).
+- Heart: top dip filled with a 3 mm round, bottom cusp an arc of a 2.2 mm circle, the border's inside half (a satin
+  can't turn a sharp inside corner: underlay poked out; 1.8 folded once the border was 4 mm). The arc's angles stay in
+  -90°..270° (atan2's wrap drew it over the top: a notch at a 100 x 84 heart's point).
+- Satin border (`satinBorder`: appliqué, patch, in-the-hoop): 4 mm at 0.34, centred 0.2 mm inside the line, so it
+  reaches 1.8 mm out as the old 3.6 mm at 0.4 did (sizes and fits unchanged; wider both ways, two key fobs no longer
+  fitted 4x4) and 2.2 mm in. Ashley 2026-11-05: fabric showed through and frayed past 3.6 mm at 0.4.
+- Stage seams: an outline sewn in stages (in-the-hoop, appliqué frame, pouch's last stage) starts each a third
+  further round (`seamAt`, `seamed`: compose doesn't `enter` them where the needle is). All three at one corner put 16
+  hits in one hole and 15 beside it on bare tear-away: Ashley's first bookmark tore there. `seamStage` keeps them
+  rebuildable: `build()` moves a start after a pause on (5 % steps) until it's 5.5 mm from where the needle stopped
+  (`reseam`; gang moves the first frame's). An appliqué frame's border after quilting keeps its own start (started
+  where the quilting stopped, 1.4 mm across the pause: a loose thread).
 - Appliqué: placement, pause (lay fabric, trim), tack-down, pause, satin. Real appliqué (`appliqued()`, not an ITH
   front or the pouch) shows the guide (`#st-appl`) until "Got it" (`studio.applSeen`).
 - Appliqué letters (`APPLIQUE_FONTS` Graduate, Lilita One, Alfa Slab One): each ink piece closed (`closeMask`,
@@ -239,8 +249,10 @@ measurements behind each number are in the code's comments.
   Cached per patch shape, piece stitch hash and hole mask (it was the slow part).
 - On a patch a piece gets a thread that shows (`against`); `underPatch` flags a later patch covering it.
 ### In-the-hoop
-- `ith` (Ornament, Key fob): appliqué front, the pieces, then a `last` stage tacking taped-on backing and satining
-  through every layer. `hang` adds the ribbon.
+- `ith` (Ornament, Key fob): the outline on bare stabilizer (with the ribbon hole's circle when `eyelet`, started half
+  way round from its satin ring's start; Ashley asked to see where the hole goes), appliqué front, the pieces, then a
+  `last` stage tacking taped-on backing and satining through every layer. `hang` adds the ribbon. Its cut file is the
+  outline alone (`cut: [edge]`).
 - `zip` (Zipper pouch): zipper line, pause, tack 5 mm either side of the teeth (#3 nylon coil), pause (two folded
   fronts), tack the outline (`fabric`, `nocut`), topstitch, the pieces, `last`: zipper half open, back face down,
   three times round. Zipper line overhangs 5 mm a side. New pieces go below the topstitch (`frontPanel`). `before`
@@ -462,12 +474,15 @@ measurements behind each number are in the code's comments.
   "satin-stitched"/"Satin border", never bare "satin"; "move between parts"/"loose thread", never "jump" (except
   the machine's "jump stitch not to trim").
 - Sew sheet (`sewSheet`: `#sheet` + `window.print()`, also on `beforeprint`): field at 1:1 in mm, centred as the
-  machine centres, 5 cm bar; steps with machine names (`machineThreadList`); appliqué shapes. `cutSVG`: one SVG at
-  actual size. Verify with headless `Page.printToPDF`, never the real print dialog via the Chrome extension (it blocks).
+  machine centres, 5 cm bar; steps with machine names (`machineThreadList`); appliqué shapes. Cut files (any design with
+  fabric shapes: appliqué, in-the-hoop fronts): "Cricut cut file (SVG)" `cutSVG` (width/height in mm, viewBox in mm:
+  Inkscape's form, which Design Space reads at size) and "Silhouette cut file (DXF)" `cutDXF` (R12 ASCII, closed
+  POLYLINEs in mm, y up; Silhouette Studio's free edition opens DXF, not SVG). DXF keeps no size, so the file name
+  carries it (`_cut_169x54mm`). Both judged in gate.js; ezdxf (in .venv) reads ours at size. Verify with headless `Page.printToPDF`, never the real print dialog via the Chrome extension (it blocks).
 - Sew along (`#along`): a step per screen, minutes = stitches / 550, own Have ready, Screen Wake Lock (retaken on
   visibilitychange). Share text carries the steps (`shareText`). On my item (`#item`): a measured photo under the
   design at true size (`state.backdrop`), never uploaded or saved.
-- Offline (`sw.js`, `needleworks-v5`): precaches `FILES`, network first, cache after 3 s; add every new file to
+- Offline (`sw.js`, `needleworks-v6`): precaches `FILES`, network first, cache after 3 s; add every new file to
   `FILES`. https only. Share target: POST `./?share` -> `needleworks-shared` cache -> `./?shared` -> `route()`.
 - A hoop change drops other tabs' designs. Min/max over stitches uses loops (`Math.min(...pts)` overflows past ~110k).
 
@@ -564,6 +579,10 @@ Automated checks that each guard a bug class (add a line with every new guard):
 - Appliqué: combine same-thread stages (6 pauses could be 3); tack-down ends 1.4 mm from the edge walk's start (2
   short jumps across a pause); only the first fabric block gets a fabric shape in the preview.
 - Quilting: narrow heart/diamond tips stay empty; quilt label with stipple sews as 3 lines.
+- Lettering: where script strokes cross or meet, two or three satin columns lie on each other (Ashley 2026-11-06: "the
+  thread got super thick"). Normal for script; the densest spots stay at or under 24/mm², and capping lettering at 18
+  dropped only 15 of 3,300 stitches in "Read Receipts", so density isn't the lever. Unchecked: Brother's own script
+  fonts at crossings.
 - Pictures: "make it stitchable" (thicken/drop too-fine detail); 1-2 mm outlines as satin (needs variable-width satin
   through junctions); etsy_6's green panel still sewn; etsy_7's pastel lines; etsy_4's greyish-lavender title;
   etsy_5 at 4 colours merges grass and yellow; slab-serif centre lines lose serifs; a soft shadow's core joins its

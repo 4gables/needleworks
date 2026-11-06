@@ -1,6 +1,6 @@
 /*! Needleworks (c) 2026 4Gables. All rights reserved. Proprietary, see LICENSE. https://4gables.com/needleworks/ */
 // The one way out: every file the page hands over (Download, a design in two hoopings, one for each name, a fixed
-// copy, the share sheet, a saved design, the cut file) goes through `handOut`, which judges every file first and
+// copy, the share sheet, a saved design, the cut files) goes through `handOut`, which judges every file first and
 // hands over nothing when one is refused. A PES must read back as the design it was written from (`validatePES`)
 // and break none of the rules the machine itself needs (quality.js `HARD`); the rest of the verdict (dense, tiny...)
 // goes back with it to be said in plain words. Until 2026-10-31 each exit made its own checks: a 121-colour PES was
@@ -21,6 +21,25 @@ function judgeSVG(f) {
   if (!paths.length || paths.some((d) => !/^(M-?[\d.]+,-?[\d.]+(L-?[\d.]+,-?[\d.]+){2,}Z)+$/.test(d))) return no(f, "The cut file has a shape that isn't closed.");
   return { ...f, ok: true, error: "", problems: [], hard: [] };
 }
+// a DXF cut file: ASCII group-code pairs from SECTION to EOF, every outline a closed POLYLINE of 3 or more vertices
+// with numbers in reach (under 1 m)
+function judgeDXF(f) {
+  const t = (typeof f.bytes === "string" ? f.bytes : new TextDecoder().decode(f.bytes)).split(/\r?\n/);
+  if (t.at(-1) === "") t.pop();
+  if (t.length % 2 || t[0].trim() !== "0" || t[1] !== "SECTION" || t.at(-1) !== "EOF") return no(f, "The cut file is damaged.");
+  let shapes = 0, vertices = -1, closed = false;
+  for (let i = 0; i < t.length; i += 2) {
+    const code = t[i].trim(), v = t[i + 1];
+    if (code === "0") {
+      if (v === "POLYLINE") { vertices = 0; closed = false; }
+      else if (v === "VERTEX") { if (vertices < 0) return no(f, "The cut file is damaged."); vertices++; }
+      else if (v === "SEQEND") { if (vertices < 3 || !closed) return no(f, "The cut file has a shape that isn't closed."); shapes++; vertices = -1; }
+    } else if (code === "70" && vertices === 0 && t[i - 2]?.trim() !== "9") closed = (+v & 1) === 1;
+    else if (code === "10" || code === "20") { const x = +v; if (!/^-?\d+(\.\d+)?$/.test(v) || !(Math.abs(x) < 1000)) return no(f, "The cut file has no size."); }
+  }
+  if (!shapes || vertices >= 0) return no(f, "The cut file has a shape that isn't closed.");
+  return { ...f, ok: true, error: "", problems: [], hard: [] };
+}
 // a saved design: what Open saved reads back
 function judgeJSON(f) {
   try {
@@ -34,6 +53,7 @@ function judgeJSON(f) {
 // (why it's refused), problems (quality.js verdict) and hard (the problems the machine can't take).
 export function judge(f, hoop = null) {
   if (/\.svg$/i.test(f.name)) return judgeSVG(f);
+  if (/\.dxf$/i.test(f.name)) return judgeDXF(f);
   if (/\.json$/i.test(f.name)) return judgeJSON(f);
   if (!/\.pes$/i.test(f.name)) return no(f, "This page only saves PES files.");
   const check = validatePES(f.bytes, f.against || null, hoop);
@@ -42,7 +62,7 @@ export function judge(f, hoop = null) {
   return { ...f, ok: !hard.length, error: hard.map((q) => q.text).join(" "), problems, hard };
 }
 
-const TYPES = { pes: "application/octet-stream", zip: "application/zip", svg: "image/svg+xml", json: "application/json" };
+const TYPES = { pes: "application/octet-stream", zip: "application/zip", svg: "image/svg+xml", dxf: "application/dxf", json: "application/json" };
 // Every file judged, then saved (one file, or a .zip of them all when `zip` names it) or shared (`share`: { title,
 // text }, the phone's share sheet). Nothing is handed over when any file is refused. Returns { ok, files (judged),
 // refused (the files refused), error }; a share resolves when the sheet closes.

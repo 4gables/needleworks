@@ -7,7 +7,7 @@
 import { readFileSync, readdirSync } from "fs";
 import { COLOR_CHANGE, END, STITCH, readEmbroidery, writePES } from "../js/core/formats.js";
 import { handOut, judge } from "../js/gate.js";
-import { cutSVG } from "../js/sheet.js";
+import { cutDXF, cutSVG } from "../js/sheet.js";
 
 let bad = 0, n = 0;
 const fail = (m) => { bad++; console.error("FAIL " + m); };
@@ -31,7 +31,7 @@ for (const f of files.filter((f) => f !== "js/gate.js")) {
 // ---- 2. the exits, by name: each one calls handOut ----
 const EXITS = {
   "js/app.js": ["Share (the phone's share sheet)", "Download (one file, or a design in two hoopings as a zip)", "Save a fixed copy (one file)",
-    "Save fixed copies (the zip again)", "Cut file (appliqué shapes, SVG)", "One for each name (zip)"],
+    "Save fixed copies (the zip again)", "Cut files (fabric shapes, SVG or DXF, one handOut for both)", "One for each name (zip)"],
   "js/studio/ui.js": ["Save design (.needleworks.json)"],
 };
 for (const [f, want] of Object.entries(EXITS)) {
@@ -88,6 +88,12 @@ const loop = [[0, 0], [30, 0], [30, 20], [0, 20]];
 ok(judge({ name: "x_cut.svg", bytes: cutSVG([[loop]], "x") }).ok, "a good cut file refused");
 ok(!judge({ name: "x_cut.svg", bytes: cutSVG([[loop.map(([x, y]) => [x, y * NaN])]], "x") }).ok, "a cut file with NaN passed");
 ok(!judge({ name: "x_cut.svg", bytes: cutSVG([[[[0, 0], [1, 1]]]], "x") }).ok, "a cut file with a 2-point shape passed");
+// the DXF cut file (Silhouette's free edition): the same checks
+ok(judge({ name: "x_cut.dxf", bytes: cutDXF([[loop], [loop.map(([x, y]) => [x + 40, y])]]) }).ok, "a good DXF cut file refused");
+ok(!judge({ name: "x_cut.dxf", bytes: cutDXF([[loop.map(([x, y]) => [x, y * NaN])]]) }).ok, "a DXF cut file with NaN passed");
+ok(!judge({ name: "x_cut.dxf", bytes: cutDXF([[[[0, 0], [1, 1]]]]) }).ok, "a DXF cut file with a 2-point shape passed");
+ok(!judge({ name: "x_cut.dxf", bytes: cutDXF([[loop]]).replace("70\r\n1\r\n10", "70\r\n0\r\n10") }).ok, "a DXF cut file with an open shape passed");
+ok(!judge({ name: "x_cut.dxf", bytes: cutDXF([[loop]]).slice(0, 200) }).ok, "a cut-short DXF cut file passed");
 ok(judge({ name: "d.needleworks.json", bytes: JSON.stringify({ needleworks: 1, pieces: [{ kind: "text", text: "Emma" }] }) }).ok, "a saved design refused");
 ok(!judge({ name: "d.needleworks.json", bytes: "{" }).ok && !judge({ name: "d.needleworks.json", bytes: '{"needleworks":1,"pieces":[]}' }).ok, "a broken saved design passed");
 ok(!judge({ name: "x.exe", bytes: new Uint8Array(10) }).ok, "an unknown file passed");

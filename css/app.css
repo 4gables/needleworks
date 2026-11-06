@@ -343,6 +343,7 @@ ul.problems { margin: 0; padding-left: 18px; list-style: disc; display: grid; ga
 .field label.ghost { display: inline-flex; align-items: center; font-weight: 400; padding: 8px 14px; }   /* "Open saved" looks like the buttons beside it */
 .extras { flex-basis: 100%; display: flex; justify-content: flex-end; gap: 18px; margin: -4px 2px 0; }
 .extras .link:disabled { opacity: .45; cursor: default; }
+.cut-files { white-space: nowrap; color: var(--muted); font-size: 14px; }
 @media (max-width: 699px), (max-height: 559px) { .extras { justify-content: center; } }
 
 /* sew sheet: only printed, black on white, 1:1 */

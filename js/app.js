@@ -6,7 +6,7 @@ import { DEFAULT_MACHINE, MACHINES, MARGIN, hoop as getHoop } from "./core/machi
 import { DENSITY, LEARN, contentBox, picturePlan, pictureImage } from "./core/digitize.js";
 import { hexToRgb, nearestBrotherThread, pecThread } from "./core/threads.js";
 import { CLOTHS, colorBlocks, draw } from "./render.js";
-import { FINISH, FIRST_STEP, TURN_PIC, cutSVG, nextThread, sewSheet, youHtml } from "./sheet.js";
+import { FINISH, FIRST_STEP, TURN_PIC, cutDXF, cutSize, cutSVG, nextThread, sewSheet, youHtml } from "./sheet.js";
 import { handOut, judge } from "./gate.js";
 import { DST_COLOURS, checkup, fewerBlocks, fix, heat, openedFile, pauses, shortJumps, sortedChanges } from "./doctor.js";
 import { HARD, MAX_BLOCKS, denseWords, moves, verdictOf } from "./quality.js";
@@ -105,7 +105,7 @@ function setView(v) {
   if (state.step != null && !(v?.steps > state.step)) showStep(null);   // the design changed under a step view
   $("turn").setAttribute("aria-pressed", turned());
   $("turn").disabled = square(); $("turn").title = square() ? "A square hoop is the same either way round." : "Turn the hoop sideways, so a long design can use the hoop's long side.";
-  if (!v) { $("dl-warn").hidden = true; $("facts").innerHTML = ""; $("threads").innerHTML = ""; $("download").disabled = true; $("download").textContent = "Download PES"; $("share").disabled = true; $("sheet-print").disabled = $("along-open").disabled = true; $("cut-file").hidden = true; $("names-open").hidden = true; paint(); return; }
+  if (!v) { $("dl-warn").hidden = true; $("facts").innerHTML = ""; $("threads").innerHTML = ""; $("download").disabled = true; $("download").textContent = "Download PES"; $("share").disabled = true; $("sheet-print").disabled = $("along-open").disabled = true; $("cut-files").hidden = true; $("names-open").hidden = true; paint(); return; }
   // the preview is the file: decode the PES bytes and draw those, not the design they were made from
   if (!v.file) {
     try { v.file = v.source ? v.pattern : unwrap(readEmbroidery(v.bytes, v.filename), state.mode === "design" && v.pattern); }
@@ -161,7 +161,7 @@ function setView(v) {
   const blocked = blocking(v);
   $("download").disabled = !fits || !!blocked; $("share").disabled = !fits || !!v.split || !!blocked;
   // (nor a sew sheet or Sew along for a file that can't be made)
-  $("sheet-print").disabled = $("along-open").disabled = !fits || !!v.split || !!blocked; $("cut-file").hidden = !v.sheet?.cut?.length; $("names-open").hidden = !!v.split || !namesFor();
+  $("sheet-print").disabled = $("along-open").disabled = !fits || !!v.split || !!blocked; $("cut-files").hidden = !v.sheet?.cut?.length; $("names-open").hidden = !!v.split || !namesFor();
   // (one per name from a design that doesn't fit yet made a zip of names that didn't fit either)
   $("names-open").disabled = !fits; $("names-open").title = fits ? "" : "Make the design fit the hoop first.";
   if (state.mode === "picture") picSteps(v, st);
@@ -544,12 +544,17 @@ function fillSheet() {
 $("sheet-print").onclick = () => { if (fillSheet()) window.print(); };
 addEventListener("beforeprint", () => { if (!$("sheet").innerHTML) fillSheet(); });
 addEventListener("afterprint", () => { $("sheet").innerHTML = ""; });
-$("cut-file").onclick = () => {
+// The fabric shapes for a cutting machine (Ashley: "my Cricut Maker 3 and or my Silhouette Cameo"): SVG for Cricut
+// Design Space (and CanvasWorkspace, Silhouette's paid editions), DXF for Silhouette's free edition. The size is in the
+// name: a DXF keeps none, so Silhouette can open it scaled, and the size to set is right there.
+const cutFile = (ext, make) => () => {
   const v = state.view; if (!v?.sheet?.cut?.length) return;
-  const name = v.filename.replace(/\.pes$/i, "");
-  const r = handOut([{ name: `${name}_cut.svg`, bytes: cutSVG(v.sheet.cut, name) }]);
+  const name = v.filename.replace(/\.pes$/i, ""), size = cutSize(v.sheet.cut).match(/^([\d.]+) × ([\d.]+)/);
+  const r = handOut([{ name: `${name}_cut_${Math.round(+size[1])}x${Math.round(+size[2])}mm.${ext}`, bytes: make(v.sheet.cut, name) }]);
   if (!r.ok) showError("Cut file stopped: " + r.error);
 };
+$("cut-file").onclick = cutFile("svg", cutSVG);
+$("cut-dxf").onclick = cutFile("dxf", cutDXF);
 
 // ---------- on my item ----------
 // a photo of the real bib or towel under the design at true size: two dots on something measured set the scale
