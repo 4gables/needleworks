@@ -1038,7 +1038,7 @@ function localStages(p, fab = "cotton") {
       const hang = p.hang ?? !QUILTED(p), eye = hasEye(p) ? eyeAt(p) : null;
       stages = [
         { color: p.color, paths: [loop(run(edge, 2.5, true))], sews: `Sews the ${name} outline on the stabilizer.`, fabric: true, bare: true, solid: [edge],
-          before: `Fabric: front and back pieces, each ${cut(p.w, p.h)}${p.quilt ? `, thin batting the same size` : ""}, tear-away stabilizer and tape${hang ? ", and a 6 in (15 cm) ribbon for the loop" : ""}${eye ? ", Fray Check and a ribbon for the hole" : ""}.` },
+          before: `Fabric: front and back pieces, each ${cut(p.w, p.h)}${p.quilt ? `, thin batting the same size` : ""}, tear-away stabilizer, tape and Fray Check${hang ? ", and a 6 in (15 cm) ribbon for the loop" : ""}${eye ? ", and a ribbon for the hole" : ""}.` },
         { color: p.color, pause: true, paths: tack(edge),
           you: `Lay ${p.quilt ? "the batting, then " : ""}the front fabric over the ${name} outline, right side up, covering it by ½ in. Press Start. Then take the hoop off the machine (leave the fabric in the hoop), trim the fabric${p.quilt ? " and batting" : ""} close to the stitching, and put the hoop back.`,
           sews: "Tacks the front fabric down.", under: true },
@@ -1048,7 +1048,7 @@ function localStages(p, fab = "cotton") {
           // down, so the ribbon goes on once it's back on the machine, the embroidered side up)
           you: `Take the hoop off the machine (leave the fabric in the hoop) and turn it upside down. Tape the backing fabric over the stabilizer, right side facing you, covering the ${name} by ½ in. Turn the hoop back over and put it back on the machine.${hang ? ` For the loop, fold the ribbon in half and tape it on the embroidered side at the top of the ${name}, loop pointing in toward the middle, ends ½ in past the outline.` : ""} Press Start.`,
           sews: `Tacks the backing on and covers the edge${eye ? " and a ribbon ring" : ""} with satin stitch through every layer.`,
-          after: `Take it out of the hoop, tear the stabilizer away and cut round the ${name} as close to the satin stitches as you can without nicking them${hang ? " (keep the ribbon loop clear of the scissors). Flip the ribbon loop up." : "."}${eye ? " Dab Fray Check inside the ribbon ring and let it dry, then snip out the hole inside it and loop a ribbon through." : ""}` },
+          after: `Take it out of the hoop, tear the stabilizer away and cut round the ${name} as close to the satin stitches as you can without nicking them${hang ? " (keep the ribbon loop clear of the scissors). Flip the ribbon loop up." : "."} Run Fray Check along the cut edge and let it dry, then snip off any fibres still poking out.${eye ? " Dab Fray Check inside the ribbon ring and let it dry, then snip out the hole inside it and loop a ribbon through." : ""}` },
       ];
     } else if (p.border === "patch") {
       // solid tatami fill (inset so the satin edge covers its ragged ends), then the satin edge over it; `compose`

@@ -678,7 +678,7 @@ $("names-open").onclick = () => {
   $("names-what").textContent = n.monogram ? `Each line's initials take the place of the monogram “${n.what}” (up to 3, in the order first, LAST, middle). Everything else stays the same.`
     : `Each name takes the place of “${n.what}”. Everything else stays the same.`;
   $("names-list").value = store.get(n.monogram ? "names.initials" : "names", ""); $("names-note").classList.remove("warn"); if ($("names-bad")) $("names-bad").hidden = true;
-  $("names-list").placeholder = n.monogram ? "JKM\nALB\nR" : "Emma\nLiam\nOlivia"; $("names-list").setAttribute("aria-label", n.monogram ? "Initials, one set per line" : "Names, one per line");
+  $("names-list").placeholder = n.monogram ? "JKM\nALB\nR" : "Ashley\nLiam\nOlivia"; $("names-list").setAttribute("aria-label", n.monogram ? "Initials, one set per line" : "Names, one per line");
   $("names-note").textContent = n.monogram ? "One set of initials per line, up to 40. You get one file for each, in a single .zip." : "One name per line, up to 40. You get one file for each, in a single .zip.";
   $("names-shrink-row").hidden = false;
   $("names-thumbs").innerHTML = ""; $("names-cancel").textContent = "Cancel";

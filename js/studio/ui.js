@@ -25,7 +25,7 @@ export const COLORS = [RED, NAVY, "#00673e", "#770176", "#e8a900", "#f993bc", BL
 
 let nextId = 1;
 const piece = (o) => ({ id: nextId++, x: 0, y: 0, color: NAVY, ...o });
-const text = (o) => piece({ kind: "text", text: "Emma", font: SCRIPT, size: 18, shape: "straight", radius: 30, ...o });
+const text = (o) => piece({ kind: "text", text: "Ashley", font: SCRIPT, size: 18, shape: "straight", radius: 30, ...o });
 const mono = (o) => piece({ kind: "monogram", letters: "aMs", font: SCRIPT, size: 30, ...o });
 const appl = (o) => piece({ kind: "letters", text: "AB", font: APPLIQUE_FONTS[0].family, size: 60, color: NAVY, ...o });
 const motif = (o) => piece({ kind: "motif", motif: "heart", size: 40, style: "fill", color: RED, ...o });
@@ -41,7 +41,7 @@ export const STARTERS = [
   // shrinks to fit its length.
   { id: "bookmark", name: "Bookmark", note: "in the hoop, with a ribbon hole", turn: true, make: () => [
     frame({ shape: "bookmark", w: 165, h: 50, border: "ith", hang: false, eyelet: true, color: RED }),
-    text({ text: "~Emma~", font: SACRAMENTO, size: 26, x: 8, color: RED })],
+    text({ text: "~Ashley~", font: SACRAMENTO, size: 26, x: 8, color: RED })],
     tip: "Made in the hoop on tear-away stabilizer: cotton for the front and felt for the back, each about 3 × 8 in, plus tape, Fray Check and a ribbon. Full size needs the 5 × 7 hoop. Type ~ at either end of a name for a swash." },
   { id: "monogram", name: "Monogram", note: "3 initials in a frame", make: () => [frame({ shape: "circle", w: 90, h: 90, border: "satin" }), mono({ size: 23 })] },
   { id: "ring", name: "Name in a circle", note: "lettering around a ring", make: () => [
@@ -61,17 +61,17 @@ export const STARTERS = [
     // (Quicksand at 9 mm: Josefin's single-storey a sewed as an o at label sizes, its stem merged with the bowl, and
     // 8 mm warned "too small" out of the box)
     text({ text: "Made for", font: ROUND, size: 9, y: -23, color: BLACK }),
-    text({ text: "Emma", size: 20, y: -3, color: RED }),
+    text({ text: "Ashley", size: 20, y: -3, color: RED }),
     text({ text: "by Ashley in 2026", font: ROUND, size: 9, y: 19, color: BLACK })],
     tip: "Stitch it on cotton backed with tear-away stabilizer, then turn the edges under and hand-sew it to the back of the quilt." },
   { id: "bib", name: "Baby bib", note: "a name over a little heart", make: () => [
     frame({ shape: "heart", w: 46, h: 42, border: "applique", y: 14, color: PINK }),
-    text({ text: "Emma", size: 16, shape: "up", radius: 32, y: 14, color: NAVY })],   // (30 ran into the heart's dip)
+    text({ text: "Ashley", size: 16, shape: "up", radius: 32, y: 14, color: NAVY })],   // (30 ran into the heart's dip)
     tip: "Hoop sticky (self-adhesive) tear-away stabilizer, score and peel its paper, and press the bib onto it (or float it on plain tear-away with spray adhesive). On terry, lay a water-soluble topper over it so the stitches don't sink." },
-  { id: "towel", name: "Towel name", note: "a big name that stands up to terry", make: () => [text({ text: "Emma", size: 32, style: "satin" })], fabric: "towel", baste: true },
+  { id: "towel", name: "Towel name", note: "a big name that stands up to terry", make: () => [text({ text: "Ashley", size: 32, style: "satin" })], fabric: "towel", baste: true },
   { id: "ornament", name: "Ornament", note: "two-sided, sewn in the hoop", make: () => [
     frame({ shape: "circle", w: 80, h: 80, border: "ith", hang: true, color: RED }),
-    text({ text: "Emma", size: 20, y: -4 }),
+    text({ text: "Ashley", size: 20, y: -4 }),
     text({ text: "2026", font: PRINT, size: 8, y: 14 })],
     tip: "Made in the hoop, front and back. Have ready: tear-away stabilizer, front and back fabric cut 1 in bigger than the circle, tape, and a 6 in ribbon for hanging. Smaller (Fit to hoop or the size slider) makes a keychain." },
   { id: "mugrug", name: "Mug rug", note: "quilted, sewn in the hoop", make: () => [
@@ -100,24 +100,24 @@ export const STARTERS = [
   { id: "patch", name: "Patch", note: "a filled badge with an edge", make: () => [
     frame({ shape: "circle", w: 76, h: 76, border: "patch", fill: NAVY, color: RED }),
     mono({ letters: "JD", size: 26, font: PRINT, color: "#f0f0f0" })] },
-  { id: "decorated", name: "Name with motifs", note: "a little heart either side", make: () => [text({ text: "Emma", size: 20, deco: "heart", color: RED })] },
+  { id: "decorated", name: "Name with motifs", note: "a little heart either side", make: () => [text({ text: "Ashley", size: 20, deco: "heart", color: RED })] },
   { id: "words", name: "Just lettering", note: "a word or name on its own", make: () => [text({ size: 24 })] },
   // more of what people sew most (2026-10-31), then a few of our own
   { id: "tag", name: "Luggage tag", note: "two-sided, with a hole for the strap", make: () => [
     frame({ shape: "square", w: 60, h: 100, border: "ith", hang: false, eyelet: true, color: NAVY }),
-    text({ text: "Emma", size: 18, y: 4, color: RED }),
+    text({ text: "Ashley", size: 18, y: 4, color: RED }),
     text({ text: "555-0123", font: ROUND, size: 8, y: 26, color: NAVY })],
     tip: "Made in the hoop like the bookmark. Felt or vinyl on the back doesn't fray; a strip of clear vinyl over the front makes it wipe clean." },
   { id: "pocket", name: "Pocket monogram", note: "small initials for a shirt or polo", make: () => [mono({ letters: "jKm", font: PRINT, size: 20, color: NAVY })],
     fabric: "knit", tip: "Sew it on the left chest, about 7-9 in down from the shoulder seam. Hoop cut-away stabilizer with the shirt, and a water-soluble topper on piqué." },
-  { id: "tote", name: "Tote bag", note: "two lines of words for a canvas bag", make: () => [text({ text: "Emma's\nbooks", font: ROUND, size: 18, color: NAVY })],
+  { id: "tote", name: "Tote bag", note: "two lines of words for a canvas bag", make: () => [text({ text: "Ashley's\nbooks", font: ROUND, size: 18, color: NAVY })],
     fabric: "canvas", tip: "Turn the bag inside out to hoop the front panel only, with tear-away stabilizer behind it." },
-  { id: "stocking", name: "Stocking cuff", note: "a name with swashes for the cuff", make: () => [text({ text: "~Emma~", size: 28, color: WHITE })],
+  { id: "stocking", name: "Stocking cuff", note: "a name with swashes for the cuff", make: () => [text({ text: "~Ashley~", size: 28, color: WHITE })],
     fabric: "felt", tip: "Sew the cuff before the stocking is put together, so it can be hooped flat. White on red felt reads from across the room." },
   { id: "birth", name: "Birth announcement", note: "name, date and weight for a keepsake", make: () => [
     frame({ shape: "oval", w: 100, h: 140, border: "line", color: NAVY }),
     motif({ motif: "baby", size: 25, y: -40, color: PINK }),
-    text({ text: "Emma", size: 22, y: -6, color: NAVY }),
+    text({ text: "Ashley", size: 22, y: -6, color: NAVY }),
     text({ text: "June 1, 2026\n7 lb 2 oz · 20 in", font: ROUND, size: 7, y: 22, color: NAVY })],
     tip: "Pretty framed in a 6 in embroidery hoop on the wall. Cotton or linen with medium tear-away stabilizer." },
   { id: "wedding", name: "Wedding keepsake", note: "two names and the date in a scallop", make: () => [
@@ -127,7 +127,7 @@ export const STARTERS = [
   { id: "bookplate", name: "Book plate", note: "“from the library of”, for a book cover", make: () => [
     frame({ shape: "square", w: 96, h: 120, border: "line", color: BLACK }),
     text({ text: "from the library of", font: ROUND, size: 8, y: -36, color: BLACK }),
-    text({ text: "Emma", size: 22, y: -10, color: RED }),
+    text({ text: "Ashley", size: 22, y: -10, color: RED }),
     motif({ motif: "book", size: 25, y: 26, color: NAVY })],
     tip: "Sew it on linen or cotton, then glue or stitch it inside a fabric book cover. Goes with the Bookmark." },
   { id: "pet", name: "Pet bandana", note: "a pet's name between two paws", make: () => [text({ text: "~Buddy~", size: 20, deco: "paw", color: NAVY })],

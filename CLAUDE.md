@@ -317,14 +317,15 @@ measurements behind each number are in the code's comments.
 - Was its own panel and engine (`bookmark.js`, `#panel-bookmark`, `bookmarks_N.zip`); now the first "Start from" card,
   pieces like every other starter: `SHAPES.bookmark` (the narrow end's corners cut 0.18 of the width, filleted 3 mm:
   the top end when tall, the left end when it lies across) 165 x 50 with `border: "ith"`, `hang: false`,
-  `eyelet: true`, and `text "~Emma~"` Sacramento 26 mm, straight, `x: 8`, all one thread. The starter has
+  `eyelet: true`, and `text "~Ashley~"` Sacramento 26 mm, straight, `x: 8`, all one thread. The starter has
   `turn: true` (`pickStarter` turns the hoop; a square hoop ignores it): it lies across so the name reads straight
   (it stood on end at rot 90 at first, hard to read, and Turn hoop didn't turn the words). Font, colour, moving,
   fabric, names batch, Sew along etc. are the Design tab's.
 - `eyelet` (ITH frames only, `hasEye`): a 4.2 mm ring of 2.2 mm satin (run, zigzag, satin) 13 mm in from the narrow
   end (`eyeAt`: the left end of a frame wider than tall, else the top), sewn in the `last` stage before the border;
-  quilting keeps clear of it. `frontPanel`/`frontAcross` start past it, and the Have ready / after texts add Fray
-  Check and the ribbon. The Luggage tag starter uses it too (tall, hole at the top).
+  quilting keeps clear of it. `frontPanel`/`frontAcross` start past it, and the Have ready / after texts add the
+  ring's Fray Check and the ribbon. Every ITH project's after text Fray Checks the cut edge (Ashley's bookmarks,
+  2026-11-05: fabric whiskers stuck out past the satin all round). The Luggage tag starter uses it too (tall, hole at the top).
 - `fittedSizes`: lettering in a frame lying across with a ribbon hole fits right of the hole less 4 mm and the border
   side less 7.8 mm (the old box), and lettering turned a quarter fits a tall frame's front lengthwise the same way;
   long names shrink.
@@ -431,7 +432,7 @@ measurements behind each number are in the code's comments.
   a poor match; Have ready splits "Your threads" / "To buy" (`ownSpool`).
 
 ## App and UI
-- Opens on `#design`; default name Emma.
+- Opens on `#design`; default name Ashley.
 - Side by side needs 700 px wide AND 560 tall (200 % zoom on 1080p is 960x540); then 100dvh, only `.controls`
   scrolls (`position: relative`). Tiers: max-height 900 hides ledes (not `.sewn-on` tips); 700-1365 x 560-760 slimmer;
   header tabs wrap to 1259 px, no MACHINE label to 1365, no tagline to 1480. Stacked layouts scroll, preview first in
@@ -466,7 +467,7 @@ measurements behind each number are in the code's comments.
 - Sew along (`#along`): a step per screen, minutes = stitches / 550, own Have ready, Screen Wake Lock (retaken on
   visibilitychange). Share text carries the steps (`shareText`). On my item (`#item`): a measured photo under the
   design at true size (`state.backdrop`), never uploaded or saved.
-- Offline (`sw.js`, `needleworks-v4`): precaches `FILES`, network first, cache after 3 s; add every new file to
+- Offline (`sw.js`, `needleworks-v5`): precaches `FILES`, network first, cache after 3 s; add every new file to
   `FILES`. https only. Share target: POST `./?share` -> `needleworks-shared` cache -> `./?shared` -> `route()`.
 - A hoop change drops other tabs' designs. Min/max over stitches uses loops (`Math.min(...pts)` overflows past ~110k).
 
