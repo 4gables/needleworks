@@ -216,6 +216,11 @@
           <label class="ghost st-load" for="st-load" title="Open a design saved from here">Open saved</label>
           <input type="file" id="st-load" accept=".json,application/json" class="sr-file">
         </div>
+        <details class="recent" id="st-recent-box" hidden>
+          <summary>Recent designs <span class="hint inline" id="st-recent-count"></span></summary>
+          <p class="hint">Designs you had here before, kept in this browser. Tap one to open it again.</p>
+          <div id="st-recent" class="cards recent-cards"></div>
+        </details>
       </fieldset>
       <fieldset class="field">
         <legend role="heading" aria-level="2">Selected piece <button type="button" id="st-center" class="link">Centre it</button></legend>

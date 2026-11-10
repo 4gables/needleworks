@@ -89,6 +89,11 @@ const STATES = [
     setup: async (p) => { await p.eval(`(()=>{const d=document.querySelector('#panel-design details.steps');d.open=true;d.scrollIntoView({block:'start'})})()`); await p.click("#st-steps [data-step]"); } },
   { id: "design-sewn", hash: "design", seed: studio([text(1, "Emma")], { fabric: "towel" }), setup: async (p) => { await p.eval(`document.getElementById('st-sewn').open=true`); } },
   { id: "design-more", hash: "design", seed: studio([text(1, "Emma")]), setup: async (p) => { await p.eval(`(()=>{const d=document.querySelector('#st-edit details.more');if(d){d.open=true;d.scrollIntoView({block:'center'})}})()`); } },
+  // (Recent designs, open, with long names: round 14; the appliqué tips seen, as they'd open above the list and push
+  // it down, a scroll the keys check counts)
+  { id: "design-recent", hash: "design", seed: { ...studio([text(1, "Emma")]), "nw:studio.applSeen": true, "nw:studio.recent": [["Grandma Rose's Kitchen Towel Set", "#ed171f"], ["Liam", "#0e1f7c"], ["Supercalifragilisticexpialidocious", "#3a8a3a"]].map(([n, c], i) =>
+      ({ needleworks: 1, pieces: [text(1, n.split(" ")[0], { color: c, size: 14 })], fabric: "cotton", thread: "auto", title: n, name: n, at: Date.now() - i * 864e5, sent: !i })) },
+    setup: async (p) => { await p.eval(`(()=>{const d=document.getElementById('st-recent-box');d.open=true;d.scrollIntoView({block:'center'});return 1})()`); await sleep(2500); }, keys: true },
   { id: "bookmark", hash: "bookmark", seed: { "nw:bm.name": "Ashley" }, keys: true },
   { id: "picture", hash: "picture", seed: {}, wait: "!document.getElementById('download').disabled", keys: true },
   { id: "picture-mine", hash: "picture", seed: { "nw:brand": "isacord" }, setup: async (p) => { await p.upload("#pic-file", path.join(FILES, "badge.png")); }, wait: "!document.getElementById('download').disabled && !document.getElementById('pic-thumb').hidden" },

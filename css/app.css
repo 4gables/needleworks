@@ -288,6 +288,11 @@ canvas#view:active { cursor: grabbing; }
 .cards button:hover { border-color: var(--accent); }
 .cards b { font-size: 14px; line-height: 1.2; }
 .cards small { display: none; }
+.recent { margin-top: 8px; }
+.recent summary { cursor: pointer; font-weight: 600; min-height: 32px; display: list-item; }
+.recent .hint { margin: 4px 0 6px; }
+.recent-cards small { display: block; color: var(--muted); font-size: 13px; }
+.recent-cards b { overflow-wrap: anywhere; }
 /* (minmax(0, …): a long piece name shrinks to an ellipsis instead of widening the column past the screen) */
 .pieces { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px; }
 .pieces li { display: flex; align-items: center; gap: 6px; background: var(--panel); border: 1.5px solid var(--line); border-radius: var(--radius); padding: 4px 6px; }
@@ -520,7 +525,7 @@ label:has(> .sr-file:focus-visible), label:has(+ .sr-file:focus-visible) { outli
      lines with big gaps between */
   :is(p, li, span, legend) > .link:not(.extras > .link) { min-height: 0; padding: 0 2px; position: relative; }
   :is(p, li, span, legend) > .link:not(.extras > .link)::after { content: ""; position: absolute; inset: -6px -4px; }
-  .zoom button, .seg button, .views > summary, .doc-blk { min-height: 44px; min-width: 44px; }
+  .zoom button, .seg button, .views > summary, .recent > summary, .doc-blk { min-height: 44px; min-width: 44px; }
 }
 /* Windows high contrast: keep thread colours (they're the content) and mark what's chosen with a real outline */
 @media (forced-colors: active) {

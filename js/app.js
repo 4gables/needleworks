@@ -18,12 +18,36 @@ import { COLORS as LINE_THREADS, initStudio, savedDesign } from "./studio/ui.js"
 const $ = (id) => document.getElementById(id);
 const store = {
   get(k, d) { try { return JSON.parse(localStorage.getItem("nw:" + k)) ?? d; } catch { return d; } },
+  // (false when the browser wouldn't keep it: private mode, or full)
   set(k, v) {
-    try { localStorage.setItem("nw:" + k, JSON.stringify(v)); }
-    catch { if (k === "studio" && !store.warned) { store.warned = true; toast("This design is too big to keep in the browser between visits. Use Save design to keep it."); } }
+    try { localStorage.setItem("nw:" + k, JSON.stringify(v)); return true; }
+    catch { if (k === "studio" && !store.warned) { store.warned = true; toast("This design is too big to keep in the browser between visits. Use Save design to keep it."); } return false; }
   },
   del(k) { try { localStorage.removeItem("nw:" + k); } catch {} },
 };
+
+// The Picture tab's own picture (and its settings, `pic.last` in store), kept in this browser (IndexedDB: a photo is too
+// big for localStorage) and opened again on the next visit: a newcomer came back to the tab and her picture was gone,
+// the sample flower in its place (round 11). One picture, up to `PIC_KEEP`; anything failing (private mode, full,
+// no IndexedDB) leaves it as before: the sample.
+const PIC_KEEP = 15e6;
+const kept = {
+  db: null,
+  open() {
+    return (this.db ||= new Promise((ok, no) => {
+      const r = indexedDB.open("needleworks", 1);
+      r.onupgradeneeded = () => r.result.createObjectStore("kept");
+      r.onsuccess = () => ok(r.result); r.onerror = () => no(r.error); r.onblocked = () => no(new Error("blocked"));
+    })).catch((e) => { this.db = null; throw e; });
+  },
+  async run(mode, f) {
+    const db = await this.open();
+    return new Promise((ok, no) => { const t = db.transaction("kept", mode), r = f(t.objectStore("kept")); t.oncomplete = () => ok(r?.result); t.onerror = t.onabort = () => no(t.error); });
+  },
+  async get(k) { try { return await this.run("readonly", (o) => o.get(k)); } catch { return undefined; } },
+  async set(k, v) { try { await this.run("readwrite", (o) => o.put(v, k)); } catch { /* not kept: the next visit starts with the sample */ } },
+};
+const keepPicture = (blob, name) => { if (blob.size <= PIC_KEEP) kept.set("picture", { blob, name }); };
 
 // the old bookmark panel's colours as saved, mapped to the exact Brother PEC colours (#1a1a1a showed as "Olive Green"),
 // for an old #bookmark link opening the Bookmark starter
@@ -47,7 +71,7 @@ const state = {
   // their spools from brands not charted here (Madeira), matched by colour: [{ brand, num, hex }]. Ticking the nearest
   // Brother spool stood for it, and every surface then said "Your Brother 079 Salmon Pink", a spool they didn't own
   mine: (store.get("myspools", []) || []).filter((o) => o && typeof o.brand === "string" && /^#[0-9a-f]{6}$/i.test(o.hex)),
-  pic: { mine: store.get("pic.mine", false), style: "fill", cross: 2.5, file: null, bitmap: null, key: 0, skip: [], swap: {}, colors: 6, size: 100, angle: 45, bg: true, density: store.get("pic.density", "standard"), req: 0, colorsInfo: [], line: "", edge: false, models: new Map() },
+  pic: { mine: store.get("pic.mine", false), style: "fill", cross: 2.5, file: null, bitmap: null, key: 0, skip: [], swap: {}, colors: 6, size: 100, angle: 45, bg: true, loads: 0, sample: false, density: store.get("pic.density", "standard"), req: 0, colorsInfo: [], line: "", edge: false, models: new Map() },
 };
 if (!MACHINES[state.machine]) state.machine = DEFAULT_MACHINE;
 const hoop = () => getHoop(state.machine, state.hoopId);
@@ -497,6 +521,7 @@ $("share").onclick = async () => {
   if (!r.ok) { toast("Sending stopped: " + r.error); return; }
   try {
     await r.shared;
+    if (v === state.views.design) studio.downloaded();
   } catch (err) {
     if (err && err.name !== "AbortError") toast("Couldn't open the share sheet. Use Download instead.");
   }
@@ -512,6 +537,7 @@ $("download").onclick = () => {
   const r = handOut(files, { hoop: hoop(), zip: v.split ? v.filename : "" });
   // (a file the machine can't take isn't saved: the dialog says why and offers a fixed copy when one helps)
   if (!r.ok && !r.files.some((f) => f.hard.length)) { showError("Download stopped: " + r.error); return; }
+  if (r.ok && v === state.views.design) studio.downloaded();
   downloaded(v, !!v.split, r.files, r.ok);
 };
 // A copy of a file that fails the quality check, fixed by the design doctor (thin to 24 hits/mm², drop tiny and
@@ -1195,7 +1221,7 @@ function setMode(mode, push = true) {
   // (the file chooser in the preview too: at 960 x 540 the panel's was below the fold, under an empty hoop)
   if (mode === "open") $("empty").append(Object.assign(document.createElement("button"), { type: "button", className: "primary", textContent: "Choose a design file", onclick: () => $("open-file").click() }));
   state.zoom = 1; state.pan = [0, 0];
-  if (mode === "picture" && !state.pic.bitmap) loadSample();
+  if (mode === "picture" && !state.pic.bitmap) lastPicture();
   else if (mode === "picture" && !state.views.picture) makePicture();
   else if (mode === "design" && !state.views.design) studio.make();
   else setView(state.views[mode] || null);
@@ -1367,6 +1393,7 @@ async function sewPicture(s, wk, isStale = () => false) {
 }
 async function makePicture() {
   const p = state.pic; if (!p.bitmap) return;
+  if (!p.sample) store.set("pic.last", { style: p.style, colors: p.colors, size: p.size, angle: p.angle, cross: p.cross, bg: p.bg, line: p.line });
   // (nothing from another tab stays on screen, with its Download, while this picture stitches)
   if (state.mode === "picture" && state.view && state.view !== state.views.picture) setView(null);
   const req = ++p.req; busy(true, "Stitching your picture…");
@@ -1657,14 +1684,33 @@ async function loadSample() {
   } catch { /* the empty state still explains what to do */ }
 }
 
-async function loadPicture(file, sample = false) {
+// the picture from the last visit, with its settings, else the sample
+async function lastPicture() {
+  const p = state.pic, n = p.loads, got = await kept.get("picture");
+  if (p.bitmap || n !== p.loads || state.mode !== "picture") return;
+  if (got?.blob instanceof Blob && typeof got.name === "string") {
+    const o = store.get("pic.last", {}) || {};
+    if (["fill", "line", "cross"].includes(o.style)) p.style = o.style;
+    for (const [k, lo, hi] of [["colors", 1, 99], ["size", 10, 400], ["angle", 0, 180], ["cross", 1, 10]]) if (Number.isFinite(o[k]) && o[k] >= lo && o[k] <= hi) { p[k] = o[k]; $("pic-" + k).value = o[k]; $(`pic-${k}-out`).textContent = { colors: String, size: sizeLabel, angle: (v) => `${v}°`, cross: (v) => `${v} mm` }[k](o[k]); }
+    if (typeof o.bg === "boolean") $("pic-bg").checked = p.bg = o.bg;
+    if (o.line === "" || /^#[0-9a-f]{6}$/i.test(o.line)) p.line = o.line;
+    styleUI();
+    await loadPicture(new File([got.blob], got.name, { type: got.blob.type }), false, true);
+    if (p.bitmap) return;
+  }
+  loadSample();
+}
+// (`again`: the kept picture from the last visit, not kept again)
+async function loadPicture(file, sample = false, again = false) {
   if (file && /\.(pes|pec|dst)$/i.test(file.name)) { openDesign(file); return; }   // (an embroidery file: open it as one)
   if (!file || !file.type.startsWith("image/")) { showError("That doesn't look like a picture. Try a PNG or JPG."); return; }
+  state.pic.loads++;
   try {
     const bitmap = await createImageBitmap(file);
-    Object.assign(state.pic, { file, bitmap, box: null, key: state.pic.key + 1, skip: [], swap: {}, edge: false, edgeSeen: false, models: new Map(), autoLine: "" });
+    if (!sample && !again) keepPicture(file, file.name);
+    Object.assign(state.pic, { file, bitmap, sample, box: null, key: state.pic.key + 1, skip: [], swap: {}, edge: false, edgeSeen: false, models: new Map(), autoLine: "" });
     setThumb(file); $("pic-rotate").hidden = false;
-    $("pic-drop").querySelector(".drop-text").innerHTML = sample ? "<b>Choose your own picture</b> or drop it here." : `<b>${escapeHtml(file.name)}</b> · choose another`;
+    $("pic-drop").querySelector(".drop-text").innerHTML = sample ? "<b>Choose your own picture</b> or drop it here." : `${again ? "Your last picture, " : ""}<b>${escapeHtml(file.name)}</b> · choose another`;
     $("pic-sample-note").hidden = !sample;
     $("pic-settings").hidden = false;
     setMode("picture"); makePicture();
@@ -1717,7 +1763,8 @@ $("pic-rotate").onclick = async () => {
   const c = makeCanvas(b.height, b.width), ctx = c.getContext("2d");
   ctx.translate(b.height, 0); ctx.rotate(Math.PI / 2); ctx.drawImage(b, 0, 0);
   Object.assign(p, { bitmap: await createImageBitmap(c), box: null, key: p.key + 1, skip: [], swap: {}, edge: false, edgeSeen: false, models: new Map() });
-  setThumb(c.convertToBlob ? await c.convertToBlob() : await new Promise((r) => c.toBlob(r)));
+  const blob = c.convertToBlob ? await c.convertToBlob() : await new Promise((r) => c.toBlob(r));
+  setThumb(blob); if (!p.sample) keepPicture(blob, p.file.name.replace(/\.[^.]+$/, ".png"));
   makePicture();
 };
 

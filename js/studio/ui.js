@@ -221,7 +221,9 @@ export function initStudio(api) {
 
   // the starter's own way of hooping, for a project that can't be hooped (a made bib: `float`)
   const floated = () => STARTERS.find((s) => s.name === from)?.float;
-  const save = () => api.store.set("studio", { pieces, sel, fabric, baste, thread, fitted, two, from, title, tip });
+  // changed since it was made (a starter or picture as it came isn't kept in Recent designs), downloaded since
+  let edited = !!saved?.edited, sent = !!saved?.sent;
+  const save = () => api.store.set("studio", { pieces, sel, fabric, baste, thread, fitted, two, from, title, tip, edited, sent });
   // undo: a snapshot before each change (a burst of slider moves counts as one), with the hoop's turn (a turned design
   // undone to unturned said Too big)
   // (a snapshot equal to the last one is skipped: picking a piece or a no-op starter made undo look dead for a press)
@@ -233,6 +235,7 @@ export function initStudio(api) {
   const sameDesign = (a, b) => { const x = JSON.parse(a), y = JSON.parse(b); delete x.sel; delete y.sel; return JSON.stringify(x) === JSON.stringify(y); };
   function remember(burst = false) {
     api.hideToast();   // (a "Removed … Undo" note goes with the next change)
+    edited = true;
     if (burst && Date.now() - quiet < 800) { quiet = Date.now(); return; }
     quiet = burst ? Date.now() : 0;
     const now = snap();
@@ -249,7 +252,7 @@ export function initStudio(api) {
     // (a note with an action is about the design as it was: "Replaced your design… Undo" stayed up after Undo, and
     // pressed, undid one step more)
     api.hideToast(true);
-    quiet = 0; buttons(); save(); ui(); make();
+    edited = true; quiet = 0; buttons(); save(); ui(); make(); recentUI();
   }
   function undo() {
     const now = snap();
@@ -1226,11 +1229,11 @@ export function initStudio(api) {
   function addWords(d, name, words = true) {
     const blocks = fileBlocks(d), had = pieces.length;
     const f = piece({ kind: "file", name, blocks, color: blocks[0].color }), t = words && text({ text: "Your words", font: SCRIPT });
-    newDesign([f], { from: name });
+    const kept = newDesign([f], { from: name });
     if (t) { freeSpot(t, "down"); pieces.push(t); }
     sel = (t || f).id; recentre();
     api.setMode("design"); save(); ui(); make();
-    if (had) toast(`Started a new design with ${name}.`, { label: "Undo", run: undo });
+    if (had) toast(`Started a new design with ${name}.${keptSaid(kept)}`, { label: "Undo", run: undo });
     // (straight into the words, selected, so typing replaces them)
     const w = t && $("st-edit").querySelector('textarea[data-k="text"]');
     if (w) { w.focus(); w.select(); }
@@ -1241,7 +1244,9 @@ export function initStudio(api) {
   // brings (`o`: fabric, baste, thread, turn, fitted, two, from, title, tip): a towel stayed on for later starters, a
   // starter's felt after Add words, a turned stocking cuff for the next file, the zoom, a step view and a starter's tip
   // after Open saved, each unsaid.
+  // (the design it replaces goes into Recent designs first: the kept entry, or null)
   function newDesign(ps, o = {}) {
+    const kept = keep();
     remember();
     api.fit(); api.showStep(null);
     api.setTurn(!!o.turn);   // (a square hoop ignores it)
@@ -1249,7 +1254,66 @@ export function initStudio(api) {
     fabric = own(FABRICS, o.fabric) ? o.fabric : "cotton"; baste = o.baste === true; thread = own(THREADS, String(o.thread)) ? String(o.thread) : "auto";
     fitted = o.fitted === true; two = o.two === true; refitted = false;
     from = o.from || ""; title = o.title || ""; tip = o.tip || "";
+    edited = false; sent = false; recentUI();
+    return kept;
   }
+  // Recent designs: the last designs another one replaced (a starter, Open saved, a picture or file as a new design,
+  // Add words), kept in this browser as Save design writes them and opened as Open saved opens them (cleanPieces). A
+  // newcomer's downloaded design went with the next starter, back only by Undo and gone after a reload (rounds 9, 11).
+  // Whole designs, not undo history. A starter or picture as it came, unchanged and not downloaded, isn't kept. Kept
+  // to `RECENT` and about 1.5 MB of the browser's ~5 MB (the design itself must still fit): oldest dropped first, and
+  // with no storage (private mode, full) there's simply no list.
+  const RECENT = 8, RECENT_CHARS = 1.5e6;
+  const designKey = (d) => JSON.stringify([d.pieces.map(({ id, ...p }) => p), d.fabric, !!d.baste, d.thread, !!d.two, d.title || "", d.hoop, !!d.turned]);
+  let recents = (() => { const r = api.store.get("studio.recent", []); return Array.isArray(r) ? r.filter((d) => d && Array.isArray(d.pieces) && d.pieces.length) : []; })();
+  const thisDesign = () => ({ needleworks: 1, pieces, fabric, baste, thread, fitted, two, title, hoop: api.hoopId(), turned: api.turned(), from, tip });
+  function keep() {
+    if (!pieces.length || (!edited && !sent && (!from || STARTERS.some((s) => s.name === from)))) return null;
+    const d = JSON.parse(JSON.stringify({ ...thisDesign(), name: firstWords(), at: Date.now(), sent })), k = designKey(d);
+    recents = [d, ...recents.filter((r) => designKey(r) !== k)].slice(0, RECENT);
+    putRecents();
+    return recents[0] === d ? d : null;
+  }
+  function putRecents() {
+    while (recents.length && (JSON.stringify(recents).length > RECENT_CHARS || !api.store.set("studio.recent", recents))) recents.pop();
+    if (!recents.length) api.store.del("studio.recent");
+    recentUI();
+  }
+  const keptSaid = (d) => (d ? ` “${d.name}”${d.sent ? ", which you downloaded," : ""} is kept under Recent designs.` : "");
+  const when = (t) => { const d = new Date(t); return d.toDateString() === new Date().toDateString() ? d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) : d.toLocaleDateString([], { month: "short", day: "numeric" }); };
+  // the list, without the design on screen (after Undo it's the first one); thumbnails drawn while it's open
+  let recentShown = [];
+  function recentUI() {
+    const now = designKey(thisDesign());
+    recentShown = recents.filter((d) => designKey(d) !== now);
+    $("st-recent-box").hidden = !recentShown.length;
+    $("st-recent-count").textContent = recentShown.length ? `· ${recentShown.length}` : "";
+    $("st-recent").innerHTML = recentShown.map((d, i) => `<button type="button" data-recent="${i}" aria-label="Open ${api.escapeHtml(d.name || "design")} again (from ${when(d.at)})"><canvas aria-hidden="true"></canvas><b>${api.escapeHtml(d.name || "Design")}</b><small>${when(d.at)}${d.sent ? " · downloaded" : ""}</small></button>`).join("");
+    recentThumbs();
+  }
+  async function recentThumbs() {
+    if (!$("st-recent-box").open) return;
+    for (const c of $("st-recent").querySelectorAll("canvas")) {
+      const d = recentShown[+c.parentNode.dataset.recent];
+      await idle();
+      if (!c.isConnected) return;
+      try {
+        const { design, steps } = compose(cleanPieces(d.pieces).pieces, { w: 1000, h: 1000, name: "" }, { fabric: d.fabric, thread: d.thread });
+        const look = previewLook(steps);
+        draw(c, design.pattern(), { pad: 4, ...look, fabric: look.fabric || "white" });
+      } catch { c.remove(); }
+    }
+  }
+  $("st-recent-box").addEventListener("toggle", recentThumbs);
+  $("st-recent").onclick = (e) => {
+    const b = e.target.closest("[data-recent]"), d = b && recentShown[+b.dataset.recent]; if (!d) return;
+    recents = recents.filter((r) => r !== d);
+    let kept = null; try { kept = openDesign(d, { from: d.from || "", tip: d.tip || "" }); } catch (err) { console.error(err); }
+    if (!kept) { putRecents(); toast("That design couldn't be opened again."); return; }
+    edited = true; sent = !!d.sent; save();
+    putRecents();
+    if (!kept.toasted) toast(`Opened “${d.name || "your design"}” again.${keptSaid(kept.kept)}`, { label: "Undo", run: undo });
+  };
   // A design file (+ Design file, or the Picture tab's stitches: "Add it to my design") as a piece of this design, in
   // free space, above what's there (or below, if only that fits), not on top of it: centred, a bought design landed on
   // the lettering. It sews first, after any frames, so lettering added under it sews on top. (where there's room, as
@@ -1717,7 +1781,7 @@ export function initStudio(api) {
     // (upright unless it's laid out long side across, the bookmark: the last starter's turned hoop made a bib hoop
     // sideways; its own fabric and thread or cotton and automatic: a towel left on made every later starter
     // towel-heavy, 30 wt stuck to every later starter)
-    newDesign(s.make(), { fabric: s.fabric, baste: s.baste, thread: s.thread, turn: s.turn, from: s.name, tip: s.tip });
+    const kept = newDesign(s.make(), { fabric: s.fabric, baste: s.baste, thread: s.thread, turn: s.turn, from: s.name, tip: s.tip });
     if (tweak) tweak(pieces); sel = pieces[pieces.length - 1].id;
     // made to fit the hoop it's opened in, everything scaled together (the coaster, quilt block, mug rug and zipper
     // pouch opened Too big on the 4x4)
@@ -1750,7 +1814,7 @@ export function initStudio(api) {
       const files = JSON.parse(had).pieces.filter((p) => p.kind === "file");
       const bring = files.length && { label: files.length === 1 ? `Add ${files[0].name} to it` : `Add your ${files.length} design files to it`,
         run: () => { remember(); for (const f of files) putFile({ ...f, id: nextId++ }); } };
-      toast(`Replaced your design with “${s.name}”.`, [bring, { label: "Undo", run: undo }].filter(Boolean));
+      toast(`Replaced your design with “${s.name}”.${keptSaid(kept)}`, [bring, { label: "Undo", run: undo }].filter(Boolean));
     }
     // phones: the preview is above the cards, so the change happened off-screen (scrolled to its top, so the sewing
     // controls under it stay above the Download bar)
@@ -2213,31 +2277,39 @@ export function initStudio(api) {
       const bad = () => new Error(bad0);
       let data; try { data = JSON.parse(await f.text()); } catch { throw bad(); }
       if (!data || data.needleworks !== 1 || !Array.isArray(data.pieces)) throw bad();
-      // every piece checked and clamped (`cleanPieces`): what came out different is said
-      const { pieces: loaded, said, huge } = cleanPieces(data.pieces);
-      if (!loaded.length) throw bad();
-      api.setMode("design");
-      const hoop0 = api.hoopId(), hoopName0 = api.hoop().name, mh0 = api.machineHoop();
-      // the hoop (when this machine has it) and the turn it was saved with
-      newDesign((nextId = 1, loaded.map((p) => ({ ...p, id: nextId++ }))), { fabric: data.fabric, baste: data.baste, thread: data.thread, fitted: data.fitted, two: data.two, turn: data.turned,
-        from: f.name.replace(/\.needleworks\.json$|\.json$/i, ""), title: typeof data.title === "string" ? tidy(data.title).slice(0, 60) : "" });
-      // (said, with a way back to the hoop that was picked: it switched from the 5x7 to the 4x4 with nothing said)
-      // (the hoop it was saved for isn't a bigger hoop picked, to offer filling: that note took the place of this one)
-      if (typeof data.hoop === "string" && data.hoop !== hoop0) { api.setHoop(data.hoop); lastHoop = null; }
-      const otherHoop = api.hoopId() !== hoop0 && api.hoop().name;
-      // (a size past what any hoop holds, cut down to the biggest piece there can be, is then fitted to this hoop:
-      // `size: 1e9` opened as a 486 mm "Emma")
-      if (huge) try { compose(pieces, api.hoop(), { fabric, baste, thread, later: [], measure: true }); } catch (err) { if (err.overBy) fitHoop(false); }
-      settle(); save(); ui(); make();
-      // (the way back checked first: a 5x7 design taken back to the 4x4 was Too big there, so it's fitted to it, and
-      // said so on the button; an Undo step)
-      if (otherHoop) {
-        const there = api.turned() ? { ...mh0, w: mh0.h, h: mh0.w } : mh0, n0 = hoopName0.replace(/ hoop$/, "");
-        let fits = true; try { compose(pieces, there, { fabric, baste, thread, later: [], measure: true }); } catch (err) { if (!err.overBy) throw err; fits = false; }
-        toast(`Opened for the ${otherHoop} it was saved for.`, { label: fits ? `Use the ${n0} instead` : `Fit it to the ${n0} instead`, run: () => { remember(); api.setHoop(hoop0); if (!fits) fitHoop(); } });
-      }
-      if (said) toast(`From that file: ${said}`);
+      const kept = openDesign(data, { from: f.name.replace(/\.needleworks\.json$|\.json$/i, "") });
+      if (!kept) throw bad();
+      if (!kept.toasted && kept.kept) toast(`Opened ${f.name}.${keptSaid(kept.kept)}`, { label: "Undo", run: undo });
     } catch (err) { console.error(err); toast("That design couldn't be opened: " + (err instanceof RangeError || err instanceof TypeError ? bad0 : err.message)); }
+  }
+  // a saved design's JSON (a file, or one of Recent designs: `o` from, tip) in place of this one: what it replaced
+  // ({ kept: Recent designs' entry or null, toasted }), or null when nothing in it can be opened
+  function openDesign(data, o) {
+    // every piece checked and clamped (`cleanPieces`): what came out different is said
+    const { pieces: loaded, said, huge } = cleanPieces(data.pieces);
+    if (!loaded.length) return null;
+    api.setMode("design");
+    const hoop0 = api.hoopId(), hoopName0 = api.hoop().name, mh0 = api.machineHoop();
+    // the hoop (when this machine has it) and the turn it was saved with
+    const kept = newDesign((nextId = 1, loaded.map((p) => ({ ...p, id: nextId++ }))), { fabric: data.fabric, baste: data.baste, thread: data.thread, fitted: data.fitted, two: data.two, turn: data.turned,
+      from: o.from, tip: o.tip, title: typeof data.title === "string" ? tidy(data.title).slice(0, 60) : "" });
+    // (said, with a way back to the hoop that was picked: it switched from the 5x7 to the 4x4 with nothing said)
+    // (the hoop it was saved for isn't a bigger hoop picked, to offer filling: that note took the place of this one)
+    if (typeof data.hoop === "string" && data.hoop !== hoop0) { api.setHoop(data.hoop); lastHoop = null; }
+    const otherHoop = api.hoopId() !== hoop0 && api.hoop().name;
+    // (a size past what any hoop holds, cut down to the biggest piece there can be, is then fitted to this hoop:
+    // `size: 1e9` opened as a 486 mm "Emma")
+    if (huge) try { compose(pieces, api.hoop(), { fabric, baste, thread, later: [], measure: true }); } catch (err) { if (err.overBy) fitHoop(false); }
+    settle(); save(); ui(); make();
+    // (the way back checked first: a 5x7 design taken back to the 4x4 was Too big there, so it's fitted to it, and
+    // said so on the button; an Undo step)
+    if (otherHoop) {
+      const there = api.turned() ? { ...mh0, w: mh0.h, h: mh0.w } : mh0, n0 = hoopName0.replace(/ hoop$/, "");
+      let fits = true; try { compose(pieces, there, { fabric, baste, thread, later: [], measure: true }); } catch (err) { if (!err.overBy) throw err; fits = false; }
+      toast(`Opened for the ${otherHoop} it was saved for.`, { label: fits ? `Use the ${n0} instead` : `Fit it to the ${n0} instead`, run: () => { remember(); api.setHoop(hoop0); if (!fits) fitHoop(); } });
+    }
+    if (said) toast(`From that file: ${said}`);
+    return { kept, toasted: !!(otherHoop || said) };
   }
   document.addEventListener("keydown", (e) => {
     if (document.body.dataset.mode !== "design" || e.defaultPrevented || e.target.matches?.("input[type=text], textarea, [role=tab]")) return;
@@ -2708,12 +2780,14 @@ export function initStudio(api) {
     }
   }
 
-  cards(); ui();
+  cards(); ui(); recentUI();
   const starter = (id, tweak) => pickStarter(STARTERS.find((x) => x.id === id), tweak);
   // Rename (app.js): the name asked for, "" for the automatic one; the name it would have without one
   // (an Undo step of its own: undoing an earlier change took the name back with it)
   const rename = (t) => { t = tidy(t || "").trim().slice(0, 60); if (t === title) return; remember(); title = api.safeName(t, "") ? t : ""; save(); make(); };
   // the Picture tab's stitches into this design (`fresh`: a new design of it alone), in Design your own
   const usePicture = (d, name, fresh) => { if (fresh || !pieces.length) { addWords(d, name, false); return; } api.setMode("design"); if (addFile(d, name)) toast(`Added ${name} to your design.`, { label: "Undo", run: undo }); };
-  return { make, addWords, usePicture, openSaved, empty: () => !pieces.length, starter, rename, title: () => title, autoName: () => api.safeName(autoWords(), "design"), selBox: () => { const p = current(); return p ? pieceBounds(sewnAt(p)) : null; }, relabel: () => { ui(); make(); }, start, move, end, nudge, deselect, forNames, remember, recentre: () => { remember(); recentre(); save(); ui(); make(); } };
+  // (Download handed the file over: a design downloaded and then replaced is said so in Recent designs)
+  const downloaded = () => { if (!sent) { sent = true; save(); } };
+  return { make, addWords, usePicture, openSaved, downloaded, empty: () => !pieces.length, starter, rename, title: () => title, autoName: () => api.safeName(autoWords(), "design"), selBox: () => { const p = current(); return p ? pieceBounds(sewnAt(p)) : null; }, relabel: () => { ui(); make(); }, start, move, end, nudge, deselect, forNames, remember, recentre: () => { remember(); recentre(); save(); ui(); make(); } };
 }

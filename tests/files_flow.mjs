@@ -145,6 +145,8 @@ for (const [bytes, says, pic] of [[png, /is a picture \(PNG\)/, true], ["new Uin
 
 // ---- Picture -> Design your own, and a thread swapped on a colour's chip
 {
+  // (the sample flower: the picture opened earlier from the Open tab is kept for the next visit, round 14)
+  await open("#design"); await ev(`new Promise((ok) => { const r = indexedDB.deleteDatabase("needleworks"); r.onsuccess = r.onerror = r.onblocked = () => ok(1); })`);
   await open("#picture");
   const r = await run(`await __ff.wait(() => !document.getElementById("pic-use").hidden && !document.getElementById("download").disabled, 40000);
     const threads = () => [...document.querySelectorAll("#threads li")].map((l) => l.textContent.trim()).sort().join("|"), want = threads();
