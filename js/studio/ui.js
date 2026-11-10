@@ -31,6 +31,8 @@ const mono = (o) => piece({ kind: "monogram", letters: "aMs", font: SCRIPT, size
 const appl = (o) => piece({ kind: "letters", text: "AB", font: APPLIQUE_FONTS[0].family, size: 60, color: NAVY, ...o });
 const motif = (o) => piece({ kind: "motif", motif: "heart", size: 40, style: "fill", color: RED, ...o });
 const frame = (o) => piece({ kind: "frame", shape: "circle", w: 80, h: 80, border: "satin", color: RED, ...o });
+// the least a frame is made, each way: the Width and Height sliders' (a circle is w across both ways)
+const FRAME_MIN = 20, frameH = (f) => (f.shape === "circle" ? f.w : f.h);
 
 // (the bookmark had its own panel and engine until 2026-10-31; it's pieces like every other starter now, and its
 // swash checkboxes became "~" typed at either end of the words)
@@ -462,8 +464,8 @@ export function initStudio(api) {
       h += `<p class="hint">Cut from fabric: the machine sews an outline, pauses for you to lay fabric on and trim it, then sews satin stitch round the edges. Letters 30 mm or taller cut and sew most easily.</p>`;
     } else if (p.kind === "frame") {
       h += seg("shape", Object.fromEntries(Object.entries(SHAPES).map(([k, s]) => [k, s.name])), p.shape);
-      h += range("w", p.shape === "circle" ? "Size" : "Width", 20, 170, p.w);
-      if (p.shape !== "circle") h += range("h", "Height", 20, 170, p.h);
+      h += range("w", p.shape === "circle" ? "Size" : "Width", FRAME_MIN, 170, p.w);
+      if (p.shape !== "circle") h += range("h", "Height", FRAME_MIN, 170, p.h);
       // (a zipper across a heart's lobes or a diamond's point makes no pouch)
       h += seg("border", Object.fromEntries(Object.entries(BORDERS).filter(([k]) => k !== "zip" || ["square", "oval", "circle"].includes(p.shape) || p.border === "zip")), p.border);
       if (p.border === "zip") h += `<p class="hint">A lined zipper pouch made in the hoop: the zipper, the front in two folded pieces, what goes on the front (the pieces below it in the list), then the back and one seam through everything. Fabric sizes are under “How to stitch it”.</p>`;
@@ -1454,6 +1456,9 @@ export function initStudio(api) {
     const was = new Set(collisions(pieces).map(([a, b]) => `${a.id}:${b.id}`)), fit0 = fittedSizes(pieces), small0 = new Set(pieces.filter((p) => minSize(fit0.has(p.id) ? { ...p, size: fit0.get(p.id) } : p)).map((p) => p.id));
     for (let i = 0; i < 6 && k < 1; i++) {
       const ps = pieces.map((q) => ({ ...q, x: r(q.x * k), y: r(q.y * k), ...(q.kind === "frame" ? { w: Math.floor(q.w * k * 2) / 2, h: Math.floor(q.h * k * 2) / 2 } : {}) }));
+      // (a frame made smaller than the sliders' least, or than it already was, is no way to fit: with lettering too wide
+      // to fit anyway, six rounds of shrinking took a ganged key fob to 0 x 0.5 mm, and its satin border threw)
+      if (ps.some((q, j) => q.kind === "frame" && Math.min(q.w, frameH(q)) < Math.min(FRAME_MIN, pieces[j].w, frameH(pieces[j])))) return null;
       try { compose(ps, hp, { fabric, baste, thread, later: [], measure: true }); }
       catch (err) { if (!err.overBy) throw err; k *= 0.98 / err.overBy; continue; }
       const fit = fittedSizes(ps);
@@ -1994,7 +1999,7 @@ export function initStudio(api) {
     const scale = (f) => { for (const p of pieces) {
       p.x *= f; p.y *= f;
       if (p.kind === "file") resizeFile(p, (p.scale || 1) * f);
-      else for (const k of ["size", "radius", "ry", "w", "h"]) if (p[k] != null) p[k] = (f < 1 ? Math.floor : Math.round)(p[k] * f * 2) / 2;
+      else for (const k of ["size", "radius", "ry", "w", "h"]) if (p[k] != null) p[k] = Math.max(0.5, (f < 1 ? Math.floor : Math.round)(p[k] * f * 2) / 2);   // (0.5: cleanPiece's least)
     } };
     const most = mostScale(), k = Math.min((hp.w - 10) / w, (hp.h - 10) / h);
     scale(k > 1 ? Math.max(1, Math.min(k, most)) : k);
@@ -2196,6 +2201,9 @@ export function initStudio(api) {
           // (measured at the size the frame then sews it: "Shrunk to 23.5 mm so it fits" under a monogram just put in at 24)
           const ps = pieces.some((o) => o.id === p.id) ? pieces.map((o) => (o.id === p.id ? q : o)) : [...pieces, q], s = sewnAt(q, ps);
           if ((s.size !== q.size && !readable(s)) || !inFrame(s, f, f.border === "patch" ? 3 : 4) || touching(s, others)) continue;
+          // (as a fix, nor a size that brings a problem of its own, as `landing` checks every other fix: "Move it to the
+          // free space in the heart appliqué, 15.5 mm" filled the loops of "Abbie goes", monkey gang-keyfob seed 1)
+          if (fix && pieces.some((o) => o.id === p.id) && newProblem(p, q, ps, { size })) continue;
           return { f, x: q.x, y: q.y, size: s.size ?? size };
         }
       }

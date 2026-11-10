@@ -871,7 +871,10 @@ function fitBox(pts, w, h) {
   const [x0, y0, x1, y1] = bounds(pts), cx = (x0 + x1) / 2, cy = (y0 + y1) / 2;
   return pts.map(([x, y]) => [((x - cx) / (x1 - x0)) * w, ((y - cy) / (y1 - y0)) * h]);
 }
-const shapeOf = (p) => SHAPES[p.shape] || SHAPES.circle;
+// (every outline at least MIN across each way, as a saved design is loaded: a frame 0 mm wide, which Make the frames
+// fit the hoop once asked for, drew NaN corners and the satin border's edge walk threw on a ganged key fob)
+const atLeast = (v) => (v >= MIN ? v : MIN);
+const shapeOf = (p) => { const s = SHAPES[p.shape] || SHAPES.circle; return { name: s.name, path: (w, h) => s.path(atLeast(w), atLeast(h)) }; };
 // a circle frame is w across both ways
 const frameH = (f) => (f.shape === "circle" ? f.w : f.h);
 const hasEye = (f) => !!f.eyelet && f.border === "ith";

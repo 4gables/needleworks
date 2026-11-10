@@ -52,6 +52,28 @@ expect("rings()", lint(rings([circle, inner], (l) => [loop(run(l, 2, true))])), 
   expect("0 mm tie-in", flow({ stitches: st }).total, "zeroTie", 1);
 }
 
+// Every frame shape x border builds finite stitches at any size it can be handed, 0 mm included, alone and ganged
+// (in-the-hoop pairs sew each stage together): `Make the frames fit the hoop` once shrank a ganged key fob to 0 x 0.5
+// mm, its outline's corners came out NaN and the satin border's edge walk threw (monkey gang-keyfob seed 2, R12)
+{
+  const { BORDERS, SHAPES, compose, pieceStages } = await import("../js/studio/pieces.js");
+  const finite = (paths) => paths.every((q) => q.every((pt) => Number.isFinite(pt?.[0]) && Number.isFinite(pt?.[1])));
+  let n = 0, failed = [];
+  for (const shape of Object.keys(SHAPES)) for (const border of Object.keys(BORDERS)) for (const [w, h] of [[0, 0.5], [0, 0], [0.5, 0], [-3, 0.2], [1, 1], [6, 3]]) {
+    const f = { id: 1, kind: "frame", shape, border, w, h, x: 0, y: 0, color: "#ed171f", hang: true, eyelet: border === "ith" };
+    n++;
+    try { if (!finite(pieceStages(f).flatMap((st) => st.paths))) failed.push(`${shape} ${border} ${w}x${h}: not finite`); }
+    catch (e) { failed.push(`${shape} ${border} ${w}x${h}: ${e.message}`); }
+  }
+  for (const border of ["ith", "applique", "zip"]) {
+    n++;
+    const ps = [{ id: 1, kind: "frame", shape: "square", border, w: 0, h: 0.5, x: -20, y: 0, color: "#ed171f" }, { id: 2, kind: "frame", shape: "square", border, w: 0, h: 0.5, x: 20, y: 0, color: "#ed171f" }];
+    try { compose(ps, hoop(undefined, "5x7"), {}); } catch (e) { if (!e.overBy) failed.push(`ganged ${border}: ${e.message}`); }
+  }
+  if (failed.length) bad++;
+  console.log(`${failed.length ? "FAIL" : "ok  "} degenerate frames build: ${n - failed.length}/${n}${failed.length ? "\n  " + failed.slice(0, 10).join("\n  ") : ""}`);
+}
+
 // reference: what the lint finds in our golden files and in professionally made files (not judged)
 const { readFileSync, readdirSync } = await import("fs");
 for (const dir of ["tests/fixtures/golden", "tests/external/pes"].filter(existsSync)) {

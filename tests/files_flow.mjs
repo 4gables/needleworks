@@ -43,7 +43,10 @@ const run = async (js) => { await ev(H); return ev(`(async () => { ${js} })()`);
 const t0 = Date.now();
 
 // ---- Open: files that aren't designs
+// (as a new visitor: a profile another test left on the 4x4 hoop made ashley_v3.pes "Too big for this hoop", and one
+// left with "Don't show this again" never opened the dialog, so the dialog checks below failed or passed for nothing)
 await open("#open");
+await ev(`localStorage.clear(), 1`); await open("#open");
 const png = `new Uint8Array(await (await fetch("assets/sample-flower.png")).arrayBuffer())`;
 for (const [bytes, says, pic] of [[png, /is a picture \(PNG\)/, true], ["new Uint8Array(0)", /empty \(0 bytes\)/], ["new Uint8Array([0x50, 0x4b, 3, 4, 20, 0])", /zip folder/],
   ["new TextEncoder().encode('%PDF-1.4')", /a PDF/], ["new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0, 16])", /picture \(JPEG\)/, true]]) {
@@ -70,8 +73,10 @@ for (const [bytes, says, pic] of [[png, /is a picture \(PNG\)/, true], ["new Uin
 {
   await open("#open");
   const golden = (f) => `new Uint8Array(await (await fetch("tests/fixtures/golden/${f}")).arrayBuffer())`;
-  const save = async (f) => run(`__ff.close(); __ff.put("#open-file", ${golden(f)}, "${f}"); await __ff.wait(() => /${f.replace(".pes", "")}/.test(document.getElementById("download").textContent) && !document.getElementById("download").disabled);
-    document.getElementById("download").click(); await __ff.wait(() => document.getElementById("done").open, 5000); return document.getElementById("done-own").hidden;`);
+  // (opened, the file is the view's: an untouched one's button says "Save a copy", not its name. "not saved" when the
+  // dialog never opened, so the checks can't pass on a file that wasn't saved)
+  const save = async (f) => run(`__ff.close(); __ff.put("#open-file", ${golden(f)}, "${f}"); await __ff.wait(() => nwTest.view()?.filename === "${f}" && !document.getElementById("download").disabled);
+    document.getElementById("download").click(); return await __ff.wait(() => document.getElementById("done").open, 5000) ? document.getElementById("done-own").hidden : "not saved";`);
   // (a save on the Design tab first: not this tab's)
   await run(`location.hash = "#design"; await __ff.wait(() => document.body.dataset.mode === "design" && !document.getElementById("download").disabled); document.getElementById("download").click(); await __ff.wait(() => document.getElementById("done").open, 5000); __ff.close(); location.hash = "#open"; await __ff.wait(() => document.body.dataset.mode === "open");`);
   check("one save on this tab: no \"design of its own\"", await save("multi.pes") === true);
