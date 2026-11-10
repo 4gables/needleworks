@@ -744,6 +744,9 @@ export function notEmbroidery(bytes, name) {
   if (text(0, "RIFF") && text(8, "WEBP")) { what = "a picture (WebP)"; type = "image/webp"; }
   if (text(4, "ftyp") && /^(heic|heix|mif1|avif)$/.test(String.fromCharCode(...b.subarray(8, 12)))) what = "a photo (HEIC or AVIF)";
   if (/^\s*(<\?xml[^]*)?<svg/i.test(String.fromCharCode(...b.subarray(0, 300)))) what = "a drawing (SVG)";
+  // (a design saved from Design your own: its pieces, not stitches)
+  const saved = /^\s*\{\s*"needleworks"\s*:/.test(String.fromCharCode(...b.subarray(0, 40)));
+  if (saved) return { message: `${name} is a design saved from Design your own, not stitches: open it there with Open saved.`, saved: true };
   if (!what) return null;
   const how = what === "a .zip folder" ? " Open it (double-click it) and pick the .pes file inside."
     : type ? " Picture to stitches can turn it into stitches." : /^a (photo|drawing)/.test(what) ? " Save it as a JPG or PNG, then Picture to stitches can turn it into stitches." : " Look for the .pes file that came with it.";
@@ -752,7 +755,7 @@ export function notEmbroidery(bytes, name) {
 export function openedFile(bytes, name) {
   // (a picture, a PDF, a zip or an empty file, said as what it is)
   const not = notEmbroidery(bytes, name);
-  if (not) throw Object.assign(new Error(not.message), { plain: true, picture: not.picture });
+  if (not) throw Object.assign(new Error(not.message), { plain: true, picture: not.picture, saved: not.saved });
   // (jumps landed on their first stitch: a DST converted here, or a fixed copy, would gain a hole where each ended)
   let d = centred(firstMove(landJumps(readEmbroidery(bytes, name))));
   // (a needle move: a stitch that goes somewhere. A file cut down to one stitch on the origin opened, then Download

@@ -12,7 +12,7 @@ import { THREADING, TURN_PIC, pickIt, snipsSaid, turnedNote, youHtml } from "../
 import { notEmbroidery, shortJumps } from "../doctor.js";
 import { QUILTS, quiltOf } from "./quilt.js";
 import { MOTIFS } from "./motifs.js";
-import { quiltDone, scaledFit, BORDERS, FABRICS, THREADS, SHAPES, TEXT_SHAPES, splitPieces, archFit, archStart, frontPanel, inkHeight, monoSize, archRoom, archShrink, archTight, cleanPiece, clearSize, collision, collisions, inFrame, letterMetrics, underPatch, crossName, crossStep, layoutSize, touching, touchingAll, towelMin, fineLine, loopsFill, compose, fileBlocks, blocksPattern, scaleBlocks, FILE_SCALE, fittedSizes, sewnBoxes, sewn, sewnBox, followFrame, label, minSize, pieceBounds, pieceStitches, previewLook, smallText, bulkReady } from "./pieces.js";
+import { quiltDone, scaledFit, BORDERS, FABRICS, THREADS, SHAPES, TEXT_SHAPES, splitPieces, archFit, archStart, frontPanel, inkHeight, monoSize, archRoom, archShrink, archTight, cleanPiece, cleanPieces, clearSize, collision, collisions, inFrame, letterMetrics, underPatch, crossName, crossStep, layoutSize, touching, touchingAll, towelMin, fineLine, loopsFill, compose, fileBlocks, blocksPattern, scaleBlocks, FILE_SCALE, fittedSizes, sewnBoxes, sewn, sewnBox, followFrame, label, minSize, pieceBounds, pieceStitches, previewLook, smallText, bulkReady } from "./pieces.js";
 
 const SCRIPT = "NW Great Vibes", PRINT = "NW Josefin Sans", ROUND = "NW Quicksand", BOLD = "NW Yellowtail";
 // exact Brother PEC thread colours, so the name on screen is the one the machine shows
@@ -981,8 +981,8 @@ export function initStudio(api) {
       if (!dragging) { const fit = fittedSizes(pieces); problems = [...new Map(pieces.flatMap((p) => pieceProblems(p, fit).list).map((x) => [x.id, x])).values()]; }
       // (quilting not worked out yet is done by a worker: `unquilted`, then `quiltSoon`)
       let composed;
-      const unquilted = dragging ? null : [];
-      try { composed = compose(pieces, api.hoop(), { fabric, baste, thread, dragging, later: unquilted }); }
+      const unquilted = dragging ? null : [], noRoom = dragging ? null : [];
+      try { composed = compose(pieces, api.hoop(), { fabric, baste, thread, dragging, later: unquilted, unquilted: noRoom }); }
       catch (err) {
         if (!err.overBy) throw err;
         if (s !== seq) return;
@@ -994,6 +994,8 @@ export function initStudio(api) {
       refitted = false;
       if (two && !dragging) { two = false; save(); }   // (fits one hooping again: growing past it later asks again)
       if (!dragging) roomier();
+      // (quilting asked for with no room left for it in the frame: said, as every problem is)
+      for (const id of noRoom || []) { const f = pieces.find((o) => o.id === id); if (f) problems.push({ id: `quilt:${id}`, kind: "quilt", level: LOOK, piece: id, text: `The ${shapeLabel(f)} has no room left inside for its quilting, so it isn't quilted: make the ${shapeLabel(f)} bigger, or what's in it smaller.` }); }
       const resizing = !dragging && pieces.find((p) => p.kind === "file" && p.pending), quilting = unquilted?.length > 0;
       if (quilting) quiltSoon(unquilted[0]);
       const { design, steps, done, ready, small, later } = stepsOf(composed, true);
@@ -1623,6 +1625,15 @@ export function initStudio(api) {
     if (over && !ith && !at && !two) toast(`Added the new ${{ text: "lettering", monogram: "monogram", letters: "appliqué letters", frame: "frame" }[p.kind] || label(p).toLowerCase()}, but the design is still too big for the ${api.hoop().name}: make something smaller, or take something out.`, { label: "Undo", run: undo });
     return true;
   }
+  // a copy or a paste that `place` made smaller to find it room, said with the size: a duplicated 40 mm heart came out
+  // 28 mm with nothing said (`quiet`: the words, for the caller's own toast)
+  function smallerSaid(p, was, who, quiet = false) {
+    const now = sewn(p, pieces).size;
+    if (now == null || was == null || now >= was - 0.25) return "";
+    const t = `${who || "It"} was made ${mmText(now)} to fit the room there: the original is ${mmText(was)}.`;
+    if (!quiet) toast(t, { label: "Undo", run: undo });
+    return quiet ? ` ${t}` : t;
+  }
   // does the design as it is fit the hoop, sewn?
   function fitsNow() {
     try { compose(pieces, api.hoop(), { fabric, baste, thread, later: [], measure: true }); return true; } catch (err) { if (!err.overBy && !err.empty) throw err; return !err.overBy; }
@@ -1640,8 +1651,9 @@ export function initStudio(api) {
     if (b.dataset.op === "del") { deleted = Date.now(); toast(`Removed ${label(pieces[i])}.`, { label: "Undo", run: undo }); pieces.splice(i, 1); if (sel === id) sel = pieces[Math.max(0, i - 1)]?.id; }
     else if (b.dataset.op === "dup") {
       // the copy goes just below the original, where there's room (else wherever there's room, as a new piece does)
-      const bb = sewnBox(pieces[i], pieces), c = { ...structuredClone(pieces[i]), id: nextId++, y: pieces[i].y + (bb ? bb[3] - bb[1] + 4 : 10) };
+      const bb = sewnBox(pieces[i], pieces), c = { ...structuredClone(pieces[i]), id: nextId++, y: pieces[i].y + (bb ? bb[3] - bb[1] + 4 : 10) }, was = sewn(pieces[i], pieces).size;
       if (!place(c, (q) => pieces.splice(i + 1, 0, q), pieces[i])) return;
+      smallerSaid(c, was, "The copy");
     }
     else if (b.dataset.op === "flip") pieces[i].flip = !pieces[i].flip;
     else if (b.dataset.op === "up" && i > 0) [pieces[i - 1], pieces[i]] = [pieces[i], pieces[i - 1]];
@@ -1938,14 +1950,9 @@ export function initStudio(api) {
       const bad = () => new Error(bad0);
       let data; try { data = JSON.parse(await f.text()); } catch { throw bad(); }
       if (!data || data.needleworks !== 1 || !Array.isArray(data.pieces)) throw bad();
-      // every piece checked and clamped (`cleanPiece`): ones that can't be read are left out, and said so
-      const pairs = data.pieces.map((p) => [p, cleanPiece(p)]), loaded = pairs.map(([, q]) => q).filter(Boolean);
+      // every piece checked and clamped (`cleanPieces`): what came out different is said
+      const { pieces: loaded, said, huge } = cleanPieces(data.pieces);
       if (!loaded.length) throw bad();
-      // (words past the editor's 60 letters, or initials past 12, are cut: said so plainly)
-      // (measured on the words tidied, as they're kept: accents typed apart, which join up, aren't letters cut)
-      const cut = pairs.some(([p, q]) => q && typeof p.text === "string" && typeof q.text === "string" && q.text.length < tidy(p.text, { lines: 3 }).length) || pairs.some(([p, q]) => q?.letters && tidy(p.letters).length > q.letters.length);
-      // (a setting it had that came out different; ones it lacked and got filled in aren't counted)
-      const changed = pairs.filter(([p, q]) => q && Object.keys(p).some((k) => k !== "id" && k !== "text" && k !== "letters" && JSON.stringify(p[k]) !== JSON.stringify(q[k]))).length;
       remember(); nextId = 1; pieces = loaded.map((p) => ({ ...p, id: nextId++ })); sel = pieces[pieces.length - 1].id;
       fabric = own(FABRICS, data.fabric) ? data.fabric : "cotton"; baste = data.baste === true; thread = own(THREADS, data.thread) ? String(data.thread) : "auto"; fitted = data.fitted === true; two = data.two === true;
       from = f.name.replace(/\.needleworks\.json$|\.json$/i, ""); title = typeof data.title === "string" ? tidy(data.title).slice(0, 60) : "";
@@ -1957,14 +1964,10 @@ export function initStudio(api) {
       api.setTurn(data.turned === true);
       // (a size past what any hoop holds, cut down to the biggest piece there can be, is then fitted to this hoop:
       // `size: 1e9` opened as a 486 mm "Emma")
-      const huge = pairs.some(([p, q]) => q && ["size", "w", "h"].some((k) => typeof p[k] === "number" && q[k] < p[k]));
       if (huge) try { compose(pieces, api.hoop(), { fabric, baste, thread, later: [], measure: true }); } catch (err) { if (err.overBy) fitHoop(false); }
       settle(); save(); ui(); make();
       if (otherHoop) toast(`Opened for the ${otherHoop} it was saved for.`, { label: `Use the ${hoopName0.replace(/ hoop$/, "")} instead`, run: () => api.setHoop(hoop0) });
-      const left = data.pieces.length - loaded.length;
-      if (left || changed || cut) toast([left ? `${left} ${left === 1 ? "piece" : "pieces"} in that file couldn't be read and ${left === 1 ? "was" : "were"} left out.` : "",
-        cut ? "Words longer than this page takes (60 letters, 12 initials) were cut short." : "",
-        changed ? `${changed === 1 ? "One piece had settings" : `${changed} pieces had settings`} this page doesn't have: ${changed === 1 ? "it was" : "they were"} set to the nearest that works.` : ""].filter(Boolean).join(" "), null, 12000);
+      if (said) toast(`From that file: ${said}`, null, 12000);
     } catch (err) { console.error(err); toast("That design couldn't be opened: " + (err instanceof RangeError || err instanceof TypeError ? bad0 : err.message)); }
   };
   document.addEventListener("keydown", (e) => {
@@ -1994,12 +1997,13 @@ export function initStudio(api) {
   document.addEventListener("paste", (e) => {
     if (!onPage(e) || e.clipboardData?.files?.length) return;
     let got; try { got = JSON.parse(e.clipboardData.getData("text/plain")); } catch { return; }
-    const ps = got?.needleworks === 1 && Array.isArray(got.pieces) ? got.pieces.map(cleanPiece).filter(Boolean) : [];
-    if (!ps.length) return;
+    // (checked as Open saved checks them, and what came out different said with the paste: `cleanPieces`)
+    const { pieces: ps, said } = got?.needleworks === 1 && Array.isArray(got.pieces) ? cleanPieces(got.pieces) : { pieces: [] }, also = said ? ` ${said}` : "";
+    if (!ps.length) { if (said) toast(`Nothing pasted: ${said}`); return; }
     e.preventDefault(); remember(); fitted = false;
     const add = ps.map((q) => ({ ...structuredClone(q), id: nextId++ })), bs = sewnBoxes(add);
     // one piece goes where a new one would (`place`): beside its original, or in a frame, or in free space
-    if (add.length === 1 && pieces.length) { if (place(add[0], (q) => pieces.push(q))) toast(`Pasted ${label(add[0])}.`); return; }
+    if (add.length === 1 && pieces.length) { const was = sewn(add[0], add).size; if (place(add[0], (q) => pieces.push(q))) toast(`Pasted ${label(add[0])}.${smallerSaid(add[0], was, "", true)}${also}`); return; }
     // several in free space beside what's there (below, else above), moved together, then the layout recentred: it was
     // pasted just below the original, half out of the hoop; with no room left, said so (it went below anyway, into
     // two hoopings)
@@ -2011,10 +2015,10 @@ export function initStudio(api) {
     };
     if (bs.length && pieces.length) {
       const box = [Math.min(...bs.map((b) => b[0])), Math.min(...bs.map((b) => b[1])), Math.max(...bs.map((b) => b[2])), Math.max(...bs.map((b) => b[3]))], at = spotFor(box);
-      if (!at) { toast(`There's no free room in the hoop for ${add.length} more pieces. Make something smaller, or take something out first.`, { label: "Paste anyway", run: () => { remember(); fitted = false; go(box, spotFor(box, true)); } }); return; }
+      if (!at) { toast(`There's no free room in the hoop for ${add.length} more pieces. Make something smaller, or take something out first.${also}`, { label: "Paste anyway", run: () => { remember(); fitted = false; go(box, spotFor(box, true)); } }); return; }
       go(box, at);
     } else go([0, 0, 0, 0], [0, 0]);
-    toast(add.length === 1 ? `Pasted ${label(add[0])}.` : `Pasted ${add.length} pieces.`);
+    toast((add.length === 1 ? `Pasted ${label(add[0])}.` : `Pasted ${add.length} pieces.`) + also);
   });
   // the smallest a new piece is made to fit a frame: half its size for lettering, what still stitches well for the
   // rest (a filled motif under 25 mm starts to lose its detail, and the editor says so, but inside the quilt block's

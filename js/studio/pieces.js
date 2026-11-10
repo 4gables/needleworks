@@ -1585,7 +1585,9 @@ export function cleanPiece(p) {
   const style = () => { if (q.style != null) q.style = pick(q.style, ["auto", "satin", "line"], "auto"); };
   if (p.kind === "text") {
     // (the words tidied as typing tidies them: tidy in core/typed.js; a saved "\r\n" or a cut emoji came back as stand-ins)
-    if (typeof q.text !== "string" || !(q.text = tidy(q.text, { lines: 3, max: MAX_WORDS })).trim()) return null;
+    // (lettering with no words yet is kept, as the editor keeps it, and said there: saved and opened, it vanished)
+    if (typeof q.text !== "string") return null;
+    q.text = tidy(q.text, { lines: 3, max: MAX_WORDS });
     q.font = font(FONTS, "NW Great Vibes"); q.size = num(q.size, MIN, BIG, 18); style();
     q.shape = pick(q.shape, Object.keys(TEXT_SHAPES), "straight"); q.radius = num(q.radius, MIN, 400, 30);
     for (const [k, lo, hi] of [["ry", MIN, 400], ["amp", 0, 100], ["waves", 0.5, 6], ["bulge", 0, 100], ["spacing", -10, 40], ["leading", 80, 200]])
@@ -1597,10 +1599,12 @@ export function cleanPiece(p) {
       if (k.length) q.kern = Object.fromEntries(k.map(([i, v]) => [i, Math.min(50, Math.max(-30, Math.round(v)))])); else delete q.kern;
     }
   } else if (p.kind === "monogram") {
-    if (typeof q.letters !== "string" || !(q.letters = tidy(q.letters, { max: MAX_INITIALS })).trim()) return null;
+    if (typeof q.letters !== "string") return null;
+    q.letters = tidy(q.letters, { max: MAX_INITIALS });
     q.font = font(FONTS, "NW Great Vibes"); q.size = num(q.size, MIN, BIG, 30); style();
   } else if (p.kind === "letters") {
-    if (typeof q.text !== "string" || !(q.text = tidy(q.text, { max: MAX_INITIALS })).trim()) return null;
+    if (typeof q.text !== "string") return null;
+    q.text = tidy(q.text, { max: MAX_INITIALS });
     q.font = font(APPLIQUE_FONTS, APPLIQUE_FONTS[0].family); q.size = num(q.size, MIN, BIG, 60);
   } else if (p.kind === "motif") {
     q.motif = own(MOTIFS, q.motif) ? q.motif : "heart"; q.size = num(q.size, MIN, BIG, 40);
@@ -1633,6 +1637,30 @@ export function cleanPiece(p) {
   // (only lettering has a font: a frame carrying a crafted one stopped the design building)
   if (p.kind !== "text" && p.kind !== "monogram" && p.kind !== "letters") delete q.font;
   return q;
+}
+
+// Pieces from a saved design or a paste, each checked (`cleanPiece`), and what came out other than it went in, said
+// in plain words (one sentence a kind, said once by whoever opens them: Open saved, a paste, a dropped or shared
+// saved design). A paste left unreadable pieces out and set an unknown font in Great Vibes with nothing said.
+// { pieces, said, huge (a size cut down to the biggest piece there can be) }
+export function cleanPieces(list) {
+  const pairs = list.map((p) => [p, cleanPiece(p)]), pieces = pairs.map(([, q]) => q).filter(Boolean), said = [];
+  const left = list.length - pieces.length;
+  if (left) said.push(`${left} ${left === 1 ? "piece" : "pieces"} couldn't be read and ${left === 1 ? "was" : "were"} left out.`);
+  // (words past the editor's 60 letters, or initials past 12; measured on the words tidied, as they're kept: accents
+  // typed apart, which join up, aren't letters cut)
+  const cut = pairs.some(([p, q]) => q && typeof p.text === "string" && typeof q.text === "string" && q.text.length < tidy(p.text, { lines: 3 }).length)
+    || pairs.some(([p, q]) => q && typeof p.letters === "string" && typeof q.letters === "string" && tidy(p.letters).length > q.letters.length);
+  if (cut) said.push(`Words longer than this page takes (${MAX_WORDS} letters, ${MAX_INITIALS} initials) were cut short.`);
+  // (a font this page hasn't got, named, and the one it's sewn in)
+  const fonts = new Map();
+  for (const [p, q] of pairs) if (q && typeof p.font === "string" && q.font && p.font !== q.font) fonts.set(p.font.replace(/^NW /, ""), (q.font || "").replace(/^NW /, ""));
+  for (const [a, b] of fonts) said.push(`The font “${a.slice(0, 40)}” isn't on this page: ${b} is used instead.`);
+  // (a setting it had that came out different; ones it lacked and got filled in aren't counted, nor a font said above)
+  const changed = pairs.filter(([p, q]) => q && Object.keys(p).some((k) => !["id", "text", "letters", "font"].includes(k) && JSON.stringify(p[k]) !== JSON.stringify(q[k]))).length;
+  if (changed) said.push(`${changed === 1 ? "One piece had settings" : `${changed} pieces had settings`} this page doesn't have: ${changed === 1 ? "it was" : "they were"} set to the nearest that works.`);
+  const huge = pairs.some(([p, q]) => q && ["size", "w", "h"].some((k) => typeof p[k] === "number" && q[k] < p[k]));
+  return { pieces, said: said.join(" "), huge };
 }
 
 // How far a design file can be resized inside a design: the doctor's re-stitch range (Open a design's Size)
@@ -1826,7 +1854,7 @@ const quilted = new Map(), lastQuilt = new Map();   // (lastQuilt: per frame, re
 // `later`: a list to put the quilting on when it isn't worked out yet, for a worker to do (`quiltOf`, then `quiltDone`):
 // the quilting last sewn in this frame stands in meanwhile, as while dragging (a 15-piece design with a stippled frame
 // held the page 4-5 s after each drop, letter typed or font change)
-function withQuilt(p, stages, others, dragging = false, later = null) {
+function withQuilt(p, stages, others, dragging = false, later = null, empty = null) {
   // around every other piece's stitches, and inside none of their filled shapes (an appliqué's fabric)
   // (not a shape the frame itself sits on, a patch or appliqué under the whole frame: that would leave no room)
   const edge = shapeOf(p).path(p.w, p.h).map(placer(p)), key0 = JSON.stringify(p), frame = key0;
@@ -1844,7 +1872,8 @@ function withQuilt(p, stages, others, dragging = false, later = null) {
   }
   const paths = quilted.get(key) || lastQuilt.get(frame) || [];
   if (!later || quilted.has(key)) { lastQuilt.set(frame, paths); if (lastQuilt.size > 12) lastQuilt.delete(lastQuilt.keys().next().value); }
-  if (!paths.length) return stages;
+  // (worked out and nothing fits: said, `empty`; a frame quilted with no room left in it sewed no quilting, said nowhere)
+  if (!paths.length) { if (quilted.has(key)) empty?.push(p.id); return stages; }
   const q = { color: p.color, paths, sews: `Quilts the ${shapeOf(p).name.toLowerCase()} (${p.quilt}).`, label: label(p) };
   // (an in-the-hoop frame lists its batting already; a quilt block's Have ready had none)
   if (p.border !== "ith") Object.assign(q, { sandwich: true,
@@ -2180,7 +2209,7 @@ function build(pieces, hoop, opts) {
   const box = (paths) => { const [x0, y0, x1, y1] = bounds(paths.flat()); return [x0 - 1, y0 - 1, x1 + 1, y1 + 1]; };
   const hits = (a, b) => a[0] < b[2] && b[0] < a[2] && a[1] < b[3] && b[1] < a[3];
   const order = [], last = [], edges = [], staged = pieces.map((p) => pieceStages(p, fab).map((st) => ({ label: label(p, true), ...st })));
-  pieces.forEach((p, i) => { if (QUILTED(p)) staged[i] = withQuilt(p, staged[i], staged.filter((_, j) => j !== i).flat(), opts.dragging, opts.later); });
+  pieces.forEach((p, i) => { if (QUILTED(p)) staged[i] = withQuilt(p, staged[i], staged.filter((_, j) => j !== i).flat(), opts.dragging, opts.later, opts.unquilted); });
   // patches: no fill under what's sewn on them (fine-line lettering excepted). Not while dragging, nor when only the
   // size is wanted (`measure`: does it fit the hoop?): the holes are cut 2.5 mm or more inside the patch's outline, well
   // within its satin edge, so they never change the design's size (the same to 0.1 mm on every starter at 50-150 %,

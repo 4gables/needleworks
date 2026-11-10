@@ -14,7 +14,7 @@ const FILES = ["js/studio/ui.js", "js/app.js", "js/sheet.js", "js/words.js", "js
 const SIZES_IN = (f) => f !== "js/studio/pieces.js";
 const MEASURE = /\b(pieceBounds|touchingAll|touching|inFrame)\(/g;
 // a piece's size read: <name>.size, except Maps/Sets and the like
-const SIZE = /\b([a-zA-Z_]\w*)\.size\b/g;
+const SIZE = /\b([a-zA-Z_]\w*)(?:\[[^\]]*\])?\.size\b/g;
 const NOT_PIECES = new Set(["advice", "pointers", "opened", "mine", "dataset", "pic", "seen", "fit", "picFits", "cache", "need"]);
 
 // [file, function, reason]: functions (or a function they're in) that may measure a piece not passed through sewn():

@@ -744,11 +744,14 @@ $("rename-open").onclick = () => {
   $("rename-name").value = studio.title(); $("rename-name").placeholder = auto;
   renameNote(); $("rename").showModal(); $("rename-name").select();
 };
+// (60 letters at most, as the Design tab keeps it: a field's maxlength cut a pasted name with nothing said)
 function renameNote() {
-  const t = tidy($("rename-name").value).trim(), as = safeName(t, "");
+  const el = $("rename-name"), cut = el.value.length > 60;
+  if (cut) el.value = el.value.slice(0, 60);
+  const t = tidy(el.value).trim(), as = safeName(t, "");
   $("rename-auto").hidden = !studio.title();
-  $("rename-note").textContent = !t ? `Empty, it's named from the design: ${studio.autoName()}.pes.`
-    : !as ? "Use some letters or numbers: the machine shows only those." : `The file will be ${as}.pes${as !== t.replace(/\s+/g, "_") ? " (the machine's screen shows plain letters, numbers, - and _)" : ""}. Saved designs, ZIPs and cutter files take this name too.`;
+  $("rename-note").textContent = (cut ? "60 letters and spaces is the most: the rest was left out. " : "") + (!t ? `Empty, it's named from the design: ${studio.autoName()}.pes.`
+    : !as ? "Use some letters or numbers: the machine shows only those." : `The file will be ${as}.pes${as !== t.replace(/\s+/g, "_") ? " (the machine's screen shows plain letters, numbers, - and _)" : ""}. Saved designs, ZIPs and cutter files take this name too.`);
 }
 $("rename-name").addEventListener("input", renameNote);
 $("rename-name").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); $("rename-save").click(); } });
@@ -795,7 +798,9 @@ $("names-make").onclick = async () => {
       // (judged as the zip will be: a name the gate would refuse is left out and said so, not the whole zip)
       const j = judge({ name: f + ".pes", bytes: writePES(pattern), against: pattern }, hoop());
       if (!j.ok) { used.delete(f.toLowerCase()); throw new Error(j.error); }
-      files.push(j); made.push({ name, file: f + ".pes", pattern, shown, smaller, pct, lines, thin, sideways, runs, size: [xh, least, own] });
+      // (a name whose file name another one already took, ignoring case and accents: "Zoe" and "Zoë" both
+      // Zoe, the second saved as Zoe_2.pes with nothing saying which was which)
+      files.push(j); made.push({ name, file: f + ".pes", renamed: f !== safeName(name, "name"), pattern, shown, smaller, pct, lines, thin, sideways, runs, size: [xh, least, own] });
     } catch (err) { bad.push(`${brief(name)} (${/hoop fits|too big/i.test(err.message) ? "too long for the hoop" : err.message})`); if (/too long to sew clearly/.test(err.message)) small.push(name); }
   }
   $("names-make").disabled = false;
@@ -817,7 +822,7 @@ $("names-make").onclick = async () => {
   // every name as it'll sew, to look over (is one crowded?), with what's different about it
   // (a name sewn as a thin line where the design is bold stands out: it was one more word in the brackets)
   // (how much smaller, said: "(smaller)" was all a name made at 28 % said)
-  const notes = (m) => [m.smaller ? `smaller, ${m.pct} %` : "", m.lines ? "on two lines" : "", m.sideways ? "hoop turned" : "", m.runs ? `runs into ${m.runs}` : ""].filter(Boolean).join(", ");
+  const notes = (m) => [m.smaller ? `smaller, ${m.pct} %` : "", m.lines ? "on two lines" : "", m.sideways ? "hoop turned" : "", m.runs ? `runs into ${m.runs}` : "", m.renamed ? `file ${m.file}` : ""].filter(Boolean).join(", ");
   $("names-thumbs").innerHTML = made.map((m, i) => `<figure data-size="${m.size.map((v) => +(v || 0).toFixed(2)).join(" ")}"><canvas data-i="${i}"></canvas><figcaption>${escapeHtml(m.name)}${notes(m) ? ` (${escapeHtml(notes(m))})` : ""}${m.thin ? `<br><strong class="names-thin">Thin line, not bold</strong>` : ""}</figcaption></figure>`).join("");
   for (const c of $("names-thumbs").querySelectorAll("canvas")) {
     const m = made[+c.dataset.i]; draw(c, m.shown || m.pattern, { pad: 6, fabric: "white" });   // (3 px: an arched name's top sat on the edge)
@@ -1246,6 +1251,8 @@ async function makePicture() {
   if (p.style === "line" && !p.line) { p.autoLine = r.summary[0]?.hex || ""; lineUI(); }
   // (asked for 4, got 3: say why, instead of a slider that looks ignored)
   state.pic.merged = r.merged || 0;
+  // (a band of one colour round the edge is taken as a frame and left out (`findFrame`): said, it went with no word)
+  state.pic.framed = !!r.framed;
   state.pic.owned = r.owned || null;
   const mt = machineThreads(r.pattern.threads);
   state.pic.machineName = new Map(r.pattern.threads.map((t, i) => [t.color, mt[i].name]));
@@ -1256,7 +1263,7 @@ async function makePicture() {
   const v = { pattern: r.pattern, verifyAgainst: r.pattern, bytes: r.bytes, filename: `${base}${state.pic.style === "line" ? "_line" : state.pic.style === "cross" ? "_cross" : ""}.pes`, fabric: "linen",
     sheet: turned() ? { notes: [$("done-turn").textContent] } : undefined,
     // (what the panel says of it, as every surface says it: words.js)
-    get problems() { return [...(state.pic.fineProblems || []), ...(state.pic.ownedProblem ? [state.pic.ownedProblem] : [])]; },
+    get problems() { return [...(state.pic.fineProblems || []), ...(state.pic.ownedProblem ? [state.pic.ownedProblem] : []), ...(state.pic.framed ? [{ id: "framed", level: TIP, text: FRAMED }] : [])]; },
   };
   state.views.picture = v;
   // (adding needs a design there to add to)
@@ -1275,12 +1282,14 @@ function pictureError(r) {
 }
 function setSize(mm) { state.pic.size = mm; $("pic-size").value = mm; $("pic-size-out").textContent = sizeLabel(mm); makePicture(); }
 
+const FRAMED = "The band of one colour round the picture's edge looks like a frame round it, so it isn't sewn.";
 function paletteUI() {
   const cols = state.pic.colorsInfo.filter((c) => !c.background && c.area > 0);
-  $("pic-merged").hidden = !state.pic.merged;
+  $("pic-merged").hidden = !state.pic.merged && !state.pic.framed;
   // (said as what happened, not as a fault: "3 colours were too close" beside a slider at 6 read like an error)
   const asked = state.pic.colors;
   $("pic-merged").textContent = state.pic.merged ? `${asked} asked for, ${cols.length} used: this picture has only ${cols.length} ${cols.length === 1 ? "colour" : "colours"} different enough to need ${cols.length === 1 ? "a thread of its own" : "threads of their own"} (the rest are shades of ${cols.length === 1 ? "it" : "these"} or of the fabric).` : "";
+  if (state.pic.framed) $("pic-merged").textContent += `${state.pic.merged ? " " : ""}${FRAMED}`;
   ownedNote();
   const open = state.pic.swapOpen;
   $("pic-palette").innerHTML = cols.map((c) => `<button type="button" data-id="${c.id}" aria-pressed="${!state.pic.skip.includes(c.id)}" aria-expanded="${c.id === open}" aria-controls="pic-swap">
@@ -1564,7 +1573,9 @@ async function openDesign(file) {
     else setMode("open");
     // (a picture renamed .pes, or opened here by mistake: one tap takes it to Picture to stitches)
     const pic = err.picture && { label: "Turn it into stitches", run: async () => loadPicture(new File([await file.arrayBuffer()], file.name.replace(/\.[^.]+$/, "") + "." + err.picture.split(/[/+]/)[1], { type: err.picture })) };
-    showError(was ? `${said} ${was.name} is still open.` : said, pic);
+    // (and a saved design to Design your own)
+    const saved = err.saved && { label: "Open it in Design your own", run: () => { setMode("design"); studioLoad(file); } };
+    showError(was ? `${said} ${was.name} is still open.` : said, pic || saved);
   }
 }
 // The fixes run in a worker (re-stitching star_badge.pes at 250 % froze the page for 10 s): one job at a time, only
@@ -1879,6 +1890,9 @@ $("open-file").onchange = (e) => e.target.files[0] && openDesign(e.target.files[
 // drag & drop / paste anywhere
 function route(file) {
   if (!file) return;
+  // (a design saved from Design your own, dropped on the page or shared to it: opened as Open saved opens it. It went
+  // to Open a design, which said it couldn't be read as an embroidery file)
+  if (/\.json$/i.test(file.name) || file.type === "application/json") { setMode("design"); studioLoad(file); return; }
   if (file.type.startsWith("image/")) loadPicture(file);
   else openDesign(file);
 }
@@ -1906,6 +1920,10 @@ fillMachines();
 brandUI();
 // ---------- design your own ----------
 // Design tab: show the design as it stands after one step (null = all of it)
+// a saved design file into Design your own's Open saved (its own checks and what it says)
+function studioLoad(file) {
+  const i = $("st-load"), dt = new DataTransfer(); dt.items.add(file); i.files = dt.files; i.dispatchEvent(new Event("change"));
+}
 function showStep(i) {
   if (state.step === i) return;
   state.step = i; document.dispatchEvent(new CustomEvent("nw:step", { detail: i })); paint();
