@@ -12,7 +12,7 @@ import { QUILTS, quiltOf } from "./quilt.js";
 import { MOTIFS } from "./motifs.js";
 import { quiltDone, scaledFit, BORDERS, FABRICS, THREADS, SHAPES, TEXT_SHAPES, splitPieces, archFit, archStart, frontPanel, inkHeight, monoSize, archRoom, archShrink, archTight, cleanPiece, clearSize, collision, collisions, inFrame, letterMetrics, underPatch, crossName, crossStep, layoutSize, touching, touchingAll, towelMin, fineLine, loopsFill, compose, fileBlocks, blocksPattern, scaleBlocks, FILE_SCALE, fittedSizes, followFrame, label, minSize, pieceBounds, previewLook, smallText, bulkReady } from "./pieces.js";
 
-const SCRIPT = "NW Great Vibes", PRINT = "NW Josefin Sans", ROUND = "NW Quicksand";
+const SCRIPT = "NW Great Vibes", PRINT = "NW Josefin Sans", ROUND = "NW Quicksand", BOLD = "NW Yellowtail";
 // exact Brother PEC thread colours, so the name on screen is the one the machine shows
 const RED = "#ed171f", NAVY = "#0e1f7c", BLACK = "#000000";
 const PINK = "#f993bc", WHITE = "#f0f0f0";
@@ -34,6 +34,11 @@ const frame = (o) => piece({ kind: "frame", shape: "circle", w: 80, h: 80, borde
 // (the bookmark had its own panel and engine until 2026-10-31; it's pieces like every other starter now, and its
 // swash checkboxes became "~" typed at either end of the words)
 const SACRAMENTO = "NW Sacramento";
+// Every starter opens with nothing to warn about on either hoop (tests/starters.mjs): "Ashley" in Great Vibes has
+// small loops that fill in from 16 to 22 mm, so script names are 24 mm where there's room and Yellowtail where there
+// isn't (the bib, ornament, luggage tag, towel). Starters made for one name lying across (the pet bandana, the
+// stocking cuff, name with motifs, tote bag, towel) open with the hoop turned like the bookmark, so a 10-letter name
+// typed over it still fits the 5x7 ("Biscuit" on the bandana was 149 mm, too big upright).
 export const STARTERS = [
   // A name along an in-the-hoop bookmark: cotton front, felt back, one thread, a ribbon hole. It lies across with the
   // hoop turned (`turn`), so the name reads straight and still uses the 7 in side (it stood on end until 2026-10-31,
@@ -42,6 +47,9 @@ export const STARTERS = [
   { id: "bookmark", name: "Bookmark", note: "in the hoop, with a ribbon hole", turn: true, make: () => [
     frame({ shape: "bookmark", w: 165, h: 50, border: "ith", hang: false, eyelet: true, color: RED }),
     text({ text: "~Ashley~", font: SACRAMENTO, size: 26, x: 8, color: RED })],
+    // (a short one on the 4x4: everything scaled down left the name 15 mm, too small to stitch cleanly)
+    small: () => [frame({ shape: "bookmark", w: 95, h: 40, border: "ith", hang: false, eyelet: true, color: RED }),
+      text({ text: "~Ashley~", font: SACRAMENTO, size: 22, x: 7, color: RED })],
     tip: "Made in the hoop on tear-away stabilizer: cotton for the front and felt for the back, each about 3 × 8 in, plus tape, Fray Check and a ribbon. Full size needs the 5 × 7 hoop. Type ~ at either end of a name for a swash." },
   { id: "monogram", name: "Monogram", note: "3 initials in a frame", make: () => [frame({ shape: "circle", w: 90, h: 90, border: "satin" }), mono({ size: 23 })] },
   { id: "ring", name: "Name in a circle", note: "lettering around a ring", make: () => [
@@ -54,24 +62,24 @@ export const STARTERS = [
     // curves just inside the border (what "Follow the frame" gives with the fonts loaded)
     text({ text: "HANDMADE", font: PRINT, size: 9, shape: "up", radius: 45, ry: 27, color: RED }),
     text({ text: "WITH LOVE", font: PRINT, size: 7, shape: "down", radius: 54, ry: 36, color: RED }),
-    text({ size: 18 })] },
-  { id: "framed", name: "Name in a frame", note: "a name inside a border", make: () => [frame({ shape: "oval", w: 110, h: 64, border: "satin" }), text({ size: 22 })] },
+    text({ size: 24 })] },
+  { id: "framed", name: "Name in a frame", note: "a name inside a border", make: () => [frame({ shape: "oval", w: 110, h: 64, border: "satin" }), text({ size: 24 })] },
   { id: "quilt", name: "Quilt label", note: "who it's for, who made it", make: () => [
     frame({ shape: "square", w: 110, h: 70, border: "line", color: BLACK }),
     // (Quicksand at 9 mm: Josefin's single-storey a sewed as an o at label sizes, its stem merged with the bowl, and
     // 8 mm warned "too small" out of the box)
     text({ text: "Made for", font: ROUND, size: 9, y: -23, color: BLACK }),
-    text({ text: "Ashley", size: 20, y: -3, color: RED }),
+    text({ text: "Ashley", size: 24, y: -3, color: RED }),
     text({ text: "by Ashley in 2026", font: ROUND, size: 9, y: 19, color: BLACK })],
     tip: "Stitch it on cotton backed with tear-away stabilizer, then turn the edges under and hand-sew it to the back of the quilt." },
   { id: "bib", name: "Baby bib", note: "a name over a little heart", make: () => [
     frame({ shape: "heart", w: 46, h: 42, border: "applique", y: 14, color: PINK }),
-    text({ text: "Ashley", size: 16, shape: "up", radius: 32, y: 14, color: NAVY })],   // (30 ran into the heart's dip)
+    text({ text: "Ashley", font: BOLD, size: 15, shape: "up", radius: 32, y: 14, color: NAVY })],   // (30 ran into the heart's dip)
     tip: "Hoop sticky (self-adhesive) tear-away stabilizer, score and peel its paper, and press the bib onto it (or float it on plain tear-away with spray adhesive). On terry, lay a water-soluble topper over it so the stitches don't sink." },
-  { id: "towel", name: "Towel name", note: "a big name that stands up to terry", make: () => [text({ text: "Ashley", size: 32, style: "satin" })], fabric: "towel", baste: true },
+  { id: "towel", name: "Towel name", note: "a big name that stands up to terry", make: () => [text({ text: "Ashley", font: BOLD, size: 32, style: "satin" })], fabric: "towel", baste: true, turn: true },
   { id: "ornament", name: "Ornament", note: "two-sided, sewn in the hoop", make: () => [
     frame({ shape: "circle", w: 80, h: 80, border: "ith", hang: true, color: RED }),
-    text({ text: "Ashley", size: 20, y: -4 }),
+    text({ text: "Ashley", font: BOLD, size: 20, y: -4 }),
     text({ text: "2026", font: PRINT, size: 8, y: 14 })],
     tip: "Made in the hoop, front and back. Have ready: tear-away stabilizer, front and back fabric cut 1 in bigger than the circle, tape, and a 6 in ribbon for hanging. Smaller (Fit to hoop or the size slider) makes a keychain." },
   { id: "mugrug", name: "Mug rug", note: "quilted, sewn in the hoop", make: () => [
@@ -95,30 +103,39 @@ export const STARTERS = [
     mono({ letters: "J", size: 30, y: 6, color: NAVY })],
     tip: "Like the ornament: tape a 5 in piece of ribbon or webbing, folded in half, at the top before the back goes on. Felt or vinyl doesn't fray, so it can be cut right up to the satin stitches." },
   { id: "applique", name: "Appliqué", note: "a fabric shape with a name", make: () => [
-    frame({ shape: "heart", w: 84, h: 76, border: "applique", y: -4 }), text({ size: 16, y: -4, color: NAVY })] },   // (18 at -6 ran into the lobes)
+    frame({ shape: "heart", w: 84, h: 76, border: "applique", y: -4 }), text({ size: 24, y: -4, color: NAVY })] },   // (18 at -6 ran into the lobes)
   { id: "initials", name: "Appliqué letters", note: "fabric letters with satin-stitched edges", make: () => [appl({ text: "AB", size: 60 })] },
   { id: "patch", name: "Patch", note: "a filled badge with an edge", make: () => [
     frame({ shape: "circle", w: 76, h: 76, border: "patch", fill: NAVY, color: RED }),
     mono({ letters: "JD", size: 26, font: PRINT, color: "#f0f0f0" })] },
-  { id: "decorated", name: "Name with motifs", note: "a little heart either side", make: () => [text({ text: "Ashley", size: 20, deco: "heart", color: RED })] },
+  { id: "decorated", name: "Name with motifs", note: "a little heart either side", make: () => [text({ text: "Ashley", size: 24, deco: "heart", color: RED })], turn: true },
   { id: "words", name: "Just lettering", note: "a word or name on its own", make: () => [text({ size: 24 })] },
   // more of what people sew most (2026-10-31), then a few of our own
   { id: "tag", name: "Luggage tag", note: "two-sided, with a hole for the strap", make: () => [
     frame({ shape: "square", w: 60, h: 100, border: "ith", hang: false, eyelet: true, color: NAVY }),
-    text({ text: "Ashley", size: 18, y: 4, color: RED }),
+    text({ text: "Ashley", font: BOLD, size: 16, y: 4, color: RED }),
     text({ text: "555-0123", font: ROUND, size: 8, y: 26, color: NAVY })],
+    // (a little shorter on the 4x4, so it isn't shrunk: at 95 % its name's loops filled in)
+    small: () => [frame({ shape: "square", w: 60, h: 92, border: "ith", hang: false, eyelet: true, color: NAVY }),
+      text({ text: "Ashley", font: BOLD, size: 16, y: 4, color: RED }),
+      text({ text: "555-0123", font: ROUND, size: 8, y: 26, color: NAVY })],
     tip: "Made in the hoop like the bookmark. Felt or vinyl on the back doesn't fray; a strip of clear vinyl over the front makes it wipe clean." },
   { id: "pocket", name: "Pocket monogram", note: "small initials for a shirt or polo", make: () => [mono({ letters: "jKm", font: PRINT, size: 20, color: NAVY })],
     fabric: "knit", tip: "Sew it on the left chest, about 7-9 in down from the shoulder seam. Hoop cut-away stabilizer with the shirt, and a water-soluble topper on piqué." },
-  { id: "tote", name: "Tote bag", note: "two lines of words for a canvas bag", make: () => [text({ text: "Ashley's\nbooks", font: ROUND, size: 18, color: NAVY })],
+  { id: "tote", name: "Tote bag", note: "two lines of words for a canvas bag", make: () => [text({ text: "Ashley's\nbooks", font: ROUND, size: 18, color: NAVY })], turn: true,
     fabric: "canvas", tip: "Turn the bag inside out to hoop the front panel only, with tear-away stabilizer behind it." },
-  { id: "stocking", name: "Stocking cuff", note: "a name with swashes for the cuff", make: () => [text({ text: "~Ashley~", size: 28, color: WHITE })],
+  { id: "stocking", name: "Stocking cuff", note: "a name with swashes for the cuff", make: () => [text({ text: "~Ashley~", size: 28, color: WHITE })], turn: true,
     fabric: "felt", tip: "Sew the cuff before the stocking is put together, so it can be hooped flat. White on red felt reads from across the room." },
   { id: "birth", name: "Birth announcement", note: "name, date and weight for a keepsake", make: () => [
     frame({ shape: "oval", w: 100, h: 140, border: "line", color: NAVY }),
     motif({ motif: "baby", size: 25, y: -40, color: PINK }),
-    text({ text: "Ashley", size: 22, y: -6, color: NAVY }),
+    text({ text: "Ashley", size: 24, y: -6, color: NAVY }),
     text({ text: "June 1, 2026\n7 lb 2 oz · 20 in", font: ROUND, size: 7, y: 22, color: NAVY })],
+    // (scaled to the 4x4 the baby was too small to fill and the date too small to stitch)
+    small: () => [frame({ shape: "oval", w: 94, h: 94, border: "line", color: NAVY }),
+      motif({ motif: "baby", size: 25, y: -26, color: PINK }),
+      text({ text: "Ashley", size: 24, y: 0, color: NAVY }),
+      text({ text: "June 1, 2026\n7 lb 2 oz · 20 in", font: ROUND, size: 7, y: 25, color: NAVY })],
     tip: "Pretty framed in a 6 in embroidery hoop on the wall. Cotton or linen with medium tear-away stabilizer." },
   { id: "wedding", name: "Wedding keepsake", note: "two names and the date in a scallop", make: () => [
     frame({ shape: "scallop", w: 120, h: 120, border: "satin", color: "#e8a900" }),
@@ -127,15 +144,22 @@ export const STARTERS = [
   { id: "bookplate", name: "Book plate", note: "“from the library of”, for a book cover", make: () => [
     frame({ shape: "square", w: 96, h: 120, border: "line", color: BLACK }),
     text({ text: "from the library of", font: ROUND, size: 8, y: -36, color: BLACK }),
-    text({ text: "Ashley", size: 22, y: -10, color: RED }),
+    text({ text: "Ashley", size: 24, y: -10, color: RED }),
     motif({ motif: "book", size: 25, y: 26, color: NAVY })],
+    small: () => [frame({ shape: "square", w: 90, h: 94, border: "line", color: BLACK }),
+      text({ text: "from the library of", font: ROUND, size: 8, y: -33, color: BLACK }),
+      text({ text: "Ashley", size: 24, y: -10, color: RED }),
+      motif({ motif: "book", size: 25, y: 22, color: NAVY })],
     tip: "Sew it on linen or cotton, then glue or stitch it inside a fabric book cover. Goes with the Bookmark." },
-  { id: "pet", name: "Pet bandana", note: "a pet's name between two paws", make: () => [text({ text: "~Buddy~", size: 20, deco: "paw", color: NAVY })],
+  { id: "pet", name: "Pet bandana", note: "a pet's name between two paws", make: () => [text({ text: "~Buddy~", size: 20, deco: "paw", color: NAVY })], turn: true,
     tip: "Sew it on one corner of a cotton square before it's folded into a bandana, with tear-away stabilizer." },
   { id: "kitchen", name: "Kitchen sign", note: "family name and a year", make: () => [
     frame({ shape: "oval", w: 120, h: 80, border: "bold", color: RED }),
     text({ text: "Grandma's\nKitchen", size: 16, y: -4, color: NAVY }),
     text({ text: "EST. 1968", font: ROUND, size: 6, y: 25, color: RED })],
+    small: () => [frame({ shape: "oval", w: 94, h: 72, border: "bold", color: RED }),
+      text({ text: "Grandma's\nKitchen", size: 16, y: -3, color: NAVY }),
+      text({ text: "EST. 1968", font: ROUND, size: 6, y: 23, color: RED })],
     tip: "Good on a flour-sack tea towel (pick Cotton) or an apron." },
 ];
 
@@ -146,7 +170,7 @@ export function initStudio(api) {
   const saved = api.store.get("studio", null);
   // (checked like an opened design: a crafted file's pieces stayed broken through a reload)
   let pieces = (Array.isArray(saved?.pieces) ? saved.pieces : []).map(cleanPiece).filter(Boolean);
-  if (!pieces.length) pieces = STARTERS.find((s) => s.id === "monogram").make();
+  if (!pieces.length) pieces = STARTERS.find((s) => s.id === "framed").make();   // (a first visit: a name, not the initials "aMs")
   if (new Set(pieces.map((p) => p.id)).size < pieces.length || !pieces.every((p) => Number.isInteger(p.id))) pieces.forEach((p, i) => (p.id = i + 1));
   nextId = Math.max(0, ...pieces.map((p) => p.id)) + 1;
   // (nothing selected stays so through a reload: `?? last` picked the last piece again)
@@ -220,7 +244,7 @@ export function initStudio(api) {
   async function thumbs() {
     if (thumbed || !$("st-cards").offsetWidth) return;
     thumbed = true;
-    const fonts = [...new Set(STARTERS.flatMap((s) => (s.make ? s.make() : [])).filter((p) => p.font).map((p) => p.font).concat(SCRIPT))];
+    const fonts = [...new Set(STARTERS.flatMap((s) => (s.make ? s.make() : []).concat(s.small ? s.small() : [])).filter((p) => p.font).map((p) => p.font).concat(SCRIPT))];
     await Promise.allSettled(fonts.map(loadFont));
     for (const s of STARTERS) {
       await idle();
@@ -345,7 +369,7 @@ export function initStudio(api) {
         + `<p class="hint" data-lines-hint aria-live="polite" hidden>Three lines is the most: that new line became a space.</p>`;
       // swashes are typed (~ at either end of the words); these put them on or take them off
       {
-        const ls = p.text.split("\n").filter((l) => l.trim()), lead = swashes(ls[0] || "").lead, tail = swashes(ls[ls.length - 1] || "").tail;
+        const { lead, tail } = swashOn(p.text);
         const kind = FONTS.find((f) => f.family === p.font)?.print ? "Dash" : "Swash";
         h += `<div class="seg swash" role="group" aria-label="${kind}es" title="Or type ~ at the start or end of the words">`
           + `<button type="button" data-swash="lead" aria-pressed="${lead}">${kind} before</button><button type="button" data-swash="tail" aria-pressed="${tail}">${kind} after</button></div>`;
@@ -359,7 +383,9 @@ export function initStudio(api) {
       if (arc) {
         h += range("radius", "Curve width", 15, 80, p.radius);
         h += range("ry", "Curve height", 15, 80, p.ry ?? p.radius);
-        if (followFrame(p, pieces)) h += `<button type="button" class="link" data-follow>Follow the frame</button>`;
+        // (only when it would change something: on a scallop it was there, did nothing, and the words ran into it)
+        const ff = followFrame(p, pieces);
+        if (ff && Object.entries(ff).some(([k, v]) => Math.abs((p[k] ?? (k === "ry" ? p.radius : 0)) - v) > 0.25)) h += `<button type="button" class="link" data-follow>Follow the frame</button>`;
       }
       if (p.shape === "wave") { h += range("amp", "Wave height", 2, 30, p.amp ?? Math.round(p.size * 0.35)); h += range("waves", "Waves", 1, 3, p.waves ?? 1, "", 0.5); }
       if (p.shape === "bridge") h += range("bulge", "Bulge", 10, 80, p.bulge ?? 30, "%", 5);
@@ -501,6 +527,8 @@ export function initStudio(api) {
     if (plain && d.fills) add("loops", LOOK, `${L} has small loops that fill in at this size.`);
     return { list, d };
   }
+  // the swashes the words have (`~` before the first line, after the last), as the Swash buttons show them
+  const swashOn = (text) => { const ls = text.split("\n").filter((l) => l.trim()); return { lead: swashes(ls[0] || "").lead, tail: swashes(ls[ls.length - 1] || "").tail }; };
   // too-small lettering, said plainly (updated in place so typing keeps focus)
   async function warn() {
     const w = $("st-edit").querySelector("[data-warn]"), p = current(); if (!w || !p) return;
@@ -546,6 +574,7 @@ export function initStudio(api) {
       else {
         const l = landing(p, sizeChange(p, need));
         size = l.fits ? `${what} ${btn(`data-size="${need}"`, `Make it ${need} mm`, l)}`
+          : l.capped ? `${what} ${roomIn(p, l, need)}`
           : l.hit ? `${what} At ${need} mm it would ${l.out ? "go outside" : "run into"} ${api.escapeHtml(label(l.hit))}: give it more room first.`
           : `${what} At ${need} mm it would be ${l.w.toFixed(0)} × ${l.h.toFixed(0)} mm, too big for the hoop even turned. Use fewer or shorter lines${onTowel ? ", or a bolder font (Yellowtail, Satisfy)." + cotton : "."}`;
       }
@@ -592,6 +621,10 @@ export function initStudio(api) {
     }
     // (a bigger size for loops that fill in is offered only when it lands, like every other fix)
     const fillsAt = ids("loops") && fills <= 3 * q.size ? landing(p, sizeChange(p, fills)) : null;
+    // (shrunk back by its frame: a frame big enough, else the motifs either side left out, where that lands)
+    const plain = fillsAt?.capped && p.deco && !fillsAt.host?.deco ? landing(p, { deco: "", ...sizeChange(p, fills) }) : null;
+    const fillsGrow = !fillsAt?.capped ? "" : grown(p, fillsAt.host, fills)
+      || (plain?.fits ? btn(`data-size="${fills}" data-no-deco`, `Make it ${fills} mm without the ${api.escapeHtml((MOTIFS[p.deco]?.name || "motif").toLowerCase())}s`, plain) : "");
     // a name typed as initials ("Max" sewed as a first/LAST/middle monogram, "MaX" with a big a): as lettering instead
     let named = "";
     if (ids("named")) {
@@ -623,7 +656,7 @@ export function initStudio(api) {
       missing: gone.length ? `This font has no ${api.escapeHtml(lackList(gone))}: ${gone.length === 1 ? "it" : "they"} would be stitched in a stand-in letter. Take ${gone.length === 1 ? "it" : "them"} out or try another font.` : "",
       small: size, towel: size, arch: arc, runs: hit,
       thin: bold && `At this size it sews as a thin line.${bold.fits ? ` ${btn(`data-seg-set="style:satin"`, "Make it bold", bold)} (small loops may fill in).` : ` Bold, it would ${no(bold)}.`}`,
-      loops: line && `At this size the small loops (the holes in letters like b and e) fill in.${line.fits ? ` ${btn(`data-seg-set="style:line"`, "Thin line", line)} keeps them open` : ""}${fillsAt?.fits ? `${line.fits ? ", or" : ""} ${btn(`data-size="${fills}"`, `${line.fits ? "make" : "Make"} it ${fills} mm`, fillsAt)}` : ""}${line.fits || fillsAt?.fits ? "." : ""}` };
+      loops: line && `At this size the small loops (the holes in letters like b and e) fill in.${line.fits ? ` ${btn(`data-seg-set="style:line"`, "Thin line", line)} keeps them open` : ""}${fillsAt?.fits ? `${line.fits ? ", or" : ""} ${btn(`data-size="${fills}"`, `${line.fits ? "make" : "Make"} it ${fills} mm`, fillsAt)}` : ""}${fillsGrow ? `${line.fits ? ", or" : ""} ${line.fits ? fillsGrow.replace(">Make", ">make") : fillsGrow}${/data-frame-grow/.test(fillsGrow) ? ` for ${fills} mm letters` : ""}` : ""}${line.fits || fillsAt?.fits || fillsGrow ? "." : ""}` };
     w.innerHTML = [...new Set(list.map((x) => x.kind))].map((k) => tag(k, said[k] + (k === withLines ? lines : ""))).filter(Boolean).join(" <br>");   // (a space too: read aloud or copied, "lines.On two lines")
     w.hidden = !w.innerHTML;
     const auto = $("st-edit").querySelector('[data-seg="style"] [data-v="auto"]');
@@ -649,10 +682,21 @@ export function initStudio(api) {
       const ps = pieces.map((o) => (o.id === f.id ? g : o.id === p.id ? q : o));
       if ((fittedSizes(ps).get(p.id) ?? q.size) < need) continue;
       const [w, h] = layoutSize(ps), fits = w <= fw && h <= fh ? "fits" : w <= fh && h <= fw ? "turn" : null;
-      if (!fits || touching(q, ps)) return null;
+      if (!fits) return null;
+      if (touching(q, ps)) continue;   // (just big enough, the letters touched the frame: a little bigger clears it)
       return { w: g.w, h: g.h, fits };
     }
     return null;
+  }
+  // the button that makes p's frame f big enough for it at `need` (`frameFor`), or ""
+  function grown(p, f, need) {
+    const g = f && frameFor(p, f, need);
+    return g ? `<button type="button" class="link" data-frame-grow="${f.id}:${g.w}:${g.h}:${need}"${g.fits === "turn" ? " data-turn" : ""}>Make the frame ${g.w} mm${g.fits === "turn" ? " and turn the hoop" : ""}</button>` : "";
+  }
+  // what to say when a size fix is shrunk back by p's frame (`landing`'s `capped`): a bigger frame where that lands
+  function roomIn(p, l, need) {
+    const g = grown(p, l.host, need);
+    return g ? `The frame only has room for ${l.capped} mm: ${g}.` : `The frame only has room for ${l.capped} mm: use fewer words, or make the frame bigger.`;
   }
   // frame f (a circle) centred on everything there and just big enough to hold it all 6 mm inside its line (about
   // 4 mm of fabric inside the border), as long as the hoop takes it; else as it was
@@ -700,6 +744,9 @@ export function initStudio(api) {
     const b0 = pieceBounds(f0 ? { ...p, size: f0 } : p), b1 = pieceBounds(fit ? { ...q, size: fit } : q);
     const out = pieces.find((f) => f.kind === "frame" && f.id !== p.id && inside(b0, pieceBounds(f)) && !inside(b1, pieceBounds(f)));
     if (out) return { w, h, fits: null, hit: out, out: true };
+    // nor a size its frame shrinks straight back (`fittedSizes`): "Make it 17 mm" left the words at 15, and the same
+    // warning offered 17 again (Kitchen sign with hearts, Wedding keepsake's two names)
+    if (change.size != null && fit != null && fit < change.size - 0.25) return { w, h, fits: null, capped: fit, host: frameOf(p) };
     return { w, h, fits: w <= fw && h <= fh ? "fits" : w <= fh && h <= fw ? "turn" : null };
   }
   // a monogram that was given a name, made lettering: same font, thread and place, at the size that fits its frame
@@ -1264,14 +1311,23 @@ export function initStudio(api) {
     // Lettering it made small enough for its loops to fill in goes back up to the size that keeps them open (up to its
     // own) where that still fits and runs into nothing: the 4x4 pouch's "Makeup" at 15 mm.
     const fits = () => { try { compose(pieces, api.hoop(), { fabric, baste, thread, later: [] }); return true; } catch (err) { if (err.overBy) return false; throw err; } };
+    // Else, in a script that keeps its loops open at that size (Yellowtail): "Ashley" in Great Vibes at 19 mm in the
+    // 4x4 quilt label. A starter with its own layout for a small hoop (`small`) uses that instead of shrinking it all.
+    const hp = api.hoop();
+    if (s.small && Math.max(hp.w, hp.h) < 150) { pieces = s.small(); if (tweak) tweak(pieces); sel = pieces[pieces.length - 1].id; }
     if (!fits()) {
       const was = new Map(pieces.map((p) => [p.id, p.size]));
       fitHoop(false);
       for (const p of pieces) {
         const fs = fittedSizes(pieces).get(p.id), need = p.kind === "text" ? loopsFill({ ...p, size: fs ?? p.size }) : 0;
-        if (!need || need > was.get(p.id)) continue;
-        const keep = p.size; p.size = Math.max(p.size, need);
-        if ((fittedSizes(pieces).get(p.id) ?? p.size) < need || touching(p, pieces) || !fits()) p.size = keep;
+        if (!need) continue;
+        const keep = p.size; if (need <= was.get(p.id)) p.size = Math.max(p.size, need);
+        if (p.size !== keep && ((fittedSizes(pieces).get(p.id) ?? p.size) < need || touching(p, pieces) || !fits())) p.size = keep;
+        if (p.size !== keep || p.font === BOLD || FONTS.find((f) => f.family === p.font)?.print) continue;
+        const back = pieces.map((o) => ({ ...o })); p.font = BOLD;
+        if (!fits()) fitHoop(false);   // (a wider script: fitted again)
+        const q = { ...p, size: fittedSizes(pieces).get(p.id) ?? p.size };
+        if (loopsFill(q) || minSize(q) || archTight(q) || touching(q, pieces) || !fits()) pieces.forEach((o, i) => Object.assign(o, back[i]));
       }
     }
     $("st-tip").hidden = !s.tip; $("st-tip").textContent = s.tip || "";
@@ -1409,6 +1465,8 @@ export function initStudio(api) {
       if (longer) reArch(p);
     }, false, k === "font" || k === "deco");
     if (k === "text") { const box = edit.querySelector("[data-pairs]"); if (box) box.innerHTML = pairUI(current()); }   // (the pairs follow the words)
+    // (and the swash buttons: a ~ typed away left "Swash before" pressed until the piece was picked again)
+    if (k === "text") { const on = swashOn(t.value); for (const b of edit.querySelectorAll("[data-swash]")) b.setAttribute("aria-pressed", String(on[b.dataset.swash])); }
     if (["size", "text", "letters", "font", "radius", "ry", "spacing"].includes(k)) { clearTimeout(warnTimer); warnTimer = setTimeout(warn, 300); }
     // a new line in the words shows the alignment and line spacing
     if (k === "text" && (t.value.split("\n").length > 1) !== !!edit.querySelector('[data-seg="align"]') && current().shape === "straight") editor();
@@ -1451,7 +1509,7 @@ export function initStudio(api) {
     if (ss) { const [k, v] = ss.dataset.segSet.split(":"); change((p) => (p[k] = v), true, true); turnToo(ss); editor(); return; }
     const sz = e.target.closest("[data-size]");
     // (an arched word made bigger gets the curve it then needs too, so the size it was told reads)
-    if (sz) { change((p) => Object.assign(p, sizeChange(p, +sz.dataset.size)), true); turnToo(sz); editor(); return; }
+    if (sz) { change((p) => { if (sz.hasAttribute("data-no-deco")) p.deco = ""; Object.assign(p, sizeChange(p, +sz.dataset.size)); }, true); turnToo(sz); editor(); return; }
     const rm = e.target.closest("[data-room]");
     if (rm) { change((p) => { Object.assign(p, archRoom(p) || {}); Object.assign(p, archFit(p) || {}); }, true); turnToo(rm); editor(); return; }
     const ln = e.target.closest("[data-lines]");
@@ -1483,9 +1541,19 @@ export function initStudio(api) {
     if (sw) { const on = sw.getAttribute("aria-pressed") !== "true"; change((p) => { const t = withSwash(p.text, sw.dataset.swash, on); if (p.kern) p.kern = rekern(p.kern, p.text, t); p.text = t; }, true); editor(); return; }
     const s = e.target.closest("[data-seg] button");
     if (s) {
+      let rest = null;
       change((p) => {
         const k = s.closest("[data-seg]").dataset.seg, arc = (v) => v === "up" || v === "down", was = p.shape;
         p[k] = s.dataset.v;
+        // lines bent into an arch: the first line is arched and the rest stay straight as their own piece where they
+        // were (an arch sews one line: "Anne-Marie / & Christopher" on Arch up were joined into one long line)
+        const lines = p.kind === "text" && k === "shape" && arc(p.shape) && !arc(was) ? p.text.split("\n").filter((l) => l.trim()) : [];
+        if (lines.length > 1) {
+          const pitch = (p.size * (p.leading ?? 130)) / 100, y0 = p.y;
+          rest = { ...p, id: nextId++, text: lines.slice(1).join("\n"), shape: "straight", y: Math.round((y0 + pitch / 2) * 2) / 2 };
+          delete rest.ry; delete rest.deco; delete rest.kern;
+          p.text = lines[0]; delete p.kern; p.y = Math.round((y0 - (pitch * (lines.length - 1)) / 2) * 2) / 2;
+        }
         // words first bent into an arch get a curve to suit them: just inside a round frame they're in, else one sized
         // from the word (the 30 mm default made a 24 mm "Olivia" read "Oliuia")
         // (kept where it was: the piece's place is the curve's centre, so a wider curve threw the word up out of the hoop)
@@ -1502,8 +1570,14 @@ export function initStudio(api) {
           const y = wordY(was, p.y);
           p.y = Math.round((arc(p.shape) ? y - (p.shape === "up" ? -1 : 1) * (p.ry ?? p.radius) : y) * 2) / 2;
         }
+        // (the rest moved clear of the arch where it runs into it, as a new piece is placed)
+        if (rest) {
+          if (touching(rest, pieces)) { const r = spotIn(rest) || freeRoom(rest, null, true); if (r) Object.assign(rest, { x: r.x, y: r.y, size: r.size ?? rest.size }); }
+          pieces.splice(pieces.indexOf(p) + 1, 0, rest);
+        }
       }, true, true);
       editor();
+      if (rest) toast(`An arch sews one line, so “${unswashed(rest.text).replace(/\n/g, " ")}” is its own straight piece now.`, { label: "Undo", run: undo });
     }
   });
 
@@ -1860,6 +1934,7 @@ export function initStudio(api) {
     // (a design that already runs into itself isn't shrunk name by name for it: every name would come out smaller)
     const clean = !collision(pieces), opts = { fabric, baste, thread };
     return {
+      canTurn: !api.turned() && api.hoop().w !== api.hoop().h,
       what: mono ? p.letters : unswashed(p.text).replace(/\s*\n\s*/g, " / "), monogram: mono,
       // the ZIP is named after the design (the starter or the saved file it came from), not "names_4.zip"
       zip: api.safeName(from || label(pieces.find((q) => q.kind === "frame") || p), "names"),
@@ -1871,7 +1946,8 @@ export function initStudio(api) {
       // them across it. Each name is drawn at the design's own letter scale (`inkHeight`: the size is the height of
       // the word's strokes, so "emma", with no capital, came out twice Emma's size); fewer initials grow to the
       // monogram's width (`monoSize`).
-      build: (name, shrink = false) => {
+      // (`hp`: another hoop to try it in, the turned one, to see whether the hoop turned would spare shrinking it)
+      build: (name, shrink = false, hp = api.hoop()) => {
         if (!/[\p{L}\p{N}]/u.test(name)) throw new Error("no letters to stitch");
         const gone = missing(name, p.font);
         if (gone.length) throw new Error(`the font has no ${lackList(gone)}`);
@@ -1896,7 +1972,7 @@ export function initStudio(api) {
             const now = fittedSizes(ps).get(p.id) ?? q.size, ref = mono ? was : (size0 * was) / p.size, thin = bold && fineLine({ ...q, size: now });
             if (thin && lastBold && !refined && !floor && size < lastBold - 0.5) { floor = size; size = lastBold - 0.5; continue; }
             if (thin && xh({ ...q, size: now }) >= 0.85 * xh({ ...p, size: was }) && !minSize({ ...q, size: now })) { q = { ...q, style: "satin" }; ps = pieces.map((r) => (r.id === p.id ? q : r)); }
-            const turned = api.turned(), pattern = compose(ps, api.hoop(), opts).design.pattern();
+            const turned = api.turned(), pattern = compose(ps, hp, opts).design.pattern();
             const hit = clean && touching({ ...q, size: now }, ps);
             if (hit && shrink && f > 0.55) {
               if (floor && size - 0.5 > floor) { size -= 0.5; continue; }

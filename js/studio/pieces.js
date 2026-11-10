@@ -784,7 +784,9 @@ function heart(w, h, n = 180) {
   }
   return fitBox(pts, w, h);
 }
-// soft waves, not cusps: a satin border can't turn a sharp inside corner cleanly
+// soft waves, not cusps: a satin border can't turn a sharp inside corner cleanly. Its valleys are SCALLOP_IN of its
+// size (0.94 - 0.06 over 0.94 + 0.06, once fitted to its box).
+const SCALLOP_IN = 0.88;
 function scallop(rx, ry, n = 360) {
   const bumps = Math.max(8, Math.round((Math.PI * (rx + ry)) / 15));
   return Array.from({ length: n }, (_, i) => {
@@ -1712,7 +1714,9 @@ export function followFrame(p, pieces) {
   if (p.kind !== "text" || (p.shape !== "up" && p.shape !== "down")) return null;
   const f = frameAround(p, pieces, ["circle", "oval", "scallop"]);
   if (!f) return null;
-  const gap = f.border === "line" ? 4 : 6, rx = f.w / 2, ry = frameH(f) / 2;
+  // (a scallop's valleys are 0.88 of its size across: the curve sized to its points ran the words into the valleys,
+  // and Follow the frame changed nothing)
+  const k = f.shape === "scallop" ? SCALLOP_IN : 1, gap = f.border === "line" ? 4 : 6, rx = (k * f.w) / 2, ry = (k * frameH(f)) / 2;
   const l = letters(p.text, p.font, p.size, p.style), up = p.shape === "up";
   const d = up ? gap - (l.parts.length ? l.top : -p.size) : gap + (l.parts.length ? Math.max(0, l.bottom) : 0);
   return { x: f.x, y: f.y, radius: Math.round(Math.max(8, rx - d) * 2) / 2, ry: Math.round(Math.max(8, ry - d) * 2) / 2 };
