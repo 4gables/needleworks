@@ -688,7 +688,8 @@ export function initStudio(api) {
         // (and words shrunk a lot by their frame, on two lines: a patch's one-line words went 20 -> 5.5 mm and a quilt
         // label's top line 7 -> 5 mm, thin, with no way back said)
         const two = fs && !up ? frameLines(p, fs) : null;
-        const lines = two ? ` On two lines it can be ${two.size} mm: <button type="button" class="link" data-lines="" data-text="${encodeURIComponent(two.text)}"${two.fits === "turn" ? " data-turn" : ""}>Put it on two lines${two.fits === "turn" ? " and turn the hoop" : ""}</button>` : "";
+        const nw = two && (two.n === 3 ? "three" : "two");
+        const lines = two ? ` On ${nw} lines it can be ${two.size} mm: <button type="button" class="link" data-lines="${two.ask}" data-text="${encodeURIComponent(two.text)}"${two.fits === "turn" ? " data-turn" : ""}>Put it on ${nw} lines${two.fits === "turn" ? " and turn the hoop" : ""}</button>` : "";
         fit.hidden = !fs; fit.innerHTML = past ? `Shrunk to ${fs} mm, the smallest it goes, and it still runs past the frame: use fewer words, or make the frame bigger.${lines}`
           : fs ? `Shrunk to ${fs} mm so it fits inside the frame.${up ? ` Turned to run up the frame it can be ${up} mm: <button type="button" class="link" data-run-up="${up}">Turn it to run up the frame</button>` : lines}` : "";
       }
@@ -1062,15 +1063,25 @@ export function initStudio(api) {
     }
     return best;
   }
-  // Words of one line its frame shrank under 80 % of the size asked, on two lines at the size asked: { text, size (as
-  // the frame then sews it), fits } when that's at least a quarter bigger and lands (`landing`), else null
+  // Words of one line its frame shrank under 80 % of the size asked, on two (or three) lines: { n, text, size (as the
+  // frame then sews it), ask, fits } at the biggest size up to the one asked that lands (`landing`), when that's at
+  // least a quarter bigger, else null. Not only at the size asked: a quilt label's "Made with love for Grace" went
+  // 9 -> 5 mm, thin, and on two lines at 9 it ran into the name below, so nothing was offered (round 14).
   function frameLines(p, fs) {
     if (fs > p.size * 0.8) return null;
-    const text = twoLines(p); if (!text) return null;
-    const size = fittedSizes(pieces.map((r) => (r.id === p.id ? { ...p, text } : r))).get(p.id) ?? p.size;
-    if (size < fs * 1.25) return null;
-    const l = landing(p, { text });
-    return l.fits ? { text, size, fits: l.fits } : null;
+    let best = null;
+    for (const [n, text] of [[2, twoLines(p)], [3, threeLines(p)]]) {
+      if (!text) continue;
+      const sewn = (ask) => fittedSizes(pieces.map((r) => (r.id === p.id ? { ...p, text, size: ask } : r))).get(p.id) ?? ask;
+      // (asked sizes from the one asked down, 0.5 mm at a time, while what's sewn stays a quarter over now)
+      for (let ask = p.size; ask >= fs * 1.25 - 1e-9; ask = Math.round((ask - 0.5) * 2) / 2) {
+        const size = sewn(ask);
+        if (size < fs * 1.25 || (best && size <= best.size * (n === 3 ? 1.1 : 1))) break;
+        const l = landing(p, { text, size: ask });
+        if (l.fits) { best = { n, text, size, ask, fits: l.fits }; break; }
+      }
+    }
+    return best;
   }
   // one line of three or more words split into three lines as even as they can be (the longest line shortest)
   function threeLines(p) {
