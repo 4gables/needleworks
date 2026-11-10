@@ -50,7 +50,7 @@ await open("#design");
 // ---- Open saved and paste: what came out different is said; empty lettering is kept
 {
   const odd = design([frame(), words({ text: "", size: 30 }), words({ text: "Hi", font: "NW Comic Papyrus", size: 12, y: 22 }), { kind: "blob" }, words({ text: "x".repeat(90), size: 10, y: -20, font: "NW Quicksand" }), { kind: "motif", motif: "heart", size: 9999, x: 40, y: 0 }]);
-  const r = await run(`await __sf.load(${JSON.stringify(odd)}); return { toast: __sf.toast(), n: __sf.pieces(), ids: __sf.ids() };`);
+  const r = await run(`await __sf.load(${JSON.stringify(odd)}); await __sf.wait(() => __sf.ids().some((id) => /^empty:/.test(id)), 8000); return { toast: __sf.toast(), n: __sf.pieces(), ids: __sf.ids() };`);   // (problems come a tick after the preview: make() is paced)
   check("Open saved: an unreadable piece is said", /1 piece couldn't be read/.test(r.toast), r.toast);
   check("Open saved: an unknown font is named", /Comic Papyrus/.test(r.toast) && /Great Vibes is used instead/.test(r.toast), r.toast);
   check("Open saved: words past the most are said cut", /cut short/.test(r.toast), r.toast);
@@ -71,12 +71,12 @@ await open("#design");
     await __sf.wait(() => document.body.dataset.mode === "design" && /Dropped/.test(document.getElementById("st-pieces").textContent), 8000);
     return [document.body.dataset.mode, document.getElementById("st-pieces").textContent];`);
   check("A saved design dropped on the page opens in Design your own", r[0] === "design" && /Dropped/.test(r[1]), JSON.stringify(r).slice(0, 200));
-  const o = await run(`location.hash = "#open"; await __sf.wait(() => document.body.dataset.mode === "open"); document.getElementById("error").hidden = true;
-    __sf.put("#open-file", ${JSON.stringify(json)}, "mine.needleworks.json"); await __sf.wait(() => !document.getElementById("error").hidden);
-    const e = document.getElementById("error"), b = e.querySelector("button"); const text = e.textContent; b?.click();
-    await __sf.wait(() => document.body.dataset.mode === "design", 5000); return [text, b?.textContent || "", document.body.dataset.mode];`);
-  check("Open a design: a saved design is said for what it is", /saved from Design your own/.test(o[0]), o[0]);
-  check("Open a design: it offers Design your own, which opens it", /Design your own/.test(o[1]) && o[2] === "design", JSON.stringify(o));
+  // (picked on Open a design, it opens straight in Design your own, as dropping it does: `savedDesign`)
+  const o = await run(`location.hash = "#open"; await __sf.wait(() => document.body.dataset.mode === "open");
+    __sf.put("#open-file", ${JSON.stringify(JSON.stringify(design([words({ text: "Picked" })])))}, "mine.needleworks.json");
+    await __sf.wait(() => document.body.dataset.mode === "design" && /Picked/.test(document.getElementById("st-pieces").textContent), 8000);
+    return [document.body.dataset.mode, document.getElementById("st-pieces").textContent, document.getElementById("error").hidden];`);
+  check("Open a design: a saved design picked there opens in Design your own", o[0] === "design" && /Picked/.test(o[1]), JSON.stringify(o).slice(0, 200));
 }
 // ---- quilting with no room left in its frame
 {

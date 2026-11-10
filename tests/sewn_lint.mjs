@@ -15,14 +15,14 @@ const SIZES_IN = (f) => f !== "js/studio/pieces.js";
 const MEASURE = /\b(pieceBounds|touchingAll|touching|inFrame)\(/g;
 // a piece's size read: <name>.size, except Maps/Sets and the like
 const SIZE = /\b([a-zA-Z_]\w*)(?:\[[^\]]*\])?\.size\b/g;
-const NOT_PIECES = new Set(["advice", "pointers", "opened", "mine", "dataset", "pic", "seen", "fit", "picFits", "cache", "need"]);
+const NOT_PIECES = new Set(["advice", "pointers", "opened", "mine", "dataset", "pic", "seen", "fit", "picFits", "cache", "need", "fact", "chips"]);
 
 // [file, function, reason]: functions (or a function they're in) that may measure a piece not passed through sewn():
 // each because what it measures is already the sewn piece, or a candidate size it fits before using, or a piece no
 // frame fits
 const RAW_MEASURE = process.env.EMPTY ? [] : [
   ["js/studio/ui.js", "pieceProblems", "q is the piece at its fitted size (fit.get), made at the top"],
-  ["js/studio/ui.js", "warn", "candidate sizes fitted with fittedSizes on the same line (two lines, the size fix)"],
+  ["js/studio/ui.js", "warnNow", "candidate sizes fitted with fittedSizes on the same line (two lines, the size fix)"],
   ["js/studio/ui.js", "roundAll", "a first frame drawn round the pieces as asked, so it shrinks none of them"],
   ["js/studio/ui.js", "landing", "frames (never fitted) and the piece at fit / f0, its fitted sizes"],
   ["js/studio/ui.js", "twoHoopings", "lettering no frame fits (filtered by !fit.has), split at a word gap"],
@@ -42,7 +42,7 @@ const RAW_MEASURE = process.env.EMPTY ? [] : [
 const RAW_SIZE = process.env.EMPTY ? [] : [
   ["js/studio/ui.js", "drawEditor", "the controls show the size asked; warn() says the sewn one beside it (\"N mm sewn\")"],
   ["js/studio/ui.js", "pieceProblems", "q.size is the fitted size; motifs are never fitted"],
-  ["js/studio/ui.js", "warn", "fixes and notes compare the asked size with d.fs, the sewn one; each fix is checked by landing()"],
+  ["js/studio/ui.js", "warnNow", "fixes and notes compare the asked size with d.fs, the sewn one; each fix is checked by landing()"],
   ["js/studio/ui.js", "runUp", "the most to try; each size measured sewn"],
   ["js/studio/ui.js", "frameFor", "the asked size kept as the frame grows; fitted after"],
   ["js/studio/ui.js", "moveAway", "freeRoom's answer at the same size (sameSize), for an unfitted piece"],

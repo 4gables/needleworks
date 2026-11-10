@@ -149,6 +149,13 @@ measurements behind each number are in the code's comments.
 - Satin width: `min(3.5, 0.2 xh, max(stroke, 0.12 xh, min(0.15 xh, 1.2)))`. Automatic: satin from 0.8 mm, fine line
   below (loops stay open); explicit Satin at least 1.0. (15 % of big x-heights filled thin scripts' e's; satin only
   from 1 mm sewed 20 mm script names as a thin line.)
+- Since round 12: `min(0.2 xh, max(min(3.5, max(stroke, 0.12 xh, min(0.15 xh, 1.2))), min(stroke, WIDE = 5)))`: only a
+  font's own stroke takes a column past 3.5 mm (60 mm Quicksand was a skinny 3.5). Not 6: the checker reads satin
+  over 6 mm as underlay ("sparse satin"). A run out of the node the last column came back to carries `reach` (wide
+  columns trimmed at every junction without it). Print letters are chained with `order(..., nodesOnly)` preferring
+  moves over 5.5 mm + half a column (trimmed) or else the longest: loose threads 75 -> 7 over the changed batch files.
+  Monograms: a lowercase descender (g j p q y) is sized by its x-height and hangs below a shared baseline (`hangs`,
+  `initialSizes`), the whole capped at 1.25x. `decurl` straightens a curl into a flared end (Josefin Z).
 - Counters: `counterPockets` measures gaps between centre lines; `counterCaps` narrows the strokes round one that
   would close (0.8 mm between needle points after pull; gaps under 0.6 mm left), `notchCaps` loose short strokes down
   to 0.8 mm. Explicit Satin and towel ignore both. `loopsFill` warns when auto satin still closes a loop (switching
@@ -338,6 +345,22 @@ measurements behind each number are in the code's comments.
   boxes meet past the first 24 steps; appliqué exits try `edgeTop` first.
 - File names: `title` (Rename) for every Design exit via `firstWords()`, else the lettering, else starter + motifs
   (Coaster_Heart.pes); a starter, Add words or a picture clears it. Picture -> "Use it in Design your own" (`usePicture`).
+- Asked vs sewn: measure a piece with `sewn(p, pieces)`/`sewnBox`/`sewnBoxes`/`layoutSize`, never `p.size` or
+  `pieceBounds(p)`; `tests/sewn_lint.mjs` (CI) fails on a raw read outside its allow-list. A change that ends a frame's
+  fit (arch, wave, turn off square) keeps the sewn size; the names batch starts from the sewn size.
+- Nothing changed silently: `cleanPieces` (Open saved, paste, + Design file) says unreadable pieces, unknown fonts,
+  cut words and clamped settings; empty lettering is kept (`empty`); quilting with no room is `quilt:<id>`; shrunk
+  copies, renamed batch files and a picture's frame band (`framed`) are said (`tests/said_flow.mjs`).
+- One reset: every entry point that replaces the design goes through `newDesign(ps, o)` (fabric, basting, thread,
+  turn, fitted, two, starter, title, tip, zoom, step view). The undo snapshot holds those and the hoop (a hoop change
+  is an undo step); `restore()` hides action toasts. The starter tip is design state. `savedDesign(bytes)` sends a
+  .needleworks.json from drop, share, Open tab or + Design file to `studio.openSaved`. `landing()` refuses a fix that
+  brings a new problem (`newProblem`), and so does "Move it to the free space". Frame outlines are at least 0.5 mm
+  (`shapeOf`); "Make the frames fit" stops at 20 mm (`FRAME_MIN`).
+- Speed: stage cache keyed by `sewnWith` (fabric only for lettering and knit patch fill; thread weight fully for
+  lettering, else only 30/60); caches evict least recently used (`recent`); a patch's carved fill comes from
+  quilt-worker.js (`fillLater`, Download "Filling…"); `make()` yields between drawing (`drawAhead`), fit, problems,
+  stitches and preview; `warn()` is paced (`pacer`/`PACED`: never save a result from a catch that swallows PACED).
 ### Two hoopings (`splitPieces`)
 - On `overBy`, whole pieces (never a cut stitch) split along the long side at the most even cut where both fit.
   Basting crosses (`crossSpots`: 1.5 mm clear, near 1/4 and 3/4, 20 mm apart if possible) end the first file and
@@ -505,6 +528,9 @@ measurements behind each number are in the code's comments.
 - One label function `threadLabel(hex, machine)` (app.js) -> { name, note, short }, wrapped by `threadLine`/`threadHtml`
   for every surface; an owned close spool leads ("Your Sulky Rayon 1076 Royal Blue" · "the machine calls it Wisteria
   Violet"). Chips: one per thread in first-use order, "used N times", long notes in the tooltip.
+- Facts about a design (size, machine size, turned, stitches, stops, time, hoop, loose threads, thread count) come from
+  `v.fact`, set once in `setView`; never recomputed on a surface. Time = `sewTime(blockLoads(file), stops)`: Sew along
+  steps are whole-minute shares adding up to it. Hoops are named only as machines.js names them.
 - Unlisted brands (Madeira): Threads I own matches by colour (`nearestSpools`, 8 nearest). Picture threads can be
   swapped (`state.pic.swap`, applied in worker.js after `toPalette`); violet -> Brother Magenta (#913697) is right.
 
@@ -578,7 +604,7 @@ measurements behind each number are in the code's comments.
 - Sew along (`#along`): a step per screen, minutes = stitches / 550, own Have ready, Screen Wake Lock (retaken on
   visibilitychange). Share text carries the steps (`shareText`). On my item (`#item`): a measured photo under the
   design at true size (`state.backdrop`), never uploaded or saved.
-- Offline (`sw.js`, `needleworks-v9`): precaches `FILES`, network first, cache after 3 s; add every new file to
+- Offline (`sw.js`, `needleworks-v10`): precaches `FILES`, network first, cache after 3 s; add every new file to
   `FILES`. https only. Share target: POST `./?share` -> `needleworks-shared` cache -> `./?shared` -> `route()`.
 - A hoop change drops other tabs' designs. Min/max over stitches uses loops (`Math.min(...pts)` overflows past ~110k).
 
@@ -657,6 +683,9 @@ Automated checks that each guard a bug class (add a line with every new guard):
     `node tests/files_flow.mjs CDP http://127.0.0.1:HP` (~2 min).
   - Speed: `node tests/monkey.mjs CDP HP --start fifteen-letters,fifteen --budget 1000`; ganged frames:
     `--start gang-<starter>` (checks `selbox`, `exit`).
+  - Round 12 guards: `node tests/sewn_lint.mjs` (CI), `tests/said_flow.mjs` (~20 s), `tests/entry_state.mjs` (~5 min,
+    9 entry points x dirty state), `tests/matrix.mjs` (~11 min, kinds x modifiers x exits), `tests/perf.mjs` (500 ms
+    budget), surfaces per-fact equality, monkey toast checks, flow_lint.test degenerate frames.
   - Doctor keeps cover: doctor.test.mjs checks each solid block's thread per mm² within 70-160 % at 50/80/120/250 %.
   - steps_lint also: step order (Press Start last), same-thread leads, inch/cm pairs, glossary once, Sew along zoom.
     ui_sweep: view-menu ticks, toasts time out, `cut-row`. Monkey: no empty <details>, size = "Shrunk to", note size =
@@ -705,10 +734,8 @@ Automated checks that each guard a bug class (add a line with every new guard):
 - Design tab: Patch starter + Lettering lands below JD. Speed: a big carved patch refills on every change
   (1.5-4.7 s; wants a carve worker like quilting); thread/fabric change on 15-26 pieces 1.1-2 s.
 - Pictures: etsy_7 cross-stitch can't hit the asked Size exactly (doodles appear between fits; the lost note explains).
-- Monogram initials are centred on their own box: descenders lifted and short (Pocket monogram "jKm"); Josefin Z's
-  acute top-left corner ragged. Speed: + Appliqué letters on a busy design ~600 ms (spotIn builds every size); typing
-  long lettering, fabric/thread change, names 1.2-1.8 s on 15+ pieces.
-- Small print lettering leaves 4-5 loose threads (22 on a 4x4 quilt label): moves of 1-5 mm between letters.
+- Josefin N/M apex sides 0.5 mm outside the ink. Tiny print (5 mm dates) still leaves loose threads where no start helps.
+  Pasting a 30+ letter line is one ~0.6 s drawing. A patch's `clearOf` measures lettering against the whole fill.
 - Flow: fill-internal hidden moves in `fillPolygon`, repeated tie-in holes in `Design.path`, ~47 script moves on arcs.
 - Text: CJK/Arabic names save as design.pes (the fonts lack them anyway).
 - Not built: photo stitch, free-standing lace, 3D puff.
