@@ -58,6 +58,8 @@ fs.writeFileSync(path.join(FILES, "badge.png"), png(240, 240, (x, y) => {   // a
   return [255, 255, 255, 255];
 }));
 fs.writeFileSync(path.join(FILES, "junk.pes"), Buffer.from("#PES0001 this is not really a design file at all"));
+// (a picture named .pes: Open says it's a picture, with a button to Picture to stitches)
+fs.copyFileSync(path.join(FILES, "badge.png"), path.join(FILES, "picture.pes"));
 const PES = fs.existsSync(path.join(ROOT, "tests/external/pes/peace.pes")) ? path.join(ROOT, "tests/external/pes/peace.pes") : path.join(ROOT, "tests/fixtures/multi.pes");
 
 // ---------- designs for the Design tab (seeded into localStorage) ----------
@@ -86,13 +88,16 @@ const STATES = [
   { id: "picture", hash: "picture", seed: {}, wait: "!document.getElementById('download').disabled", keys: true },
   { id: "picture-mine", hash: "picture", seed: { "nw:brand": "isacord" }, setup: async (p) => { await p.upload("#pic-file", path.join(FILES, "badge.png")); }, wait: "!document.getElementById('download').disabled && !document.getElementById('pic-thumb').hidden" },
   { id: "picture-error", hash: "picture", seed: {}, setup: async (p) => { await p.upload("#pic-file", path.join(FILES, "blank.png")); }, wait: "!document.getElementById('error').hidden" },
+  { id: "picture-swap", hash: "picture", seed: {}, setup: async (p) => { await p.upload("#pic-file", path.join(FILES, "badge.png")); for (let i = 0; i < 100 && !(await p.eval("!!document.querySelector('#pic-palette button')")); i++) await sleep(200); await p.eval("document.querySelector('#pic-palette button').click()"); }, wait: "!document.getElementById('pic-swap').hidden", keys: true },
   { id: "open", hash: "open", seed: {} },
+  { id: "open-picture", hash: "open", seed: {}, setup: async (p) => { await p.upload("#open-file", path.join(FILES, "picture.pes")); }, wait: "!!document.querySelector('#error button')" },
   { id: "open-file", hash: "open", seed: {}, setup: async (p) => { await p.upload("#open-file", PES); }, wait: "!document.getElementById('open-info').hidden", keys: true },
   { id: "open-bad", hash: "open", seed: {}, setup: async (p) => { await p.upload("#open-file", path.join(FILES, "junk.pes")); }, wait: "!document.getElementById('error').hidden" },
   { id: "dlg-done", hash: "design", seed: studio([text(1, "Emma")]), setup: async (p) => { await p.click("#download"); }, dialog: "done" },
   { id: "dlg-names", hash: "design", seed: studio([text(1, "Emma")]), setup: async (p) => { await p.click("#names-open"); await p.eval(`(()=>{const t=document.getElementById('names-list');t.value='Emma\\nLiam\\nOlivia\\nAlexandrina-Wilhelmina\\nNoah';t.dispatchEvent(new Event('input',{bubbles:true}))})()`); await sleep(1500); }, dialog: "names" },
   { id: "dlg-spools", hash: "design", seed: { ...studio([text(1, "Emma")]), "nw:brand": "isacord", "nw:spools": { isacord: ["0015", "1902", "3541"] } },
     setup: async (p) => { await p.eval(`(()=>{const s=document.getElementById('brand');s.value='@mine';s.dispatchEvent(new Event('change',{bubbles:true}))})()`); }, dialog: "spools" },
+  { id: "dlg-rename", hash: "design", seed: studio([text(1, "Emma")]), setup: async (p) => { await p.click("#rename-open"); await p.eval(`(()=>{const t=document.getElementById('rename-name');t.value='A very long file name for the coaster I made for Grandma Jean';t.dispatchEvent(new Event('input',{bubbles:true}))})()`); }, dialog: "rename" },
   { id: "dlg-along", hash: "design", seed: studio([{ id: 1, x: 0, y: 0, color: "#ed171f", kind: "frame", shape: "circle", w: 90, h: 90, border: "applique" }, text(2, "Emma")]), setup: async (p) => { await p.click("#along-open"); }, dialog: "along" },
   { id: "dlg-item", hash: "design", seed: studio([text(1, "Emma")]), setup: async (p) => { await p.click("#item-open"); }, dialog: "item", pre: async (p) => { await p.eval(`document.querySelector('details.views').open=true`); } },
   { id: "view-menu", hash: "design", seed: studio([text(1, "Emma")]), setup: async (p) => { await p.click("details.views > summary"); }, keys: true },

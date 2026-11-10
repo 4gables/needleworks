@@ -1,6 +1,6 @@
 /*! Needleworks (c) 2026 4Gables. All rights reserved. Proprietary, see LICENSE. https://4gables.com/needleworks/ */
 // Design tab UI: start from a card, edit pieces in a short list, drag them on the preview.
-import { APPLIQUE_FONTS, FONTS, loadFont } from "../core/fonts.js";
+import { APPLIQUE_FONTS, FONTS, fontOf, loadFont } from "../core/fonts.js";
 import { MAX_INITIALS, MAX_WORDS, initials, lackList, lacks, swashes, tidy, tidyField, unswashed, withSwash } from "../core/typed.js";
 import { nearestBrotherThread } from "../core/threads.js";
 import { designStats, machineThreads, readEmbroidery } from "../core/formats.js";
@@ -9,7 +9,7 @@ import { FILL_PATTERNS } from "../core/digitize.js";
 import { MARGIN } from "../core/machines.js";
 import { draw } from "../render.js";
 import { THREADING, TURN_PIC, pickIt, snipsSaid, turnedNote, youHtml } from "../sheet.js";
-import { shortJumps } from "../doctor.js";
+import { notEmbroidery, shortJumps } from "../doctor.js";
 import { QUILTS, quiltOf } from "./quilt.js";
 import { MOTIFS } from "./motifs.js";
 import { quiltDone, scaledFit, BORDERS, FABRICS, THREADS, SHAPES, TEXT_SHAPES, splitPieces, archFit, archStart, frontPanel, inkHeight, monoSize, archRoom, archShrink, archTight, cleanPiece, clearSize, collision, collisions, inFrame, letterMetrics, underPatch, crossName, crossStep, layoutSize, touching, touchingAll, towelMin, fineLine, loopsFill, compose, fileBlocks, blocksPattern, scaleBlocks, FILE_SCALE, fittedSizes, sewnBoxes, followFrame, label, minSize, pieceBounds, pieceStitches, previewLook, smallText, bulkReady } from "./pieces.js";
@@ -200,10 +200,13 @@ export function initStudio(api) {
   const fixHint = () => (problems.some((x) => x.piece != null && x.level !== TIP) ? "Select the piece in the list for its fix before you stitch." : "");
   // what the design is called (the starter it began as, or the saved file it came from), for the names ZIP
   let from = typeof saved?.from === "string" ? saved.from : "";
+  // the file name they gave the design (Rename, beside Download), kept with it: every file it makes takes it (the PES,
+  // two hoopings' ZIP, the names ZIP, the saved design, the cutter files). Empty: named from what's in it.
+  let title = typeof saved?.title === "string" ? tidy(saved.title).slice(0, 60) : "";
 
   // the starter's own way of hooping, for a project that can't be hooped (a made bib: `float`)
   const floated = () => STARTERS.find((s) => s.name === from)?.float;
-  const save = () => api.store.set("studio", { pieces, sel, fabric, baste, thread, fitted, two, from });
+  const save = () => api.store.set("studio", { pieces, sel, fabric, baste, thread, fitted, two, from, title });
   // undo: a snapshot before each change (a burst of slider moves counts as one), with the hoop's turn (a turned design
   // undone to unturned said Too big)
   // (a snapshot equal to the last one is skipped: picking a piece or a no-op starter made undo look dead for a press)
@@ -1078,20 +1081,34 @@ export function initStudio(api) {
   }
   // A design opened on the Open tab, to add words to: a new design of the file and a line of lettering under it (the
   // last design stays one Undo away). Fit to hoop then resizes both.
-  function addWords(d, name) {
+  // (`words` false: the design alone, selected: the Picture tab's "start a new design with it")
+  function addWords(d, name, words = true) {
     const blocks = fileBlocks(d), had = pieces.length;
     remember();
     api.fit(); api.unturn();   // (whole and upright, as a starter opens: a turned stocking cuff left the file turned, "Waiting for a fit")
-    const f = piece({ kind: "file", name, blocks, color: blocks[0].color }), t = text({ text: "Your words", font: SCRIPT });
-    pieces = [f]; fitted = false; two = false; from = name;
+    const f = piece({ kind: "file", name, blocks, color: blocks[0].color }), t = words && text({ text: "Your words", font: SCRIPT });
+    pieces = [f]; fitted = false; two = false; from = name; title = "";
     // (a new design starts on cotton, as a starter does: the last starter's felt stayed on, "Hoop the felt", unsaid)
     fabric = "cotton"; baste = false; thread = "auto"; $("st-tip").hidden = true; $("st-tip").textContent = "";
-    freeSpot(t, "down"); pieces.push(t); sel = t.id; recentre();
+    if (t) { freeSpot(t, "down"); pieces.push(t); }
+    sel = (t || f).id; recentre();
     api.setMode("design"); save(); ui(); make();
     if (had) toast(`Started a new design with ${name}.`, { label: "Undo", run: undo });
     // (straight into the words, selected, so typing replaces them)
-    const w = $("st-edit").querySelector('textarea[data-k="text"]');
+    const w = t && $("st-edit").querySelector('textarea[data-k="text"]');
     if (w) { w.focus(); w.select(); }
+  }
+  // A design file (+ Design file, or the Picture tab's stitches: "Add it to my design") as a piece of this design, in
+  // free space, above what's there (or below, if only that fits), not on top of it: centred, a bought design landed on
+  // the lettering. It sews first, after any frames, so lettering added under it sews on top. (where there's room, as
+  // any new piece: it went above everything, the design then two hoopings) False when there's no room (said).
+  function addFile(d, name) {
+    remember();
+    const blocks = fileBlocks(d), p = piece({ kind: "file", name, blocks, color: blocks[0].color });
+    freeSpot(p, "up");
+    if (!place(p, (q) => { const at = pieces.findIndex((o) => o.kind !== "frame"); pieces.splice(at < 0 ? pieces.length : at, 0, q); })) return false;
+    recentre(); save(); ui(); make();
+    return true;
   }
 
   // A bigger hoop picked for a design that fits: offered once, the design made as big as it allows (Fit to hoop). A
@@ -1449,7 +1466,8 @@ export function initStudio(api) {
   // the file's name: who it's for when a line says so ("Made for Lily": the label was by_Grandma_Jean.pes, its biggest
   // line), else the biggest lettering (the name, not the quilt label's "Made for")
   const fileName = () => `${api.safeName(firstWords(), "design")}.pes`;
-  const firstWords = () => {
+  const firstWords = () => title || autoWords();
+  const autoWords = () => {
     const words = pieces.filter((p) => p.kind === "text" || p.kind === "letters");
     for (const p of words) for (const line of unswashed(p.text).split("\n")) {
       const m = /\bfor\s+(\S+(?:\s+\S+){0,2})\s*$/i.exec(line);
@@ -1465,7 +1483,10 @@ export function initStudio(api) {
     // (only words a file name can carry: empty lettering named it after the starter, spaces alone design.pes)
     const said = (p) => (p.kind === "monogram" ? p.letters : unswashed(p.text)), named = (p) => !!api.safeName(said(p), "");
     const m = pick((p) => lettered(p) && named(p)) || pick(named);
-    if (!m) return from || "design";   // (else the starter: a quilt block was design.pes)
+    // (else the starter, with the motifs in it: four coasters, a snowflake, a heart..., all downloaded as Coaster.pes;
+    // a quilt block was design.pes)
+    const motifs = [...new Set(pieces.filter((p) => p.kind === "motif").map((p) => MOTIFS[p.motif]?.name).filter(Boolean))];
+    if (!m) return [from, ...motifs].filter(Boolean).join(" ") || "design";
     // lettering split into pieces (Arch up keeps the other lines straight; two hoopings split at a word gap) is named
     // after all of it, in sewing order: "Happy / Birthday" was Birthday.pes, "Welcome to our Home" our_Home_2_hoopings.zip
     if (m.of != null) return [...new Set(pieces.filter((q) => q.of === m.of && named(q)).map(said))].join(" ");
@@ -1498,7 +1519,7 @@ export function initStudio(api) {
     const had = pieces.length && snap();
     remember(); pieces = s.make(); if (tweak) tweak(pieces); sel = pieces[pieces.length - 1].id;
     fabric = s.fabric || "cotton";   // (a towel left on made every later starter towel-heavy, +40-75 % stitches)
-    baste = !!s.baste; fitted = false; two = false; from = s.name;
+    baste = !!s.baste; fitted = false; two = false; from = s.name; title = "";
     thread = s.thread || "auto";   // (30 wt stuck to every later starter, and through a reload, while fabric reset)
     // made to fit the hoop it's opened in, everything scaled together (the coaster, quilt block, mug rug and zipper
     // pouch opened Too big on the 4x4)
@@ -1877,7 +1898,7 @@ export function initStudio(api) {
   $("st-save").onclick = () => {
     // (with the hoop it was laid out in and its turn: a turned design reopened said Too big)
     const r = api.handOut([{ name: `${api.safeName(firstWords(), "design")}.needleworks.json`,
-      bytes: JSON.stringify({ needleworks: 1, pieces, fabric, baste, thread, fitted, ...(two ? { two } : {}), hoop: api.hoopId(), turned: api.turned() }, null, 1) }]);
+      bytes: JSON.stringify({ needleworks: 1, pieces, fabric, baste, thread, fitted, ...(two ? { two } : {}), ...(title ? { title } : {}), hoop: api.hoopId(), turned: api.turned() }, null, 1) }]);
     if (!r.ok) toast(r.error === "The saved design is empty." ? "Add a piece first: there's nothing to save yet." : r.error);
   };
   const bad0 = "it isn't a design saved from this page, or it's damaged (saved designs end in .needleworks.json)";
@@ -1899,7 +1920,7 @@ export function initStudio(api) {
       const changed = pairs.filter(([p, q]) => q && Object.keys(p).some((k) => k !== "id" && k !== "text" && k !== "letters" && JSON.stringify(p[k]) !== JSON.stringify(q[k]))).length;
       remember(); nextId = 1; pieces = loaded.map((p) => ({ ...p, id: nextId++ })); sel = pieces[pieces.length - 1].id;
       fabric = own(FABRICS, data.fabric) ? data.fabric : "cotton"; baste = data.baste === true; thread = own(THREADS, data.thread) ? String(data.thread) : "auto"; fitted = data.fitted === true; two = data.two === true;
-      from = f.name.replace(/\.needleworks\.json$|\.json$/i, "");
+      from = f.name.replace(/\.needleworks\.json$|\.json$/i, ""); title = typeof data.title === "string" ? tidy(data.title).slice(0, 60) : "";
       // the hoop (when this machine has it) and the turn it was saved with
       if (typeof data.hoop === "string") api.setHoop(data.hoop);
       api.setTurn(data.turned === true);
@@ -2141,15 +2162,10 @@ export function initStudio(api) {
   $("st-file").onchange = async (e) => {
     const f = e.target.files[0]; e.target.value = ""; if (!f) return;
     try {
-      const d = readEmbroidery(new Uint8Array(await f.arrayBuffer()), f.name);
-      remember();
-      const blocks = fileBlocks(d), p = piece({ kind: "file", name: f.name.replace(/\.[^.]+$/, ""), blocks, color: blocks[0].color });
-      // in free space, above what's there (or below, if only that fits), not on top of it: centred, a bought design
-      // landed on the lettering. It sews first, after any frames, so lettering added under it sews on top.
-      // (where there's room, as any new piece: it went above everything, the design then two hoopings)
-      freeSpot(p, "up");
-      if (!place(p, (q) => { const at = pieces.findIndex((o) => o.kind !== "frame"); pieces.splice(at < 0 ? pieces.length : at, 0, q); })) return;
-      recentre(); save(); ui(); make();
+      // (a picture, a zip or an empty file said as what it is, as the Open tab says it)
+      const bytes = new Uint8Array(await f.arrayBuffer()), not = notEmbroidery(bytes, f.name);
+      if (not) { toast(not.message); return; }
+      addFile(readEmbroidery(bytes, f.name), f.name.replace(/\.[^.]+$/, ""));
     } catch (err) { toast("That file couldn't be added: " + err.message); }
   };
 
@@ -2168,7 +2184,7 @@ export function initStudio(api) {
       canTurn: !api.turned() && api.hoop().w !== api.hoop().h,
       what: mono ? p.letters : unswashed(p.text).replace(/\s*\n\s*/g, " / "), monogram: mono,
       // the ZIP is named after the design (the starter or the saved file it came from), not "names_4.zip"
-      zip: api.safeName(from || label(pieces.find((q) => q.kind === "frame") || p), "names"),
+      zip: api.safeName(title || from || label(pieces.find((q) => q.kind === "frame") || p), "names"),
       // Each name is checked like the design itself: a letter the font lacks is refused (a stand-in glyph was stitched),
       // and a name that runs into another piece is made smaller with `shrink` (Lily-Rose's y in the bib's heart) or
       // said. shrink: a name too long for the hoop, or running into something, is tried at 90 %, 80 %… down to half.
@@ -2178,7 +2194,26 @@ export function initStudio(api) {
       // the word's strokes, so "emma", with no capital, came out twice Emma's size); fewer initials grow to the
       // monogram's width (`monoSize`).
       // (`hp`: another hoop to try it in, the turned one, to see whether the hoop turned would spare shrinking it)
+      // A name that would come out too small to sew clearly (under the font's least x-height, `minSize`, where the
+      // design's own lettering isn't) is refused, said with the size it would have been: in the oval a 36-letter name
+      // fitted across the frame came out at 28 % with 2 mm letters, "(smaller)" all it said. A name of two or more
+      // words is tried on two lines first (`lines: 2`).
       build: (name, shrink = false, hp = api.hoop()) => {
+        const m = once(name, shrink, hp);
+        // (and one shrunk under 70 % whose letters come out a quarter bigger on two lines)
+        if (!m.small && !(m.smaller && m.pct < 70)) return m;
+        const one = !mono && (p.text || "").split("\n").filter((l) => l.trim()).length === 1, gaps = [...name.matchAll(/ +/g)];
+        if (one && gaps.length) {
+          const g = gaps.reduce((a, b) => (Math.abs(b.index - name.length / 2) < Math.abs(a.index - name.length / 2) ? b : a));
+          let two = null;
+          try { two = once(name.slice(0, g.index) + "\n" + name.slice(g.index + g[0].length), shrink, hp); } catch {}
+          if (two && !two.small && (m.small || two.pct >= m.pct * 1.25)) return { ...two, name, lines: 2 };
+        }
+        if (!m.small) return m;
+        throw new Error(`too long to sew clearly in this design: its letters would be ${m.small.toFixed(1)} mm tall`);
+      },
+    };
+    function once(name, shrink, hp) {
         if (!/[\p{L}\p{N}]/u.test(name)) throw new Error("no letters to stitch");
         // (as long as the editor takes, `MAX_WORDS`: a 200-letter name drew nothing and its file held the heart alone)
         const most = mono ? MAX_INITIALS : MAX_WORDS;
@@ -2216,16 +2251,22 @@ export function initStudio(api) {
             }
             // (never a file without the name in it)
             if (!pieceStitches({ ...q, size: now }).length) throw new Error("it comes out as no stitches");
+            // (`small`: the x-height it would sew at, when that's under the least that reads and the design's isn't)
+            const small = minSize({ ...q, size: now }) && !minSize({ ...p, size: was }) ? xh({ ...q, size: now }) || 0.1 : 0;
             return { pattern, name, turned, runs: hit ? label(hit) : "", smaller: now < ref * 0.95,   // (said from 5 % smaller: "Ben (smaller)" stood beside an Ava the same height)
-             thin: fabric !== "towel" && fineLine({ ...q, size: now }) && !fineLine({ ...p, size: was }) };
+             // (`xh`, `least`, `own`: the x-height it sews at, the least that reads, the design's own: tests/text_fuzz.mjs)
+             pct: Math.round((100 * now) / ref), small, xh: xh({ ...q, size: now }), least: mono ? 4 : fontOf(p.font).min || 4, own: xh({ ...p, size: was }), thin: fabric !== "towel" && fineLine({ ...q, size: now }) && !fineLine({ ...p, size: was }) };
           }
           catch (err) { if (!shrink || !err.overBy || f < 0.55) throw err; f -= 0.1; size = step(size0 * f); floor = 0; }
         }
-      },
-    };
+    }
   }
 
   cards(); ui();
   const starter = (id, tweak) => pickStarter(STARTERS.find((x) => x.id === id), tweak);
-  return { make, addWords, starter, selBox: () => { const p = current(); return p ? pieceBounds(p) : null; }, relabel: () => { ui(); make(); }, start, move, end, nudge, deselect, forNames, remember, recentre: () => { remember(); recentre(); save(); ui(); make(); } };
+  // Rename (app.js): the name asked for, "" for the automatic one; the name it would have without one
+  const rename = (t) => { t = tidy(t || "").trim().slice(0, 60); if (t === title) return; title = api.safeName(t, "") ? t : ""; save(); make(); };
+  // the Picture tab's stitches into this design (`fresh`: a new design of it alone), in Design your own
+  const usePicture = (d, name, fresh) => { if (fresh || !pieces.length) { addWords(d, name, false); return; } api.setMode("design"); if (addFile(d, name)) toast(`Added ${name} to your design.`, { label: "Undo", run: undo }); };
+  return { make, addWords, usePicture, empty: () => !pieces.length, starter, rename, title: () => title, autoName: () => api.safeName(autoWords(), "design"), selBox: () => { const p = current(); return p ? pieceBounds(p) : null; }, relabel: () => { ui(); make(); }, start, move, end, nudge, deselect, forNames, remember, recentre: () => { remember(); recentre(); save(); ui(); make(); } };
 }

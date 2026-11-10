@@ -196,7 +196,7 @@ async function names(where, names, family) {
     await new Promise((r) => setTimeout(r, 300));
     await Promise.all(__tf.files.map((f) => f.ready));
     const out = { files: __tf.files.map((f) => ({ name: f.name, entries: f.entries })), note: document.getElementById("names-note").textContent,
-      caps: [...document.querySelectorAll("#names-thumbs figcaption")].map((c) => c.textContent), overflow: __tf.overflow(["#names .names-thumbs", "#names-note", "#names-bad"]), errors: __tf.errors.splice(0) };
+      caps: [...document.querySelectorAll("#names-thumbs figcaption")].map((c) => c.textContent), sizes: [...document.querySelectorAll("#names-thumbs figure")].map((f) => f.dataset.size), overflow: __tf.overflow(["#names .names-thumbs", "#names-note", "#names-bad"]), errors: __tf.errors.splice(0) };
     return out;
   })()`);
   const zip = got.files.find((f) => /\.zip$/.test(f.name)), entries = zip?.entries || [];
@@ -212,6 +212,13 @@ async function names(where, names, family) {
   for (const n of refused) check(`${where} names: lacking letters refused with a reason`, got.note.includes(brief(n)) && (/has no|no letters|3 initials|too long/.test(got.note)), `${show(n)} in ${show(got.note.slice(0, 200))}`);
   check(`${where} names: every name accounted for`, made + (got.note.match(/Couldn't make: (.*?)\. (?:Left out|$)/)?.[1] || "").split(/\), /).filter(Boolean).length >= typed.length - refused.length || made >= typed.length - refused.length, `${made} made of ${typed.length}, ${refused.length} refused`);
   check(`${where} names dialog layout`, !got.overflow.length, got.overflow.join("; "));
+  // (round 11: a 36-letter name was made at 28 % with 2 mm letters, "(smaller)" all it said; "Ola" typed twice was
+  // made once with nothing said) Every name made sews at the least x-height that reads, where the design's own does
+  // (`data-size`: x-height, least, the design's), a smaller one says by how much, and a name typed twice is said.
+  got.sizes.forEach((z, i) => { const [xh, least, own] = (z || "").split(" ").map(Number); if (own >= least) check(`${where} names: none made too small to read`, xh >= least * 0.95, `${got.caps[i]}: x-height ${xh} mm, least ${least}`); });
+  for (const c of got.caps) if (/smaller/.test(c)) check(`${where} names: smaller says how much`, /smaller, \d+ %/.test(c), c);
+  const raw = names.map((n) => tidy(n).trim()).filter(Boolean).slice(0, 40), dup = raw.some((n, i) => raw.indexOf(n) !== i);
+  if (dup) check(`${where} names: a name typed twice is said`, /typed twice/.test(got.note), show(got.note.slice(0, 200)));
   await ev(`(() => { const d = document.getElementById("names"); if (d.open) d.close(); return true; })()`);
 }
 
@@ -357,7 +364,7 @@ await part("fonts", async () => {
 });
 await part("bookmark", () => bookmark(QUICK ? sample(12) : [...sample(50), "Анна", "Jose\u0301", "CON", "Zoë", "שרה", "❤\ufe0f", ".", "Jo.", "~", "~Emma~", "~ Emma ~", "Em~ma", "~~Jo", "~Ann\nLee~", "Hi!~"]));
 // names batches: corpus names plus names differing only by case or accent
-const batch = (n) => [...VARIANTS, "CON", "con", "nul", "Łukasz", "Søren", "Анна", "Σοφία", "שרה", "李明", "❤\ufe0f", "O'Neil", ".", "B".repeat(200), ...sample(n)];
+const batch = (n) => [...VARIANTS, "Maximilian-Alexander von Hohenzollern", "Wolfeschlegelsteinhausenbergerdorff", "Ola", "Ola", "CON", "con", "nul", "Łukasz", "Søren", "Анна", "Σοφία", "שרה", "李明", "❤\ufe0f", "O'Neil", ".", "B".repeat(200), ...sample(n)];
 await part("names", async () => {
   await load("#design"); await start("words");
   await names("Words", batch(QUICK ? 6 : 20), "NW Great Vibes");

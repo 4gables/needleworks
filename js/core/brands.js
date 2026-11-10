@@ -67,6 +67,14 @@ export function nearestSpool(brand, hex, owned = null) {
   return { ...best, dE: Math.sqrt(bd), far, brand: BRANDS[brand], label: `${BRANDS[brand]} ${best.num}${best.name ? ` ${best.name}` : ""}` };
 }
 
+// the n spools nearest a colour (by eye, CIELAB), nearest first: "Threads I own" matching a spool from a brand that isn't
+// charted here (Madeira) by its colour
+export function nearestSpools(brand, hex, n = 8) {
+  const c = chart(brand); if (!c) return [];
+  const [L, A, B] = lab(hexToRgb(hex));
+  return c.map((s) => ({ num: s.num, d: (s.lab[0] - L) ** 2 + (s.lab[1] - A) ** 2 + (s.lab[2] - B) ** 2 })).sort((a, b) => a.d - b.d).slice(0, n).map((s) => s.num);
+}
+
 // example spool numbers for the "Threads I own" box, in the brand's own spelling: its white, red and black
 export function exampleSpools(brand) {
   return chart(brand) ? ["#ffffff", "#e0201c", "#000000"].map((h) => nearestSpool(brand, h).num).join(" ") : "";
