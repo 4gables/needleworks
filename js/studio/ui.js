@@ -1025,6 +1025,7 @@ export function initStudio(api) {
   function addWords(d, name) {
     const blocks = fileBlocks(d), had = pieces.length;
     remember();
+    api.fit(); api.unturn();   // (whole and upright, as a starter opens: a turned stocking cuff left the file turned, "Waiting for a fit")
     const f = piece({ kind: "file", name, blocks, color: blocks[0].color }), t = text({ text: "Your words", font: SCRIPT });
     pieces = [f]; fitted = false; two = false; from = name;
     // (a new design starts on cotton, as a starter does: the last starter's felt stayed on, "Hoop the felt", unsaid)

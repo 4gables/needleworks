@@ -201,6 +201,10 @@ measurements behind each number are in the code's comments.
   Tall ones (over 1.6 x as tall as wide: the bookmark) lie down in their card. 2026-10-31 added Bookmark, Luggage tag,
   Pocket monogram, Tote bag, Stocking cuff, Birth announcement, Wedding keepsake, Book plate, Pet bandana, Kitchen
   sign (existing pieces only). `studio.starter(id, tweak)` picks one from code (old #bookmark links).
+- Starters open with nothing above a tip on 5x7 and 4x4 (`tests/starters.mjs`): "Ashley" in Great Vibes fills its
+  loops 16-22 mm, so names are 24 mm or Yellowtail (`BOLD`); an optional `small` layout for hoops under 150 mm (the
+  studio batch builds it on the 4x4); name starters that lie long open turned (pet, stocking, decorated, tote, towel).
+  A fresh profile opens on "framed". Starter tips carry no supply sizes: Have ready is the only place for them.
 ### Fabric (`FABRICS`) and thread weight (`THREADS`)
 - Each fabric holds `ready`, `hoop`, `tip`, `after` so supplies, step 1 and finish agree. Cotton, felt, denim, canvas
   sew alike. Knit: zigzag underlay from 1.5 mm, +0.15 mm pull a side, 0.42 satin, Lighter patch fill.
@@ -302,6 +306,15 @@ measurements behind each number are in the code's comments.
   list (editor, Download note, dialog, steps, sew sheet, share text, Sew along all show it; R8 fleece "closes up" was
   in the editor only while the dialog said Checked).
 - `clearSize` is a binary search (4.7 s -> 0.29 s on a 113 mm heart).
+- `landing()`: a size the frame shrinks back (over 0.25 mm) is `capped`, never offered ("make it 17 mm" did nothing);
+  instead a bigger frame (`grown`/`roomIn`; `frameFor` keeps growing past a touch) or the motifs left out (`data-no-deco`).
+- `followFrame` on a scallop uses its valleys (`SCALLOP_IN` 0.88). Arching multi-line text arches the first line; the
+  rest becomes a straight piece (toast, one undo).
+- Typed text limits `MAX_WORDS` 60 / `MAX_INITIALS` 12 (typed.js) in the editor (`data-max`, said when cut; never
+  `maxlength`, which cut a paste silently), `cleanPiece` and the names batch (refused, "too long"). Past ~150 letters
+  `renderWord`'s canvas draws nothing: lettering with no stitches is the BLOCK `undrawn`; empty lettering is `empty`.
+- `label(p)` shortens over 30 letters to 24 + "…" (`brief`) for messages; `label(p, true)` is the thread name written
+  in the PES (golden bytes): never write the short one into a file.
 ### Two hoopings (`splitPieces`)
 - On `overBy`, whole pieces (never a cut stitch) split along the long side at the most even cut where both fit.
   Basting crosses (`crossSpots`: 1.5 mm clear, near 1/4 and 3/4, 20 mm apart if possible) end the first file and
@@ -324,6 +337,10 @@ measurements behind each number are in the code's comments.
   design's letter scale (`inkHeight`), keep bold, shrink to fit (90 %… 55 %) or are captioned; a missing glyph refuses
   a name; past 40 are left out; turned batches turn every file. Each file validated and judged;
   `<starter or file>_<N>_names|monograms.zip`, names deduplicated ignoring case (emma/Emma collide on macOS, FAT).
+- Names batch: names that would shrink or not fit but fit full size turned get "Turn the hoop and make them" first
+  (`build(name, shrink, hp)`, `canTurn`); no file leaves without its name. File names: a line break is a word gap
+  (`latin`); spaces-only words fall back to the starter's name; same-size copies of the main lettering join
+  (`Lily_Noah.pes`).
 
 ## Bookmark (a starter since 2026-10-31)
 - Was its own panel and engine (`bookmark.js`, `#panel-bookmark`, `bookmarks_N.zip`); now the first "Start from" card,
@@ -414,6 +431,9 @@ measurements behind each number are in the code's comments.
   rewritten. `designBlockAgrees` flags a v6 design block that isn't its PEC block. `HARD` failures (thread count,
   palette 62-64 unless named appliqué/placement/tack-down, disagreeing block, over 99 blocks) are never saved as they
   came: rewritten, or shown but not saved. Passing untouched files download as their own bytes.
+- `damaged` = design block disagrees AND the machine block is broken (misplaced box, wrong thread count/appliqué
+  codes): said instead of "two designs". A DST with real records after its end code is `short`. A failed Open keeps
+  the open design.
 - `checkup(readEmbroidery(bytes))` reads the file as it will be saved, counts from quality.js: `peak` at every
   offset, tiny past max(50, 1 %), satin gap measured along the edge, across the stitch (60 % short stitches on curves
   aren't gaps; same in pe900_check) (under 0.25: "Even out"), stitches over 10 mm (note) and 12.1 mm ("Split
@@ -442,6 +462,12 @@ measurements behind each number are in the code's comments.
 - Spool matching is CIELAB (red-mean called black "Ivy"). Threads I own: searchable swatches (`chartSpools`); the
   Design tab's "Yours:" row (`api.ownedSpools`) gives a piece the spool's colour, the file the nearest PEC; `far` flags
   a poor match; Have ready splits "Your threads" / "To buy" (`ownSpool`).
+- Every surface names a colour by the file's palette: the Design tab's `machineName(hex, was)` (`hoopings` from
+  `threadNames`) for the editor hint (`threadOf`), swatch tooltips (`swatchTip`, the name after the pick) and Have ready;
+  never `nearestBrotherThread` for a label. `spool(hex, machine)`: a Brother number is `brotherNum(machine)`.
+  `threadList`: one entry per spool ("for Brother A and Brother B; a rough match for A"); a brand with no spools gives
+  its "≈" numbers. `nearestSpool` `far` also for two tints (chroma 5+) over 60° of hue apart past ΔE 10 (Flesh Pink vs
+  white 0015 was 14.7).
 
 ## App and UI
 - Opens on `#design`; default name Ashley.
@@ -463,6 +489,15 @@ measurements behind each number are in the code's comments.
   `keepFocus` = render + `refocus`. No per-feature focus fixes. Arrow nudges only from the page or `#view`; the piece list is one Tab stop
   (`rove`). Undo skips equal snapshots; Redo ⇧⌘Z / Ctrl+Y. 44 px coarse targets; `forced-colors` keeps thread
   colours; `--danger/--warn/--good/--ink` tokens (red only for warnings).
+- Focus when a control is gone with no replacement: `refocus` takes the control in its place in the new markup
+  (child-index path) or the next in document order, one task later (after async warnings); the container's first
+  control was the Words box after every one-tap fix. View menu closes on focusout, Escape, outside tap, a checkbox;
+  the Background select keeps it open.
+- Preview: `draw` edges a thread whose contrast with its ground is under 1.6 (`groundOf`: cloth, `fieldColor`, else
+  the computed background; white on white was unreadable); `{ sel }` draws a dashed box round the selected piece
+  (`studio.selBox`; off in step view, playback, two hoopings). `showEditor` brings the editor into view. Phones:
+  `#bar-undo` in the Download bar; `.link` in running text keeps its line (target grown by a ±6 px `::after`).
+  `.font-row` shows each font name in its own lettering (the select stays the keyboard's way).
 - Exit gate: every file leaves through `gate.js` `handOut(files, { hoop, zip, share })` (`judge`: PES = `validatePES`
   against its design + no `HARD` rule, the rest of the verdict said in words; cut SVG = mm size, closed shapes; saved
   JSON parses with a piece). Nothing is handed over when one file is refused; a HARD fail says "Not saved" and offers a
@@ -473,6 +508,13 @@ measurements behind each number are in the code's comments.
   Words (`words.js`): "pause"/"thread change" (`stopWords`/`stopsAt` only), never "stop"; "satin stitch(es)"/
   "satin-stitched"/"Satin border", never bare "satin"; "move between parts"/"loose thread", never "jump" (except
   the machine's "jump stitch not to trim").
+- Turned-hoop note `turnedNote(bare)` (sheet.js): `compose` returns `bare` when step 1 hoops bare stabilizer, then it
+  says hoop the stabilizer and lay the fabric a quarter turn round (it said "Hoop the fabric"). `tidySteps`: a repeated
+  sentence -> "on both <frame>s" / "(N of them)"; "put the hoop back" + "Take the hoop off" -> "...if it's still on".
+  Fabric over an outline: "reaching ½ in (1 cm) past the outline all round", or a piece cut with the Cutter file laid
+  exactly on the line (Have ready and the dialog mention it). Ganged ITH: `kit(n, all, W, H)`, stabilizer etc. once.
+  Time = `sewMinutes`: stitches/550 + 6 s per cut trim + 0.5 min per pause. Sew sheet prints threads brighter than
+  0.8 in colour over a 0.6 mm #555 line (`pale`). "Add words" resets fabric to cotton.
 - Sew sheet (`sewSheet`: `#sheet` + `window.print()`, also on `beforeprint`): field at 1:1 in mm, centred as the
   machine centres, 5 cm bar; steps with machine names (`machineThreadList`); appliqué shapes. Cut files (any design with
   fabric shapes: appliqué, in-the-hoop fronts): "Cricut cut file (SVG)" `cutSVG` (width/height in mm, viewBox in mm:
@@ -553,6 +595,12 @@ Automated checks that each guard a bug class (add a line with every new guard):
     (\u2028/\v) is two names in the names batch (the app's `tidy` splits it) but one in the test's `refused` check.
   - Pictures unlike the samples: `tests/picture_corpus.sh CDP HP OUT [query]` (~1.5 min; 26 seeded drawings x styles x
     sizes; open cases in its `KNOWN` list with a reason; `?ext=etsy_N` renders the external samples).
+  - Starters open warning-free and fit (typing "Maximilian" too): `node tests/starters.mjs CDP http://127.0.0.1:HP` (~3 min).
+  - Guidance words agree (no repeated sentences, hooping note vs step 1, cut file mentioned, time formula, dialog):
+    `node tests/steps_lint.mjs CDP http://127.0.0.1:HP` (~1.5 min).
+  - One thread label per colour on every surface: surfaces.mjs "threads:" cases; damaged/short Open and empty lettering
+    cases too. Monkey flags a fix that changes the pieces but not the stitches (`--start <starter id>`); ui_sweep
+    `focus-back`, `menu-left-open`.
 
 ## Hosting
 - After a push, GitHub Pages serves files with `max-age=600`: for up to 10 minutes a browser can run new and old
@@ -591,6 +639,7 @@ Automated checks that each guard a bug class (add a line with every new guard):
 - `pe900_check.py`'s max density reads lower than a full offset scan below the limit (pass/fail unaffected).
 - Design tab: Patch starter + Lettering lands below JD. Speed: a big carved patch refills on every change
   (1.5-4.7 s; wants a carve worker like quilting); thread/fabric change on 15-26 pieces 1.1-2 s.
+- Monkey replay (r9): Add appliqué letters on the 4x4 with an oval, a motif and a monogram placed past the hoop (`place()`).
 - Flow: fill-internal hidden moves in `fillPolygon`, repeated tie-in holes in `Design.path`, ~47 script moves on arcs.
 - Text: CJK/Arabic names save as design.pes (the fonts lack them anyway).
 - Not built: photo stitch, free-standing lace, 3D puff.

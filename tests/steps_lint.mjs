@@ -104,6 +104,8 @@ function lint(name, d, gang) {
 }
 
 await open("#design");
+// (the 5x7, whatever the profile was left on: starters.mjs ends on the 4x4, where the bookmark lies flat and unturned)
+await ev(`(() => { const s = document.getElementById("hoop"); s.value = "5x7"; s.dispatchEvent(new Event("change", { bubbles: true })); return 1; })()`); await settle();
 const ids = await ev(`[...document.querySelectorAll('[data-start]')].map((b) => b.dataset.start)`);
 for (const id of ids) {
   if (only && !only.split(",").includes(id)) continue;
@@ -141,7 +143,7 @@ if (!only) {
     if (!dl.link) bad.push("dialog's How to stitch it isn't a link");
     else {
       await ev(`document.querySelector("#done [data-steps-link]").click(), 1`); await sleep(800);
-      const after = await ev(`(() => { const d = document.getElementById("st-steps").closest("details"), r = d.getBoundingClientRect(); return { closed: !document.getElementById("done").open, open: d.open, focus: document.activeElement === d.querySelector("summary"), top: r.top, h: innerHeight } })()`);
+      const after = await ev(`(() => { const d = document.getElementById("st-steps").closest("details"), r = d.querySelector("summary").getBoundingClientRect(); return { closed: !document.getElementById("done").open, open: d.open, focus: document.activeElement === d.querySelector("summary"), top: r.top, h: innerHeight } })()`);
       if (!after.closed || !after.open || !after.focus || after.top < -1 || after.top > after.h) bad.push(`How to stitch it link: ${JSON.stringify(after)}`);
     }
   }
