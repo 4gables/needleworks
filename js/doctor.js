@@ -632,12 +632,13 @@ export function respace(st, scale = 1) {
 }
 
 // a new pattern: scaled about its centre, tiny stitches merged into the next, long ones split, dense spots thinned;
-// `sort` merges same-thread blocks first; past 80-120 % it's re-stitched (`restitch`)
-export function fix(pattern, { scale = 1, tiny = false, thin = false, sort = false, join = false, satin = false } = {}) {
+// `sort` merges same-thread blocks first; past 80-120 % it's re-stitched (`restitch`), and any bigger with `grow`
+// (the Design tab: Fit to hoop took a picture 100 -> 120 mm scaled, its fill rows 0.48 mm apart, fabric showing)
+export function fix(pattern, { scale = 1, tiny = false, thin = false, sort = false, join = false, satin = false, grow = false } = {}) {
   pattern = landJumps(pattern);
   if (sort) { const j = join ? joinSame(pattern) : pattern; pattern = sortColors(j) || j; }
   // (re-stitched, every stitch is new: tiny ones it made go whatever the box says; gnome at 150 %: 2 -> 43)
-  if (scale < 0.8 - 1e-9 || scale > 1.2 + 1e-9) pattern = restitch(pattern, scale), scale = 1, satin = false, tiny = true;
+  if (scale < 0.8 - 1e-9 || scale > 1.2 + 1e-9 || (grow && scale > 1.02)) pattern = restitch(pattern, scale), scale = 1, satin = false, tiny = true;
   else if (scale !== 1) satin = true;
   let st = pattern.stitches;
   if (scale !== 1) {

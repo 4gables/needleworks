@@ -15,6 +15,9 @@
 //             fitting design fitting and does something; Undo takes it back in one step
 //   stale     what's shown (size and stitch chips, Fits <hoop>, steps count, fabric/thread/turn buttons, the Open
 //             tab's "Largest that fits", the Picture tab's size) equals a fresh computation after any settings change
+//   arch      a word first bent goes about a third of the way round at most, or that's said; an arch has one line
+//   asked     words, font, thread or fabric changes keep lettering's asked size while its frame still fits it, and
+//             the height control reads the size it's sewn at
 //   undo      undo then redo, and Save design then Open saved, give back the same design
 //   toast     a note's action (Undo, "Make it as big as…", "Use the 5x7 instead", "Turn the hoop and add it", "Add it at
 //             N %", "… anyway") does what it says: changes the design or the hoop, leaves what the note was about
@@ -160,7 +163,7 @@ function screen() {
 // a warning's kind, from its words (numbers and names left out)
 // (thin before loops: "Make it bold (small loops may fill in)"; loops before towel: "Thin line keeps them open." ends
 // like the towel's "… mm or more keeps them open.")
-const KINDS = [["small", /too small to stitch cleanly/], ["thin", /sews as a thin line/], ["loops", /small loops .*fill in/], ["towel", /closes? (the |these )?letters up|leave the letters open|keeps them open\.$/], ["arch", /wrap most of the way round|too tight for letters/],
+const KINDS = [["small", /too small to stitch cleanly/], ["thin", /sews as a thin line/], ["loops", /small loops .*fill in/], ["towel", /closes? (the |these )?letters up|leave the letters open|keeps them open\.$/], ["arch", /wraps? (most of the way|too far) round|too tight for letters/],
   ["hit", /^This runs into/], ["lines", /^On (two|three) lines/], ["motif", /this small, the/],
   ["named", /looks like a name|has 3 initials at most/], ["caps", /^Capitals in a joined script/], ["oneline", /sews the words on one line/], ["under", /patch sews after this|sews before the patch/],
   ["same", /nearly the same thread/], ["kern", /pushed into each other/], ["missing", /has no /], ["framefit", /^Shrunk to fit inside the frame/]];
@@ -236,6 +239,24 @@ function checks(f, sc, act, before) {
   // the size control says the size it's sewn at when a frame shrinks it (it said 24 mm beside "Shrunk to 22 mm")
   const fitNote = D.querySelector("#st-edit [data-fit]"), szOut = D.querySelector('#st-edit input[data-k="size"] + output');
   if (fitNote && !fitNote.hidden && szOut) { const m = /Shrunk to ([\d.]+) mm/.exec(fitNote.textContent); if (m && !szOut.textContent.includes(`${m[1]} mm`)) add("stale", `the height reads “${szOut.textContent}” beside “Shrunk to ${m[1]} mm”`); }
+  // the height reads the size it's sewn at (after "Ashley Ashley Ashley" -> "Ashley" it read 24 mm beside 9 mm letters)
+  if (sel && szOut && (sel.kind === "text" || sel.kind === "monogram") && !(fitNote && !fitNote.hidden)) {
+    const fit = P.fittedSizes(s.pieces), want = fit.get(sel.id) ?? sel.size, m = /^([\d.]+) mm/.exec(szOut.textContent.trim());
+    if (m && Math.abs(+m[1] - want) > 0.5) add("stale", `the height reads “${szOut.textContent}” but ${P.label(sel)} is sewn at ${want} mm`);
+  }
+  // a change that doesn't set a size keeps the size asked for while a frame still fits the lettering (shorter words
+  // after longer ones the heart had shrunk kept the shrunk 9 mm)
+  if (before?.d && ASKED.has(act.t === "menu" ? `menu-${String(act.what).split("=")[0]}` : act.t) && before.d.pieces.length === s.pieces.length)
+    s.pieces.forEach((p, i) => {
+      const q = before.d.pieces[i];
+      if (p.kind === "text" && q.kind === "text" && p.size !== q.size && P.fitFrame(p, s.pieces)) add("asked", `${act.t}${act.what ? ` (${String(act.what).slice(0, 30)})` : ""} changed ${P.label(p)}'s size ${q.size} -> ${p.size} mm`);
+    });
+  // arches: a word first bent goes at most about a third of the way round (17 mm "Anne-Marie" went 150° round the
+  // wedding scallop's curve, nothing said), and an arch sews one line (typed lines were sewn round it as one)
+  if (sel?.kind === "text" && (sel.shape === "up" || sel.shape === "down")) {
+    if (/^shape=(up|down)$/.test(act.what) && P.archWrap(sel) > 0.4 && !sc.edit.some((t) => kindOf(t) === "arch")) add("arch", `${act.what} took ${P.label(sel)} ${Math.round(P.archWrap(sel) * 360)}° round its curve, nothing said`);
+    if (act.t === "text" && sel.text.includes("\n")) add("arch", `${P.label(sel)} is arched with ${sel.text.split("\n").length} lines`);
+  }
   // placing things for the user never takes a design that fitted past the hoop
   if (before?.f && PLACING.has(act.t) && before.f.fits && !f.fits && !act.allowBig) add("placed", `${act.t}${act.what ? ` (${act.what})` : ""} took a design that fitted past the hoop (${f.s.pieces.length} pieces)`);
   if ((act.t === "fit" || act.t === "starter") && !f.fits && !act.skipped) add("placed", `${act.t}${act.what ? ` (${act.what})` : ""} left the design too big`);
@@ -243,6 +264,9 @@ function checks(f, sc, act, before) {
   // hoop); not past a frame's `most` (the size its project is made for)
   if (act.t === "fit" && f.fits && !act.skipped && !f.s.pieces.some((p) => p.most || p.kind === "file")) {
     const fill = Math.max(f.vs.widthMm / (f.dh.w - 10), f.vs.heightMm / (f.dh.h - 10));
+    // (and never shrinks one that fits already: 125 x 175 in the 5x7 came out 120 x 168)
+    if (before?.f?.fits && before.f.vs && f.vs.widthMm < before.f.vs.widthMm - 0.6 && f.vs.heightMm < before.f.vs.heightMm - 0.6 && before.f.h.id === f.h.id && before.f.t === f.t)
+      add("fit", `Fit to hoop shrank a design that fitted: ${before.f.vs.widthMm.toFixed(0)} × ${before.f.vs.heightMm.toFixed(0)} -> ${f.vs.widthMm.toFixed(0)} × ${f.vs.heightMm.toFixed(0)} mm`);
     if (fill < 0.9) add("fit", `Fit to hoop left it ${f.vs.widthMm.toFixed(0)} × ${f.vs.heightMm.toFixed(0)} mm in the ${f.h.name} (${Math.round(fill * 100)} % of the room)`);
   }
   // the selection box goes round the selected piece as it's drawn: at the size it's sewn (it was drawn at the size
@@ -276,6 +300,7 @@ function checks(f, sc, act, before) {
   if (st && (s.fabric !== (st.fabric || "cotton") || String(s.thread) !== String(st.thread || "auto"))) add("stale", `starter ${st.id} kept fabric ${s.fabric} / thread ${s.thread}`);
   return bad;
 }
+const ASKED = new Set(["text", "swatch", "fabric", "thread", "baste", "menu-font"]);
 const PLACING = new Set(["add", "paste", "listop-dup", "starter", "file", "fix", "fixall", "bigfix", "toastfix", "fit", "twoup", "sameon"]);
 
 // ---------- actions ----------
@@ -337,7 +362,7 @@ async function exec(d) {
       if (el.maxLength > 0) v = v.slice(0, el.maxLength);
       act.what = JSON.stringify(v); el.focus();
       if (d.c < 0.3) for (let k = 1; k < v.length; k++) { el.value = v.slice(0, k); fire(el, "input"); await sleep(90); }   // typed, a letter at a time
-      el.value = v; fire(el, "input"); el.blur(); break;
+      el.value = v; fire(el, "input"); fire(el, "change"); el.blur(); break;
     }
     case "swatch": { const bs = all("#st-edit [data-color], #st-edit [data-fill], #st-edit button[data-blend]"); if (!bs.length) return { ...act, skipped: true }; at(bs, d.a).click(); break; }
     case "motif": { const bs = all("#st-edit [data-motif]"); if (!bs.length) return { ...act, skipped: true }; at(bs, d.a).click(); break; }
@@ -357,7 +382,10 @@ async function exec(d) {
       const sel = d.t === "twoup" ? "[data-two-up]" : "[data-same-on]";
       const fs = all("#st-pieces .pick").filter((b) => studio()?.pieces.find((p) => p.id === +b.dataset.id)?.kind === "frame"); if (!fs.length) return { ...act, skipped: true };
       at(fs, d.a).click(); await idle(); const b = D.querySelector(`#st-edit ${sel}`); if (!b) return { ...act, skipped: true };
-      b.click(); break;
+      // (never silent: a third bookmark on the 5x7 did nothing, its "Error: paced" swallowed)
+      const was = design(); b.click(); await idle();
+      if (same(design(), was) && $("st-toast").hidden) act.extra.push({ kind: "toast", msg: `${b.textContent.trim()} did nothing and said nothing` });
+      break;
     }
     case "hoop": { const s = $("hoop"), o = [...s.options].find((x) => x.value !== s.value); if (!o) return { ...act, skipped: true }; act.what = o.value; s.value = o.value; fire(s, "change"); break; }
     case "turn": $("turn").click(); break;
@@ -425,6 +453,9 @@ async function exec(d) {
       const t0 = performance.now(); $("names-make").click();
       while (/Making the files/.test($("names-note").textContent) && performance.now() - t0 < 30000) await sleep(50);
       act.what = $("names-note").textContent.slice(0, 120);
+      // (a name made under the font's least x-height is said: a batch of 1.4 mm letters said "Made 9 files")
+      const tiny = all("#names-thumbs figure[data-size]").filter((fg) => { const [xh, least] = fg.dataset.size.split(" ").map(Number); return xh && least && xh < least - 0.05; });
+      if (tiny.length && !/Too small to stitch cleanly/.test($("names-note").textContent)) act.extra.push({ kind: "names", msg: `${tiny.length} names made under the font's least height, not said (“${act.what}”)` });
       $("names").close(); break;
     }
     case "tab": {
@@ -538,6 +569,15 @@ async function tryFix(b, undo) {
   if (gx.filter((x) => !(x === "loops" && /^Make it bold/.test(label))).length && sc0 === "one") add("fix", `brought new warnings beside Download: ${gx.join(", ")} (“${sc.warn.slice(0, 160)}”)`);
   const h0 = pairKeys(f0.hits), nh = [...(f1.hits || [])].filter(([a, c]) => !h0.has(`${a.id}:${c.id}`));
   if (nh.length) add("fix", `ran ${nh.map(([a, c]) => `${P.label(a)} into ${P.label(c)}`).join(", ")}`);
+  // (onto a patch's edge, which collisions leave out: "Make it 25 mm" put a heart on the satin edge)
+  const sw = (s) => { const fit = P.fittedSizes(s.pieces); return (p) => P.sewn(p, s.pieces, fit); }, sw0 = f0.s?.pieces && sw(f0.s), sw1 = f1.s?.pieces && sw(f1.s);
+  if (sw0 && sw1) for (const pt of f0.s.pieces) if (pt.kind === "frame" && pt.border === "patch" && !(pt.rot || 0)) for (const p of f0.s.pieces) {
+    const p1 = f1.s?.pieces.find((o) => o.id === p.id), pt1 = f1.s?.pieces.find((o) => o.id === pt.id);
+    // (moved off it to somewhere else is no edge: only a piece still over the patch)
+    const b = P.pieceBounds(sw1(p1)), c = P.pieceBounds(pt1), over = b && c && b[0] < c[2] && b[2] > c[0] && b[1] < c[3] && b[3] > c[1] && b[0] + b[2] > 2 * c[0] && b[0] + b[2] < 2 * c[2] && b[1] + b[3] > 2 * c[1] && b[1] + b[3] < 2 * c[3];
+    if (p === pt || p.kind === "frame" || !p1 || !pt1 || !over || !P.inFrame(sw0(p), pt, 3) || P.inFrame(sw1(p1), pt1, 3)) continue;
+    add("fix", `put ${P.label(p1)} on the edge of ${P.label(pt1)}`);
+  }
   if (f0.fits && !f1.fits && !/two hoopings|anyway/.test(label)) add("fix", `took the design past the hoop`);
   if (/^(Fit to hoop|Turn the hoop|Make it as big)/.test(label) && !f1.fits) add("fix", `left it too big`);
   if (/two hoopings/.test(label) && sc.kind !== "split") add("fix", `didn't give two hoopings (Download reads “${sc.dl}”)`);
