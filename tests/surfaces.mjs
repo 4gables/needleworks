@@ -73,6 +73,8 @@ const CASES = [
   design("too big", [M("heart", 170)], { hoop: "4x4" }),
   design("appliqué frame + small", [F("heart", 46, 42, "applique", { color: "#f993bc" }), T("Emma", 6, { y: 0 })]),
   design("clean starter-like", [F("oval", 110, 64, "satin"), T("Emma", 22)]),
+  // (words typed away to nothing: a saved design drops such a piece, so they're cleared in the editor, `act`)
+  { ...design("empty lettering", [F("heart", 84, 76, "applique"), T("Emma", 16)]), act: `const t = document.querySelector('#st-edit textarea[data-k="text"]'); t.value = "  "; t.dispatchEvent(new Event("input", { bubbles: true }));` },
   design("quilted frame + name", [F("square", 100, 100, "satin", { quilt: "stipple" }), T("Ava", 7, { font: ROUND })]),
   // (an old #bookmark link: the Bookmark starter with the old panel's saved name)
   { name: "bookmark", tab: "bookmark" },
@@ -91,6 +93,9 @@ const CASES = [
   { name: "open: 121 colours", tab: "open", file: "colours" },
   { name: "open: old misplaced", tab: "open", file: "misplaced" },
   { name: "open: shrunk 60%", tab: "open", file: "jumpy", scale: 60 },
+  // (round 9: a PES changed in a download was "two different designs"; a DST whose end code came early opened as whole)
+  { name: "open: damaged", tab: "open", file: "damaged" },
+  { name: "open: DST ending early", tab: "open", file: "early" },
 ];
 
 // ---------- files for the Open tab (written with the site's own writer) ----------
@@ -108,8 +113,20 @@ function pes(kind) {
     threads.length = 0;
     for (let k = 0; k < 121; k++) { threads.push({ color: `#${((k * 2654435761) >>> 8 & 0xffffff).toString(16).padStart(6, "0")}` }); if (k) at(S.at(-1)[0], S.at(-1)[1], 5); at((k % 11) * 60, Math.floor(k / 11) * 60, 1); zig((k % 11) * 60, 40, 20, 2); }
   }
+  if (kind === "damaged" || kind === "early") { at(0, 0, 1); zig(0, 300, 30, 2); }
   S.push([...S.at(-1).slice(0, 2), 4]);
-  return { bytes: writePES({ stitches: S, threads }), name: `${kind}.pes` };
+  const bytes = writePES({ stitches: S, threads });
+  if (kind === "damaged") {   // (the design box and a few stitches in the machine's block changed)
+    const blk = (bytes[8] | (bytes[9] << 8) | (bytes[10] << 16) | (bytes[11] << 24)) + 512;
+    bytes[blk + 17] ^= 0x15; for (const k of [40, 77, 120]) bytes[blk + k] ^= 0x22;
+  }
+  if (kind === "early") {   // a DST of 300 stitches with an end code after the 100th
+    const t = new Uint8Array(512 + 3 * 301).fill(0x20);
+    for (let i = 0; i < 300; i++) t.set([i % 2 ? 0x05 : 0x06, 0x01, 0x03], 512 + 3 * i);
+    t.set([0, 0, 0xf3], 512 + 300); t.set([0, 0, 0xf3], 512 + 900);
+    return { bytes: t, name: "early.dst" };
+  }
+  return { bytes, name: `${kind}.pes` };
 }
 
 // ---------- in the page: every surface, read ----------
@@ -231,6 +248,7 @@ for (const c of CASES) {
         await sleep(3000);
       }
     }
+    if (c.act) { await sleep(1500); await ev(`(() => { ${c.act}; return 1; })()`); await sleep(1500); }
     const r = await ev(READ);
     if (r.none) { console.log("  (nothing to show)"); continue; }
     const exp = r.expected, idsOf = (l) => l.map((p) => p.id);
@@ -285,7 +303,7 @@ for (const c of CASES) {
 }
 console.log(`\nproblem kinds covered: ${[...seenKinds].sort().join(" ")}`);
 const NEED = ["design:towel", "design:motif", "design:small", "design:thin", "design:loops", "design:named", "design:lines", "design:covered", "design:hidden",
-  "design:pushed", "design:missing", "design:arch", "design:runs", "open:file:dense", "open:packed", "open:stuck"];
+  "design:pushed", "design:missing", "design:arch", "design:runs", "open:file:dense", "open:packed", "open:stuck", "open:damaged", "open:short", "design:empty"];
 if (!only) for (const k of NEED) if (![...seenKinds].some((s) => s === k || s.startsWith(k + ":"))) problems.push(`coverage: no case shows ${k}`);
 const unique = [...new Set(problems)];
 if (unique.length) { console.log(`\n${unique.length} problems:`); for (const p of unique) console.log("  " + p); }

@@ -15,11 +15,24 @@ const INVISIBLE = /(?![\u200c\u200d\u{e0020}-\u{e007f}])[\p{Cc}\p{Cf}]/gu;
 // line breaks of every kind, and the odd spaces (no-break, thin, ideographic...): a plain new line or space
 const BREAK = /\r\n|[\r\n\v\f\u0085\u2028\u2029]/g, SPACE = /[\t\p{Zs}]/gu;
 
+// The longest words a piece takes, everywhere they're typed (the editor, the names list, a saved or pasted design), in
+// the units a text field's maxlength counts: lettering 60 (3 lines), initials and appliqué letters 12. Past ~150
+// letters the word no longer fits the canvas it's drawn on and came out as nothing: a 200-letter name in One for each
+// name made a file with the heart alone.
+export const MAX_WORDS = 60, MAX_INITIALS = 12;
+
 let seg = null;
 // the letters as a reader sees them: an accented letter, a flag or an emoji family is one, however many code points
 export function graphemes(s) {
   if (seg === null) seg = typeof Intl !== "undefined" && Intl.Segmenter ? new Intl.Segmenter("en", { granularity: "grapheme" }) : false;
   return seg ? [...seg.segment(s)].map((g) => g.segment) : [...s];
+}
+
+// long words as a message names them: the first 24 letters and "…" past 30 (60 letters of "BBBB…" filled two lines of
+// every warning, twice in the too-big one)
+export function brief(s) {
+  const g = graphemes(String(s ?? ""));
+  return g.length > 30 ? g.slice(0, 24).join("").trimEnd() + "…" : g.join("");
 }
 
 // a monogram's initials: its letters without the spaces ("J K M" is JKM, "É" typed as E + ◌\u0301 is one)
@@ -116,7 +129,8 @@ const spell = (t) => t.replace(/./gu, (c, i) => {
 });
 // plain readable ASCII (printable, spaces kept): what a file or thread name can carry
 export function latin(s) {
-  const t = spell(tidy(String(s ?? ""), { lines: 99 }));
+  // (a new line is a gap between words: "Bev's" over "Kitchen" was Bev_sKitchen.pes)
+  const t = spell(tidy(String(s ?? ""), { lines: 99 }).replace(/\n/g, " "));
   return spell(t.normalize("NFKD").replace(/\p{M}/gu, "")).replace(/[^\x20-\x7e]/g, (c) => PUNCT[c] ?? "");
 }
 // USB file names the machine can show: ASCII letters, digits, _ and -, never empty
