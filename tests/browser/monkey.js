@@ -382,7 +382,10 @@ async function exec(d) {
       const sel = d.t === "twoup" ? "[data-two-up]" : "[data-same-on]";
       const fs = all("#st-pieces .pick").filter((b) => studio()?.pieces.find((p) => p.id === +b.dataset.id)?.kind === "frame"); if (!fs.length) return { ...act, skipped: true };
       at(fs, d.a).click(); await idle(); const b = D.querySelector(`#st-edit ${sel}`); if (!b) return { ...act, skipped: true };
-      b.click(); break;
+      // (never silent: a third bookmark on the 5x7 did nothing, its "Error: paced" swallowed)
+      const was = design(); b.click(); await idle();
+      if (same(design(), was) && $("st-toast").hidden) act.extra.push({ kind: "toast", msg: `${b.textContent.trim()} did nothing and said nothing` });
+      break;
     }
     case "hoop": { const s = $("hoop"), o = [...s.options].find((x) => x.value !== s.value); if (!o) return { ...act, skipped: true }; act.what = o.value; s.value = o.value; fire(s, "change"); break; }
     case "turn": $("turn").click(); break;
