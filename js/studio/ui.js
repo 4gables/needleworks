@@ -895,12 +895,12 @@ export function initStudio(api) {
     const hit = touchingAll(fit ? { ...q, size: fit } : q, ps).find((o) => !was.has(o.id));
     if (hit) return { w, h, fits: null, hit };
     // nor one that takes it out of the frame it sat in (the same ring's words widened outside the circle)
-    const inside = (a, b) => a && b && a[0] >= b[0] && a[1] >= b[1] && a[2] <= b[2] && a[3] <= b[3];
+    const inside = (a, b) => a && b && a[0] >= b[0] && a[1] >= b[1] && a[2] <= b[2] && a[3] <= b[3], meets = (a, b) => a && b && a[0] < b[2] && a[2] > b[0] && a[1] < b[3] && a[3] > b[1];
     const b0 = pieceBounds(f0 ? { ...p, size: f0 } : p), b1 = pieceBounds(fit ? { ...q, size: fit } : q);
     // (a patch's edge too, which `touching` leaves out as lettering sits on the fill: "Make it 25 mm" put a heart on
     // the patch's satin edge)
     const s0 = f0 ? { ...p, size: f0 } : p, s1 = fit ? { ...q, size: fit } : q;
-    const out = pieces.find((f) => f.kind === "frame" && f.id !== p.id && ((inside(b0, pieceBounds(f)) && !inside(b1, pieceBounds(f))) || (f.border === "patch" && !(f.rot || 0) && inFrame(s0, f, 3) && !inFrame(s1, f, 3))));
+    const out = pieces.find((f) => f.kind === "frame" && f.id !== p.id && ((inside(b0, pieceBounds(f)) && !inside(b1, pieceBounds(f))) || (f.border === "patch" && !(f.rot || 0) && meets(b1, pieceBounds(f)) && inFrame(s0, f, 3) && !inFrame(s1, f, 3))));
     if (out) return { w, h, fits: null, hit: out, out: true };
     // nor a size its frame shrinks straight back (`fittedSizes`): "Make it 17 mm" left the words at 15, and the same
     // warning offered 17 again (Kitchen sign with hearts, Wedding keepsake's two names)
@@ -1051,7 +1051,12 @@ export function initStudio(api) {
     // fit: shorter words that now fit at the asked size keep it, "Ashley Ashley Ashley" -> "Ashley" stayed 9 mm)
     const fs = p.size == null ? null : fittedSizes(pieces).get(p.id), was = p.size;
     fn(p);
-    if (fs != null && p.size === was && !fitFrame(p, pieces)) p.size = fs;
+    // (the size control too, which a slider being dragged doesn't redraw: Turn to -35° read 90 mm beside a 58 mm A)
+    if (fs != null && p.size === was && !fitFrame(p, pieces)) {
+      p.size = fs;
+      const r = $("st-edit").querySelector('input[data-k="size"]');
+      if (r) { r.max = Math.max(+r.max, Math.ceil(fs)); r.value = fs; r.nextElementSibling.textContent = shown(fs, "mm"); r.nextElementSibling.title = ""; }
+    }
     if (!keep) fitted = false; save(); list();
     clearTimeout(warnTimer); warnTimer = setTimeout(warn, 300);
     clearTimeout(timer); timer = setTimeout(make, now ? 0 : 160);
