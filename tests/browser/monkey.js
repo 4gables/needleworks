@@ -566,6 +566,13 @@ async function tryFix(b, undo) {
   if (gx.filter((x) => !(x === "loops" && /^Make it bold/.test(label))).length && sc0 === "one") add("fix", `brought new warnings beside Download: ${gx.join(", ")} (“${sc.warn.slice(0, 160)}”)`);
   const h0 = pairKeys(f0.hits), nh = [...(f1.hits || [])].filter(([a, c]) => !h0.has(`${a.id}:${c.id}`));
   if (nh.length) add("fix", `ran ${nh.map(([a, c]) => `${P.label(a)} into ${P.label(c)}`).join(", ")}`);
+  // (onto a patch's edge, which collisions leave out: "Make it 25 mm" put a heart on the satin edge)
+  const sw = (s) => { const fit = P.fittedSizes(s.pieces); return (p) => P.sewn(p, s.pieces, fit); }, sw0 = f0.s?.pieces && sw(f0.s), sw1 = f1.s?.pieces && sw(f1.s);
+  if (sw0 && sw1) for (const pt of f0.s.pieces) if (pt.kind === "frame" && pt.border === "patch" && !(pt.rot || 0)) for (const p of f0.s.pieces) {
+    const p1 = f1.s?.pieces.find((o) => o.id === p.id), pt1 = f1.s?.pieces.find((o) => o.id === pt.id);
+    if (p === pt || p.kind === "frame" || !p1 || !pt1 || !P.inFrame(sw0(p), pt, 3) || P.inFrame(sw1(p1), pt1, 3)) continue;
+    add("fix", `put ${P.label(p1)} on the edge of ${P.label(pt1)}`);
+  }
   if (f0.fits && !f1.fits && !/two hoopings|anyway/.test(label)) add("fix", `took the design past the hoop`);
   if (/^(Fit to hoop|Turn the hoop|Make it as big)/.test(label) && !f1.fits) add("fix", `left it too big`);
   if (/two hoopings/.test(label) && sc.kind !== "split") add("fix", `didn't give two hoopings (Download reads “${sc.dl}”)`);

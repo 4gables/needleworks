@@ -633,7 +633,11 @@ export function initStudio(api) {
       // (the size control says it too: it read 24 mm beside "Shrunk to 22 mm")
       const r = $("st-edit").querySelector('input[data-k="size"]');
       if (r) { const o = r.nextElementSibling, cut = fs && fs !== +r.value; o.textContent = cut ? `${fs} mm sewn` : shown(r.value, "mm"); o.title = cut ? `Set to ${shown(r.value, "mm")}, sewn at ${shown(fs, "mm")} to fit inside the frame` : ""; }
-      fit.hidden = !fs; fit.innerHTML = fs ? `Shrunk to ${fs} mm so it fits inside the frame.${up ? ` Turned to run up the frame it can be ${up} mm: <button type="button" class="link" data-run-up="${up}">Turn it to run up the frame</button>` : ""}` : "";
+      // (shrunk as far as it goes and still past the frame, said so: "Shrunk to 5 mm so it fits inside the frame" stood
+      // beside 60 letters running 127 mm past a heart and the hoop)
+      const host = fs && fitFrame(p, pieces), past = host && !inFrame({ ...p, size: fs }, host, 0);
+      fit.hidden = !fs; fit.innerHTML = past ? `Shrunk to ${fs} mm, the smallest it goes, and it still runs past the frame: use fewer words, or make the frame bigger.`
+        : fs ? `Shrunk to ${fs} mm so it fits inside the frame.${up ? ` Turned to run up the frame it can be ${up} mm: <button type="button" class="link" data-run-up="${up}">Turn it to run up the frame</button>` : ""}` : "";
     }
     if (await apart()) return;
     // what's wrong with it, worked out once (`pieceProblems`) as every other surface says it; here each with its fix
@@ -869,7 +873,10 @@ export function initStudio(api) {
     // nor one that takes it out of the frame it sat in (the same ring's words widened outside the circle)
     const inside = (a, b) => a && b && a[0] >= b[0] && a[1] >= b[1] && a[2] <= b[2] && a[3] <= b[3];
     const b0 = pieceBounds(f0 ? { ...p, size: f0 } : p), b1 = pieceBounds(fit ? { ...q, size: fit } : q);
-    const out = pieces.find((f) => f.kind === "frame" && f.id !== p.id && inside(b0, pieceBounds(f)) && !inside(b1, pieceBounds(f)));
+    // (a patch's edge too, which `touching` leaves out as lettering sits on the fill: "Make it 25 mm" put a heart on
+    // the patch's satin edge)
+    const s0 = f0 ? { ...p, size: f0 } : p, s1 = fit ? { ...q, size: fit } : q;
+    const out = pieces.find((f) => f.kind === "frame" && f.id !== p.id && ((inside(b0, pieceBounds(f)) && !inside(b1, pieceBounds(f))) || (f.border === "patch" && !(f.rot || 0) && inFrame(s0, f, 3) && !inFrame(s1, f, 3))));
     if (out) return { w, h, fits: null, hit: out, out: true };
     // nor a size its frame shrinks straight back (`fittedSizes`): "Make it 17 mm" left the words at 15, and the same
     // warning offered 17 again (Kitchen sign with hearts, Wedding keepsake's two names)
@@ -2197,7 +2204,7 @@ export function initStudio(api) {
   // rest (a filled motif under 25 mm starts to lose its detail, and the editor says so, but inside the quilt block's
   // frame beats outside it)
   const least = (p) => (p.size == null ? p.size : p.kind === "text" ? Math.max(5, Math.round(p.size) / 2) : p.kind === "monogram" ? Math.min(p.size, 15)
-    : p.kind === "motif" ? Math.min(p.size, 20) : p.kind === "letters" ? Math.min(p.size, 30) : p.size);
+    : p.kind === "motif" ? Math.min(p.size, MOTIF_MIN(p)) : p.kind === "letters" ? Math.min(p.size, 30) : p.size);
   // could p at `size` fit a w x h box at all? (its box at its own size scaled, with a little to spare: stitching each
   // size of a 60 mm appliqué AB that couldn't fit held "+ Appliqué letters" up for 1.2 s)
   function roughly(p) {
@@ -2207,7 +2214,9 @@ export function initStudio(api) {
   // made smaller to find it room, a piece must still stitch cleanly (and on a towel, keep its letters open): "Move it
   // to the free space in the circle, 17 mm" closed a towel monogram up
   const MOTIF_MIN = (q) => (q.kind === "motif" ? MOTIF_LEAST[q.style || "fill"] || 0 : 0);
-  const readable = (q) => !minSize(q) && !(fabric === "towel" && (q.kind === "text" || q.kind === "monogram") && towelMin(q) > q.size * 1.04);
+  // (a motif under the size it's said too small at, too: + Motif put a filled heart in at 20 mm, then said it was too
+  // small to fill)
+  const readable = (q) => !minSize(q) && !(fabric === "towel" && (q.kind === "text" || q.kind === "monogram") && towelMin(q) > q.size * 1.04) && !(q.size < MOTIF_MIN(q));
   // x, y that put p in the middle of frame f's front (a zipper pouch's is below the zipper)
   function middleOf(f, p) {
     const fb = pieceBounds({ ...p, x: 0, y: 0 }), [t, b] = frontPanel(f);
