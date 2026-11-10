@@ -82,6 +82,15 @@ for (const dir of dirs) for (const f of readdirSync(dir).filter((x) => /\.(pes|d
       if (sort && out > blocks) { bad++; console.error(`FAIL ${f} sort added thread changes (${blocks} -> ${out})`); }
     } catch (err) { bad++; console.error(`FAIL ${f} restitch ${scale} sort ${sort}: ${err.message}`); }
   }
+  // the Design tab's file pieces grown a little (`grow`: re-stitched, not scaled open): valid and as covered
+  {
+    n++;
+    try {
+      const p = fix(d, { scale: 1.1, thin: true, grow: true }), b = bounds(p), v = validatePES(writePES(p), p);
+      if (!v.ok && b[0] <= 1260 && b[1] <= 1760) { bad++; console.error(`FAIL ${f} grow 1.1: ${v.error}`); }
+      sameCover(f, src, p, 1.1);
+    } catch (err) { bad++; console.error(`FAIL ${f} grow 1.1: ${err.message}`); }
+  }
   const s = sortColors(d); if (s) sorted++;
   // the download dialog's fixed copy (app.js fixedCopy) passes the app's own verdict, which is pe900_check's
   const bytes = writePES(d), v = verdictOf(bytes);

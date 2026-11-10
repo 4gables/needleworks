@@ -1193,7 +1193,7 @@ export function initStudio(api) {
       };
     }
     fileJob = { id: p.id, scale: p.scale, key: fileKey(p, p.scale) };
-    fileWorker.postMessage({ id: 0, d: blocksPattern(p.orig), opts: { scale: p.scale, tiny: p.scale < 1, thin: true } });
+    fileWorker.postMessage({ id: 0, d: blocksPattern(p.orig), opts: { scale: p.scale, tiny: p.scale < 1, thin: true, grow: true } });
   }
   // A design opened on the Open tab, to add words to: a new design of the file and a line of lettering under it (the
   // last design stays one Undo away). Fit to hoop then resizes both.
@@ -1891,7 +1891,7 @@ export function initStudio(api) {
     const fo = e.target.closest("[data-font]"), fs = fo && edit.querySelector('select[data-k="font"]');
     if (fs) { fs.value = fo.dataset.font; for (const t of ["input", "change"]) fs.dispatchEvent(new Event(t, { bubbles: true })); return; }
     const c = e.target.closest("[data-color]");
-    if (c) { change((p) => (p.color = c.dataset.color), true, true); editor(); return; }
+    if (c) { const was = current()?.color; change((p) => (p.color = c.dataset.color), true, true); editor(); ungang(current(), was); return; }
     const mo = e.target.closest("[data-motif]");
     if (mo) { change((p) => (p.motif = mo.dataset.motif), true, true); editor(); list(); return; }
     const f = e.target.closest("[data-fill]");
@@ -2255,6 +2255,14 @@ export function initStudio(api) {
   // selection box ran far past the letters.
   function sewnAt(p, ps = pieces) { return sewn(p, ps); }
   // frames alike (an in-the-hoop project made again beside the first, `twoUp`)
+  // a frame of several alike (Make another) given its own thread: they no longer sew in the same steps, said, with the
+  // thread put on all of them as the way back (one key fob's thread changed took 2 steps to 8, nothing said)
+  function ungang(p, was) {
+    if (p?.kind !== "frame" || was == null || p.color === was) return;
+    const twins = pieces.filter((q) => alike(q, p) && q.color === was);
+    if (!twins.length) return;
+    toast(`The ${shapeLabel(p)}s now sew one after the other, in more steps: they have different threads.`, { label: "Use this thread on all of them", run: () => { remember(); for (const q of twins) { const t = pieces.find((o) => o.id === q.id); if (t) t.color = p.color; } save(); ui(); make(); } });
+  }
   function alike(a, b) { return a !== b && a.kind === "frame" && b.kind === "frame" && a.border === b.border && a.shape === b.shape && a.w === b.w && a.h === b.h; }
   // what's on frame f (at the sizes it's sewn)
   function onFrame(f, ps = pieces) {
