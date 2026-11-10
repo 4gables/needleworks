@@ -264,6 +264,15 @@ const MEASURE = String.raw`(async (opts) => {
     if (words.length >= 4 && b.width < 3.5 * px) { const tops = new Set(); for (const n of own) { rg.selectNodeContents(n); for (const q of rg.getClientRects()) tops.add(Math.round(q.top)); }
       if (tops.size >= 3) out.push({ kind: 'squeezed', el: desc(e), detail: tops.size + ' lines in ' + Math.round(b.width) + ' px' }); }
   }
+  // 2b. a scrolling list showing a sliver of its next item (round 10: the picture's thread chips at 820 x 1180 showed 8 px
+  // of a third row under a half-empty preview, read as cut off): whole rows, or at least half of the next as a cue
+  for (const l of scope.querySelectorAll('ul, ol, [role=list]')) {
+    if (hidden(l)) continue;
+    const s = getComputedStyle(l); if (!/(auto|scroll)/.test(s.overflowY) || l.scrollHeight <= l.clientHeight + 1) continue;
+    const b = l.getBoundingClientRect();
+    for (const c of l.children) { const r = c.getBoundingClientRect(), seen = Math.min(r.bottom, b.bottom) - Math.max(r.top, b.top);
+      if (r.height && seen > 1 && seen < 0.4 * r.height) { out.push({ kind: 'cut-row', el: desc(l), detail: Math.round(seen) + ' of ' + Math.round(r.height) + ' px of an item shows' }); break; } }
+  }
   // 3. at load (nothing scrolled): the preview, Download and the file chooser on screen
   if (!dlg && opts.atLoad && !document.scrollingElement.scrollTop && !document.querySelector('.controls').scrollTop) {
     const onScreen = (e, frac = 0.5) => { if (!e || hidden(e)) return null; const r = e.getBoundingClientRect(), c = clipOf(e, { scrolls: true });

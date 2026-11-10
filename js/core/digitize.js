@@ -593,31 +593,49 @@ export function labelWith(img, model, crop = [0, 0, 1, 1]) {
   return { w, h, labels, colors, merged: model.merged, frame: !!model.frame, empty: model.empty, lost: model.lost || 0 };
 }
 
-// The longest line in the picture too thin to keep (px along it): a pixel or two wide, unlike the fabric (ΔE over 20)
-// yet read as fabric, 2 px clear of anything sewn (not the blend round a shape's edge). A logo's 1 px grey rule
-// vanished without a word. (`labels`: colour ids)
-function lostLines(P, labels, colors) {
+// The lines in the picture too thin to keep: a pixel or two wide, unlike the fabric (ΔE over 20) yet read as fabric, 2 px
+// clear of anything sewn (not the blend round a shape's edge). A logo's 1 px grey rule vanished without a word.
+// (`labels`: colour ids.) Returns their pixels' components (`cl`, 0 = none), each one's length (px; 0 when it isn't
+// thin by its box: a straight line) and its half-width (px: a curved line is thin too).
+function faintLines(P, labels, colors, across = false) {
   const { w, h, n, lab } = P, bg = colors.find((c) => c.background);
-  if (!bg) return 0;
+  if (!bg) return { cl: new Int32Array(n), len: [] };
   const B = srgbToLab(...hexToRgb(bg.picture || bg.hex)), m = { w, h, data: new Uint8Array(n) }, ink = { w, h, data: new Uint8Array(n) };
   for (let i = 0; i < n; i++) ink.data[i] = labels[i] >= 0 && labels[i] !== bg.id ? 0 : 1;
   const away = distanceTransform(ink);
+  // (`across`: only where the fabric lies on both sides, 3 px away: a line drawn on it, not the blend along the edge of a
+  // frame or a panel the design sits on)
+  const fab = (x, y) => x >= 0 && y >= 0 && x < w && y < h && Math.hypot(lab[(y * w + x) * 3] - B[0], lab[(y * w + x) * 3 + 1] - B[1], lab[(y * w + x) * 3 + 2] - B[2]) <= 12;
+  const line = (i) => { const x = i % w, y = (i - x) / w; return [[3, 0], [0, 3], [2, 2], [2, -2]].some(([dx, dy]) => fab(x + dx, y + dy) && fab(x - dx, y - dy)); };
   for (let i = 0; i < n; i++)
-    if (labels[i] === bg.id && away[i] > 2 && Math.hypot(lab[i * 3] - B[0], lab[i * 3 + 1] - B[1], lab[i * 3 + 2] - B[2]) > 20) m.data[i] = 1;
-  const { labels: cl, count } = label(m);
-  if (!count) return 0;
+    if (labels[i] === bg.id && away[i] > 2 && Math.hypot(lab[i * 3] - B[0], lab[i * 3 + 1] - B[1], lab[i * 3 + 2] - B[2]) > 20 && (!across || line(i))) m.data[i] = 1;
+  const { labels: cl, count } = label(m), len = new Array(count + 1).fill(0), half = new Float64Array(count + 1);
+  if (!count) return { cl, len, half };
+  const inside = distanceTransform(m);
   const x0 = new Int32Array(count + 1).fill(w), x1 = new Int32Array(count + 1), y0 = new Int32Array(count + 1).fill(h), y1 = new Int32Array(count + 1), size = new Int32Array(count + 1);
   for (let i = 0; i < n; i++) {
     const c = cl[i]; if (!c) continue;
     const x = i % w, y = (i - x) / w;
     size[c]++; if (x < x0[c]) x0[c] = x; if (x > x1[c]) x1[c] = x; if (y < y0[c]) y0[c] = y; if (y > y1[c]) y1[c] = y;
+    if (inside[i] > half[c]) half[c] = inside[i];
   }
-  let best = 0;
-  for (let c = 1; c <= count; c++) {
-    const L = Math.hypot(x1[c] - x0[c] + 1, y1[c] - y0[c] + 1);
-    if (size[c] <= 2.5 * L && L > best) best = L;
-  }
-  return best;
+  for (let c = 1; c <= count; c++) { const L = Math.hypot(x1[c] - x0[c] + 1, y1[c] - y0[c] + 1); if (size[c] <= 2.5 * L) len[c] = L; }
+  return { cl, len, half };
+}
+// the longest of them (px along it)
+const lostLines = (P, labels, colors) => faintLines(P, labels, colors).len.reduce((a, b) => Math.max(a, b), 0);
+
+// The picture's ink on its learned copy, for keptParts: what its colours learned at the most threads label as ink, and
+// the lines too fine to label (faintLines: etsy_7's pale pink doodles read as fabric, and the lost measure couldn't see
+// them). ref: labelWith(img, those colours). Returns { w, h, data (1 = ink) }.
+export function pictureInk(img, ref) {
+  const P = pixels(img), { w, h, n } = P, data = new Uint8Array(n);
+  const fabric = new Set(ref.colors.filter((c) => c.background).map((c) => c.id));
+  for (let i = 0; i < n; i++) if (ref.labels[i] >= 0 && !fabric.has(ref.labels[i])) data[i] = 1;
+  // (curled doodles too: under 3 px wide)
+  const { cl, len, half } = faintLines(P, ref.labels, ref.colors, true);
+  for (let i = 0; i < n; i++) if (cl[i] && (len[cl[i]] || half[cl[i]] <= 1.5)) data[i] = 1;
+  return { w, h, data };
 }
 
 export function analyze(img, opts = {}) {
@@ -953,6 +971,7 @@ export function digitize(img, analysis, opts = {}) {
       // (the longest line too thin to keep, as a share of the picture's longer side: the page says so)
       r.fine.lost = analysis.lost || 0;
       r.res = res;   // (working px per mm, after any shrink to fit)
+      r.origin ||= [img.width / 2, img.height / 2];   // (where mm 0,0 lies, working px)
       return r;
     }
     catch (e) { if (!e.overBy || tries === 3) throw e; res *= e.overBy * 1.01; }
@@ -1740,7 +1759,71 @@ function crossStitch(img, analysis, opts) {
     summary.push({ ...col, shapes: crosses, kinds: ["cross"] });
   }
   d.finish();
-  return { design: d, summary, fine: { narrowMm2: 0, hairlines: 0 } };
+  // (the grid is centred, not the picture: where mm 0,0 lies in working px, for keptParts)
+  return { design: d, summary, fine: { narrowMm2: 0, hairlines: 0 }, origin: [ox, oy] };
+}
+
+// What of the picture made it into stitches, whatever the style: every part of the picture (a connected piece of what
+// isn't fabric, on the learned copy, so it's the same at every Size) is kept when most of its edge lies within thread's
+// reach of a stitch. Each style leaves things out by its own rules (specks, lone cells, lines too fine to label, a pale
+// colour merged into the fabric when threads run short), and etsy_7's hundred doodles vanished at 60 mm with the
+// dialog saying "Checked". Parts under 1 mm across or 0.5 mm² at this size (JPEG flecks) aren't counted.
+// ink: pictureInk(learn copy, colours learned at the most threads: what the picture has, whatever the count asked);
+// full: labelWith(learn copy, the colours sewn: for the colours left out on purpose); pattern: the design before any
+// turn (0.1 mm); at: { w, h, res, origin } of the working copy; crop: the part of the learned copy it shows (fractions).
+// Returns { parts, lost (how many), share (of the area), mm2, big (the longest lost part, mm), bulk (the largest lost
+// part's area, mm²), ids: the lost parts (the same part has the same id at every
+// Size, style and colour count of one picture) }.
+// the most thread colours a picture can be sewn in (the Picture tab's slider)
+export const MOST = 8;
+export function keptParts(ink0, full, pattern, at, crop, { style = "fill", cross = 2.5, skip = [] } = {}) {
+  const { w, h } = ink0, n = w * h, out = new Set(full.colors.filter((c) => skip.includes(c.id)).map((c) => c.id));
+  const ink = { w, h, data: new Uint8Array(n) };
+  for (let i = 0; i < n; i++) ink.data[i] = ink0.data[i] && !out.has(full.labels[i]) ? 1 : 0;
+  // learned px -> mm, and stitches drawn onto the learned copy
+  const kx = (crop[2] - crop[0]) * w / at.w, ky = (crop[3] - crop[1]) * h / at.h, mmPx = 1 / (at.res * kx);
+  const toPx = (x, y) => [(crop[0] * w) + (x / 10 * at.res + at.origin[0]) * kx, (crop[1] * h) + (y / 10 * at.res + at.origin[1]) * ky];
+  const sewn = { w, h, data: new Uint8Array(n).fill(1) };
+  let prev = null;
+  for (const [x, y, c] of pattern.stitches) {
+    if (c !== 0) { prev = null; continue; }   // (STITCH; jumps, trims and colour changes draw nothing)
+    const p = toPx(x, y);
+    if (prev) {
+      const k = Math.max(1, Math.ceil(Math.hypot(p[0] - prev[0], p[1] - prev[1]) * 2));
+      for (let s = 0; s <= k; s++) {
+        const X = Math.round(prev[0] + ((p[0] - prev[0]) * s) / k), Y = Math.round(prev[1] + ((p[1] - prev[1]) * s) / k);
+        if (X >= 0 && Y >= 0 && X < w && Y < h) sewn.data[Y * w + X] = 0;
+      }
+    }
+    prev = p;
+  }
+  const toStitch = distanceTransform(sewn), wide = distanceTransform(ink), { labels: cl, count } = label(ink);
+  const area = new Float64Array(count + 1), half = new Float64Array(count + 1), x0 = new Int32Array(count + 1).fill(w), x1 = new Int32Array(count + 1).fill(-1), y0 = new Int32Array(count + 1).fill(h), y1 = new Int32Array(count + 1).fill(-1);
+  for (let i = 0; i < n; i++) {
+    const c = cl[i]; if (!c) continue;
+    const x = i % w, y = (i - x) / w; area[c]++;
+    if (wide[i] > half[c]) half[c] = wide[i];
+    if (x < x0[c]) x0[c] = x; if (x > x1[c]) x1[c] = x; if (y < y0[c]) y0[c] = y; if (y > y1[c]) y1[c] = y;
+  }
+  // thread's reach (mm): a fill reaches its edge, sewing lines under 1 mm along their centre; a line drawing outlines
+  // a shape or runs along a stroke's centre (up to 6 mm wide); a cross covers its cell
+  const reach = (c) => 1 + (style === "cross" ? cross / mmPx : (0.6 + Math.min(half[c] * mmPx, style === "line" ? 3 : 0.5)) / mmPx);
+  const edge = new Float64Array(count + 1), hit = new Float64Array(count + 1), gonePart = new Set();
+  for (let i = 0; i < n; i++) {
+    const c = cl[i]; if (!c) continue;
+    const x = i % w;
+    if (x > 0 && x < w - 1 && i >= w && i < n - w && cl[i - 1] && cl[i + 1] && cl[i - w] && cl[i + w]) continue;
+    edge[c]++; if (toStitch[i] <= reach(c)) hit[c]++;
+  }
+  let parts = 0, lost = 0, all = 0, gone = 0, big = 0, bulk = 0;
+  for (let c = 1; c <= count; c++) {
+    const mm2 = area[c] * mmPx * mmPx;
+    if (Math.max(x1[c] - x0[c], y1[c] - y0[c]) + 1 < 1 / mmPx || mm2 < 0.5) continue;
+    parts++; all += mm2;
+    if (hit[c] >= 0.3 * edge[c]) continue;
+    lost++; gone += mm2; gonePart.add(c); big = Math.max(big, (Math.max(x1[c] - x0[c], y1[c] - y0[c]) + 1) * mmPx); bulk = Math.max(bulk, mm2);
+  }
+  return { parts, lost, share: all ? gone / all : 0, mm2: gone, big, bulk, ids: [...gonePart] };
 }
 
 // Size is the sewn design's longer side, not the picture's: a framed photo at "174 mm" sewed 84 x 58 mm, and a
@@ -1764,6 +1847,53 @@ export function picturePlan(box, boxes, sizeMm, hoop, res = DEFAULTS.res, fit = 
   const crop = { sx, sy, sw: ex - sx, sh: ey - sy };
   return { crop, frac: [(sx - box.sx) / box.sw, (sy - box.sy) / box.sh, (ex - box.sx) / box.sw, (ey - box.sy) / box.sh],
     w: Math.max(8, Math.round(crop.sw * s * res)), h: Math.max(8, Math.round(crop.sh * s * res)), max: Math.floor(max), sizeMm: Math.min(sizeMm, max) };
+}
+
+// Sews a picture at a Size: the sewn design's longer side, within 0.4 mm (a cross-stitch: half a cell, its grid can't
+// do better). What's sewn is smaller than the colours' extent (blends and specks aren't sewn) or, when bigger parts
+// survive, larger, so it's drawn again: proportionally, then between the closest tries under and over (etsy_7 in
+// cross-stitch: 40 mm with its doodles dropped, 90 with them kept, and back). The closest try wins, an over-size
+// counting half again. The tries depend only on the settings, never on what was sewn before: the fit used to be carried from the last
+// size and style, so one setting sewed 1578, 1576 or 1430 stitches by history. `fit` (from an earlier sewing of these
+// exact settings) is sewn once as it is.
+// job(img, frac) -> the worker's reply; plan(fit) -> picturePlan(...). Returns the reply with `plan` and `tries`.
+export async function sewSized(job, plan, { style = "fill", cross = 2.5, fit = null } = {}) {
+  const tol = style === "cross" ? cross / 2 : 0.4, tries = [], most = fit ? 1 : style === "cross" ? 10 : 5;
+  // (over the Size is worse than under: it was asked to fit somewhere)
+  const miss = (got, want) => (got > want ? 1.5 * (got - want) : want - got);
+  let f = fit || 1, best = null, bracketed = 0;
+  for (let t = 0; t < most; t++) {
+    const pl = plan(f), r = await job(pl);
+    if (!r.ok) return r;
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    for (const [x, y, c] of r.pattern.stitches) if (c === 0) { if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
+    const got = x1 > x0 || y1 > y0 ? Math.max(x1 - x0, y1 - y0) / 10 : 0, e = { fit: f, got, off: miss(got, pl.sizeMm), r, plan: pl };
+    tries.push(e);
+    if (!best || e.off < best.off - 1e-6) best = e;
+    if (Math.abs(got - pl.sizeMm) <= tol || !got) break;
+    // (bracketed: between the closest under and over, in proportion once, then halving (parts appear and vanish
+    // between two sizes: a jump no proportion finds); else in proportion)
+    const under = tries.filter((q) => q.got < pl.sizeMm).sort((a, b) => b.fit - a.fit)[0], over = tries.filter((q) => q.got > pl.sizeMm).sort((a, b) => a.fit - b.fit)[0];
+    let n = (f * pl.sizeMm) / got;
+    if (under && over && under.fit < over.fit) {
+      const a = under, b = over;
+      n = bracketed++ ? (a.fit + b.fit) / 2 : a.fit + ((pl.sizeMm - a.got) * (b.fit - a.fit)) / (b.got - a.got);
+      if (!(n > a.fit + 0.1 * (b.fit - a.fit) && n < b.fit - 0.1 * (b.fit - a.fit))) n = (a.fit + b.fit) / 2;
+      if (b.fit - a.fit < 0.004) break;
+    }
+    const np = plan(n);
+    if (tries.some((q) => q.plan.w === np.w && q.plan.h === np.h)) break;   // (the same working copy again)
+    f = n;
+  }
+  return { ...best.r, plan: best.plan, fit: best.fit, tries: tries.map((q) => [+q.fit.toFixed(4), q.got]) };
+}
+
+// When what a picture leaves out (keptParts) is worth saying: a twentieth of its area, or a fifth of its parts and at
+// least three (etsy_7 at 60 mm: 71 of 117 doodles; etsy_8's script title at 60 mm, 16 of 62), or a part of 1.4 mm² or
+// more (a 1.4 mm dot: a drawing's eye, a 3 in "VP3") on a picture of few parts. A busy picture's berries and stem tips
+// (etsy_3 at 120 mm: 34 of 240 parts, 1 % of it) and clean logos aren't (a JPEG's 2.8 mm sliver of 0.5 mm² is no part).
+export function lostMuch(k) {
+  return !!k && k.parts > 0 && (k.share >= 0.05 || (k.lost >= 3 && k.lost >= 0.2 * k.parts) || (k.parts <= 20 && k.bulk >= 1.4));
 }
 
 // The Picture tab's copies of a picture (also used by tests/browser/picture_corpus.html, so it sews what the page sews).

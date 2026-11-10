@@ -15,7 +15,7 @@ it finishes in time. Run: tests/picture_corpus.sh CDP_PORT HTTP_PORT OUT (or ser
 this page; ?only=name,name runs some images, ?quick one case each). Title: DONE &lt;cases&gt; &lt;problems&gt;.</p>
 <pre id="log"></pre>
 <script type="module">
-import { DENSITY, LEARN, contentBox, picturePlan, pictureImage } from "../../js/core/digitize.js";
+import { DENSITY, LEARN, contentBox, lostMuch, picturePlan, pictureImage, sewSized } from "../../js/core/digitize.js";
 import { COLOR_CHANGE, JUMP, STITCH, TRIM, designStats, validatePES } from "../../js/core/formats.js";
 import { hoop as getHoop } from "../../js/core/machines.js";
 import { distanceTransform, label } from "../../js/core/raster.js";
@@ -187,6 +187,33 @@ const PICS = [
     });
     return out;
   })() },
+  // etsy_7 itself (round 10): a bold title over a sheet of doodles in hairlines, most of them too fine to sew at 60 mm
+  // or as crosses: said (`lost`: the cases that must carry the lost note; the rest are checked against this page's own
+  // measure of what's left out)
+  { name: "doodle_sheet", n: 4, lost: ["fill_s60", "cross_s100"], cases: [["fill", 60, 4], ["fill", 160, 4], ["line", 100, 4], ["cross", 100, 4]], layers: (() => {
+    const r = rng(17), cols = ["#e9a3c9", "#9fc5e8", "#b4a7d6", "#b6d7a8"], out = [];
+    out.push({ role: "text", col: "#e0218a", draw: (c) => text(c, "DOODLES", 400, 110, font("bold", 100), "#e0218a") });
+    cols.forEach((col, k) => {
+      const lines = [];
+      for (let i = k; i < 48; i += 4) {
+        const x = 90 + (i % 8) * 88, y = 170 + Math.floor(i / 8) * 70;
+        lines.push(i % 2 ? wobbly(r, ring(x + 20, y + 20, 15, 16), 2, 4) : wobbly(r, [[x, y + 30], [x + 15, y + 5], [x + 30, y + 30], [x + 42, y + 8]], 2, 4));
+      }
+      out.push({ role: "stroke", col, width: 1.5, lines, draw: (c, q, L) => { c.strokeStyle = L.col; for (const p of L.lines) polyStroke(c, p, 1.5); } });
+    });
+    return out;
+  })() },
+  // the round 10 child's drawing: a sun with thin rays, a ground line and a dinosaur with a 1.5 mm eye (at 100 mm).
+  // Cross-stitch drops the rays and the line, Filled the eye: said either way.
+  { name: "child_drawing", n: 4, lost: ["cross_s100", "fill_s100"], cases: [["fill", 100, 4], ["line", 100, 4], ["cross", 100, 4]], layers: (() => {
+    const r = rng(23), rays = Array.from({ length: 8 }, (_, k) => { const a = (k * Math.PI) / 4; return wobbly(r, [[650 + 60 * Math.cos(a), 110 + 60 * Math.sin(a)], [650 + 95 * Math.cos(a), 110 + 95 * Math.sin(a)]], 2); });
+    return [
+      { role: "ink", col: "#f5c400", draw: (c) => { circle(c, 650, 110, 45); c.fillStyle = "#f5c400"; c.fill(); } },
+      { role: "stroke", col: "#f5c400", width: 5, lines: rays, draw: (c, q, L) => { c.strokeStyle = L.col; for (const p of L.lines) polyStroke(c, p, 5); } },
+      { role: "stroke", col: "#4a7a2a", width: 5, lines: [wobbly(r, [[40, 560], [400, 550], [760, 562]], 3)], draw: (c, q, L) => { c.strokeStyle = L.col; polyStroke(c, L.lines[0], 5); } },
+      { role: "ink", col: "#3aa655", draw: (c) => { c.fillStyle = "#3aa655"; c.beginPath(); c.ellipse(300, 420, 170, 90, 0, 0, 2 * Math.PI); c.fill(); c.beginPath(); c.ellipse(470, 300, 60, 45, -0.4, 0, 2 * Math.PI); c.fill(); c.fillRect(420, 300, 50, 110); } },
+      { role: "ink", col: "#111111", draw: (c) => { circle(c, 490, 290, 6); c.fillStyle = "#111111"; c.fill(); } }];
+  })() },
   // etsy_4's class: a greyish lavender script title over a darker purple flower
   { name: "lavender_title", n: 3, layers: [
     { role: "text", col: "#8e86b5", draw: (c) => text(c, "Easter Bouquets", 400, 140, font("script", 90), "#8e86b5") },
@@ -285,24 +312,18 @@ const job = (msg) => new Promise((ok, no) => {
   worker.onerror = (e) => { clearTimeout(t); no(new Error(e.message)); };
   worker.postMessage({ ...msg, id });
 });
-// as makePicture/onPicture in app.js: measure, plan, stitch, then redraw up to twice when the size came out > 0.4 mm off
+// as sewPicture in app.js: measure, then sized by sewSized (the same tries the page makes)
 async function sew(bitmap, c) {
   const box = contentBox(bitmap), key = `${c.tag}`, k = LEARN / Math.max(box.sw, box.sh);
   const learn = pictureImage(bitmap, box, Math.max(1, Math.round(box.sw * k)), Math.max(1, Math.round(box.sh * k)));
   const hoop = c.turn ? { ...HOOP, w: HOOP.h, h: HOOP.w } : HOOP;
-  const opts = { colors: c.colors, removeBackground: true, fillAngle: 45, density: DENSITY.standard, skip: [], hoop, turn: !!c.turn, palette: null, style: c.style, cross: 2.5, line: undefined };
+  const opts = { colors: c.colors, removeBackground: true, fillAngle: 45, density: DENSITY.standard, skip: [], hoop, turn: !!c.turn, palette: null, style: c.style, cross: c.cross || 2.5, line: undefined };
   const m = await job({ key, learn, opts });
   if (!m.ok) return { error: m.error, code: m.code };
-  let fit = 1, r, plan;
-  for (let tries = 0; tries < 3; tries++) {
-    plan = picturePlan(box, m.boxes.filter((_, i) => !m.colors[i].background), c.size, hoop, undefined, fit);
-    r = await job({ key, learn, img: pictureImage(bitmap, plan.crop, plan.w, plan.h), crop: plan.frac, opts });
-    if (!r.ok) return { error: r.error, code: r.code };
-    const st = designStats(r.pattern), got = Math.max(st.widthMm, st.heightMm);
-    if (!(got > 0 && Math.abs(got - plan.sizeMm) > 0.4) || tries === 2) break;
-    fit = (fit * plan.sizeMm) / got;
-  }
-  return { r, plan, hoop };
+  const r = await sewSized((pl) => job({ key, ref: c.tag.split(`_${c.style}_`)[0], learn, img: pictureImage(bitmap, pl.crop, pl.w, pl.h), crop: pl.frac, opts }),
+    (fit) => picturePlan(box, m.boxes.filter((_, i) => !m.colors[i].background), c.size, hoop, undefined, fit), { style: c.style, cross: opts.cross });
+  if (!r.ok) return { error: r.error, code: r.code };
+  return { r, plan: r.plan, hoop };
 }
 
 // thread distance: every sewn stitch line rasterised at G mm, per colour block; distance from any design point (mm)
@@ -356,6 +377,8 @@ async function render(tag, pat, turn, reg, toMm) {
 const KNOWN = {
   pc_soft_shadow_fill_s60_c2: "2 threads for 3 colours: the shadow's darkest core, where it meets the lettering, joins the orange; with 3 threads or more it's left out",
   pc_jpeg_logo_fill_s60_c2: "0.6 mm strokes of 3 mm letters in a heavily compressed JPEG: parts of one stem are sewn",
+  pc_doodle_sheet_fill_s160_c4: "the pale pink 1.5 px doodles read as fabric when the colours are learned (CLAUDE.md Open: etsy_7's pastel lines); the lost note says so",
+  pc_doodle_sheet_line_s100_c4: "the pale pink 1.5 px doodles read as fabric when the colours are learned (CLAUDE.md Open: etsy_7's pastel lines); the lost note says so",
 };
 
 // ---------- checks ----------
@@ -408,7 +431,7 @@ async function run(spec) {
       const at = threadMap(pat, turn), thread = pat.threads.map((t) => t.color);
       const pxMm = mmPerPx / reg.k;   // mm per mask px
       // trims and loose jumps; the pieces a sewer would count (sewable ones), and the area sewn
-      let trims = 0, loose = 0, last = null, sewnMm2 = 0, need = 0;
+      let trims = 0, loose = 0, last = null, sewnMm2 = 0, need = 0, drawn = 0, drawnMm2 = 0, gone = 0, goneMm2 = 0;
       for (let i = 0; i < pat.stitches.length; i++) {
         const [x, y, cmd] = pat.stitches[i];
         if (cmd === TRIM) { trims++; const nx = pat.stitches.slice(i + 1).find((q) => q[2] === STITCH); if (last && nx && Math.hypot(nx[0] - last[0], nx[1] - last[1]) <= 50) loose++; }
@@ -434,6 +457,15 @@ async function run(spec) {
           continue;
         }
         const len = areaMm2 / Math.max(0.1, wideMm);
+        // (left out, by this page's own measure: under a fifth of it within thread's reach; for the lost note below)
+        if (areaMm2 >= 0.5) {
+          let n2 = 0, h2 = 0;
+          const D2 = style === "cross" ? 2.5 : 0.6 + Math.min(p.wide * pxMm, style === "line" ? 3 : 0.5);
+          // (a line drawing outlines a shape: its edge)
+          for (const q of sample(p.px.map((_, i) => i), 300)) { if (style === "line" && p.dt[q] * pxMm > 1.5) continue; n2++; if (at(...toMm(p.px[q], p))[0] <= D2) h2++; }
+          drawn++; drawnMm2 += areaMm2;
+          if (n2 && h2 < 0.2 * n2) { gone++; goneMm2 += areaMm2; }
+        }
         if (areaMm2 >= (style === "cross" ? 3 : 1.5)) need++;
         if (!big(p, style, pxMm)) continue;
         sewnMm2 += areaMm2;
@@ -462,6 +494,13 @@ async function run(spec) {
           if (th && !(p.cols || [p.col]).some((x) => matches(x, th))) bad.push(`${name} sewn in ${th} (${family(th)}), drawn ${family(p.col || p.cols[0])}`);
         }
       }
+      // what's left out is said (class: etsy_7's doodles, a drawing's sun rays in cross-stitch, a 1.5 mm eye, all left
+      // out while the dialog said "Checked"): much left out by this page's measure and no lost note fails, and so does a
+      // lost note with nothing left out
+      const note = lostMuch(r.fine?.kept), much = (gone >= 3 && gone >= 0.2 * drawn) || goneMm2 >= 0.1 * drawnMm2;
+      if (much && !note) bad.push(`${gone} of ${drawn} drawn pieces (${(100 * goneMm2 / Math.max(drawnMm2, 1e-9)).toFixed(0)}% of the area) left out without a note`);
+      if (!note && spec.lost?.includes(`${style}_s${size}`)) bad.push(`no lost note (${r.fine?.kept?.lost} of ${r.fine?.kept?.parts} parts left out)`);
+      if (note && !gone && goneMm2 < 0.01 * drawnMm2) bad.push(`a lost note (${r.fine.kept.lost} of ${r.fine.kept.parts} parts) with nothing drawn left out`);
       // line drawing: a crayon or marker stroke 1.5-5 mm wide is sewn once along its centre, not round both edges
       if (style === "line") for (const L of spec.layers) {
         const wd = (L.width || 0) * mmPerPx;
@@ -484,13 +523,13 @@ async function run(spec) {
       const budget = Math.round(1.2 * need + 2 * thread.length + 2 + sewnMm2 / 100);
       if (trims > budget) bad.push(`${trims} trims (budget ${budget}: ${need} pieces, ${(sewnMm2 / 100).toFixed(1)} cm²)`);
       if (RENDER) await render(tag, pat, turn, reg, toMm);
-      Object.assign(res, { stitches: st.stitches, trims, loose, peak: pk, threads: thread.length, size: `${st.widthMm.toFixed(0)}x${st.heightMm.toFixed(0)}`, perCm2: +(trims / Math.max(0.01, sewnMm2 / 100)).toFixed(2), lost: +(r.fine?.lost || 0).toFixed(3) });
+      Object.assign(res, { stitches: st.stitches, trims, loose, peak: pk, threads: thread.length, size: `${st.widthMm.toFixed(0)}x${st.heightMm.toFixed(0)}`, perCm2: +(trims / Math.max(0.01, sewnMm2 / 100)).toFixed(2), lost: +(r.fine?.lost || 0).toFixed(3), kept: r.fine?.kept && `${r.fine.kept.lost}/${r.fine.kept.parts} ${(100 * r.fine.kept.share).toFixed(1)}% big ${r.fine.kept.big.toFixed(1)}`, note: lostMuch(r.fine?.kept), gone: `${gone}/${drawn}`, tries: r.tries });
     }
     // (cases still open, said so rather than hidden: they print as KNOWN and don't count)
     const known = KNOWN[tag];
     res.bad = bad; res.known = !!(known && bad.length); results.push(res);
     if (bad.length && !known) problems++;
-    log(`  ${bad.length ? (known ? "KNOWN" : "FAIL") : "ok  "}${known && bad.length ? " (" + known + ")" : ""} ${tag} ${res.ms} ms ${res.stitches ?? ""} st ${res.trims ?? ""} trims ${res.loose ?? ""} loose peak ${res.peak ?? ""}${bad.map((b) => "\n       " + b).join("")}`);
+    log(`  ${bad.length ? (known ? "KNOWN" : "FAIL") : "ok  "}${known && bad.length ? " (" + known + ")" : ""} ${tag} ${res.ms} ms ${res.stitches ?? ""} st ${res.trims ?? ""} trims ${res.loose ?? ""} loose peak ${res.peak ?? ""} ${res.size ?? ""} lost ${res.kept ?? ""} (drawn ${res.gone ?? ""})${res.note ? " NOTE" : ""} tries ${res.tries?.length ?? ""}${bad.map((b) => "\n       " + b).join("")}`);
   }
 }
 worker = new Worker(new URL("../../js/worker.js", import.meta.url), { type: "module" });
@@ -498,13 +537,13 @@ window.corpus = { PICS, picture, regions, sew, contentBox, pictureImage, LEARN }
 // ?ext=etsy_6,etsy_7: pictures from tests/external/images (not committed) through the same path: stats and renders only
 for (const name of Q.get("ext")?.split(",") || []) {
   let bitmap; try { bitmap = await createImageBitmap(await (await fetch(`../external/images/${name}.jpg`)).blob()); } catch { log(`skip ${name}`); continue; }
-  for (const [style, size, colors] of [["fill", 120, 6], ["line", 120, 4], ["cross", 100, 4]]) {
+  for (const [style, size, colors] of Q.has("extall") ? [["fill", 60, 6], ["fill", 120, 6], ["line", 60, 4], ["line", 120, 4], ["cross", 60, 4], ["cross", 100, 4]] : [["fill", 120, 6], ["line", 120, 4], ["cross", 100, 4]]) {
     const tag = `ext_${name}_${style}_s${size}_c${colors}`, t1 = performance.now(), s = await sew(bitmap, { tag, style, size, colors });
     if (s.error) { log(`  ${tag}: ${s.code} ${s.error}`); continue; }
     const st = designStats(s.r.pattern), sx = s.plan.crop.sx, sy = s.plan.crop.sy;
     await fetch(`/save/${tag}.pes`, { method: "POST", body: s.r.bytes });
     if (RENDER) await render(tag, s.r.pattern, false, { pieces: [] }, () => [0, 0]);
-    log(`  ${tag} ${Math.round(performance.now() - t1)} ms ${st.stitches} st ${st.trims} trims, threads ${s.r.pattern.threads.map((t) => t.description).join(", ")}${verdictOf(s.r.bytes).map((q) => " QUALITY " + q.key).join("")}`);
+    log(`  ${tag} ${Math.round(performance.now() - t1)} ms ${st.stitches} st ${st.trims} trims, ${Math.round(Math.max(st.widthMm, st.heightMm))} mm, threads ${s.r.pattern.threads.map((t) => t.description).join(", ")}, left out ${s.r.fine.kept.lost}/${s.r.fine.kept.parts} ${(100 * s.r.fine.kept.share).toFixed(1)}%${lostMuch(s.r.fine.kept) ? " NOTE" : ""}${verdictOf(s.r.bytes).map((q) => " QUALITY " + q.key).join("")}`);
   }
 }
 for (const spec of PICS) if (!ONLY || ONLY.includes(spec.name)) await run(spec);

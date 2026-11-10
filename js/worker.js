@@ -1,12 +1,13 @@
 /*! Needleworks (c) 2026 4Gables. All rights reserved. Proprietary, see LICENSE. https://4gables.com/needleworks/ */
 // Runs picture digitizing off the main thread.
-import { digitize, labelWith, learnColours, toPalette } from "./core/digitize.js";
+import { MOST, digitize, keptParts, labelWith, learnColours, pictureInk, toPalette } from "./core/digitize.js";
 import { writePES } from "./core/formats.js";
 import { turnForMachine } from "./core/design.js";
 
 // The colours learned from the picture's fixed-size copy, kept per picture and colour count (Size, Turn hoop and the
-// fill settings reuse them), and the last labelled working copy (moving sliders that don't change it is fast)
-let model = null, labelled = null;
+// fill settings reuse them), and the last labelled working copy (moving sliders that don't change it is fast); `ref`:
+// the learned copy labelled with the most colours, kept per picture, for what's left out (keptParts)
+let model = null, labelled = null, ref = null;
 self.onmessage = (e) => {
   const { id, key, learn, img, crop, opts } = e.data;
   try {
@@ -22,7 +23,11 @@ self.onmessage = (e) => {
     if (labelled?.key !== lk) labelled = { key: lk, analysis: labelWith(img, m, crop) };
     const analysis = labelled.analysis;
     const a = opts.palette?.length ? toPalette(analysis, opts.palette) : analysis;
-    const { design, summary, fine, res } = digitize(img, a, opts);
+    const { design, summary, fine, res, origin } = digitize(img, a, opts);
+    // (what of the picture was left out, measured on the learned copy: the same parts at every Size and colour count)
+    model.full ||= labelWith(learn, m);
+    if (ref?.key !== e.data.ref) ref = { key: e.data.ref, ink: pictureInk(learn, labelWith(learn, learnColours(learn, { ...opts, colors: MOST }))) };
+    fine.kept = keptParts(ref.ink, model.full, design.pattern(), { w: img.width, h: img.height, res, origin }, crop, opts);
     // digitized in the sideways hoop when turned; the file always loads in the machine's orientation
     const pattern = opts.turn ? turnForMachine(design.pattern()) : design.pattern();
     const bytes = writePES(pattern);
