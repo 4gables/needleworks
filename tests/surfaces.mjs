@@ -209,7 +209,7 @@ const READ = String.raw`(async () => {
     out.sayings.steps = { count: num($("#st-steps-count").innerText.match(/(\d+) steps?/)?.[0]), file: pick($("#st-steps [data-step]")?.textContent), turned: !!$("#st-steps .turned") };
     grab($("#st-steps"));
   } else if (out.mode === "picture") {
-    out.editor = ids("#pic-fine [data-problem], #pic-owned [data-problem]");
+    out.editor = ids("#pic-fine [data-problem], #pic-owned [data-problem], #pic-merged [data-problem]");
     out.untagged = [...$$("#pic-fine, #pic-owned")].filter((e) => !e.hidden && e.textContent.trim() && !e.querySelector("[data-problem]")).map((e) => e.textContent);
     out.steps = ids("#pic-steps [data-problem]"); out.stepsCount = $("#pic-steps-count").innerText;
     out.stepThreads = []; grab($("#pic-steps"));

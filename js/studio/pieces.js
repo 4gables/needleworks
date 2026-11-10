@@ -316,14 +316,14 @@ export function touching(p, pieces) {
 // skipped without measuring (the same answer, faster: a design of 15 pieces measured every pair).
 export function touchingAll(p, pieces, first = false) {
   if (p.kind === "frame") return [];
-  const fit = fittedSizes(pieces), sewn = (o) => (fit.has(o.id) ? { ...o, size: fit.get(o.id) } : o);
+  const fit = fittedSizes(pieces), sewnOf = (o) => sewn(o, pieces, fit);
   const paths = pieceStitches(p), pts = paths.flat(), out = [];
   if (!pts.length) return out;
   const b = bounds(pts);
   let mine = null;
   for (const o of pieces) {
     if (o === p || o.id === p.id || (o.kind === "frame" && o.border === "patch")) continue;
-    const theirs = pieceStitches(sewn(o)), tp = theirs.flat();
+    const theirs = pieceStitches(sewnOf(o)), tp = theirs.flat();
     if (!tp.length) continue;
     const c = bounds(tp);
     if (c[0] > b[2] + CLEAR || c[2] < b[0] - CLEAR || c[1] > b[3] + CLEAR || c[3] < b[1] - CLEAR) continue;
@@ -335,13 +335,13 @@ export function touchingAll(p, pieces, first = false) {
 // the first piece that runs into another, and what it runs into ([p, q]), or null
 export function collision(pieces) {
   const fit = fittedSizes(pieces);
-  for (const p of pieces) { const q = touching(fit.has(p.id) ? { ...p, size: fit.get(p.id) } : p, pieces); if (q) return [p, q]; }
+  for (const p of pieces) { const q = touching(sewn(p, pieces, fit), pieces); if (q) return [p, q]; }
   return null;
 }
 // every pair of pieces that run into each other, each pair once ([p, q] in list order)
 export function collisions(pieces) {
   const fit = fittedSizes(pieces), out = [], seen = new Set();
-  for (const p of pieces) for (const q of touchingAll(fit.has(p.id) ? { ...p, size: fit.get(p.id) } : p, pieces)) {
+  for (const p of pieces) for (const q of touchingAll(sewn(p, pieces, fit), pieces)) {
     const [a, b] = pieces.indexOf(p) < pieces.indexOf(q) ? [p, q] : [q, p], k = a.id + ":" + b.id;
     if (!seen.has(k)) { seen.add(k); out.push([a, b]); }
   }
@@ -352,10 +352,10 @@ export function collisions(pieces) {
 // held the page up 4.6 s): { tiny: lettering that would be too small to stitch and isn't now, hit: [a, b] a pair that
 // would run into each other and doesn't now }
 export function scaledFit(pieces, k) {
-  const fit = fittedSizes(pieces), sewn = (o) => (fit.has(o.id) ? { ...o, size: fit.get(o.id) } : o);
-  const tiny = pieces.find((p) => { const q = sewn(p), l = bulk(q), least = q.kind === "text" ? fontOf(q.font).min || 4 : 4; return l && l.parts.length && l.xh >= least && l.xh * k < least; }) || null;
+  const fit = fittedSizes(pieces), sewnOf = (o) => sewn(o, pieces, fit);
+  const tiny = pieces.find((p) => { const q = sewnOf(p), l = bulk(q), least = q.kind === "text" ? fontOf(q.font).min || 4 : 4; return l && l.parts.length && l.xh >= least && l.xh * k < least; }) || null;
   const was = new Set(collisions(pieces).map(([a, b]) => `${a.id}:${b.id}`));
-  const st = new Map(pieces.map((o) => [o.id, pieceStitches(sewn(o)).map((q) => q.map(([x, y]) => [x * k, y * k]))]));
+  const st = new Map(pieces.map((o) => [o.id, pieceStitches(sewnOf(o)).map((q) => q.map(([x, y]) => [x * k, y * k]))]));
   for (const p of pieces) {
     if (p.kind === "frame") continue;
     const mine = st.get(p.id), b = bounds(mine.flat());
@@ -377,7 +377,7 @@ export function scaledFit(pieces, k) {
 // the biggest size (0.5 mm steps, down to 60 %, never too small to stitch) at which p clears `other`, or 0
 // (halving the range, not 0.5 mm at a time: a 113 mm filled heart over a monogram stitched ~90 sizes, 4.7 s per change)
 export function clearSize(p, pieces, other) {
-  const from = fittedSizes(pieces).get(p.id) ?? p.size, theirs = pieceStitches(other), sizes = [];
+  const from = fittedSizes(pieces).get(p.id) ?? p.size, theirs = pieceStitches(sewn(other, pieces)), sizes = [];
   for (let s = Math.ceil(from * 2) / 2 - 0.5; s >= Math.max(5, from * 0.6); s -= 0.5) sizes.push(s);
   // the sizes before the first one too small to stitch (smaller is never better there)
   let x = -1, n = sizes.length;
@@ -423,8 +423,19 @@ export function layoutSize(pieces) {
 // quilt label whose two-line words were asked wider than their frame "fitted" the 5x7 smaller (92 -> 91 mm wide).
 export function sewnBoxes(pieces) {
   const fit = fittedSizes(pieces);
-  return pieces.map((p) => pieceBounds(fit.has(p.id) ? { ...p, size: fit.get(p.id) } : p)).filter(Boolean);
+  return pieces.map((p) => pieceBounds(sewn(p, pieces, fit))).filter(Boolean);
 }
+// p as it's sewn among `pieces` (it may be a new piece not in the list yet): lettering a frame shrinks at its fitted
+// size (`fittedSizes`), anything else as it is. The one way to measure a piece where it shows: decide or say
+// nothing from p.size / pieceBounds(p) as asked (tests/sewn_lint.mjs). Measured as asked, a key fob's 25 mm monogram
+// sewn 9 mm wasn't "on" the fob, Fit to hoop shrank a quilt label, the selection box ran past the letters.
+// (`fit`: fittedSizes of the same list, when the caller has it)
+export function sewn(p, pieces, fit = null) {
+  fit ||= fittedSizes(pieces.some((o) => o.id === p.id) ? pieces : [...pieces, p]);
+  const f = fit.get(p.id);
+  return f != null && f !== p.size ? { ...p, size: f } : p;
+}
+export function sewnBox(p, pieces, fit = null) { return pieceBounds(sewn(p, pieces, fit)); }
 export function layoutBox(pieces) {
   const bs = sewnBoxes(pieces);
   return bs.length ? [Math.min(...bs.map((b) => b[0])), Math.min(...bs.map((b) => b[1])), Math.max(...bs.map((b) => b[2])), Math.max(...bs.map((b) => b[3]))] : null;
@@ -1616,7 +1627,9 @@ export function cleanPiece(p) {
   const style = () => { if (q.style != null) q.style = pick(q.style, ["auto", "satin", "line"], "auto"); };
   if (p.kind === "text") {
     // (the words tidied as typing tidies them: tidy in core/typed.js; a saved "\r\n" or a cut emoji came back as stand-ins)
-    if (typeof q.text !== "string" || !(q.text = tidy(q.text, { lines: 3, max: MAX_WORDS })).trim()) return null;
+    // (lettering with no words yet is kept, as the editor keeps it, and said there: saved and opened, it vanished)
+    if (typeof q.text !== "string") return null;
+    q.text = tidy(q.text, { lines: 3, max: MAX_WORDS });
     q.font = font(FONTS, "NW Great Vibes"); q.size = num(q.size, MIN, BIG, 18); style();
     q.shape = pick(q.shape, Object.keys(TEXT_SHAPES), "straight"); q.radius = num(q.radius, MIN, 400, 30);
     for (const [k, lo, hi] of [["ry", MIN, 400], ["amp", 0, 100], ["waves", 0.5, 6], ["bulge", 0, 100], ["spacing", -10, 40], ["leading", 80, 200]])
@@ -1628,10 +1641,12 @@ export function cleanPiece(p) {
       if (k.length) q.kern = Object.fromEntries(k.map(([i, v]) => [i, Math.min(50, Math.max(-30, Math.round(v)))])); else delete q.kern;
     }
   } else if (p.kind === "monogram") {
-    if (typeof q.letters !== "string" || !(q.letters = tidy(q.letters, { max: MAX_INITIALS })).trim()) return null;
+    if (typeof q.letters !== "string") return null;
+    q.letters = tidy(q.letters, { max: MAX_INITIALS });
     q.font = font(FONTS, "NW Great Vibes"); q.size = num(q.size, MIN, BIG, 30); style();
   } else if (p.kind === "letters") {
-    if (typeof q.text !== "string" || !(q.text = tidy(q.text, { max: MAX_INITIALS })).trim()) return null;
+    if (typeof q.text !== "string") return null;
+    q.text = tidy(q.text, { max: MAX_INITIALS });
     q.font = font(APPLIQUE_FONTS, APPLIQUE_FONTS[0].family); q.size = num(q.size, MIN, BIG, 60);
   } else if (p.kind === "motif") {
     q.motif = own(MOTIFS, q.motif) ? q.motif : "heart"; q.size = num(q.size, MIN, BIG, 40);
@@ -1664,6 +1679,30 @@ export function cleanPiece(p) {
   // (only lettering has a font: a frame carrying a crafted one stopped the design building)
   if (p.kind !== "text" && p.kind !== "monogram" && p.kind !== "letters") delete q.font;
   return q;
+}
+
+// Pieces from a saved design or a paste, each checked (`cleanPiece`), and what came out other than it went in, said
+// in plain words (one sentence a kind, said once by whoever opens them: Open saved, a paste, a dropped or shared
+// saved design). A paste left unreadable pieces out and set an unknown font in Great Vibes with nothing said.
+// { pieces, said, huge (a size cut down to the biggest piece there can be) }
+export function cleanPieces(list) {
+  const pairs = list.map((p) => [p, cleanPiece(p)]), pieces = pairs.map(([, q]) => q).filter(Boolean), said = [];
+  const left = list.length - pieces.length;
+  if (left) said.push(`${left} ${left === 1 ? "piece" : "pieces"} couldn't be read and ${left === 1 ? "was" : "were"} left out.`);
+  // (words past the editor's 60 letters, or initials past 12; measured on the words tidied, as they're kept: accents
+  // typed apart, which join up, aren't letters cut)
+  const cut = pairs.some(([p, q]) => q && typeof p.text === "string" && typeof q.text === "string" && q.text.length < tidy(p.text, { lines: 3 }).length)
+    || pairs.some(([p, q]) => q && typeof p.letters === "string" && typeof q.letters === "string" && tidy(p.letters).length > q.letters.length);
+  if (cut) said.push(`Words longer than this page takes (${MAX_WORDS} letters, ${MAX_INITIALS} initials) were cut short.`);
+  // (a font this page hasn't got, named, and the one it's sewn in)
+  const fonts = new Map();
+  for (const [p, q] of pairs) if (q && typeof p.font === "string" && q.font && p.font !== q.font) fonts.set(p.font.replace(/^NW /, ""), (q.font || "").replace(/^NW /, ""));
+  for (const [a, b] of fonts) said.push(`The font “${a.slice(0, 40)}” isn't on this page: ${b} is used instead.`);
+  // (a setting it had that came out different; ones it lacked and got filled in aren't counted, nor a font said above)
+  const changed = pairs.filter(([p, q]) => q && Object.keys(p).some((k) => !["id", "text", "letters", "font"].includes(k) && JSON.stringify(p[k]) !== JSON.stringify(q[k]))).length;
+  if (changed) said.push(`${changed === 1 ? "One piece had settings" : `${changed} pieces had settings`} this page doesn't have: ${changed === 1 ? "it was" : "they were"} set to the nearest that works.`);
+  const huge = pairs.some(([p, q]) => q && ["size", "w", "h"].some((k) => typeof p[k] === "number" && q[k] < p[k]));
+  return { pieces, said: said.join(" "), huge };
 }
 
 // How far a design file can be resized inside a design: the doctor's re-stitch range (Open a design's Size)
@@ -1857,7 +1896,7 @@ const quilted = new Map(), lastQuilt = new Map();   // (lastQuilt: per frame, re
 // `later`: a list to put the quilting on when it isn't worked out yet, for a worker to do (`quiltOf`, then `quiltDone`):
 // the quilting last sewn in this frame stands in meanwhile, as while dragging (a 15-piece design with a stippled frame
 // held the page 4-5 s after each drop, letter typed or font change)
-function withQuilt(p, stages, others, dragging = false, later = null) {
+function withQuilt(p, stages, others, dragging = false, later = null, empty = null) {
   // around every other piece's stitches, and inside none of their filled shapes (an appliqué's fabric)
   // (not a shape the frame itself sits on, a patch or appliqué under the whole frame: that would leave no room)
   const edge = shapeOf(p).path(p.w, p.h).map(placer(p)), key0 = JSON.stringify(p), frame = key0;
@@ -1875,7 +1914,8 @@ function withQuilt(p, stages, others, dragging = false, later = null) {
   }
   const paths = quilted.get(key) || lastQuilt.get(frame) || [];
   if (!later || quilted.has(key)) { lastQuilt.set(frame, paths); if (lastQuilt.size > 12) lastQuilt.delete(lastQuilt.keys().next().value); }
-  if (!paths.length) return stages;
+  // (worked out and nothing fits: said, `empty`; a frame quilted with no room left in it sewed no quilting, said nowhere)
+  if (!paths.length) { if (quilted.has(key)) empty?.push(p.id); return stages; }
   const q = { color: p.color, paths, sews: `Quilts the ${shapeOf(p).name.toLowerCase()} (${p.quilt}).`, label: label(p) };
   // (an in-the-hoop frame lists its batting already; a quilt block's Have ready had none)
   if (p.border !== "ith") Object.assign(q, { sandwich: true,
@@ -2058,7 +2098,8 @@ function carve(p, stages, above, fab) {
 // (one piece is bigger than the hoop by itself, or no cut leaves both halves small enough).
 export function splitPieces(pieces, hoop) {
   const lw = hoop.w - 2 * MARGIN - 2, lh = hoop.h - 2 * MARGIN - 2;
-  const items = pieces.map((p) => ({ p, b: pieceBounds(p) })).filter((it) => it.b);
+  // (each at the size it's sewn: lettering asked bigger than its frame counted as bigger than half the hoop)
+  const fit = fittedSizes(pieces), items = pieces.map((p) => { const q = sewn(p, pieces, fit); return { p, q, b: pieceBounds(q) }; }).filter((it) => it.b);
   if (items.length < 2) return null;
   const all = [Math.min(...items.map((i) => i.b[0])), Math.min(...items.map((i) => i.b[1])), Math.max(...items.map((i) => i.b[2])), Math.max(...items.map((i) => i.b[3]))];
   for (const ax of all[2] - all[0] - lw > all[3] - all[1] - lh ? [0, 1] : [1, 0]) {
@@ -2089,7 +2130,7 @@ export function splitPieces(pieces, hoop) {
 // pulled out), near a quarter and three quarters of the way across, at least 20 mm apart when the hooping allows
 // (the further apart, the truer the second hooping lines up). null when no line has two clear spots.
 function crossSpots(items, best, at, { lo, hi, L, C, c0, c1 }) {
-  const ink = cloud(items.flatMap((i) => pieceStitches(i.p)));
+  const ink = cloud(items.flatMap((i) => pieceStitches(i.q)));
   const ext = (g) => [Math.min(...g.map((i) => i.b[lo])), Math.max(...g.map((i) => i.b[hi]))];
   const [aLo, aHi] = ext(best.A), [bLo, bHi] = ext(best.B);
   const vLo = c1 - C + 5, vHi = c0 + C - 5, mid = (c0 + c1) / 2, half = Math.max((c1 - c0) / 4, Math.min(20, (vHi - vLo) / 2));
@@ -2206,11 +2247,11 @@ export function compose(pieces, hoop, opts = {}) {
 function build(pieces, hoop, opts) {
   const fab = FABRICS[opts.fabric] ? opts.fabric : "cotton";
   const fit = fittedSizes(pieces);
-  pieces = pieces.map((p) => (fit.has(p.id) ? { ...p, size: fit.get(p.id) } : p));
+  pieces = pieces.map((p) => sewn(p, pieces, fit));
   const box = (paths) => { const [x0, y0, x1, y1] = bounds(paths.flat()); return [x0 - 1, y0 - 1, x1 + 1, y1 + 1]; };
   const hits = (a, b) => a[0] < b[2] && b[0] < a[2] && a[1] < b[3] && b[1] < a[3];
   const order = [], last = [], edges = [], staged = pieces.map((p) => pieceStages(p, fab).map((st) => ({ label: label(p, true), ...st })));
-  pieces.forEach((p, i) => { if (QUILTED(p)) staged[i] = withQuilt(p, staged[i], staged.filter((_, j) => j !== i).flat(), opts.dragging, opts.later); });
+  pieces.forEach((p, i) => { if (QUILTED(p)) staged[i] = withQuilt(p, staged[i], staged.filter((_, j) => j !== i).flat(), opts.dragging, opts.later, opts.unquilted); });
   // patches: no fill under what's sewn on them (fine-line lettering excepted). Not while dragging, nor when only the
   // size is wanted (`measure`: does it fit the hoop?): the holes are cut 2.5 mm or more inside the patch's outline, well
   // within its satin edge, so they never change the design's size (the same to 0.1 mm on every starter at 50-150 %,
