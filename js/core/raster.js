@@ -6,6 +6,8 @@ import { smooth } from "./geom.js";
 export function makeMask(w, h) { return { w, h, data: new Uint8Array(w * h) }; }
 
 // Zhang-Suen thinning (what skimage.skeletonize does for 2-D)
+// Each sub-pass looks again only at pixels whose neighbourhood changed since it last looked (the deletions are the same
+// set as a full scan's, which was most of the time of a long word: 30+ scans of the whole box)
 export function skeletonize(m) {
   const { w, h } = m, d = m.data.slice();
   // work only inside the ink bounding box
@@ -15,14 +17,18 @@ export function skeletonize(m) {
   }
   if (x1 < 0) return { w, h, data: d };
   x0 = Math.max(1, x0); y0 = Math.max(1, y0); x1 = Math.min(w - 2, x1); y1 = Math.min(h - 2, y1);
+  const queued = [new Uint8Array(w * h), new Uint8Array(w * h)], todo = [[], []];
+  for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) { const i = y * w + x; if (d[i]) for (let p = 0; p < 2; p++) { queued[p][i] = 1; todo[p].push(i); } }
   const del = [];
   let changed = true;
   while (changed) {
     changed = false;
     for (let pass = 0; pass < 2; pass++) {
       del.length = 0;
-      for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) {
-        const i = y * w + x;
+      const list = todo[pass], q = queued[pass];
+      todo[pass] = [];
+      for (const i of list) {
+        q[i] = 0;
         if (!d[i]) continue;
         const p2 = d[i - w], p3 = d[i - w + 1], p4 = d[i + 1], p5 = d[i + w + 1],
           p6 = d[i + w], p7 = d[i + w - 1], p8 = d[i - 1], p9 = d[i - w - 1];
@@ -33,7 +39,17 @@ export function skeletonize(m) {
         if (pass === 0 ? (p2 && p4 && p6) || (p4 && p6 && p8) : (p2 && p4 && p8) || (p2 && p6 && p8)) continue;
         del.push(i);
       }
-      if (del.length) { changed = true; for (const i of del) d[i] = 0; }
+      if (!del.length) continue;
+      changed = true;
+      for (const i of del) d[i] = 0;
+      for (const i of del) {
+        const x = i % w, y = (i - x) / w;
+        for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+          const X = x + dx, Y = y + dy, j = Y * w + X;
+          if (X < x0 || X > x1 || Y < y0 || Y > y1 || !d[j]) continue;
+          for (let p = 0; p < 2; p++) if (!queued[p][j]) { queued[p][j] = 1; todo[p].push(j); }
+        }
+      }
     }
   }
   return { w, h, data: d };
@@ -45,8 +61,9 @@ export function distanceTransform(m) {
   const g = new Float64Array(w * h);
   for (let i = 0; i < w * h; i++) g[i] = data[i] ? INF : 0;
   const v = new Int32Array(Math.max(w, h)), z = new Float64Array(Math.max(w, h) + 1), dd = new Float64Array(Math.max(w, h));
-  const pass = (n, get, set) => {
-    for (let q = 0; q < n; q++) f[q] = get(q);
+  // (one row or column of g: n values from `at`, `step` apart)
+  const pass = (n, at, step) => {
+    for (let q = 0; q < n; q++) f[q] = g[at + q * step];
     let k = 0; v[0] = 0; z[0] = -INF; z[1] = INF;
     for (let q = 1; q < n; q++) {
       let s;
@@ -59,10 +76,10 @@ export function distanceTransform(m) {
     }
     k = 0;
     for (let q = 0; q < n; q++) { while (z[k + 1] < q) k++; const r = v[k]; dd[q] = (q - r) * (q - r) + f[r]; }
-    for (let q = 0; q < n; q++) set(q, dd[q]);
+    for (let q = 0; q < n; q++) g[at + q * step] = dd[q];
   };
-  for (let x = 0; x < w; x++) pass(h, (y) => g[y * w + x], (y, val) => { g[y * w + x] = val; });
-  for (let y = 0; y < h; y++) pass(w, (x) => g[y * w + x], (x, val) => { g[y * w + x] = val; });
+  for (let x = 0; x < w; x++) pass(h, x, w);
+  for (let y = 0; y < h; y++) pass(w, y * w, 1);
   for (let i = 0; i < w * h; i++) g[i] = Math.sqrt(g[i]);
   return g;
 }
@@ -625,18 +642,23 @@ export function counterPockets(mask, lines, stroke) {
   const parent = new Int32Array(N).fill(-1), peak = new Float32Array(N), area = new Int32Array(N), at = new Int32Array(N), out = new Uint8Array(N);
   const find = (i) => { while (parent[i] !== i) { parent[i] = parent[parent[i]]; i = parent[i]; } return i; };
   const pockets = [];
+  const meet = (i, j) => {
+    if (parent[j] < 0) return;
+    let a = find(i), b = find(j);
+    if (a === b) return;
+    // a: the elder (reaches open space, or the wider), b: the pocket that ends at this pixel's level
+    if (out[a] < out[b] || (out[a] === out[b] && peak[a] < peak[b])) [a, b] = [b, a];
+    if (!out[b] && peak[b] > 0.55 * stroke && peak[b] - dt[i] > 0.1 * stroke) pockets.push({ peak: peak[b], saddle: dt[i], area: area[b], at: [(at[b] % cw) + x0, Math.floor(at[b] / cw) + y0] });
+    parent[b] = a; area[a] += area[b]; out[a] |= out[b];
+  };
   for (const i of idx) {
     const x = i % cw, y = (i - x) / cw;
     parent[i] = i; peak[i] = dt[i]; area[i] = 1; at[i] = i; out[i] = x === 0 || y === 0 || x === cw - 1 || y === ch - 1 ? 1 : 0;
-    for (const j of [x > 0 ? i - 1 : -1, x < cw - 1 ? i + 1 : -1, y > 0 ? i - cw : -1, y < ch - 1 ? i + cw : -1]) {
-      if (j < 0 || parent[j] < 0) continue;
-      let a = find(i), b = find(j);
-      if (a === b) continue;
-      // a: the elder (reaches open space, or the wider), b: the pocket that ends at this pixel's level
-      if (out[a] < out[b] || (out[a] === out[b] && peak[a] < peak[b])) [a, b] = [b, a];
-      if (!out[b] && peak[b] > 0.55 * stroke && peak[b] - dt[i] > 0.1 * stroke) pockets.push({ peak: peak[b], saddle: dt[i], area: area[b], at: [(at[b] % cw) + x0, Math.floor(at[b] / cw) + y0] });
-      parent[b] = a; area[a] += area[b]; out[a] |= out[b];
-    }
+    // (left, right, up, down: no array made per pixel)
+    if (x > 0) meet(i, i - 1);
+    if (x < cw - 1) meet(i, i + 1);
+    if (y > 0) meet(i, i - cw);
+    if (y < ch - 1) meet(i, i + cw);
   }
   return pockets;
 }

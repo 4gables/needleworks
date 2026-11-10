@@ -24,6 +24,9 @@ const maxOf = (a) => { let m = -Infinity; for (const v of a) if (v > m) m = v; r
 
 // ---------- lettering ----------
 const lettering = new Map();   // font + text -> centre-line strokes (rendering is the slow part)
+// A cache hit moved to the end, so the oldest dropped is the least recently used: dropped in the order made, a design's
+// own pieces fell out under the sizes a fit or a fix tries (16 sizes of one name), and every change rebuilt them.
+function recent(map, key) { const v = map.get(key); map.delete(key); map.set(key, v); return v; }
 // Nothing drawn before its font has loaded is cached: it was drawn in the browser's fallback font, and caching it
 // kept that lettering after the font arrived.
 // (a family name the CSS parser can't read, from a crafted saved design, is a font that isn't ready, not a DOMException)
@@ -33,7 +36,7 @@ const fontReady = (family) => { try { return !family || typeof document === "und
 const SWASH = { lead: 1.8, tail: 2.6, dash: 2.2 };
 function letterStrokes(text, family, spacing = 0, kern = null, lead = false, tail = false) {
   const key = family + "\n" + text + "\n" + spacing + (kern ? "\n" + kern.join() : "") + (lead || tail ? `\n~${+lead}${+tail}` : "");
-  if (lettering.has(key)) return lettering.get(key);
+  if (lettering.has(key)) return recent(lettering, key);
   const print = !!fontOf(family).print;
   const curls = lead || tail ? { leadIn: lead ? (print ? SWASH.dash : SWASH.lead) : 0, tail: tail ? (print ? SWASH.dash : SWASH.tail) : 0 } : {};
   // (knots: junctions joined by a stroke shorter than 0.75 of its width become one; `skeletonEdges`)
@@ -860,17 +863,26 @@ const trimIt = (what, where = "") => ({ trim: what, where });
 // A piece sews in stages; each stage is one colour block. `pause` forces a machine stop even in the same thread,
 // with `you` telling the person what to do at it.
 // Stitches don't change when a piece only moves or turns, so they're built once per shape and placed after.
+// (keyed on the fabric and thread weight only where they change the piece's stitches, `sewnWith`: changing fabric or
+// thread on a 15-piece design rebuilt every frame and motif, 1.5 s)
 const built = new Map();
 export function pieceStages(p, fab = "cotton") {
-  const { x, y, rot, id, flip, ...shape } = p, key = JSON.stringify(shape) + fab + wt;
+  const { x, y, rot, id, flip, ...shape } = p, key = JSON.stringify(shape) + sewnWith(p, fab);
   if (!built.has(key)) {
     const st = localStages(p, fab);
     if (!fontReady(p.font)) return st.map((s) => placed(s, placer(p)));
     built.set(key, st);
-    if (built.size > 80) built.delete(built.keys().next().value);
+    if (built.size > 120) built.delete(built.keys().next().value);
   }
   const place = placer(p);
-  return built.get(key).map((st) => placed(st, place));
+  return recent(built, key).map((st) => placed(st, place));
+}
+// what else a piece's stitches depend on: the fabric only for lettering (towel, knit) and a patch's fill (knit); the
+// thread weight for lettering (Automatic sews small letters for 60 wt), else only 30 and 60 (`sd`, `fd`: Automatic is 40)
+function sewnWith(p, fab) {
+  const lettering = p.kind === "text" || p.kind === "monogram";
+  const f = lettering ? (fab === "towel" || fab === "knit" ? fab : "") : p.kind === "frame" && p.border === "patch" && fab === "knit" ? fab : "";
+  return "\n" + f + "\n" + (lettering || wt === "30" || wt === "60" ? wt : "");
 }
 // a stage moved into place: its stitches, its cut outlines and the filled area it covers (`solid`: closed loops,
 // even-odd, that quilting keeps clear of). (Until 2026-10-30 `cut` stayed where the piece was built, at the centre
@@ -1504,8 +1516,22 @@ export function pieceBounds(p) {
 export function inFrame(p, f, margin = 3) {
   const edge = shapeOf(f).path(f.w, f.h).map(placer(f)), pts = pieceStitches(p).flat();
   if (!pts.length) return false;
-  for (let i = 0; i < pts.length; i += 3) if (!inside(pts[i], edge) || edgeGap(pts[i], edge) < margin) return false;
+  for (let i = 0; i < pts.length; i += 3) if (!inside(pts[i], edge) || closer(pts[i], edge, margin)) return false;
   return true;
+}
+// is [x, y] under d mm from the polygon's edge? (stopping at the first edge that close, and skipping edges
+// whose box is clearly further: inFrame measured every edge for every stitch, the most of placing a new piece)
+function closer([x, y], poly, d) {
+  if (!(d > 0)) return false;   // (a distance is never under 0: onFrame's -2)
+  const far = d + 1e-6;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const [ax, ay] = poly[j], [bx, by] = poly[i];
+    if (x < Math.min(ax, bx) - far || x > Math.max(ax, bx) + far || y < Math.min(ay, by) - far || y > Math.max(ay, by) + far) continue;
+    const dx = bx - ax, dy = by - ay, l = dx * dx + dy * dy;
+    const t = l ? Math.max(0, Math.min(1, ((x - ax) * dx + (y - ay) * dy) / l)) : 0;
+    if (Math.hypot(x - ax - t * dx, y - ay - t * dy) < d) return true;
+  }
+  return false;
 }
 // the first filled patch after p in the list that would cover some of p's stitches (sewn first, it's hidden), or null;
 // `before`: the last patch before p that p is sewn on
@@ -1522,7 +1548,7 @@ export function underPatch(p, pieces, before = false) {
   }
   return null;
 }
-// point in polygon (even-odd), and the distance to its nearest edge
+// point in polygon (even-odd)
 function inside([x, y], poly) {
   let c = false;
   for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
@@ -1530,15 +1556,6 @@ function inside([x, y], poly) {
     if ((yi > y) !== (yj > y) && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) c = !c;
   }
   return c;
-}
-function edgeGap([x, y], poly) {
-  let d = Infinity;
-  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
-    const [ax, ay] = poly[j], [bx, by] = poly[i], dx = bx - ax, dy = by - ay, l = dx * dx + dy * dy;
-    const t = l ? Math.max(0, Math.min(1, ((x - ax) * dx + (y - ay) * dy) / l)) : 0;
-    d = Math.min(d, Math.hypot(x - ax - t * dx, y - ay - t * dy));
-  }
-  return d;
 }
 
 // A piece as the page names it, long words `brief` (`whole`: all of them, for the thread name in the file, which a
@@ -1940,8 +1957,17 @@ function toFrame(paths, edge, obstacles, from = null) {
 // Cached in three layers, so a change that leaves the holes as they were (typing in thin lettering on the patch, a
 // font change, dragging a piece that isn't carved) never refills the patch, the slowest thing in compose: the patch's
 // own grids (by its shape), each piece's hole (by its stitches) and the fill (by the holes it ends up with).
-const carved = new Map(), grids = new Map(), CARVE_W = 3.4;
-function carve(p, stages, above, fab) {
+// `later` (the Design tab's preview): a fill not worked out yet goes on that list for a worker (`patchFillOf`, then
+// `carveDone`), the patch's last fill standing in meanwhile, as quilting does (a fabric or thread change refilled a
+// busy design's patch, 0.3-0.6 s of the page held up)
+const carved = new Map(), grids = new Map(), lastCarve = new Map(), CARVE_W = 3.4;
+export function carveDone(key, fill) { carved.set(key, fill); if (carved.size > 12) carved.delete(carved.keys().next().value); }
+export function patchFillOf(job) {
+  const was = wt;
+  wt = job.wt;
+  try { return patchFill(job.p, job.loops, job.fab); } finally { wt = was; }
+}
+function carve(p, stages, above, fab, later = null) {
   const a = ((p.rot || 0) * Math.PI) / 180, c = Math.cos(a), sn = Math.sin(a), f = p.flip ? -1 : 1;
   const local = above.map((sts) => sts.flatMap((s) => s.paths).map((q) => q.map(([x, y]) => [((x - p.x) * c + (y - p.y) * sn) * f, -(x - p.x) * sn + (y - p.y) * c])))
     .filter((g) => g.length);
@@ -1961,7 +1987,7 @@ function carve(p, stages, above, fab) {
     grids.set(shape, { edge, x0, y0, w, hh, n, room: distanceTransform(inside), bits: new Map() });
     if (grids.size > 4) grids.delete(grids.keys().next().value);
   }
-  const { edge, x0, y0, w, hh, n, room, bits: carvedBits } = grids.get(shape), hole = { w, h: hh, data: new Uint8Array(n) };
+  const { edge, x0, y0, w, hh, n, room, bits: carvedBits } = recent(grids, shape), hole = { w, h: hh, data: new Uint8Array(n) };
   for (const g of local) {
     let h = g.length;
     for (const q of g) for (const [x, y] of q) h = (Math.imul(h ^ Math.round(x * 10), 16777619) ^ Math.round(y * 10)) | 0;
@@ -1993,19 +2019,21 @@ function carve(p, stages, above, fab) {
       carvedBits.set(gk, bits);
       if (carvedBits.size > 64) carvedBits.delete(carvedBits.keys().next().value);
     }
-    const bits = carvedBits.get(gk);
+    const bits = recent(carvedBits, gk);
     if (bits) for (const i of bits) hole.data[i] = 1;
   }
   let h = 0, cnt = 0;
   for (let i = 0; i < n; i++) if (hole.data[i]) { h = Math.imul(h ^ i, 16777619) | 0; cnt++; }
-  const key = JSON.stringify([shape, h, cnt, fab, wt]);
+  const key = JSON.stringify([shape, h, cnt, fab === "knit", wt === "30"]);   // (all `patchFill` reads of them)
   if (!carved.has(key)) {
     const holes = cnt ? contours(hole).map((l) => l.map(([x, y]) => [x0 + x / R, y0 + y / R]))
       .filter((l) => l.length > 8 && Math.abs(l.reduce((s, q, i) => s + q[0] * l[(i + 1) % l.length][1] - l[(i + 1) % l.length][0] * q[1], 0)) / 2 >= 20) : [];
-    carved.set(key, holes.length ? patchFill(p, [edge, ...holes], fab) : null);
-    if (carved.size > 12) carved.delete(carved.keys().next().value);
+    const job = holes.length && { key, kind: "patch", p, loops: [edge, ...holes], fab, wt };
+    if (job && later) later.push(job); else carveDone(key, job ? patchFillOf(job) : null);
   }
-  const fill = carved.get(key); if (!fill) return stages;
+  const done = carved.has(key), fill = done ? recent(carved, key) : lastCarve.get(shape);
+  if (done) { lastCarve.set(shape, fill); if (lastCarve.size > 12) lastCarve.delete(lastCarve.keys().next().value); }
+  if (!fill) return stages;
   const place = placer(p), placed = fill.map((st) => ({ ...st, label: label(p, true), paths: st.paths.map((q) => moved(q, place)) }));
   return [...placed, ...stages.filter((s) => !s.patchFill)];
 }
@@ -2176,7 +2204,7 @@ function build(pieces, hoop, opts) {
   pieces.forEach((p, i) => {
     if (p.kind !== "frame" || p.border !== "patch" || opts.dragging || opts.measure) return;
     const above = pieces.slice(i + 1).map((q, k) => (q.kind === "frame" || q.style === "line" ? [] : staged[i + 1 + k].filter((s) => !s.under && !s.fabric)));
-    staged[i] = carve(p, staged[i], above, fab);
+    staged[i] = carve(p, staged[i], above, fab, opts.fillLater ? opts.later : null);
   });
   const gangs = gang(pieces, staged);
   for (const st of staged.flat()) {

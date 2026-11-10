@@ -32,7 +32,7 @@ const SETTLED = String.raw`(async () => {
   await sleep(600);
   for (let i = 0; i < 100; i++) {
     const dl = $("#download").textContent;
-    if (nwTest.view() && (!$("#busy") || $("#busy").hidden) && !/Quilting|Re-stitching/.test(dl)) break;
+    if (nwTest.view() && (!$("#busy") || $("#busy").hidden) && !/Quilting|Filling|Re-stitching/.test(dl)) break;
     await sleep(200);
   }
   await sleep(900);   // (the file check runs 250 ms after the view settles)

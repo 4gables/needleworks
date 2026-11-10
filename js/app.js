@@ -787,8 +787,9 @@ $("names-make").onclick = async () => {
   $("names-make").disabled = true; $("names-note").textContent = "Making the files…";
   // (file names compared ignoring case: emma.pes and Emma.pes are one file on a Mac, Windows or the USB stick)
   const files = [], bad = [], used = new Set(), made = [], small = [];
-  for (const name of list) {
+  for (const [k, name] of list.entries()) {
     await new Promise((r) => setTimeout(r, 0));
+    if (list.length > 2) $("names-note").textContent = `Making the files… ${k + 1} of ${list.length}`;
     try {
       const { pattern, shown, smaller, pct, lines, thin, turned: sideways, runs, xh, least, own } = n.build(name, $("names-shrink").checked);
       const f = uniqueName(safeName(name, "name"), used);
@@ -1928,7 +1929,8 @@ const studio = initStudio({
     catch { state.views.design = null; if (state.mode === "design") setView(null); showError("This design has more thread changes than a file can hold. Use fewer thread colours, or a design file with fewer of them."); return; }
     const v = { pattern, verifyAgainst: pattern, bytes, filename, fabric: "linen", ...look };
     state.views.design = v;
-    if (state.mode === "design") { const keep = [state.zoom, state.pan]; setView(v); [state.zoom, state.pan] = keep; paint(); }
+    // (painted again only when setView moved the zoom: drawing a busy design twice was ~0.2 s of every change)
+    if (state.mode === "design") { const keep = [state.zoom, state.pan]; setView(v); if (state.zoom !== keep[0] || state.pan !== keep[1]) { [state.zoom, state.pan] = keep; paint(); } }
     // (the size as the size chip says it, from the file read back, for words that give the size: the too-big note
     // said 171 × 33 beside a 171 × 34 chip)
     return v.shown ? designStats(v.shown) : null;
