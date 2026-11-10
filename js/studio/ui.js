@@ -1240,12 +1240,14 @@ export function initStudio(api) {
 
   // A bigger hoop picked for a design that fits: offered once, the design made as big as it allows (Fit to hoop). A
   // 93 mm design moved from the 4x4 to the 5x7 stayed 93 mm with nothing said.
-  let lastHoop = null;
+  let lastHoop = null, turnedByHand = false;
+  // (and the hoop turned by hand, the Turn hoop button: a quilt label turned on the 5x7 had room to grow and nothing
+  // said so; not a turn that comes with Undo or a new design)
+  $("turn").addEventListener("click", () => { turnedByHand = true; });
   function roomier() {
-    const hp = api.hoop(), key = `${hp.machine}/${hp.id}/${hp.w}x${hp.h}`, was = lastHoop;
-    lastHoop = { key, area: hp.w * hp.h };
-    // (and the hoop turned by hand: a quilt label turned on the 5x7 had room to grow and nothing said so)
-    if (!was || was.key === key || hp.w * hp.h < was.area || document.body.dataset.mode !== "design") return;
+    const hp = api.hoop(), key = `${hp.machine}/${hp.id}/${hp.w}x${hp.h}`, was = lastHoop, hand = turnedByHand;
+    lastHoop = { key, area: hp.w * hp.h }; turnedByHand = false;
+    if (!was || was.key === key || hp.w * hp.h < was.area || (hp.w * hp.h === was.area && !hand) || document.body.dataset.mode !== "design") return;
     const [w, h] = layoutSize(pieces);
     if (!w || !h || Math.min((hp.w - 10) / w, (hp.h - 10) / h, mostScale()) < 1.1) return;
     toast(`The ${hp.name}${hp.w * hp.h === was.area ? " turned this way" : ""} has room to make this design bigger.`, { label: `Make it as big as the ${hp.name.replace(/ hoop$/, "")} allows`, run: () => { remember(); fitHoop(); } });
