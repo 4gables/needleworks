@@ -361,6 +361,22 @@ measurements behind each number are in the code's comments.
   lettering, else only 30/60); caches evict least recently used (`recent`); a patch's carved fill comes from
   quilt-worker.js (`fillLater`, Download "Filling…"); `make()` yields between drawing (`drawAhead`), fit, problems,
   stitches and preview; `warn()` is paced (`pacer`/`PACED`: never save a result from a catch that swallows PACED).
+- `change()` keeps a frame-shrunk size only when the change takes lettering out of `fitFrame` (arch, turn off square):
+  "Ashley Ashley Ashley" back to "Ashley" stayed 9 mm (the saved size was wrong too). Pacing: `pacer` is on only while
+  `warnNow`'s own code runs (`go()` after each await, off in `finally`): left on, Make another did nothing and "paced"
+  was thrown uncaught.
+- Too big: the preview, editor and Download note offer the same fixes (`tooBig(msg, ...fixes)`, `showError(msg,
+  fixes)`): Fit to hoop (never shrinking a design that fits), Fit and turn, "Make the frame fit the hoop" (`framesFit`,
+  the over side first), a sliver over "Make X N mm" (`snug`, up to 10 %). A hand Turn with room offers growing.
+- Arches: `archWrap`/`ARCH` 1/3; `archRoom` warns past 0.4; a followed frame shrinks letters to 80 % to stay within it;
+  lines split off an arch go under its lowest stitch (`lineRest`/`placeRest`), typed lines too when the box is left.
+- `readable` includes `MOTIF_MIN`; `patchEdge`: nothing placed or fixed onto a patch's satin edge. A file piece made
+  bigger is re-stitched (`fix(..., { grow })`). Giving one ganged frame its own thread says so ("Use this thread on all").
+- Keyboard one-tap fixes focus the control they changed (`CHANGED`), else the problems left, never the Turn slider.
+  Toasts with an action stay until used or dismissed (×, Escape, next design change, tab change); others time out
+  (paused while hovered/focused). Dialogs open with `modal()` (a tall one at its top). The same problem for several
+  pieces is said once "(N pieces)" (`folded`); quoted names are in <bdi> (`isolate`). The Words box hides the swash
+  marks (`swashless`/`reswashed`). A starter over a picture offers "Add <file> to it". The design's fonts load first.
 ### Two hoopings (`splitPieces`)
 - On `overBy`, whole pieces (never a cut stitch) split along the long side at the most even cut where both fit.
   Basting crosses (`crossSpots`: 1.5 mm clear, near 1/4 and 3/4, 20 mm apart if possible) end the first file and
@@ -451,6 +467,10 @@ measurements behind each number are in the code's comments.
 - Left out: `keptParts(pictureInk(...))` on the learned copy; `lostMuch` (5 % of area, or 3+ parts and 20 %, or one
   part of 1.4 mm2+ on a picture of 20 parts or fewer) is the `lost` problem with fixes checked on a second worker
   (`picChecks`; kept = 3 of 4 lost parts). The thin-line note is `hairline`, not said with it.
+- `findFrame`: a frame covers at least half of two sides meeting at a corner (a ground line was dropped as a frame);
+  "Sew the edge band too" (`opts.edge`). Lost parts are ringed on the thumbnail (`markThumb`); `#pic-size-note`
+  explains a size gap. Filled keeps "eyes" (a dot of 0.6 mm2+ inside another colour, up to 6 per colour). Line drawing:
+  outline bands sewn once from `tO >= 0.5 tS`; `oneInk`: no join across bare fabric between different colours.
 - Filled: shapes 1 mm or wider get tatami following the outline (skeleton satin broke corners); parts under 2 x
   `THIN_PART` and lines under 1 mm sew a triple run, never dropped. Specks: under 4 mm² and 2.5 mm across, groups
   under 6 mm of line, walks under 1.5 mm (`lostLines` reports dropped fine lines). Kept: text dots on the fabric (>= 0.8 mm across, 0.6
@@ -489,6 +509,10 @@ measurements behind each number are in the code's comments.
   the open design.
 - `notEmbroidery` (doctor.js) reads the first bytes: pictures (offered to Picture to stitches), PDF, ZIP, HEIC/SVG and
   empty files are said for what they are. Open saved says which hoop it switched to and offers the one picked.
+- Open: sizes offered as fitting are made with `fitFix` (re-stitched copies come out up to 0.5 mm bigger:
+  flower_ludd 176.1 in 176); `largest()` keeps the smaller per hoop. A failing file opens with its fixes ticked (Save
+  fixed copy), `_fixed` at any size; the done dialog says to sew the `_fixed` one when both were saved. A PES cut before
+  its stitches says "cut short"; junk .dst refused (`notDST`).
 - `checkup(readEmbroidery(bytes))` reads the file as it will be saved, counts from quality.js: `peak` at every
   offset, tiny past max(50, 1 %), satin gap measured along the edge, across the stitch (60 % short stitches on curves
   aren't gaps; same in pe900_check) (under 0.25: "Even out"), stitches over 10 mm (note) and 12.1 mm ("Split
@@ -528,6 +552,10 @@ measurements behind each number are in the code's comments.
 - One label function `threadLabel(hex, machine)` (app.js) -> { name, note, short }, wrapped by `threadLine`/`threadHtml`
   for every surface; an owned close spool leads ("Your Sulky Rayon 1076 Royal Blue" · "the machine calls it Wisteria
   Violet"). Chips: one per thread in first-use order, "used N times", long notes in the tooltip.
+- Spools from uncharted brands (Madeira) are the user's own (`nw:myspools` {brand, num, hex}, `state.mine`, matched
+  with `nearestSpool(..., extra)`), labelled "Madeira 1147" / "Madeira (pink)". One chip per machine thread. "that's
+  fine" when the machine's colour differs (`apart`); guide-line colours "any thread will do". `FABRICS.item` advice only
+  when no starter tip says what it's sewn on.
 - Facts about a design (size, machine size, turned, stitches, stops, time, hoop, loose threads, thread count) come from
   `v.fact`, set once in `setView`; never recomputed on a surface. Time = `sewTime(blockLoads(file), stops)`: Sew along
   steps are whole-minute shares adding up to it. Hoops are named only as machines.js names them.
@@ -591,8 +619,8 @@ measurements behind each number are in the code's comments.
   the second unit from the first as shown, inches in eighths (sizes_lint). Non-action sentences (THREADING, glossary:
   `ASIDES`) ride with the action before, never numbered. Hand actions before "put the hoop back". When it's done names
   the loose threads (`snipsSaid`). A patch frame's colour is "Edge thread".
-- Toasts: one `toast()` in app.js (studio `api.toast`), one timing rule (3-8 s; with an action at least 10 s); a failure
-  from a tap is a toast, `#error` only for what's wrong with the design. View menu stays open for ticks/Background.
+- Toasts: one `toast()` in app.js (studio `api.toast`), one timing rule (3-8 s; an action's stays until used or
+  dismissed); never over the focused control (`toastPlace` moves it to the top); a failure from a tap is a toast, `#error` only for what's wrong with the design. View menu stays open for ticks/Background.
 - Sew sheet (`sewSheet`: `#sheet` + `window.print()`, also on `beforeprint`): field at 1:1 in mm, centred as the
   machine centres, 5 cm bar; steps with machine names (`machineThreadList`); appliqué shapes. Cut files (any design with
   fabric shapes: appliqué, in-the-hoop fronts): "Cricut cut file (SVG)" `cutSVG` (width/height in mm, viewBox in mm:
@@ -604,7 +632,7 @@ measurements behind each number are in the code's comments.
 - Sew along (`#along`): a step per screen, minutes = stitches / 550, own Have ready, Screen Wake Lock (retaken on
   visibilitychange). Share text carries the steps (`shareText`). On my item (`#item`): a measured photo under the
   design at true size (`state.backdrop`), never uploaded or saved.
-- Offline (`sw.js`, `needleworks-v10`): precaches `FILES`, network first, cache after 3 s; add every new file to
+- Offline (`sw.js`, `needleworks-v11`): precaches `FILES`, network first, cache after 3 s; add every new file to
   `FILES`. https only. Share target: POST `./?share` -> `needleworks-shared` cache -> `./?shared` -> `route()`.
 - A hoop change drops other tabs' designs. Min/max over stitches uses loops (`Math.min(...pts)` overflows past ~110k).
 
@@ -686,6 +714,9 @@ Automated checks that each guard a bug class (add a line with every new guard):
   - Round 12 guards: `node tests/sewn_lint.mjs` (CI), `tests/said_flow.mjs` (~20 s), `tests/entry_state.mjs` (~5 min,
     9 entry points x dirty state), `tests/matrix.mjs` (~11 min, kinds x modifiers x exits), `tests/perf.mjs` (500 ms
     budget), surfaces per-fact equality, monkey toast checks, flow_lint.test degenerate frames.
+  - Round 13: ui_sweep fix-landing, dialog-scrolled, picked-hidden, cut-short, toasts stay; surfaces <bdi>, said-twice,
+    owned-spool rules, Open fixed/as-it-came; monkey asked, arch, Fit-never-shrinks, patch edge, Make another never
+    silent; doctor.test offered sizes fit as re-stitched; picture_corpus ground_line, framed; text.test Words box.
   - Doctor keeps cover: doctor.test.mjs checks each solid block's thread per mm² within 70-160 % at 50/80/120/250 %.
   - steps_lint also: step order (Press Start last), same-thread leads, inch/cm pairs, glossary once, Sew along zoom.
     ui_sweep: view-menu ticks, toasts time out, `cut-row`. Monkey: no empty <details>, size = "Shrunk to", note size =
@@ -733,7 +764,8 @@ Automated checks that each guard a bug class (add a line with every new guard):
 - `pe900_check.py`'s max density reads lower than a full offset scan below the limit (pass/fail unaffected).
 - Design tab: Patch starter + Lettering lands below JD. Speed: a big carved patch refills on every change
   (1.5-4.7 s; wants a carve worker like quilting); thread/fabric change on 15-26 pieces 1.1-2 s.
-- Pictures: etsy_7 cross-stitch can't hit the asked Size exactly (doodles appear between fits; the lost note explains).
+- Pictures: etsy_7 cross-stitch can't hit the asked Size exactly (said under the Size slider). Junk JPEG streaks are
+  traced as tiny lines in line drawings (jpeg_flower).
 - Josefin N/M apex sides 0.5 mm outside the ink. Tiny print (5 mm dates) still leaves loose threads where no start helps.
   Pasting a 30+ letter line is one ~0.6 s drawing. A patch's `clearOf` measures lettering against the whole fill.
 - Flow: fill-internal hidden moves in `fillPolygon`, repeated tie-in holes in `Design.path`, ~47 script moves on arcs.

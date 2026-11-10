@@ -84,18 +84,28 @@ for (const [bytes, says, pic] of [[png, /is a picture \(PNG\)/, true], ["new Uin
   check("the same file again: still nothing", await save("multi.pes") === true);
   // (two separate designs saved in one visit read as parts of one: "each file you've saved is a design of its own")
   check("a second, unrelated file saved: nothing said", await save("ashley_v3.pes") === true);
-  // a failing file saved as it came, then its fixed copy from the dialog: which one to sew, the fixed one
+  // a failing file saved as it came (its fixes unticked), then its fixed copy from the dialog: which one to sew, the
+  // fixed one. (round 13) Opened again it opens with its fixes ticked and Download saves the fixed copy (peace.pes's
+  // "Save a copy" saved it failing, the fixed copy only inside the dialog)
   if (await ev(`fetch("tests/external/pes/peace.pes").then((r) => r.ok)`).catch(() => false)) {
     const peace = `new Uint8Array(await (await fetch("tests/external/pes/peace.pes")).arrayBuffer())`;
     const first = await run(`__ff.close(); __ff.put("#open-file", ${peace}, "peace.pes"); await __ff.wait(() => /^peace/.test(nwTest.view()?.filename || "") && !document.getElementById("download").disabled);
+      await new Promise((r) => setTimeout(r, 800)); for (const b of document.querySelectorAll("#doctor-fix input[type=checkbox]")) if (b.checked && !b.disabled) b.click();
+      await __ff.wait(() => nwTest.view()?.filename === "peace.pes" && !document.getElementById("download").disabled, 20000);
       __ff.got.length = 0; document.getElementById("download").click(); await __ff.wait(() => document.getElementById("done").open, 5000);
       const own = document.getElementById("done-own").hidden; const b = [...document.querySelectorAll("#done-bad button")].find((x) => /fixed/.test(x.textContent));
-      if (b) b.click(); return { own, fixed: !!b, got: __ff.got.slice(), now: document.getElementById("done-own").hidden ? "" : document.getElementById("done-own").textContent };`);
-    check("peace.pes: saved and its fixed copy offered", first.fixed && first.got.length === 2, JSON.stringify(first));
+      if (b) b.click(); await __ff.wait(() => __ff.got.length >= 2, 10000);
+      return { own, fixed: !!b, got: __ff.got.slice(), now: document.getElementById("done-own").hidden ? "" : document.getElementById("done-own").textContent };`);
+    check("peace.pes as it came: saved and its fixed copy offered", first.fixed && first.got.length === 2, JSON.stringify(first));
     if (first.fixed && first.got.length === 2) {
       check("a failing file saved: nothing said before its fixed copy", first.own === true, JSON.stringify(first));
       check("its fixed copy saved too: sew the fixed one, never both", /^Sew \S+_fixed\.pes at the machine, not \S+\.pes/.test(first.now) && !/any order/.test(first.now), JSON.stringify(first));
     }
+    const fixed = await run(`__ff.close(); __ff.put("#open-file", ${peace}, "peace.pes"); await __ff.wait(() => /^peace/.test(nwTest.view()?.filename || "") && !document.getElementById("download").disabled);
+      await __ff.wait(() => /fixed/.test(nwTest.view()?.filename || ""), 20000);   // (not the as-it-came view still showing)
+      __ff.got.length = 0; const btn = document.getElementById("download").textContent; document.getElementById("download").click(); await __ff.wait(() => document.getElementById("done").open, 5000);
+      return { btn, got: __ff.got.slice()};`);
+    check("peace.pes: opens fixed, Download saves the fixed copy", fixed.btn === "Save fixed copy" && fixed.got.length === 1 && /^peace\S*_fixed\.pes$/.test(fixed.got[0]), JSON.stringify(fixed));
   }
 }
 

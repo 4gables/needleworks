@@ -306,6 +306,17 @@ function toast(msg, action) {
   if (acts.length) bs[acts.length].onclick = () => toastGone();
   toastAct = acts.length > 0; toastBox.classList.remove("gone"); toastBox.hidden = false; toastAt = Date.now(); clearTimeout(toastTimer);
   toastLeft = toastAct ? 0 : toastMs(msg); if (toastLeft) toastTimer = setTimeout(toastGone, toastLeft);
+  toastPlace();
+}
+// A note never covers the control focus is on: it goes to the top of the screen instead (round 13: notes that stay
+// until dismissed sat over Share, which raised one, and over a phone's Turn hoop, so a keyboard user's focus was hidden).
+function toastPlace() {
+  if (toastBox.hidden) return;
+  toastBox.classList.remove("top");
+  const a = document.activeElement;
+  if (!a || a === document.body || toastBox.contains(a)) return;
+  const r = a.getBoundingClientRect(), t = toastBox.getBoundingClientRect();
+  if (r.width && r.left < t.right && r.right > t.left && r.top < t.bottom && r.bottom > t.top) toastBox.classList.add("top");
 }
 // (held while it's being read or reached for, then given a moment more)
 const toastHold = (on) => {
@@ -315,7 +326,7 @@ const toastHold = (on) => {
 toastBox.addEventListener("pointerenter", () => toastHold(true)); toastBox.addEventListener("pointerleave", () => toastHold(false));
 toastBox.addEventListener("focusin", () => toastHold(true)); toastBox.addEventListener("focusout", () => setTimeout(() => toastHold(false)));
 // (where focus was before it came into the note, to go back to)
-document.addEventListener("focusin", (e) => { if (e.target instanceof Element && !toastBox.contains(e.target)) toastFrom = e.target; });
+document.addEventListener("focusin", (e) => { if (e.target instanceof Element && !toastBox.contains(e.target)) { toastFrom = e.target; toastPlace(); } });
 toastBox.addEventListener("keydown", (e) => { if (e.key === "Escape") { e.stopPropagation(); toastGone(); } });
 // a note with an action ("Removed … Undo") goes with the next change, once it's been up a moment
 // (`now`: whatever its age, as Undo takes the design back past what the note was about)

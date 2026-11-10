@@ -134,7 +134,7 @@ await open("#design");
   const r = await run(`const c = Object.assign(document.createElement("canvas"), { width: 400, height: 400 }), g = c.getContext("2d");
     g.fillStyle = "#c81e1e"; g.fillRect(0, 0, 400, 400); g.fillStyle = "#ffffff"; g.fillRect(28, 28, 344, 344); g.fillStyle = "#1e3cc8"; g.beginPath(); g.arc(200, 200, 110, 0, 7); g.fill();
     const blob = await new Promise((r) => c.toBlob(r, "image/png")); __sf.put("#pic-file", new Uint8Array(await blob.arrayBuffer()), "framed.png", "image/png");
-    await __sf.wait(() => nwTest.view() && document.body.dataset.mode === "picture" && !document.getElementById("download").disabled, 40000);
+    await __sf.wait(() => /^framed/.test(nwTest.view()?.filename || "") && document.body.dataset.mode === "picture" && !document.getElementById("download").disabled, 40000);
     return { ids: nwTest.problems().map((p) => p.id), note: document.getElementById("pic-merged").hidden ? "" : document.getElementById("pic-merged").textContent };`);
   check("Picture: a frame band left out is said (problem and panel)", r.ids.includes("framed") && /frame/.test(r.note), JSON.stringify(r));
 }
