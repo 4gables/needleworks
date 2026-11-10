@@ -4,7 +4,7 @@ import { FONTS } from "./core/fonts.js";
 import { COLOR_CHANGE, STITCH, designStats, machineThreads, readEmbroidery, validatePES, writePES } from "./core/formats.js";
 import { DEFAULT_MACHINE, MACHINES, MARGIN, hoop as getHoop } from "./core/machines.js";
 import { DENSITY, LEARN, MOST, contentBox, lostMuch, picturePlan, pictureImage, sewSized } from "./core/digitize.js";
-import { PEC_MATCH, hexToRgb, nearestBrotherThread, pecThread } from "./core/threads.js";
+import { PEC_MATCH, PEC_THREADS, hexToRgb, nearestBrotherThread, pecThread, rgbToHex } from "./core/threads.js";
 import { CLOTHS, colorBlocks, draw } from "./render.js";
 import { TURNED, TURN_PIC, cutDXF, cutName, cutSVG, firstStep, sewSheet, sewTime, stepTime, told, youHtml } from "./sheet.js";
 import { handOut, judge } from "./gate.js";
@@ -12,7 +12,7 @@ import { DST_COLOURS, blockLoads, checkup, fewerBlocks, fix, heat, openedFile, p
 import { HARD, MAX_BLOCKS, denseWords, moves, verdictOf } from "./quality.js";
 import { BLOCK, LOOK, LOOK_HEAD, TIP, TIP_HEAD, problemsHtml, problemsInline, problemsItems, problemsOf, shownOn, stopWords, stopsAt, mmText } from "./words.js";
 import { brief, safeName, tidy, uniqueName, withSwash } from "./core/typed.js";
-import { BRANDS, brotherNum, chartSpools, exampleSpools, lab, nearestSpool, nearestSpools, spools } from "./core/brands.js";
+import { BRANDS, apart, brotherNum, chartSpools, exampleSpools, lab, nearestSpool, nearestSpools, ownSpoolOf, spools } from "./core/brands.js";
 import { COLORS as LINE_THREADS, initStudio, savedDesign } from "./studio/ui.js";
 
 const $ = (id) => document.getElementById(id);
@@ -44,6 +44,9 @@ const state = {
   turn: { picture: false, design: false, open: false, ...store.get("turn", {}) },
   brand: BRANDS[store.get("brand", "")] ? store.get("brand", "") : "",   // thread brand for spool numbers ("" = Brother only)
   spools: store.get("spools", {}),   // { brand: [spool numbers owned] }
+  // their spools from brands not charted here (Madeira), matched by colour: [{ brand, num, hex }]. Ticking the nearest
+  // Brother spool stood for it, and every surface then said "Your Brother 079 Salmon Pink", a spool they didn't own
+  mine: (store.get("myspools", []) || []).filter((o) => o && typeof o.brand === "string" && /^#[0-9a-f]{6}$/i.test(o.hex)),
   pic: { mine: store.get("pic.mine", false), style: "fill", cross: 2.5, file: null, bitmap: null, key: 0, skip: [], swap: {}, colors: 6, size: 100, angle: 45, bg: true, density: store.get("pic.density", "standard"), req: 0, colorsInfo: [], line: "", models: new Map() },
 };
 if (!MACHINES[state.machine]) state.machine = DEFAULT_MACHINE;
@@ -160,15 +163,17 @@ function setView(v) {
   // row in one thread (pauses) are one time. Every thread, hidden placement lines too: an ornament's chips read Blue,
   // Red while its steps and Have ready said Red, Blue, because its first red block is a placement line hidden in the
   // preview. (the chip's note is the short one; the whole label is its tooltip, and the steps say it in full)
+  // One chip per machine thread, not per label: two colours sewn in one spool of theirs were one chip, "Your Isacord
+  // 0020 · the machine calls it Dark Gray", while the steps named Black for the second (the machine shows both)
   const mt = machineThreadList(v), chips = new Map();
   let last = "";
   for (const b of v.cache.blocks) {
-    const t = mt[b.index] || nearestBrotherThread(b.color), l = threadLabel(b.color, t.name), name = l.name;
-    if (!chips.has(name)) chips.set(name, { color: b.color, l, file: v.fileNote?.(b, t) || "", times: 0 });
-    if (name !== last) chips.get(name).times++;
-    last = name;
+    const t = mt[b.index] || nearestBrotherThread(b.color), l = threadLabel(b.color, t.name), key = t.name;
+    if (!chips.has(key)) chips.set(key, { color: b.color, l, file: v.fileNote?.(b, t) || "", times: 0 });
+    if (key !== last) chips.get(key).times++;
+    last = key;
   }
-  $("threads").innerHTML = [...chips].map(([name, { color, l, file, times }]) => {
+  $("threads").innerHTML = [...chips.values()].map(({ color, l, file, times }) => { const name = l.name;
     const small = [file, l.short, times > 1 ? `used ${times === 2 ? "twice" : `${times} times`}` : ""].filter(Boolean).join(" · ");
     return `<li${l.note ? ` title="${escapeHtml(`${name} · ${l.note}`)}"` : ""}><i style="background:${color}"></i><span>${escapeHtml(name)}${small ? `<br><small>${escapeHtml(small)}</small>` : ""}</span></li>`;
   }).join("");
@@ -877,24 +882,48 @@ $("names-make").onclick = async () => {
 // thread); otherwise the machine's name, with "≈ Isacord 1306", "spool 007" or a far owned spool in the note; `short`:
 // the chips' note (a long "nearest of yours … is quite different" under each chip shrank the preview: it's the tooltip).
 // `machine`: the name the file gives the colour, so Brother's spool number is that thread's
-function threadLabel(hex, machine) {
+// `guide`: the colour is sewn only as guide lines under fabric (the Design tab says so from its steps; else the view's)
+function threadLabel(hex, machine, guide = guideColour(hex)) {
   const lead = { name: `Brother ${machine}`, note: "", short: "" };
   if (!state.brand) return lead;
-  const own = state.spools[state.brand], s = nearestSpool(state.brand, hex, own);
+  const s = owns() ? nearOwn(hex) : nearestSpool(state.brand, hex);
   if (!s) return lead;
   // (an owned spool far from the colour isn't a match: white showed as "your Isacord 5513", a green; `far` in brands.js)
   // (Brother's own spools match the machine's colours exactly: just the number of the thread the machine names)
-  if (!own?.length) { const note = state.brand === "brother" ? `spool ${brotherNum(machine) || s.num}` : `≈ ${s.label}`; return { ...lead, note, short: note }; }
-  if (s.far) return { ...lead, note: `nearest of yours, ${s.label}, is quite different`, short: "none of yours is close" };
-  return { name: `Your ${s.label}`, note: `the machine calls it ${machine}`, short: `the machine calls it ${machine}` };
+  if (!owns()) { const note = state.brand === "brother" ? `spool ${brotherNum(machine) || s.num}` : `≈ ${s.label}`; return { ...lead, note, short: note }; }
+  // (one wording for no close spool on every surface: the chip said "none of yours is close" and the steps and editor
+  // "nearest of yours, Sulky 1076 Royal Blue, is quite different". A placement line under the appliqué fabric is only
+  // a guide: its thread hardly matters, so it isn't "quite different")
+  if (s.far) return guide ? { ...lead, note: "only a guide line: any thread will do", short: "only a guide line: any thread will do" }
+    : { ...lead, note: `none of yours is close (the nearest, ${s.label}, is quite different)`, short: "none of yours is close" };
+  const name = `Your ${s.label}`;
+  // (their Brother spool is the machine's own thread: "Your Brother 007 Prussian Blue · the machine calls it Prussian
+  // Blue" said the name twice)
+  if (!s.own && state.brand === "brother" && s.name === machine) return { name, note: "", short: "" };
+  // (the file's thread for this colour may be another colour, its nearest being taken by another colour: a navy spool
+  // of theirs read "the machine calls it Olive Green" with nothing to say that's fine)
+  const t = PEC_THREADS.find((x) => x && x[0] === machine), other = t && apart(s.hex, rgbToHex(t.slice(1, 4)));
+  return other ? { name, note: `the machine calls it ${machine}: that's fine, it's only the name on its screen`, short: `the machine calls it ${machine}: that's fine` }
+    : { name, note: `the machine calls it ${machine}`, short: `the machine calls it ${machine}` };
+}
+// whether they've listed spools of their own for the brand shown (its chart's, or their own from other brands)
+const owns = () => !!state.brand && (state.spools[state.brand]?.length > 0 || state.mine.length > 0);
+// the nearest spool of theirs to a colour (`far` when none is close), or null when they've listed none
+const nearOwn = (hex) => owns() ? nearestSpool(state.brand, hex, state.spools[state.brand] || [], state.mine) : null;
+// a colour sewn only as guide lines under fabric (appliqué placement lines: hidden in the preview, `hide`)
+function guideColour(hex) {
+  const v = state.view, bl = v?.cache?.blocks;
+  if (!v?.hide?.size || !bl) return false;
+  const mine = bl.filter((b) => b.color === hex);
+  return mine.length > 0 && mine.every((b) => v.hide.has(b.index));
 }
 // the label as one line ("Your Isacord 1902 · the machine calls it Red"), for text without a small note
-const threadLine = (hex, machine) => { const l = threadLabel(hex, machine); return l.note ? `${l.name} · ${l.note}` : l.name; };
+const threadLine = (hex, machine, guide) => { const l = threadLabel(hex, machine, guide); return l.note ? `${l.name} · ${l.note}` : l.name; };
 // as html: the name, then the note in small (`sep` before it)
-const threadHtml = (hex, machine, sep = " ") => { const l = threadLabel(hex, machine); return `${escapeHtml(l.name)}${l.note ? `${sep}<small>${escapeHtml(l.note)}</small>` : ""}`; };
+const threadHtml = (hex, machine, sep = " ", guide) => { const l = threadLabel(hex, machine, guide); return `${escapeHtml(l.name)}${l.note ? `${sep}<small>${escapeHtml(l.note)}</small>` : ""}`; };
 // the spool they own for a colour ("Isacord 0015 White"), for supply lists; "" when they haven't listed one close to it
 function ownSpool(hex) {
-  const own = state.brand && state.spools[state.brand], s = own?.length && nearestSpool(state.brand, hex, own);
+  const s = nearOwn(hex);
   return s && !s.far ? s.label : "";
 }
 // the threads for a supply list: by the spools they own when they've listed some, the rest as what to buy ("To buy:
@@ -904,7 +933,7 @@ function ownSpool(hex) {
 // (one spool per entry: "Isacord 3541 (for Brother Violet, Brother Purple)", not 3541 three times; a spool that's only
 // the nearest the brand has says so, as the thread chips do; a brand without spools listed gives its numbers here too)
 function threadList(colors, machineName = (hex) => nearestBrotherThread(hex).name) {
-  const own = state.brand && state.spools[state.brand]?.length, name = (hex) => `Brother ${machineName(hex)}`;
+  const own = owns(), name = (hex) => `Brother ${machineName(hex)}`;
   const and = (a) => a.length < 3 ? a.join(" and ") : `${a.slice(0, -1).join(", ")} and ${a.at(-1)}`;
   const uniq = [...new Set(colors)];
   if (state.brand && !own && state.brand !== "brother") {
@@ -933,9 +962,11 @@ function brandUI() {
     + Object.entries(BRANDS).map(([k, n]) => `<option value="${k}">${n}</option>`).join("") + `</optgroup><option value="@mine">Threads I own…</option>`;
   // (with spools listed, the brand reads "My Isacord": "Isacord (threads I own)" was cut off by the select)
   for (const o of $("brand").options) if (o.value && state.spools[o.value]?.length) o.textContent = `My ${BRANDS[o.value]}`;
+  // (only spools of other brands: "My threads", the brand still giving the numbers of threads to buy)
+    else if (o.value && o.value === state.brand && state.mine.length) o.textContent = "My threads";
   $("brand").value = state.brand;
   $("brand").title = state.brand ? `The machine's thread names, with the ${BRANDS[state.brand]} spool numbers beside them` : "The machine's thread names. Pick a brand to see its spool numbers too.";
-  const mine = state.brand && state.spools[state.brand]?.length;
+  const mine = owns();
   $("pic-mine-row").hidden = !mine; $("pic-mine").checked = !!mine && state.pic.mine;
 }
 // (the Design tab's editor too: its thread hint kept the old label until a reload)
@@ -949,7 +980,8 @@ function openSpools() {
   $("spools-brand").innerHTML = Object.entries(BRANDS).map(([k, n]) => `<option value="${k}">${n}</option>`).join("");
   $("spools-brand").value = state.brand || "brother";   // (a Brother machine's owner mostly has Brother spools)
   $("spools-list").value = (state.spools[$("spools-brand").value] || []).join(" ");
-  $("spools-find").value = ""; spoolNear = null;
+  $("spools-find").value = ""; spoolNear = null; spoolsMine = state.mine.map((o) => ({ ...o }));
+  $("spools-own").hidden = true; $("own-brand").value = $("own-num").value = ""; $("own-hint").textContent = "";
   spoolsGrid(); $("spools").showModal();
 }
 // (examples in the brand's own numbers: Brother's showed Isacord-like "0020 1902 3541")
@@ -967,6 +999,8 @@ const UNLISTED = ["Madeira", "Gunold", "Floriani", "Marathon", "Polyneon", "Mett
 // A spool from a brand that isn't charted (Madeira) is matched by its colour: the colour picked shows the nearest
 // spools of the brand chosen here (`near`), to tick the closest; any search is set aside meanwhile.
 let spoolNear = null;
+// their own spools from other brands while the dialog is open (state.mine once saved)
+let spoolsMine = [];
 function spoolsFind() {
   const q = $("spools-find").value.trim().toLowerCase(), b = $("spools-brand").value, nz = q.replace(/^0+(?=\d)/, "");
   const names = Object.fromEntries(chartSpools(b).map((s) => [s.num, s.name.toLowerCase()]));
@@ -980,10 +1014,27 @@ function spoolsFind() {
   $("spools-all").hidden = !near;
   const other = UNLISTED.find((u) => q.includes(u.toLowerCase()));
   $("spools-none").hidden = !!first || !q || !!near;
-  $("spools-none").textContent = other ? `${other} isn't one of the brands here: pick your spool's colour below, then tick the nearest ${BRANDS[b]} spool to stand for it.`
-    : `No ${BRANDS[b]} spool with that number or name. A spool from another brand: pick its colour below.`;
+  $("spools-none").textContent = other ? `${other} isn't one of the brands here: pick your spool's colour below and add it as your own ${other === "Medeira" ? "Madeira" : other} spool.`
+    : `No ${BRANDS[b]} spool with that number or name. A spool from another brand: pick its colour below and add it as your own.`;
 }
-$("spools-colour").oninput = (e) => { spoolNear = e.target.value; spoolsFind(); };
+// (a colour picked offers to add it as their own spool, its brand from the search if one was named there: "Madeira");
+// the search is cleared, as it's set aside ("Prussian" stayed in the box while the grid showed pinks)
+$("spools-colour").oninput = (e) => {
+  const other = UNLISTED.find((u) => $("spools-find").value.toLowerCase().includes(u.toLowerCase()));
+  if (other && !$("own-brand").value.trim()) $("own-brand").value = other === "Medeira" ? "Madeira" : other;
+  spoolNear = e.target.value; $("spools-find").value = ""; $("spools-own").hidden = false;
+  $("own-hint").textContent = `Below: the nearest ${BRANDS[$("spools-brand").value]} spools. Tick one only if you own that spool too.`;
+  spoolsFind();
+};
+$("own-add").onclick = () => {
+  const brand = $("own-brand").value.trim().replace(/\s+/g, " "), num = $("own-num").value.trim().replace(/\s+/g, " "), hex = $("spools-colour").value.toLowerCase();
+  if (!brand) { $("own-hint").textContent = "Type the brand printed on the spool first (Madeira, Gunold…)."; $("own-brand").focus(); return; }
+  const o = { brand, num, hex };
+  spoolsMine = [...spoolsMine.filter((x) => !(x.brand.toLowerCase() === brand.toLowerCase() && x.num === num && (num || x.hex === hex))), o];
+  $("own-num").value = ""; $("own-hint").textContent = `Added your ${ownSpoolOf(o).label}. Save keeps it.`;
+  spoolsPreview();
+};
+for (const id of ["own-brand", "own-num"]) $(id).onkeydown = (e) => { if (e.key === "Enter") { e.preventDefault(); $("own-add").click(); } };
 $("spools-all").onclick = () => { spoolNear = null; spoolsFind(); $("spools-colour").focus(); };
 function roveSpool(el) { for (const x of $("spools-grid").querySelectorAll("[tabindex='0']")) x.tabIndex = -1; if (el) el.tabIndex = 0; }
 function spoolsPreview() {
@@ -991,9 +1042,12 @@ function spoolsPreview() {
   spoolsHint();
   const missing = typed.filter((t) => !spools(b, t).length), have = new Set(got);
   for (const el of $("spools-grid").children) el.setAttribute("aria-pressed", have.has(el.dataset.spool));
-  $("spools-note").textContent = (got.length ? `${got.length} ${BRANDS[b]} ${got.length === 1 ? "spool" : "spools"} ticked.` : "None ticked yet.")
+  const n = spoolsMine.length;
+  $("spools-note").textContent = (got.length ? `${got.length} ${BRANDS[b]} ${got.length === 1 ? "spool" : "spools"} ticked.` : n ? "" : "None ticked yet.")
+    + (n ? ` ${n} of your own from other brands.` : "")
     + (missing.length ? ` Not in our ${BRANDS[b]} chart: ${missing.join(", ")} (another brand's numbers? Pick that brand above, or match each spool by its colour).` : "");
-  $("spools-chips").innerHTML = got.map((n) => { const s = nearestSpool(b, "#000000", [n]); return `<span><i style="background:${s.hex}"></i>${n}${s.name ? ` ${escapeHtml(s.name)}` : ""}</span>`; }).join("");
+  $("spools-chips").innerHTML = got.map((n) => { const s = nearestSpool(b, "#000000", [n]); return `<span><i style="background:${s.hex}"></i>${n}${s.name ? ` ${escapeHtml(s.name)}` : ""}</span>`; }).join("")
+    + spoolsMine.map((o, i) => { const l = escapeHtml(ownSpoolOf(o).label); return `<span><i style="background:${o.hex}"></i>${l}<button type="button" class="x" data-unown="${i}" aria-label="Take ${l} off" title="Take it off">×</button></span>`; }).join("");
 }
 $("spools-grid").onclick = (e) => {
   const el = e.target.closest("[data-spool]"); if (!el) return;
@@ -1023,9 +1077,14 @@ $("spools-find").onkeydown = (e) => {
 };
 $("spools-brand").onchange = () => { $("spools-list").value = (state.spools[$("spools-brand").value] || []).join(" "); $("spools-find").value = ""; spoolsGrid(); };
 $("spools-list").oninput = spoolsPreview;
+$("spools-chips").onclick = (e) => {
+  const x = e.target.closest("[data-unown]"); if (!x) return;
+  spoolsMine.splice(+x.dataset.unown, 1); spoolsPreview(); $("own-brand").focus();
+};
 $("spools-save").onclick = () => {
   const b = $("spools-brand").value;
   state.spools[b] = spools(b, $("spools-list").value); store.set("spools", state.spools);
+  state.mine = spoolsMine; store.set("myspools", state.mine);
   state.brand = b; store.set("brand", b); $("spools").close(); brandUI(); relabel();
   if (state.mode === "picture" && state.pic.mine) makePicture();
 };
@@ -1033,12 +1092,11 @@ $("pic-mine").onchange = (e) => { state.pic.mine = e.target.checked; store.set("
 // the spools they own in the brand shown, in colour-card order, for the Design tab's thread swatches
 function ownedSpools() {
   const own = state.brand && state.spools[state.brand];
-  return own?.length ? chartSpools(state.brand).filter((s) => own.includes(s.num)) : [];
+  return state.brand ? [...(own?.length ? chartSpools(state.brand).filter((s) => own.includes(s.num)) : []), ...state.mine.map(ownSpoolOf)] : [];
 }
 // the owned spools' colours, for "Use only threads I own"
 function ownedPalette() {
-  const own = state.brand && state.spools[state.brand];
-  return state.pic.mine && own?.length ? own.map((n) => nearestSpool(state.brand, "#000000", [n]).hex) : null;
+  return state.pic.mine && owns() ? ownedSpools().map((s) => s.hex) : null;
 }
 
 // ---------- machine & hoop ----------
@@ -1333,12 +1391,12 @@ function swapUI(cols = state.pic.colorsInfo.filter((c) => !c.background && c.are
 // "Use only threads I own": say which of the picture's colours share one spool, and which have none close (the
 // Design tab says "quite different"; here yellow and pink sewed in one spool without a word)
 function ownedNote() {
-  const own = state.brand && state.spools[state.brand], groups = state.pic.mine && own?.length ? state.pic.owned || [] : [];
+  const groups = state.pic.mine && owns() ? state.pic.owned || [] : [];
   const name = (hex) => nearestBrotherThread(hex).name.toLowerCase(), list = (a) => a.length < 3 ? a.join(" and ") : `${a.slice(0, -1).join(", ")} and ${a.at(-1)}`;
   const said = [];
   for (const { hex, from } of groups) {
-    const s = nearestSpool(state.brand, hex, own); if (!s) continue;
-    const names = [...new Set(from.map(name))], far = from.some((c) => nearestSpool(state.brand, c, own)?.far);
+    const s = nearOwn(hex); if (!s) continue;
+    const names = [...new Set(from.map(name))], far = from.some((c) => nearOwn(c)?.far);
     if (names.length > 1) said.push(`${list(names)} ${names.length === 2 ? "both" : "all"} sew in your ${s.label}${far ? " (quite different for some)" : ""}.`);
     else if (far) said.push(`${names[0]} sews in your ${s.label}, which is quite different.`);
   }

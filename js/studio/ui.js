@@ -199,6 +199,8 @@ export function initStudio(api) {
   // the design's thread colours in sewing order, one list per hooping, as the file's palette is made from them (set by
   // threadNames each time the design is made; `machineName`)
   let hoopings = [];
+  // colours sewn only as guide lines hidden under fabric (an appliqué file's placement line): any thread will do
+  let guides = new Set();
   let fabric = FABRICS[saved?.fabric] ? saved.fabric : "cotton", baste = !!saved?.baste, thread = THREADS[saved?.thread] ? String(saved.thread) : "auto";
   // made to fit with Fit to hoop: a font or style change that then takes it past the hoop fits it again
   let fitted = !!saved?.fitted, refitted = false;
@@ -342,9 +344,9 @@ export function initStudio(api) {
   // Dark Fuchsia)
   // (each swatch's tooltip names the thread the file would give it, `machineName`: two of their spools both said "the
   // machine calls it Dark Gray", and the file gave the second Olive Green)
-  const swatches = (p, k = "color") => COLORS.map((c) => `<button type="button" data-${k}="${c}" style="background:${c}" aria-pressed="${c === p[k]}" title="${api.escapeHtml(swatchTip(c, p[k]))}"></button>`).join("")
+  const swatches = (p, k = "color") => COLORS.map((c) => `<button type="button" data-${k}="${c}" style="background:${c}" aria-pressed="${c === p[k]}" title="${api.escapeHtml(swatchTip(c, p[k], "", p))}"></button>`).join("")
     + `<span class="custom"><input type="color" data-${k}-any value="${p[k]}" aria-label="Any colour"></span>`
-    + ((own) => own.length ? `<span class="own-swatches" role="group" aria-label="Your threads"><span class="hint">Yours:</span>${own.map((s) => `<button type="button" data-${k}="${s.hex}" style="background:${s.hex}" aria-pressed="${s.hex === p[k]}" title="${api.escapeHtml(swatchTip(s.hex, p[k], s.label))}" aria-label="Your ${api.escapeHtml(s.label)}"></button>`).join("")}</span>` : "")(api.ownedSpools?.() || []);
+    + ((own) => own.length ? `<span class="own-swatches" role="group" aria-label="Your threads"><span class="hint">Yours:</span>${own.map((s) => `<button type="button" data-${k}="${s.hex}" style="background:${s.hex}" aria-pressed="${s.hex === p[k]}" title="${api.escapeHtml(swatchTip(s.hex, p[k], s.label, p))}" aria-label="Your ${api.escapeHtml(s.label)}"></button>`).join("")}</span>` : "")(api.ownedSpools?.() || []);
   const fontSelect = (p) => `<select data-k="font">${FONTS.map((f) => `<option value="${f.family}" ${f.family === p.font ? "selected" : ""}>${f.name}${f.print ? " (print)" : ""}</option>`).join("")}</select>`;
   // every font's name in its own lettering, in a row under the list to tap (names alone said nothing of the look); the
   // list stays the keyboard's and a screen reader's way to pick one
@@ -539,7 +541,7 @@ export function initStudio(api) {
     const base = ownBase();
     // (a floated project isn't hooped: the fabric's own "hoop it with…" said otherwise)
     if (!base && floated()) return `${floated().fabric}${fabric === "towel" ? " On terry, the letters are sewn bold on a light base that flattens the loops, under a water-soluble topper (see Have ready)." : ""}`;
-    if (!base) return FABRICS[fabric].tip;
+    if (!base) return [FABRICS[fabric].tip, tip ? "" : FABRICS[fabric].item].filter(Boolean).join(" ");
     const what = [(fabric === "knit" || fabric === "towel") && lettered() ? "the lettering" : "", fabric === "knit" && pieces.some((p) => p.kind === "frame" && p.border === "patch") ? "the patch's fill" : ""].filter(Boolean);
     return what.length ? `${base}, so ${FABRICS[fabric].name} only changes how ${what.join(" and ")} ${what.length > 1 ? "are" : "is"} sewn${fabric === "towel" ? " (bold, on a light base)" : " (to suit a knit)"}.`
       : `${base}, so the fabric chosen here doesn't change the stitches.`;
@@ -1262,21 +1264,27 @@ export function initStudio(api) {
   // the name the machine will show for `hex` if the piece's colour `was` became it: the file's palette gives each colour
   // its nearest Brother thread no earlier colour took (machineThreads), so a colour may get its second-nearest. The
   // editor said "Brother Dark Gray" (the nearest) while the chips, steps and sew sheet said Olive Green (Dark Gray taken)
-  function machineName(hex, was = hex) {
+  // (`p`: the piece being recoloured. Another piece keeping the colour `was` keeps its blocks: a Madeira swatch's tooltip
+  // said Pink with the name sharing navy with the heading, both recoloured in the guess, while the file named Light Lilac)
+  function machineName(hex, was = hex, p = null) {
     const seg = hoopings.find((h) => h.includes(was)) || hoopings[0] || [];
-    const cols = seg.includes(was) ? seg.map((c) => (c === was ? hex : c)) : [...seg, hex];
+    const shared = p && pieces.some((q) => q.id !== p.id && [q.color, q.fill, q.blend].includes(was));
+    const cols = !seg.includes(was) ? [...seg, hex] : !shared ? seg.map((c) => (c === was ? hex : c))
+      : seg.includes(hex) ? seg : [...seg.slice(0, seg.lastIndexOf(was) + 1), hex, ...seg.slice(seg.lastIndexOf(was) + 1)];
     return machineThreads(cols.map((color) => ({ color })))[cols.indexOf(hex)].name;
   }
   // a piece's thread as every surface labels it (their spool first when they own one, else the machine's name)
-  function threadOf(p, k = "color") { return api.threadLine(p[k], machineName(p[k])); }
-  function swatchTip(hex, was, own) { const m = machineName(hex, was); return own ? `Your ${own} (the machine calls it ${m})` : `Brother ${m}`; }
+  function threadOf(p, k = "color") { return api.threadLine(p[k], machineName(p[k]), guides.has(p[k])); }
+
+  // (their spool's tooltip in the words every surface uses: app.js `threadLabel`)
+  function swatchTip(hex, was, own, p) { const m = machineName(hex, was, p); return own ? api.threadLine(hex, m) : `Brother ${m}`; }
   // after the design is made: the editor's thread labels and swatch tooltips as the file now names them
   function relabelThreads() {
     const p = current(); if (!p || drawnId !== p.id) return;
     for (const el of $("st-edit").querySelectorAll("[data-thread-of]")) el.textContent = threadOf(p, el.dataset.threadOf);
     for (const k of ["color", "fill", "blend"]) for (const b of $("st-edit").querySelectorAll(`button[data-${k}]`)) {
       const own = (api.ownedSpools?.() || []).find((s) => s.hex === b.dataset[k]);
-      b.title = swatchTip(b.dataset[k], p[k], own?.label);
+      b.title = swatchTip(b.dataset[k], p[k], own?.label, p);
     }
   }
   // each step's thread as the machine's screen names it (the file's own palette, one per hooping: a colour may get its
@@ -1306,7 +1314,9 @@ export function initStudio(api) {
   }
   // thread and needle advice that matches the thread chosen: Automatic sews small letters for 60 wt and says so; a weight
   // picked by hand gets its own tip (the quilt label said "60 wt" while 30 wt was picked)
-  const threadTip = (small) => thread === "auto" ? (small ? SMALL_TIP : "")
+  // (with spools of their own listed, Automatic's 60 wt advice says their usual 40 wt sews them too: a Sulky Rayon owner
+  // was told to use a thread she didn't have)
+  const threadTip = (small) => thread === "auto" ? (small ? SMALL_TIP + (api.ownedSpools?.().length ? " No 60 wt? Your own 40 wt spools sew them too, a little bolder." : "") : "")
     : THREADS[thread].tip + (small && thread !== "60" ? ` These letters are small for ${THREADS[thread].name}: 60 wt sews them crisper.` : "");
   // the too-big message, over the preview and under the selected piece's controls (with a second fix there too)
   function tooBig(msg, fix, alt) {
@@ -1532,6 +1542,7 @@ export function initStudio(api) {
   // (`first`: a split design's first file, named over its steps; the rehooping between the files isn't a step or a
   // pause: the steps said "2 pauses" where the download said "no pauses")
   function stepsUI(steps, after = [], small = false, before = [], waiting = "", first = "") {
+    guides = new Set(steps.filter((st) => !st.rehoop && st.under && steps.every((o) => o.rehoop || o.color !== st.color || o.under)).map((st) => st.color));
     applGuide(steps); relabelThreads();
     // (stops in the words the facts beside the preview use: "2 thread changes and 1 pause", not "3 pauses"; a split
     // design's rehooping between its files is neither)
@@ -1547,7 +1558,7 @@ export function initStudio(api) {
       + (api.turned() ? `<li class="after"><b>Hooping</b><span class="turned">${TURN_PIC}${api.escapeHtml(turnText())}</span></li>` : "") + (before.length ? `<li class="after"><b>Have ready</b><ul class="ready">${before.map((r) => `<li>${api.escapeHtml(r)}</li>`).join("")}</ul></li>` : "")
       + (first ? `<li class="after"><b>First hooping: ${api.escapeHtml(first)}</b></li>` : "")
       + steps.map((st, i) => st.rehoop ? `<li class="after"><b>${api.escapeHtml(st.title)}</b>${youHtml(st.you, api.escapeHtml)}</li>` : `<li><button type="button" data-step="${i}" aria-pressed="${api.step() === i}">
-      <b><span class="n">${++n}</span><i style="background:${st.color}"></i>${api.threadHtml(st.color, st.machine || nearestBrotherThread(st.color).name)}</b>
+      <b><span class="n">${++n}</span><i style="background:${st.color}"></i>${api.threadHtml(st.color, st.machine || nearestBrotherThread(st.color).name, " ", guides.has(st.color))}</b>
       ${st.you ? youHtml(st.you, api.escapeHtml) : ""}<span>${api.escapeHtml(st.sews.join(" "))}</span>
       ${st.early ? `<small>Sewn early, with the other ${api.escapeHtml(st.machine || nearestBrotherThread(st.color).name)} parts, to save a thread change.</small>` : ""}</button></li>`).join("")
       + (threadTip(small) ? `<li class="after"><b>Thread and needle</b><span>${api.escapeHtml(threadTip(small))}</span></li>` : "")

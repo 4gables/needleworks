@@ -152,6 +152,30 @@ for (const [bytes, says, pic] of [[png, /is a picture \(PNG\)/, true], ["new Uin
     const shown = [...document.querySelectorAll("#spools-grid button:not([hidden])")].map((b) => b.title); __ff.close(); return { none, shown };`);
   check("an unlisted brand is said as not listed", /Madeira isn't one of the brands here/.test(r.none), r.none);
   check("a colour picked shows the nearest spools", r.shown.length > 0 && r.shown.length <= 8 && r.shown.some((t) => /Violet|Purple/.test(t)), r.shown.join(", "));
+  // (round 13) the colour picked is added as their own Madeira spool (the brand named in the search), not as the
+  // nearest Brother spool ticked to stand for it ("Your Brother 079 Salmon Pink" everywhere, a spool she didn't own);
+  // the search is cleared (it kept "Prussian" while the grid showed pinks)
+  const m = await run(`const s = document.getElementById("brand"); s.value = "@mine"; s.dispatchEvent(new Event("change")); await new Promise((r) => setTimeout(r, 300));
+    const f = document.getElementById("spools-find"); f.value = "Madeira"; f.dispatchEvent(new Event("input"));
+    const c = document.getElementById("spools-colour"); c.value = "#e8a0a8"; c.dispatchEvent(new Event("input"));
+    const form = !document.getElementById("spools-own").hidden, brand = document.getElementById("own-brand").value, search = f.value;
+    document.getElementById("own-num").value = "1147"; document.getElementById("own-add").click();
+    const chips = document.getElementById("spools-chips").textContent; document.getElementById("spools-save").click();
+    location.hash = "#design"; await new Promise((r) => setTimeout(r, 1500));
+    // (the pieces in turn: a picture's file piece has no thread swatches)
+    let sw = [];
+    for (const id of [...document.querySelectorAll("#st-pieces .pick")].map((b) => b.dataset.id)) {
+      document.querySelector('#st-pieces .pick[data-id="' + id + '"]').click(); await new Promise((r) => setTimeout(r, 800));
+      sw = [...document.querySelectorAll("#st-edit .own-swatches button")].map((b) => b.getAttribute("aria-label") + " | " + b.title);
+      if (sw.length) break;
+    }
+    const saved = localStorage.getItem("nw:myspools");
+    for (const k of ["myspools", "spools", "brand"]) localStorage.removeItem("nw:" + k);
+    return { form, brand, search, chips, sw, saved };`);
+  check("a colour picked offers to add it as their own spool, the brand from the search", m.form && m.brand === "Madeira", JSON.stringify(m));
+  check("a colour picked clears the search", m.search === "", JSON.stringify(m));
+  check("their own Madeira spool is listed and saved", /Madeira 1147/.test(m.chips) && /"Madeira"/.test(m.saved || ""), JSON.stringify(m));
+  check("their own Madeira spool is a swatch named as theirs, never as a Brother spool", m.sw.some((t) => /^Your Madeira 1147 \| Your Madeira 1147/.test(t)) && !m.sw.some((t) => /Your Brother/.test(t)), JSON.stringify(m.sw));
 }
 for (const p of problems) console.log("FAIL " + p);
 console.log(`files flow: ${Math.round((Date.now() - t0) / 1000)} s`);
