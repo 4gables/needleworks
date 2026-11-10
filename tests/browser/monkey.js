@@ -146,7 +146,7 @@ function screen() {
 // like the towel's "… mm or more keeps them open.")
 const KINDS = [["small", /too small to stitch cleanly/], ["thin", /sews as a thin line/], ["loops", /small loops .*fill in/], ["towel", /closes? (the |these )?letters up|leave the letters open|keeps them open\.$/], ["arch", /wrap most of the way round|too tight for letters/],
   ["hit", /^This runs into/], ["lines", /^On (two|three) lines/], ["motif", /this small, the/],
-  ["named", /looks like a name|has 3 initials at most/], ["oneline", /sews the words on one line/], ["under", /patch sews after this|sews before the patch/],
+  ["named", /looks like a name|has 3 initials at most/], ["caps", /^Capitals in a joined script/], ["oneline", /sews the words on one line/], ["under", /patch sews after this|sews before the patch/],
   ["same", /nearly the same thread/], ["kern", /pushed into each other/], ["missing", /has no /], ["framefit", /^Shrunk to fit inside the frame/]];
 // (beside Download each problem names its pieces: "“Emma” runs into Heart; …")
 const GLOBAL = [["hit", /runs into/], ["missing", /has no /], ["under", /sews before the patch/], ["same", /nearly the same thread/], ["small", /too small to stitch/],
@@ -199,6 +199,9 @@ function checks(f, sc, act, before) {
     if (sc.kind === "split" && !chose2 && !["undo", "redo", "undoredo", "openSaved"].includes(act.t)) add("split", `split into two hoopings without being asked (after ${act.t})`);
     if (sc.kind === "big" && !sc.big && !sc.error) add("fit", `too big with nothing said`);
     if (/Fits /.test(sc.facts)) add("stale", `too big but the chips say “${sc.facts}”`);
+    // the too-big note gives the size chip's size (171 × 33 beside a 171 × 34 chip)
+    const said = /This design is ([\d.]+ × [\d.]+) mm/.exec(sc.big || sc.error), chip = /^([\d.]+ × [\d.]+) mm/.exec(sc.facts);
+    if (said && chip && said[1] !== chip[1]) add("stale", `the note says ${said[1]} mm beside a ${chip[1]} mm size chip`);
   }
   // collisions said
   // (beside Download when it can be downloaded: a design too big for the hoop says that first)
@@ -212,9 +215,20 @@ function checks(f, sc, act, before) {
   if (!$("st-fabric-name").textContent.startsWith(P.FABRICS[s.fabric].name)) add("stale", `“Sewing on” says ${$("st-fabric-name").textContent}, fabric is ${s.fabric}`);
   const turnNote = all("#st-steps .turned").length > 0;
   if (sc.kind === "one" && turnNote !== f.t) add("stale", `the hooping note ${turnNote ? "shows" : "is missing"} with the hoop ${f.t ? "turned" : "upright"}`);
+  // nothing in the editor opens empty (an arched script name's "More" had nothing under it)
+  for (const d of all("#st-edit details")) if (![...d.children].some((c) => c.tagName !== "SUMMARY" && c.textContent.trim())) add("stale", `“${d.querySelector("summary")?.textContent}” opens empty`);
+  // the size control says the size it's sewn at when a frame shrinks it (it said 24 mm beside "Shrunk to 22 mm")
+  const fitNote = D.querySelector("#st-edit [data-fit]"), szOut = D.querySelector('#st-edit input[data-k="size"] + output');
+  if (fitNote && !fitNote.hidden && szOut) { const m = /Shrunk to ([\d.]+) mm/.exec(fitNote.textContent); if (m && !szOut.textContent.includes(`${m[1]} mm`)) add("stale", `the height reads “${szOut.textContent}” beside “Shrunk to ${m[1]} mm”`); }
   // placing things for the user never takes a design that fitted past the hoop
   if (before?.f && PLACING.has(act.t) && before.f.fits && !f.fits && !act.allowBig) add("placed", `${act.t}${act.what ? ` (${act.what})` : ""} took a design that fitted past the hoop (${f.s.pieces.length} pieces)`);
   if ((act.t === "fit" || act.t === "starter") && !f.fits && !act.skipped) add("placed", `${act.t}${act.what ? ` (${act.what})` : ""} left the design too big`);
+  // Fit to hoop fills the hoop (it measured the sizes asked for, not sewn, and made a quilt label smaller on a bigger
+  // hoop); not past a frame's `most` (the size its project is made for)
+  if (act.t === "fit" && f.fits && !act.skipped && !f.s.pieces.some((p) => p.most || p.kind === "file")) {
+    const fill = Math.max(f.vs.widthMm / (f.dh.w - 10), f.vs.heightMm / (f.dh.h - 10));
+    if (fill < 0.9) add("fit", `Fit to hoop left it ${f.vs.widthMm.toFixed(0)} × ${f.vs.heightMm.toFixed(0)} mm in the ${f.h.name} (${Math.round(fill * 100)} % of the room)`);
+  }
   // a starter brings its own fabric and thread weight, or cotton and automatic (towel and 30 wt stuck to later starters)
   const st = act.t === "starter" && !act.skipped && UI.STARTERS.find((x) => x.id === act.what);
   if (st && (s.fabric !== (st.fabric || "cotton") || String(s.thread) !== String(st.thread || "auto"))) add("stale", `starter ${st.id} kept fabric ${s.fabric} / thread ${s.thread}`);

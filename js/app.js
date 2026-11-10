@@ -1750,6 +1750,9 @@ const studio = initStudio({
     const v = { pattern, verifyAgainst: pattern, bytes, filename, fabric: "linen", ...look };
     state.views.design = v;
     if (state.mode === "design") { const keep = [state.zoom, state.pan]; setView(v); [state.zoom, state.pan] = keep; paint(); }
+    // (the size as the size chip says it, from the file read back, for words that give the size: the too-big note
+    // said 171 × 33 beside a 171 × 34 chip)
+    return v.shown ? designStats(v.shown) : null;
   },
 });
 

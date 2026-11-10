@@ -227,13 +227,15 @@ function archRho(p, l) {
 // over the top taller than 0.6 x the radius fan out so far that their feet crowd together: Great Vibes "Oliver" 28 mm
 // on the bib's 32 mm arch bunched "iver" with no warning. Joined script letters over the top also bunch where their
 // x-height is over 0.24 x the radius (Great Vibes "Olivia" 24 mm: "vi" ran together at 38 mm, read cleanly from ~48;
-// the bib's Emma is 0.23).
+// the bib's Emma is 0.23). Script descenders over the top (a p's or y's loop) point in and meet their neighbours' past
+// 0.15 x the radius: "Happy" in Great Vibes, 24 mm on a 36 mm arch (0.19), knotted "ppy" with nothing said.
 export function archTight(p) {
   if (p.kind !== "text" || (p.shape !== "up" && p.shape !== "down")) return false;
   const l = letters(p.text, p.font, p.size, p.style);
   if (!l.parts.length) return false;
   const rho = archRho(p, l);
-  return p.shape === "up" ? l.bottom > 0.8 * rho || -l.top > 0.6 * rho || (!fontOf(p.font).print && l.xh > 0.24 * rho) : -l.top > 0.8 * rho;
+  const script = !fontOf(p.font).print;
+  return p.shape === "up" ? l.bottom > (script ? 0.15 : 0.8) * rho || -l.top > 0.6 * rho || (script && l.xh > 0.24 * rho) : -l.top > 0.8 * rho;
 }
 // The curve an arch starts on when lettering is first bent (the 30 mm default made a 24 mm "Olivia" read "Oliuia"): the
 // word over about a third of the way round, never tighter than its letters need (`archFit`).
@@ -404,9 +406,19 @@ function near(c, paths, d) {
 }
 // width and height (mm) of everything sewn, at the sizes it's sewn
 export function layoutSize(pieces) {
-  const fit = fittedSizes(pieces), bs = pieces.map((p) => pieceBounds(fit.has(p.id) ? { ...p, size: fit.get(p.id) } : p)).filter(Boolean);
-  if (!bs.length) return [0, 0];
-  return [Math.max(...bs.map((b) => b[2])) - Math.min(...bs.map((b) => b[0])), Math.max(...bs.map((b) => b[3])) - Math.min(...bs.map((b) => b[1]))];
+  const b = layoutBox(pieces);
+  return b ? [b[2] - b[0], b[3] - b[1]] : [0, 0];
+}
+// Every piece's box at the size it's sewn (lettering a frame shrinks at its fitted size), and the whole layout's box
+// (or null). Whatever measures, fits or centres the layout goes by these: Fit to hoop measured the sizes asked for, so a
+// quilt label whose two-line words were asked wider than their frame "fitted" the 5x7 smaller (92 -> 91 mm wide).
+export function sewnBoxes(pieces) {
+  const fit = fittedSizes(pieces);
+  return pieces.map((p) => pieceBounds(fit.has(p.id) ? { ...p, size: fit.get(p.id) } : p)).filter(Boolean);
+}
+export function layoutBox(pieces) {
+  const bs = sewnBoxes(pieces);
+  return bs.length ? [Math.min(...bs.map((b) => b[0])), Math.min(...bs.map((b) => b[1])), Math.max(...bs.map((b) => b[2])), Math.max(...bs.map((b) => b[3]))] : null;
 }
 
 // extra points so long straight runs follow the curve
@@ -640,10 +652,12 @@ function spaced(p, min = 0.4) {
 
 // the lettering whose size matters: the words, or a monogram's middle letter (its sides are 0.68 of a 3-letter one,
 // so with 3 letters that smaller size is what blurs first); null for other pieces
+// (the sizes and counters only: the strokes' sewing order (`order`) is not worked out, which was most of the time
+// for each size tried: duplicating a towel name searched ~90 sizes, 1.2 s)
 function bulk(p) {
   if (p.kind !== "text" && p.kind !== "monogram") return null;
   const chars = initials(p.letters);
-  return p.kind === "text" ? letters(p.text, p.font, p.size, p.style) : letters(chars[1] || p.letters, p.font, chars.length === 3 ? p.size * 0.68 : p.size, p.style);
+  return p.kind === "text" ? letters(p.text, p.font, p.size, p.style, 0, null, false) : letters(chars[1] || p.letters, p.font, chars.length === 3 ? p.size * 0.68 : p.size, p.style, 0, null, false);
 }
 
 // whether bulk(p) is worked out already: a long text drawn again as one line takes a while (0.3-0.7 s for three
@@ -905,11 +919,17 @@ function textRows(p, fab = "cotton") {
   if (ls.length > 1) ls = ls.map((l, i) => (i && l.xh ? letters(lines[i], p.font, (p.size * ls[0].xh) / l.xh, style, sp, kerns[i]) : l));
   ls = ls.filter((l) => l.parts.length);
   if (!ls.length) return [];
-  const pitch = (p.size * (p.leading ?? 130)) / 100, span = (l) => { const xs = l.parts.flatMap(([q]) => q.map((v) => v[0])); return [minOf(xs), maxOf(xs)]; };
+  // Baselines `leading` x size apart, and the ink of one line at least half an x-height (a quarter of the size at most:
+  // a line in capitals measures its x-height to the top of them) clear of the next's (scaled with the leading): the size is the first line's ink, so a line with no descenders over one with tall digits came
+  // out crowded ("14 March 2026 / 3.2 kg" 0.36 x-height apart)
+  const pitch = (p.size * (p.leading ?? 130)) / 100, least = (Math.min(ls[0].xh * 0.5, p.size * 0.25) * (p.leading ?? 130)) / 130;
+  const base = [0];
+  for (let i = 1; i < ls.length; i++) base.push(base[i - 1] + Math.max(pitch, ls[i - 1].bottom - ls[i].top + least));
+  const span = (l) => { const xs = l.parts.flatMap(([q]) => q.map((v) => v[0])); return [minOf(xs), maxOf(xs)]; };
   const spans = ls.map(span), W = Math.max(...spans.map(([a, b]) => b - a));
-  const top = Math.min(...ls.map((l, i) => l.top + i * pitch)), bottom = Math.max(...ls.map((l, i) => l.bottom + i * pitch));
+  const top = Math.min(...ls.map((l, i) => l.top + base[i])), bottom = Math.max(...ls.map((l, i) => l.bottom + base[i]));
   return ls.map((l, i) => {
-    const [a, b] = spans[i], dx = p.align === "left" ? -W / 2 - a : p.align === "right" ? W / 2 - b : -(a + b) / 2, dy = i * pitch - (top + bottom) / 2;
+    const [a, b] = spans[i], dx = p.align === "left" ? -W / 2 - a : p.align === "right" ? W / 2 - b : -(a + b) / 2, dy = base[i] - (top + bottom) / 2;
     return { parts: l.parts.map(([q, ...r]) => [q.map(([x, y]) => [x + dx, y + dy]), ...r]), satinW: l.satinW, xh: l.xh };
   });
 }
@@ -1452,27 +1472,18 @@ function monogram(p, fab = "cotton") {
   // Print letters are spaced by what's sewn: their satins reach half a column past the centre lines the widths are
   // measured on, so TKM in Josefin ran the T's bar into the K and the K's leg into the M. Each letter moves right until
   // its stitches, band by band (0.5 mm tall, each checked against its neighbours too), clear the last one's by the gap
-  // plus a thread's width. Script monograms keep their interlocking look.
-  if (fontOf(p.font).print) {
-    const sewn = ls.map((l) => lettersOn(l.parts.map(([q, ...r]) => [q.map(([a, b]) => [a, b - (l.top + l.bottom) / 2]), ...r]), l.satinW, fab, l.xh));
-    const prof = sewn.map((paths) => { const m = new Map(); for (const [a, b] of paths.flat()) { const k = Math.floor(b / 0.5), v = m.get(k); m.set(k, v ? [Math.min(v[0], a), Math.max(v[1], a)] : [a, a]); } return m; });
-    const at = [0];
-    for (let i = 1; i < sewn.length; i++) {
-      let need = -Infinity;
-      for (const [k, [, right]] of prof[i - 1]) for (let d = -1; d <= 1; d++) { const v = prof[i].get(k + d); if (v) need = Math.max(need, right - v[0]); }
-      at.push(at[i - 1] + (need === -Infinity ? widths[i - 1] : need) + gap + 0.4);
-    }
-    const xs = sewn.flatMap((paths, i) => paths.flat().map(([a]) => a + at[i])), c = (minOf(xs) + maxOf(xs)) / 2;
-    return sewn.flatMap((paths, i) => paths.map((q) => moved(q, ([a, b]) => [a + at[i] - c, b])));
+  // plus a thread's width. Script monograms too: spaced by the widths of their centre lines, a script capital's swash
+  // or loop left gaps of every size (Great Vibes BTL: the L far off to the right, AGM run together).
+  const sewn = ls.map((l) => lettersOn(l.parts.map(([q, ...r]) => [q.map(([a, b]) => [a, b - (l.top + l.bottom) / 2]), ...r]), l.satinW, fab, l.xh));
+  const prof = sewn.map((paths) => { const m = new Map(); for (const [a, b] of paths.flat()) { const k = Math.floor(b / 0.5), v = m.get(k); m.set(k, v ? [Math.min(v[0], a), Math.max(v[1], a)] : [a, a]); } return m; });
+  const at = [0];
+  for (let i = 1; i < sewn.length; i++) {
+    let need = -Infinity;
+    for (const [k, [, right]] of prof[i - 1]) for (let d = -1; d <= 1; d++) { const v = prof[i].get(k + d); if (v) need = Math.max(need, right - v[0]); }
+    at.push(at[i - 1] + (need === -Infinity ? widths[i - 1] : need) + gap + 0.4);
   }
-  let x = -(widths.reduce((a, b) => a + b, 0) + gap * (chars.length - 1)) / 2;
-  const out = [];
-  ls.forEach((l, i) => {
-    const mid = (l.top + l.bottom) / 2, cx = x + widths[i] / 2;
-    out.push(...lettersOn(l.parts.map(([q, ...r]) => [q.map(([a, b]) => [a + cx, b - mid]), ...r]), l.satinW, fab, l.xh));
-    x += widths[i] + gap;
-  });
-  return out;
+  const xs = sewn.flatMap((paths, i) => paths.flat().map(([a]) => a + at[i])), c = (minOf(xs) + maxOf(xs)) / 2;
+  return sewn.flatMap((paths, i) => paths.map((q) => moved(q, ([a, b]) => [a + at[i] - c, b])));
 }
 
 export function pieceBounds(p) {
@@ -1583,6 +1594,7 @@ export function cleanPiece(p) {
     if (q.quilt != null && !own(QUILTS, q.quilt)) delete q.quilt;
     if (q.hang != null) q.hang = q.hang === true;
     if (q.eyelet != null) q.eyelet = q.eyelet === true;
+    if (q.most != null) { q.most = num(q.most, MIN, BIG, undefined); if (q.most === undefined) delete q.most; }
   } else if (p.kind === "file") {
     const pt = (v) => Array.isArray(v) && v.length >= 2 && Number.isFinite(v[0]) && Number.isFinite(v[1]) && Math.abs(v[0]) < 1000 && Math.abs(v[1]) < 1000;
     const clean = (bs) => (Array.isArray(bs) ? bs.filter((b) => b && Array.isArray(b.paths)).map((b) => ({
@@ -1711,19 +1723,22 @@ function clearOf(p, frame, size) {
   return cleared.get(key);
 }
 
-// A monogram given fewer initials inside a frame keeps the width it had (one letter left of the starter's "aMs" stayed
-// 23 mm tall in a 90 mm circle), as big as the frame then lets it be sewn (`fittedSizes`). More initials, or no
-// frame around it: its size stays (the frame fit shrinks it if it must).
+// A monogram given other initials inside a frame keeps the width it had (one letter left of the starter's "aMs" stayed
+// 23 mm tall in a 90 mm circle), as big as the frame then lets it be sewn (`fittedSizes`). With no frame around it
+// its size stays.
 // It grows only as far as its stitches stay CLEAR of the frame's and everything else's (a Great Vibes L or A grew
 // from 23 to 73 mm, past its circle: the fit measures the letters' box, and a script capital's swash reaches past it).
+// Other initials of the same count fill the same width too (a names batch of monograms in the 90 mm circle: BTL came
+// out wide and AGM tight, at one size), down to 70 % of the size (a W-heavy set).
 export function monoSize(p, letters, pieces) {
-  const count = (t) => initials(t).length, n0 = count(p.letters), n1 = count(letters);
-  if (p.kind !== "monogram" || !n1 || n1 >= n0 || !frameAround(p, pieces.filter((f) => f === p || !(f.rot || 0)))) return p.size;
+  const n1 = initials(letters).length;
+  if (p.kind !== "monogram" || !n1 || !frameAround(p, pieces.filter((f) => f === p || !(f.rot || 0)))) return p.size;
   const wide = (q) => { const b = pieceBounds({ ...q, x: 0, y: 0 }); return b ? b[2] - b[0] : 0; };
   const at = fittedSizes(pieces).get(p.id) ?? p.size, w0 = wide({ ...p, size: at }), w1 = wide({ ...p, letters, size: at });
-  if (!w0 || !w1 || w1 >= w0) return p.size;
-  const q = { ...p, letters, size: Math.min(90, Math.round(((at * w0) / w1) * 2) / 2) };
+  if (!w0 || !w1 || Math.abs(w1 - w0) < 0.5) return p.size;
+  const q = { ...p, letters, size: Math.max(Math.round(p.size * 1.4) / 2, Math.min(90, Math.round(((at * w0) / w1) * 2) / 2)) };
   const ps = pieces.map((o) => (o.id === p.id ? q : o)), top = fittedSizes(ps).get(p.id) ?? q.size, others = ps.filter((o) => o.id !== p.id);
+  if (q.size < p.size) return top;
   // (whole mm down from the biggest, then the half above the first that clears; never below where it started)
   const clear = (s) => !touchingAll({ ...q, size: s }, others, true).length;
   if (clear(top)) return top;
