@@ -211,18 +211,48 @@ function unfold(e, c) {
     return t >= 0 && t <= 1 && u >= 0 && u <= 1 ? [p[0] + (q[0] - p[0]) * t, p[1] + (q[1] - p[1]) * t] : null;
   };
   const K = 400;   // how far either side of a fold to look for the crossing (8 mm of a 0.02 mm line)
+  // The nearest crossing first: segment i = a - di before the fold, j = b + s - di after it, the least s, then the
+  // least di. Past the first few s, looked for only among runs of C segments whose boxes meet (a box apart can't
+  // cross): the same answer as trying every pair in that order, which took ~80,000 tries round each fold that doesn't
+  // cross itself (21 million for one "+ Appliqué letters", its sizes tried: most of the time it took).
+  const C = 16, S0 = 24, box = [];
+  const boxAt = (c) => {
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    for (let k = c * C; k <= Math.min(e.length - 1, c * C + C); k++) { const [x, y] = e[k]; if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
+    box[c] = [x0 - 1e-6, y0 - 1e-6, x1 + 1e-6, y1 + 1e-6];
+  };
+  for (let c = 0; c * C < e.length - 1; c++) boxAt(c);
+  const first = (a, b) => {
+    for (let s = 0; s <= S0; s++) for (let di = 0; di <= s; di++) {
+      const i = a - di, j = b + s - di;
+      if (i < 0 || j > e.length - 2 || j < i + 2) continue;
+      const x = cross(e[i], e[i + 1], e[j], e[j + 1]);
+      if (x) return [i, j, x];
+    }
+    let best = null;   // [s, di, i, j, x]
+    const lo = Math.max(0, a - K), hi = Math.min(e.length - 2, b + K);
+    for (let ci = Math.floor(a / C); ci >= Math.floor(lo / C); ci--) {
+      const [ax0, ay0, ax1, ay1] = box[ci], i0 = Math.max(lo, ci * C), i1 = Math.min(a, ci * C + C - 1);
+      for (let cj = Math.floor(b / C); cj <= Math.floor(hi / C); cj++) {
+        const [bx0, by0, bx1, by1] = box[cj], j0 = Math.max(b, cj * C), j1 = Math.min(hi, cj * C + C - 1);
+        if (a - i1 + j0 - b > K) break;
+        if (ax0 > bx1 || bx0 > ax1 || ay0 > by1 || by0 > ay1) continue;
+        for (let i = i1; i >= i0; i--) for (let j = Math.max(j0, i + 2); j <= j1; j++) {
+          const di = a - i, s = di + j - b;
+          if (s <= S0) continue;
+          if (s > K || (best && (s > best[0] || (s === best[0] && di >= best[1])))) break;
+          const x = cross(e[i], e[i + 1], e[j], e[j + 1]);
+          if (x) best = [s, di, i, j, x];
+        }
+      }
+    }
+    return best && best.slice(2);
+  };
   for (let a = 0; a < e.length - 1; a++) {
     if (!back(a)) continue;
     let b = a; while (b + 1 < e.length - 1 && back(b + 1)) b++;
-    let hit = null;
-    for (let s = 0; s <= K && !hit; s++)   // nearest crossing first: segment i before the fold, j after it
-      for (let di = 0; di <= s && !hit; di++) {
-        const i = a - di, j = b + s - di;
-        if (i < 0 || j > e.length - 2 || j < i + 2) continue;
-        const x = cross(e[i], e[i + 1], e[j], e[j + 1]);
-        if (x) hit = [i, j, x];
-      }
-    if (hit) { const [i, j, x] = hit; for (let k = i + 1; k <= j; k++) e[k] = x; a = j; } else a = b;
+    const hit = first(a, b);
+    if (hit) { const [i, j, x] = hit; for (let k = i + 1; k <= j; k++) e[k] = x; for (let c = Math.max(0, Math.floor((i + 1) / C) - 1); c <= Math.floor(j / C); c++) boxAt(c); a = j; } else a = b;
   }
   return e;
 }

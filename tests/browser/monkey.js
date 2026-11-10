@@ -18,7 +18,7 @@
 //   undo      undo then redo, and Save design then Open saved, give back the same design
 //   slow      no action blocks the page longer than the budget (?budget, 1000 ms); every action settles in 15 s
 //   error     no uncaught exception or console error
-// Query: ?seed=1&steps=200&start=default|fifteen|random|<starter id>&budget=1000&shrink=1, or &replay=<base64 JSON of steps>.
+// Query: ?seed=1&steps=200&start=default|fifteen|fifteen-letters|random|<starter id>&budget=1000&shrink=1, or &replay=<base64 JSON of steps>.
 // Title "DONE <steps> <problems>"; window.monkey holds the result (problems with a shrunk, replayable step list).
 // Run many seeds with: node tests/monkey.mjs CDP_PORT HTTP_PORT [--seeds 1-20] [--steps 200] [--start default,fifteen]
 const Q = new URLSearchParams(location.search);
@@ -47,7 +47,7 @@ async function boot(start = START, seed = SEED, keep = false) {
     if (!keep) for (const k of Object.keys(localStorage)) if (k.startsWith("nw:")) localStorage.removeItem(k);
     const set = (k, v) => localStorage.setItem("nw:" + k, JSON.stringify(v));
     set("studio.guideSeen", true); set("studio.applSeen", true); set("doneSeen", true);
-    if (start === "fifteen" && !keep) {
+    if (start.startsWith("fifteen") && !keep) {
       const d = JSON.parse(new TextDecoder().decode(await fixture("../fixtures/fifteen.needleworks.json")));
       set("studio", { pieces: d.pieces, sel: null, fabric: "cotton", baste: false, thread: "auto", fitted: false, from: "fifteen" }); set("hoop", d.hoop || "5x7");
     }
@@ -66,6 +66,12 @@ async function boot(start = START, seed = SEED, keep = false) {
     if (start === "default" && !keep && !studio()) { D.querySelector('#st-cards [data-start="monogram"]').click(); await idle(); }
     // (a starter by its id: its layout as the user opens it, the Kitchen sign or Wedding keepsake)
     if (!keep && UI.STARTERS.some((x) => x.id === start)) { D.querySelector(`#st-cards [data-start="${start}"]`).click(); await idle(); }
+    // (the 15 pieces with appliqué letters added past the hoop, "Add it anyway": every change of that too-big design
+    // took 0.5-1.9 s, tests/monkey.mjs --start fifteen-letters)
+    if (start === "fifteen-letters" && !keep) {
+      $("st-add").querySelector('[data-add="letters"]').click(); await idle();
+      D.querySelector("#st-toast:not([hidden]) button")?.click(); await idle();
+    }
     if (start === "random" && !keep) { const cards = all("#st-cards [data-start]"); cards[Math.floor(rng(seed * 7919)() * cards.length)].click(); await idle(); }
     W.__mk.errors.length = 0; W.__mk.long.length = 0;
     return;
@@ -473,7 +479,11 @@ async function tryFix(b, undo) {
 
 // ---------- running ----------
 async function step(d, k) {
-  const before = { f: fresh() }, n0 = W.__mk.long.length, e0 = W.__mk.errors.length, t0 = performance.now();
+  const before = { f: fresh() };
+  // (the long task of the checks just made is reported a moment later: counted, it put ~300 ms on every step of a
+  // 16-piece design)
+  await sleep(30);
+  const n0 = W.__mk.long.length, e0 = W.__mk.errors.length, t0 = performance.now();
   const act = await exec(d);
   const settle = await idle();
   if (D.body.dataset.mode !== "design") { $("tab-design")?.click(); await idle(); }

@@ -6,6 +6,7 @@ import { nearestBrotherThread } from "../core/threads.js";
 import { designStats, machineThreads, readEmbroidery } from "../core/formats.js";
 import { BLOCK, LOOK, TIP, explained, inchFirst, inches, problemsItems, shownOn, stopWords } from "../words.js";
 import { FILL_PATTERNS } from "../core/digitize.js";
+import { MARGIN } from "../core/machines.js";
 import { draw } from "../render.js";
 import { THREADING, TURN_PIC, pickIt, turnedNote, youHtml } from "../sheet.js";
 import { QUILTS, quiltOf } from "./quilt.js";
@@ -969,7 +970,7 @@ export function initStudio(api) {
         if (s !== seq) return;
         // fitted with Fit to hoop and since grown by a font or style change: fitted again (it came out 1 mm over)
         if (fitted && !dragging && !refitted) { refitted = true; fitHoop(); return; }
-        split(err); return;
+        split(err, dragging); return;
       }
       if (s !== seq) return;
       refitted = false;
@@ -1200,7 +1201,9 @@ export function initStudio(api) {
     for (const f of [fix, alt]) if (f) { const b = document.createElement("button"); b.type = "button"; b.className = "link"; b.textContent = f.label; b.onclick = f.run; n.append(f === alt && fix ? ", or " : " ", b); }
   }
   // too big for the hoop: two hoopings if whole pieces can be shared out, else say how much to shrink
-  function split(err) {
+  // (`dragging`: once a frame while a piece is dragged; what the one-tap ways back to one hooping are is worked out
+  // when it's let go, as the problems list is)
+  function split(err, dragging = false) {
     const hoop = api.hoop(), parts = two ? splitPieces(pieces, hoop) : null;
     // can't be shared out: show it whole (a big pretend hoop) so it can be seen and dragged back; setView turns
     // Download into "Too big for this hoop"
@@ -1210,7 +1213,11 @@ export function initStudio(api) {
       try {
         // (in a pretend hoop big enough for it: past 2 m the preview was left empty beside "This design is 6429 mm")
         const whole = (o) => { try { return compose(pieces, { ...hoop, w: 2000, h: 2000 }, o); } catch (e) { if (!e.overBy) throw e; return compose(pieces, { ...hoop, w: 2000 * e.overBy * 1.1, h: 2000 * e.overBy * 1.1 }, o); } };
-        const composed = whole({ fabric, baste, thread, later: [] }), big = composed.design, [x0, y0, x1, y1] = big.bounds();
+        // (the design that didn't fit, as compose built it, when it fits the pretend hoop: building it all again there
+        // held every edit, drag frame and undo of a too-big 16-piece design up ~0.3 s more)
+        const [a0, b0, a1, b1] = err.composed?.design.bounds() || [0, 0, Infinity, Infinity];
+        const composed = a1 - a0 <= 2000 - 2 * MARGIN && b1 - b0 <= 2000 - 2 * MARGIN ? err.composed : whole({ fabric, baste, thread, later: [], dragging });
+        const big = composed.design, [x0, y0, x1, y1] = big.bounds();
         // (the size as the size chip says it, the stitches' extent: the error said 138 × 40 beside a 138 × 41 chip)
         // and never rounded down to look as if it fits ("126 × 23 mm, but the hoop fits 126 × 176" for 126.4)
         // (the preview first, so the note's size is the size chip's: the file read back, not the stitches before it)
@@ -1234,18 +1241,33 @@ export function initStudio(api) {
       // (and where Fit to hoop leaves something too small, the frames alone made smaller, what's in them fitted to
       // them, or Fit with the hoop turned where that's much bigger: a quilt label moved to the 4x4 had no one-tap way
       // back, and appliqué letters fitted upright came out 121 mm long where turned they'd be 169)
-      const lands = fitLands(), ways = fitWays(lands), fitNow = ways.fit || ways.frame || ways.turn || null, alt = fitNow === ways.turn ? null : ways.turn || null;
       if (turn) { tooBig(msg + " It fits with the hoop turned:", { label: "Turn the hoop", run: () => $("turn").click() }); return; }
+      if (dragging) { tooBig(msg); return; }
       // two hoopings, when they're possible: with the hoop turned, or with long lettering split between two words (that
       // one stitches both halves: worked out once the design has been still for a moment, not on every letter typed)
-      const say = (way) => {
+      const say = ({ lands, ways }, way) => {
+        const fitNow = ways.fit || ways.frame || ways.turn || null, alt = fitNow === ways.turn ? null : ways.turn || null;
         if (way.ok) tooBig(`${msg} ${way.ok} the machine sews one half, then you hoop the fabric again for the other (crosses line them up).${fitNow ? ` Or ${fitNow.label.replace(/^\w/, (c) => c.toLowerCase())} for one hooping, smaller.` : ` (Fitted to one hooping, ${lands.why}.)`}`,
-          { label: "Sew it in two hoopings", run: () => { remember(); fitted = false; two = true; if (way.pieces) pieces = way.pieces; if (way.turn) { api.setTurn(!api.turned()); api.fit(); } save(); ui(); make(); } }, fitNow);
+          { label: "Sew it in two hoopings", run: () => { remember(); fitted = false; two = true; if (way.pieces) pieces = JSON.parse(way.pieces); if (way.turn) { api.setTurn(!api.turned()); api.fit(); } save(); ui(); make(); } }, fitNow);
         else tooBig(`${msg}${way.why ? ` ${way.why}` : ""} ${fitNow ? "Make the biggest piece smaller, or" : `Make the biggest piece smaller, or take something out (fitted to the hoop, ${lands.why}).`}`, fitNow, alt);
       };
-      const way = twoHoopings(hoop, true), s = seq;
-      say(way);
-      if (way.later) setTimeout(() => { if (s === seq) say(twoHoopings(hoop)); }, 700);
+      // The ways back to one hooping (each stitches the design again, scaled or with its frames made smaller) and to
+      // two, kept per design and hoop (undo and redo come back to designs already worked out), and worked out a moment
+      // after the preview and the size are shown: on a 16-piece design with a patch they held every change ~0.7 s more.
+      const key = adviceKey(), s = seq, had = advice.has(key);
+      if (!had) { advice.set(key, {}); if (advice.size > 24) advice.delete(advice.keys().next().value); }
+      const known = advice.get(key);
+      // (the pieces two hoopings would sew kept as text: the live pieces change in place with every later edit)
+      const twoWay = (quick) => { const w = twoHoopings(hoop, quick); return w.pieces ? { ...w, pieces: JSON.stringify(w.pieces) } : w; };
+      const ways = () => (known.ways ||= ((lands) => ({ lands, ways: fitWays(lands) }))(fitLands()));
+      const full = () => { known.full ||= twoWay(false); say(ways(), known.full); };
+      const go = () => {
+        if (s !== seq) return;
+        say(ways(), (known.quick ||= known.full || twoWay(true)));
+        if (known.quick.later) { if (known.full) full(); else setTimeout(() => { if (s === seq) full(); }, 700); }
+      };
+      if (had) { go(); return; }
+      tooBig(msg); setTimeout(go, 0);
       return;
     }
     const opts = { fabric, baste, thread }, base = api.safeName(firstWords(), "design");
@@ -1281,6 +1303,8 @@ export function initStudio(api) {
   // now; else { why } in a few words (judged from the stitches as they are, scaled: `scaledFit`). Kept for the same
   // design and hoop.
   let lastLands = null;
+  // what split() worked out for a design too big for the hoop, by design and hoop
+  const advice = new Map(), adviceKey = () => JSON.stringify({ pieces, fabric, baste, thread, turn: api.turned(), hoop: api.hoop() });
   function fitLands() {
     const key = snap() + JSON.stringify(api.hoop());
     if (lastLands?.key === key) return lastLands.val;
@@ -1319,7 +1343,7 @@ export function initStudio(api) {
     const was = new Set(collisions(pieces).map(([a, b]) => `${a.id}:${b.id}`)), fit0 = fittedSizes(pieces), small0 = new Set(pieces.filter((p) => minSize(fit0.has(p.id) ? { ...p, size: fit0.get(p.id) } : p)).map((p) => p.id));
     for (let i = 0; i < 6 && k < 1; i++) {
       const ps = pieces.map((q) => ({ ...q, x: r(q.x * k), y: r(q.y * k), ...(q.kind === "frame" ? { w: Math.floor(q.w * k * 2) / 2, h: Math.floor(q.h * k * 2) / 2 } : {}) }));
-      try { compose(ps, hp, { fabric, baste, thread, later: [] }); }
+      try { compose(ps, hp, { fabric, baste, thread, later: [], measure: true }); }
       catch (err) { if (!err.overBy) throw err; k *= 0.98 / err.overBy; continue; }
       const fit = fittedSizes(ps);
       if (ps.some((p) => !small0.has(p.id) && minSize(fit.has(p.id) ? { ...p, size: fit.get(p.id) } : p))) return null;
@@ -1479,7 +1503,7 @@ export function initStudio(api) {
     // pouch opened Too big on the 4x4)
     // Lettering it made small enough for its loops to fill in goes back up to the size that keeps them open (up to its
     // own) where that still fits and runs into nothing: the 4x4 pouch's "Makeup" at 15 mm.
-    const fits = () => { try { compose(pieces, api.hoop(), { fabric, baste, thread, later: [] }); return true; } catch (err) { if (err.overBy) return false; throw err; } };
+    const fits = () => { try { compose(pieces, api.hoop(), { fabric, baste, thread, later: [], measure: true }); return true; } catch (err) { if (err.overBy) return false; throw err; } };
     // Else, in a script that keeps its loops open at that size (Yellowtail): "Ashley" in Great Vibes at 19 mm in the
     // 4x4 quilt label. A starter with its own layout for a small hoop (`small`) uses that instead of shrinking it all.
     const hp = api.hoop();
@@ -1556,7 +1580,7 @@ export function initStudio(api) {
   }
   // does the design as it is fit the hoop, sewn?
   function fitsNow() {
-    try { compose(pieces, api.hoop(), { fabric, baste, thread, later: [] }); return true; } catch (err) { if (!err.overBy && !err.empty) throw err; return !err.overBy; }
+    try { compose(pieces, api.hoop(), { fabric, baste, thread, later: [], measure: true }); return true; } catch (err) { if (!err.overBy && !err.empty) throw err; return !err.overBy; }
   }
   // p where it is runs into nothing and keeps the design in one hooping
   const clear = (p) => !touching(p, pieces) && fitsWith(p);
@@ -1840,7 +1864,7 @@ export function initStudio(api) {
     recentre();   // (in the middle, as the machine sews it: a fitted layout said "Off centre here")
     // the outlines leave out satin width and swashes: shrink again until what's sewn fits (a few tries at most)
     for (let i = 0; i < 6; i++) {
-      try { compose(pieces, hp, { fabric, baste, thread, later: [] }); break; }
+      try { compose(pieces, hp, { fabric, baste, thread, later: [], measure: true }); break; }
       catch (err) { if (!err.overBy) break; scale(0.98 / err.overBy); }
     }
     if (draw) { save(); ui(); make(); }
@@ -1881,7 +1905,7 @@ export function initStudio(api) {
       // (a size past what any hoop holds, cut down to the biggest piece there can be, is then fitted to this hoop:
       // `size: 1e9` opened as a 486 mm "Emma")
       const huge = pairs.some(([p, q]) => q && ["size", "w", "h"].some((k) => typeof p[k] === "number" && q[k] < p[k]));
-      if (huge) try { compose(pieces, api.hoop(), { fabric, baste, thread, later: [] }); } catch (err) { if (err.overBy) fitHoop(false); }
+      if (huge) try { compose(pieces, api.hoop(), { fabric, baste, thread, later: [], measure: true }); } catch (err) { if (err.overBy) fitHoop(false); }
       settle(); save(); ui(); make();
       const left = data.pieces.length - loaded.length;
       if (left || changed || cut) toast([left ? `${left} ${left === 1 ? "piece" : "pieces"} in that file couldn't be read and ${left === 1 ? "was" : "were"} left out.` : "",
@@ -2094,8 +2118,8 @@ export function initStudio(api) {
     const far = twins.reduce((m, q) => Math.max(m, across ? q.y - f.y : q.x - f.x), 0);
     const copies = on.map((q) => ({ ...structuredClone(q), id: nextId++, ...(across ? { y: q.y + far + step } : { x: q.x + far + step }) }));
     remember(); pieces = [...pieces, ...copies]; recentre();
-    const fit = (() => { try { compose(pieces, api.hoop(), { fabric, baste, thread, later: [] }); return "fits"; } catch (err) { if (!err.overBy) throw err; }
-      if (api.hoop().w !== api.hoop().h) { api.setTurn(!api.turned()); try { compose(pieces, api.hoop(), { fabric, baste, thread, later: [] }); return "turned"; } catch (err) { api.setTurn(!api.turned()); if (!err.overBy) throw err; } }
+    const fit = (() => { try { compose(pieces, api.hoop(), { fabric, baste, thread, later: [], measure: true }); return "fits"; } catch (err) { if (!err.overBy) throw err; }
+      if (api.hoop().w !== api.hoop().h) { api.setTurn(!api.turned()); try { compose(pieces, api.hoop(), { fabric, baste, thread, later: [], measure: true }); return "turned"; } catch (err) { api.setTurn(!api.turned()); if (!err.overBy) throw err; } }
       return ""; })();
     // (recentre moved the originals too: put everything back as it was, with no redo left behind)
     if (!fit) { undo(); future.length = 0; buttons(); toast(`Another ${shapeLabel(f)} doesn't fit this hoop beside the first. Make it smaller first, or pick a bigger hoop.`); return; }

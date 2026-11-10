@@ -6,7 +6,7 @@
 //
 // usage (the test server and a headless Chrome running, as for the batches):
 //   .venv/bin/python tests/batch_server.py out/batch 8782 &   node tests/cdp.mjs 9312 start /tmp/mk
-//   node tests/monkey.mjs 9312 8782 [--seeds 1-20] [--steps 200] [--start default,fifteen,random,<starter id>...] [--budget 1000] [--shrink]
+//   node tests/monkey.mjs 9312 8782 [--seeds 1-20] [--steps 200] [--start default,fifteen,fifteen-letters,random,<starter id>...] [--budget 1000] [--shrink]
 //   replay one:  open http://127.0.0.1:8782/tests/browser/monkey.html?start=default&replay=<replay string>
 // Exit code 1 when anything was found. ~1 s a step (the 15-piece design ~2 s).
 import { execFileSync } from "node:child_process";

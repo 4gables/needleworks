@@ -1,0 +1,45 @@
+<!doctype html><meta charset="utf-8"><title>Measure check</title>
+<style>body{padding:12px;font:13px monospace} pre{white-space:pre-wrap}</style>
+<p>compose(..., { measure: true }) (only whether it fits is wanted: patches aren't carved) must give a design the same
+size as the full compose, to the 0.1 mm, or a fit check could decide differently. Every starter, the 15-piece fixture
+and patches under lettering, filled motifs and appliqué letters, scaled as "Make the frames fit" scales them
+(50-150 %), on three fabrics. Title <code>DONE checked bad</code>.</p>
+<pre id="log"></pre>
+<script type="module">
+import { APPLIQUE_FONTS, FONTS } from "../../js/core/fonts.js";
+import { compose } from "../../js/studio/pieces.js";
+import { STARTERS } from "../../js/studio/ui.js";
+
+const log = (s) => (document.getElementById("log").textContent += s + "\n");
+for (const f of [...FONTS, ...APPLIQUE_FONTS]) await document.fonts.load(`40px "${f.family}"`);
+const hoop = { name: "pretend", w: 2000, h: 2000 };
+let n = 0, bad = 0, carved = 0, id = 1;
+const P = (o) => ({ id: id++, x: 0, y: 0, rot: 0, color: "#0e1f7c", ...o });
+const fifteen = (await (await fetch("../fixtures/fifteen.needleworks.json")).json()).pieces;
+const designs = [["fifteen", fifteen],
+  ...STARTERS.filter((s) => s.make).flatMap((s) => [[s.id, s.make()], ...(s.small ? [[s.id + "_small", s.small()]] : [])]),
+  ["patch_bold_text", [P({ kind: "frame", shape: "circle", w: 90, h: 90, border: "patch", fill: "#e8c39e" }), P({ kind: "text", text: "Mia", font: "Lilita One", size: 30, style: "satin", color: "#b0003a" })]],
+  ["patch_letters", [P({ kind: "frame", shape: "square", w: 80, h: 80, border: "patch", fill: "#cfe8ff" }), P({ kind: "letters", text: "AB", font: APPLIQUE_FONTS[0].family, size: 40, color: "#d4145a" })]],
+  ["patch_motif", [P({ kind: "frame", shape: "oval", w: 100, h: 80, border: "patch", fill: "#fff3b0" }), P({ kind: "motif", motif: "heart", size: 45, style: "fill", color: "#d4145a" })]],
+  ["patch_edge_text", [P({ kind: "frame", shape: "heart", w: 90, h: 76, border: "patch", fill: "#ddd" }), P({ kind: "text", text: "WIDE WORD", font: "Graduate", size: 14, style: "satin", y: 18 })]]];
+const r = (v) => Math.round(v * 2) / 2;
+for (const [name, pieces] of designs) {
+  if (!pieces.some((p) => p.kind === "frame" && p.border === "patch")) continue;
+  for (const k of [1, 0.5, 0.65, 0.8, 0.9, 1.15, 1.5]) for (const fabric of ["cotton", "towel", "knit"]) {
+    const ps = pieces.map((q) => ({ ...q, x: r(q.x * k), y: r(q.y * k), ...(q.kind === "frame" ? { w: Math.floor(q.w * k * 2) / 2, h: Math.floor(q.h * k * 2) / 2 } : {}) }));
+    let a, b;
+    try {
+      const da = compose(ps, hoop, { fabric, later: [] }).design, db = compose(ps, hoop, { fabric, later: [], measure: true }).design;
+      a = da.bounds(); b = db.bounds(); if (da.stitches.length !== db.stitches.length) carved++;
+    }
+    catch (e) { log(`skip ${name} ${k} ${fabric}: ${e.message}`); continue; }
+    n++;
+    if (a.some((v, i) => Math.abs(v - b[i]) > 1e-9)) { bad++; log(`DIFFERENT ${name} x${k} ${fabric}: ${a} vs ${b}`); }
+  }
+  log(`${name} done`);
+}
+log(`${n} checked (${carved} carved), ${bad} different`);
+// (none carved: the check proves nothing)
+if (!carved) bad++;
+document.title = `DONE ${n} ${bad}`;
+</script>
