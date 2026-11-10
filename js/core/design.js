@@ -83,10 +83,13 @@ export class Design {
     // saved design) is moved onto it, as the machine centres it anyway: a PES design box holds 204.8 mm either way,
     // and past that the file read back shifted and was refused at Download (tests/browser/engine_fuzz.html). Designs
     // nearer the centre stay exactly where they are.
+    // (`shifted`, 0.1 mm: how far, so a preview can draw it where it was made, under the pieces it came from)
     const [x0, y0, x1, y1] = this.bounds();
+    this.shifted = null;
     if (Math.max(-x0, x1, -y0, y1) > 200) {
       const cx = Math.round((x0 + x1) * 5), cy = Math.round((y0 + y1) * 5);
       this.stitches = this.stitches.map(([x, y, c]) => [x - cx, y - cy, c]);
+      this.shifted = [cx, cy];
     }
     this.check();
     return this;

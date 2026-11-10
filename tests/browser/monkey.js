@@ -72,6 +72,12 @@ async function boot(start = START, seed = SEED, keep = false) {
       $("st-add").querySelector('[data-add="letters"]').click(); await idle();
       D.querySelector("#st-toast:not([hidden]) button")?.click(); await idle();
     }
+    // (gang-<starter id>: that starter, then "Make another in the hoop" on its frame: two key fobs, two bookmarks)
+    if (!keep && start.startsWith("gang-")) {
+      D.querySelector(`#st-cards [data-start="${start.slice(5)}"]`).click(); await idle();
+      const f = all("#st-pieces .pick").find((b) => studio()?.pieces.find((p) => p.id === +b.dataset.id)?.kind === "frame");
+      if (f) { f.click(); await idle(); D.querySelector("#st-edit [data-two-up]")?.click(); await idle(); D.querySelector("#st-toast:not([hidden]) button")?.click(); await idle(); }
+    }
     if (start === "random" && !keep) { const cards = all("#st-cards [data-start]"); cards[Math.floor(rng(seed * 7919)() * cards.length)].click(); await idle(); }
     W.__mk.errors.length = 0; W.__mk.long.length = 0;
     return;
@@ -235,12 +241,38 @@ function checks(f, sc, act, before) {
     const fill = Math.max(f.vs.widthMm / (f.dh.w - 10), f.vs.heightMm / (f.dh.h - 10));
     if (fill < 0.9) add("fit", `Fit to hoop left it ${f.vs.widthMm.toFixed(0)} × ${f.vs.heightMm.toFixed(0)} mm in the ${f.h.name} (${Math.round(fill * 100)} % of the room)`);
   }
+  // the selection box goes round the selected piece as it's drawn: at the size it's sewn (it was drawn at the size
+  // asked, far past frame-shrunk letters) and where its stitches are on screen (a design moved onto the hoop's centre
+  // to be written drew its stitches 100 mm from the box)
+  const v = W.nwTest.view(), box = W.nwTest.sel?.();
+  if (sel && box && v?.shown && !v.hoopings && !v.split) {
+    const fit = P.fittedSizes(f.s.pieces), pts = P.pieceStitches(fit.has(sel.id) ? { ...sel, size: fit.get(sel.id) } : sel).flat();
+    if (pts.length) {
+      let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+      for (const [x, y] of pts) { x0 = Math.min(x0, x); y0 = Math.min(y0, y); x1 = Math.max(x1, x); y1 = Math.max(y1, y); }
+      if ([x0, y0, x1, y1].some((q, i) => Math.abs(q - box[i]) > 1)) add("selbox", `the selection box [${box.map((q) => q.toFixed(1))}] isn't round ${P.label(sel)} as sewn [${[x0, y0, x1, y1].map((q) => q.toFixed(1))}]`);
+      const cells = new Set();
+      for (const [x, y, c] of v.shown.stitches) if (c === 0) cells.add(`${Math.round(x / 10)},${Math.round(y / 10)}`);
+      const step = Math.max(1, Math.floor(pts.length / 200));
+      let n = 0, near = 0;
+      for (let i = 0; i < pts.length; i += step) {
+        n++; const cx = Math.round(pts[i][0]), cy = Math.round(pts[i][1]);
+        let hit = false; for (let dx = -1; dx <= 1 && !hit; dx++) for (let dy = -1; dy <= 1 && !hit; dy++) hit = cells.has(`${cx + dx},${cy + dy}`);
+        if (hit) near++;
+      }
+      if (near < n * 0.6) add("selbox", `${P.label(sel)}'s stitches aren't drawn where its selection box is (${near} of ${n} points)`);
+    }
+  }
+  // every way out follows Download's rule: nothing else saves or shares a design Download won't make
+  if ($("download").disabled && !/Quilting|Re-stitching/.test(sc.dl)) for (const id of ["share", "sheet-print", "along-open", "names-open"]) {
+    const el = $(id); if (el && !el.hidden && !el.disabled) add("exit", `“${sc.dl}” but ${el.textContent.trim()} is on`);
+  }
   // a starter brings its own fabric and thread weight, or cotton and automatic (towel and 30 wt stuck to later starters)
   const st = act.t === "starter" && !act.skipped && UI.STARTERS.find((x) => x.id === act.what);
   if (st && (s.fabric !== (st.fabric || "cotton") || String(s.thread) !== String(st.thread || "auto"))) add("stale", `starter ${st.id} kept fabric ${s.fabric} / thread ${s.thread}`);
   return bad;
 }
-const PLACING = new Set(["add", "paste", "listop-dup", "starter", "file", "fix", "fixall", "bigfix", "toastfix", "fit"]);
+const PLACING = new Set(["add", "paste", "listop-dup", "starter", "file", "fix", "fixall", "bigfix", "toastfix", "fit", "twoup", "sameon"]);
 
 // ---------- actions ----------
 const WORDS = ["Emma", "Olivia Rose", "HAPPY BIRTHDAY GRANDMA", "Sam & Alex", "Merry Christmas from all of us", "A", "Lily\nRose", "Made with\nlove", "Wilhelmina Fitzgerald-Montgomery",
@@ -248,7 +280,7 @@ const WORDS = ["Emma", "Olivia Rose", "HAPPY BIRTHDAY GRANDMA", "Sam & Alex", "M
 const INITIALS = ["aMs", "JKM", "R", "JD", "Max", "Ann", "ABCD", "ab", "Ł"];
 const WEIGHTS = { add: 9, select: 8, range: 12, seg: 7, menu: 5, text: 6, swatch: 2, motif: 2, listop: 5, fabric: 3, thread: 2, baste: 1, hoop: 4, turn: 4, fit: 4,
   undo: 4, redo: 2, center: 1, nudge: 3, drag: 3, starter: 3, paste: 2, openSaved: 2, file: 1, filescale: 2, names: 1, tab: 2, del: 1, escape: 1, recentre: 1,
-  undoredo: 2, reload: 1, fix: 12, bigfix: 4, toastfix: 2, fixall: 3 };
+  undoredo: 2, reload: 1, fix: 12, bigfix: 4, toastfix: 2, fixall: 3, twoup: 1, sameon: 1, grow: 2 };
 function gen(r) {
   const tot = Object.values(WEIGHTS).reduce((a, b) => a + b, 0);
   let x = r() * tot, t = "add";
@@ -312,6 +344,17 @@ async function exec(d) {
     case "fabric": { const b = at(all("#st-fabric [data-fab]"), d.a); act.what = b.dataset.fab; b.click(); break; }
     case "thread": { const b = at(all("#st-thread [data-thread]"), d.a); act.what = b.dataset.thread; b.click(); break; }
     case "baste": $("st-baste").click(); break;
+    case "grow": {   // the selected piece's size as big as its slider goes (lettering in a frame is then sewn smaller)
+      const el = D.querySelector('#st-edit input[type=range][data-k="size"]'); if (!el) return { ...act, skipped: true };
+      act.what = el.max; await setRange(el, +el.max, false); break;
+    }
+    case "twoup": case "sameon": {
+      // "Make another in the hoop" / "Put the same on the other one" on an in-the-hoop frame
+      const sel = d.t === "twoup" ? "[data-two-up]" : "[data-same-on]";
+      const fs = all("#st-pieces .pick").filter((b) => studio()?.pieces.find((p) => p.id === +b.dataset.id)?.kind === "frame"); if (!fs.length) return { ...act, skipped: true };
+      at(fs, d.a).click(); await idle(); const b = D.querySelector(`#st-edit ${sel}`); if (!b) return { ...act, skipped: true };
+      b.click(); break;
+    }
     case "hoop": { const s = $("hoop"), o = [...s.options].find((x) => x.value !== s.value); if (!o) return { ...act, skipped: true }; act.what = o.value; s.value = o.value; fire(s, "change"); break; }
     case "turn": $("turn").click(); break;
     case "fit": $("st-fit").click(); break;
@@ -521,7 +564,9 @@ async function main() {
   chose2 = false; opened = null;
   await boot();
   for (let k = 0; k < (REPLAY ? list.length : STEPS); k++) {
-    const d = REPLAY ? list[k] : gen(r);
+    // (a gang start first adds one of each kind, each grown as big as it goes: what goes on the second fob, and a
+    // selection box round frame-shrunk letters)
+    const d = REPLAY ? list[k] : START.startsWith("gang-") && k < 8 ? { t: k % 2 ? "grow" : "add", a: [0.1, 0.3, 0.7, 0.9][k >> 1], b: 0.5, c: 0.5 } : gen(r);
     if (!REPLAY) list.push(d);
     const { act, bad, long } = await step(d, k);
     times.push([act.t, Math.round(long)]);

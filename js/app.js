@@ -111,7 +111,9 @@ function setView(v) {
   if (!v) { $("rename-open").hidden = true; $("dl-warn").hidden = true; $("facts").innerHTML = ""; $("threads").innerHTML = ""; $("download").disabled = true; $("download").textContent = "Download PES"; $("share").disabled = true; $("sheet-print").disabled = $("along-open").disabled = true; $("cut-files").hidden = true; $("names-open").hidden = true; paint(); return; }
   // the preview is the file: decode the PES bytes and draw those, not the design they were made from
   if (!v.file) {
-    try { v.file = v.source ? v.pattern : unwrap(readEmbroidery(v.bytes, v.filename), state.mode === "design" && v.pattern); }
+    // (a design moved onto the hoop's centre to be written, `shift`: drawn back where its pieces are, so the selection
+    // box and a drag line up with the stitches: they were 100 mm apart after a piece was dragged far out of the hoop)
+    try { v.file = v.source ? v.pattern : unwrap(readEmbroidery(v.bytes, v.filename), state.mode === "design" && v.pattern, v.shift ? (turned() ? [-v.shift[1], v.shift[0]] : v.shift) : undefined); }
     catch (err) { v.file = null; showError("This file didn't read back: " + err.message); $("download").disabled = true; $("share").disabled = true; return; }
   }
   v.shown = turned() ? turnPattern(v.file, false) : v.file; v.heat = null;
@@ -172,7 +174,9 @@ function setView(v) {
   // (nor a sew sheet or Sew along for a file that can't be made)
   $("sheet-print").disabled = $("along-open").disabled = !fits || !!v.split || !!blocked; $("cut-files").hidden = !v.sheet?.cut?.length; $("names-open").hidden = !!v.split || !namesFor(); $("rename-open").hidden = state.mode !== "design";
   // (one per name from a design that doesn't fit yet made a zip of names that didn't fit either)
-  $("names-open").disabled = !fits; $("names-open").title = fits ? "" : "Make the design fit the hoop first.";
+  // (and not while Download is blocked: every way out of the tab follows the same rule. It stayed on beside "Fix the
+  // lettering first" and made a ZIP of names from a design that couldn't be sewn.)
+  $("names-open").disabled = !fits || !!blocked; $("names-open").title = !fits ? "Make the design fit the hoop first." : blocked ? `${blocked.replace(/\.$/, "")}: fix that first.` : "";
   if (state.mode === "picture") picSteps(v, st);
   // (pieces running into each other said beside Download, before the file is saved, not only in the editor)
   warnUI(v);
@@ -224,9 +228,9 @@ function picSteps(v, st) {
 // A design reaching past 204.8 mm from its centre (only a too-big or split design's whole view, never a file to sew)
 // overflows the PEC box's signed 12 bits and reads back shifted: put it back where it was made, or a piece dragged
 // past that point jumped across the preview and couldn't be picked up where it showed
-function unwrap(file, pattern) {
+function unwrap(file, pattern, [sx, sy] = [0, 0]) {
   const lo = (p) => { let x = Infinity, y = Infinity; for (const s of p?.stitches || []) if (s[2] === STITCH) { if (s[0] < x) x = s[0]; if (s[1] < y) y = s[1]; } return [x, y]; };
-  const [ax, ay] = lo(file), [bx, by] = lo(pattern), dx = Math.round(bx - ax), dy = Math.round(by - ay);
+  const [ax, ay] = lo(file), [bx, by] = lo(pattern), dx = Math.round(bx - ax) + sx, dy = Math.round(by - ay) + sy;
   if (isFinite(dx) && isFinite(dy) && (Math.abs(dx) > 2 || Math.abs(dy) > 2)) for (const s of file.stitches) { s[0] += dx; s[1] += dy; }
   return file;
 }
@@ -1946,4 +1950,4 @@ if (new URLSearchParams(location.search).has("shared")) (async () => {
 // a link to another tab on this page (#design, #open...) switches to it; #bookmark opens the Bookmark starter
 addEventListener("hashchange", () => { const m = location.hash.slice(1); if (m === "bookmark" || (m !== state.mode && MODES.includes(m))) setMode(m, false); });
 // for tests/surfaces.mjs: the view on screen, its problems and its share text (what every surface should agree on)
-globalThis.nwTest = { view: () => state.view, problems: () => problemsOf(state.view), share: () => state.view && shareText(state.view), cut: (ext = "svg") => cutFiles(state.view, ext).map((f) => ({ ...judge(f), bytes: String(f.bytes) })), fine: () => state.pic.fine && { ...state.pic.fine, checking: state.pic.checking, fixes: state.pic.fixes?.map((f) => f.label) } };
+globalThis.nwTest = { view: () => state.view, sel: () => selBox(), problems: () => problemsOf(state.view), share: () => state.view && shareText(state.view), cut: (ext = "svg") => cutFiles(state.view, ext).map((f) => ({ ...judge(f), bytes: String(f.bytes) })), fine: () => state.pic.fine && { ...state.pic.fine, checking: state.pic.checking, fixes: state.pic.fixes?.map((f) => f.label) } };
