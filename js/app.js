@@ -37,14 +37,18 @@ const kept = {
     return (this.db ||= new Promise((ok, no) => {
       const r = indexedDB.open("needleworks", 1);
       r.onupgradeneeded = () => r.result.createObjectStore("kept");
-      r.onsuccess = () => ok(r.result); r.onerror = () => no(r.error); r.onblocked = () => no(new Error("blocked"));
+      // (another tab deleting or upgrading it: this connection gives way, else that waited for good and every open
+      // queued behind it, the Picture tab never ready, not even with the sample)
+      r.onsuccess = () => { const db = r.result; db.onversionchange = () => { db.close(); this.db = null; }; ok(db); };
+      r.onerror = () => no(r.error); r.onblocked = () => no(new Error("blocked"));
     })).catch((e) => { this.db = null; throw e; });
   },
   async run(mode, f) {
     const db = await this.open();
     return new Promise((ok, no) => { const t = db.transaction("kept", mode), r = f(t.objectStore("kept")); t.oncomplete = () => ok(r?.result); t.onerror = t.onabort = () => no(t.error); });
   },
-  async get(k) { try { return await this.run("readonly", (o) => o.get(k)); } catch { return undefined; } },
+  // (at most 2 s: what's kept is a nicety, the tab must open either way)
+  async get(k) { try { return await Promise.race([this.run("readonly", (o) => o.get(k)), new Promise((ok) => setTimeout(ok, 2000))]); } catch { return undefined; } },
   async set(k, v) { try { await this.run("readwrite", (o) => o.put(v, k)); } catch { /* not kept: the next visit starts with the sample */ } },
 };
 const keepPicture = (blob, name) => { if (blob.size <= PIC_KEEP) kept.set("picture", { blob, name }); };

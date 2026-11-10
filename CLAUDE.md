@@ -409,7 +409,9 @@ measurements behind each number are in the code's comments.
     in `nw:studio.recent` (8, ~1.5 MB, oldest dropped on quota), not when unchanged from a starter or first visit and
     not downloaded (`edited`/`sent`; `studio.downloaded()`); opening one is an Undo step. Whole designs, not undo
     history. The Picture tab keeps its own picture in IndexedDB (`needleworks`/`kept`, 15 MB) and settings in
-    `nw:pic.last` (`lastPicture()`); tests expecting the sample delete that database.
+    `nw:pic.last` (`lastPicture()`); tests expecting the sample delete that database The connection closes on `versionchange`
+    (it never did: another tab's delete waited for good and every open behind it, the Picture tab never ready) and reads
+    give up after 2 s.
 ### Two hoopings (`splitPieces`)
 - On `overBy`, whole pieces (never a cut stitch) split along the long side at the most even cut where both fit.
   Basting crosses (`crossSpots`: 1.5 mm clear, near 1/4 and 3/4, 20 mm apart if possible) end the first file and
@@ -707,6 +709,14 @@ measurements behind each number are in the code's comments.
   15.7 mm (we split over 7), we trim every jump, our palette choice, Brother's page-size field on lace samples.
 - `tests/external/` (gitignored): third-party samples and pictures, pyembroidery oracles (`oracle/`), files once
   emailed to a tester (`emailed/`).
+### What to run (owner, 2026-11-10: "quantity isn't a substitute for quality")
+- `zsh tests/check.sh [ref] [baseline_dir]`: CI tests, files_flow, ui_sweep --quick, monkey (3 seeds x 4 starts); the
+  batches + pe900_check + byte compare when stitch code changed (then the VM); steps_lint / entry_state / said_flow /
+  picture_corpus / lettering_look only when their area changed. ~25 min; every check has a time limit (no `timeout` on
+  macOS: perl alarm; a hung surfaces run sat at 0 % CPU).
+- On demand only: surfaces (21 min, overlaps sweep + monkey), matrix, perf, starters, picture_history, text_fuzz,
+  engine_fuzz, flow_lint on batches. A new guard replaces or extends one of the routine checks; add a new script only
+  for a class nothing routine can reach, and retire one it overlaps.
 ### Category checks
 Automated checks that each guard a bug class (add a line with every new guard):
 - Writer drift: golden bytes (`formats.test.mjs`). Machine-readable PEC: `pe900_check.py`, `validatePES` on every
