@@ -77,7 +77,7 @@ const STATES = [
   { id: "design-toobig-open", hash: "design", seed: studio([text(1, "W".repeat(60), { font: "NW Quicksand", size: 30 })]), setup: async (p) => { await p.eval(`for (const d of document.querySelectorAll('#panel-design details')) d.open = true`); } },
   { id: "design-threads", hash: "design", seed: studio(many) },
   { id: "design-fix", hash: "design", seed: studio([{ id: 1, x: 0, y: 0, color: "#ed171f", kind: "frame", shape: "circle", w: 90, h: 90, border: "satin" }, text(2, "Emma bbe", { size: 3 })]), keys: true },
-  { id: "design-toast", hash: "design", seed: studio([text(1, "Emma"), text(2, "Liam", { y: 25 })]), setup: async (p) => { await p.click('[data-op="del"]'); }, wait: "!document.getElementById('st-toast')?.hidden" },
+  { id: "design-toast", hash: "design", seed: studio([text(1, "Emma"), text(2, "Liam", { y: 25 })]), setup: async (p) => { await p.click('[data-op="del"]'); }, wait: "!document.getElementById('st-toast')?.hidden", keys: true },
   { id: "design-steps", hash: "design", seed: studio([{ id: 1, x: 0, y: 0, color: "#ed171f", kind: "frame", shape: "circle", w: 90, h: 90, border: "applique" }, text(2, "Emma")]),
     setup: async (p) => { await p.eval(`(()=>{const d=document.querySelector('#panel-design details.steps');d.open=true;d.scrollIntoView({block:'start'})})()`); await p.click("#st-steps [data-step]"); } },
   { id: "design-sewn", hash: "design", seed: studio([text(1, "Emma")], { fabric: "towel" }), setup: async (p) => { await p.eval(`document.getElementById('st-sewn').open=true`); } },
@@ -278,7 +278,7 @@ const MEASURE = String.raw`(async (opts) => {
     // (a warning beside Download is read before the file is saved: on screen, not under the Download bar)
     // (except on a screen too short for the preview and a warning together: a landscape phone scrolls to it)
     if (!hidden(document.getElementById('dl-warn')) && H >= 560) need.push(['#dl-warn', 0.9]);
-    const clear = (e) => { const r = e.getBoundingClientRect(), y = Math.min(r.bottom - 2, H - 1), h = document.elementFromPoint(r.left + r.width / 2, Math.max(0, (r.top + y) / 2)); return h && (e.contains(h) || h.contains(e)); };
+    const clear = (e) => { const r = e.getBoundingClientRect(), y = Math.min(r.bottom - 2, H - 1), h = document.elementFromPoint(r.left + r.width / 2, Math.max(0, (r.top + y) / 2)); return h && (e.contains(h) || h.contains(e) || !!h.closest('.toast')); };   // (a toast sits over the Download bar on purpose, and goes by itself)
     for (const [sel, f] of need) { const all = [...document.querySelectorAll(sel)].filter((e) => !hidden(e)); if (!all.some((e) => onScreen(e, f) && (e.id === 'view' || clear(e)))) out.push({ kind: 'below-fold', el: sel, detail: all.length ? (onScreen(all[0], f) ? 'covered by ' + desc(document.elementFromPoint(all[0].getBoundingClientRect().left + all[0].getBoundingClientRect().width / 2, all[0].getBoundingClientRect().top + 4)) : 'at ' + Math.round(all[0].getBoundingClientRect().top) + ' of ' + H) : 'not shown' }); }
   }
   // 4. the preview: the hoop as drawn, the canvas
@@ -383,6 +383,22 @@ async function keyboard(t, vp, st, problems) {
   const { ev, send, events } = t;
   const add = (kind, el, detail) => problems.push({ vp: vp.id, scheme: "light", state: st.id, kind, el, detail });
   let err = await t.load(st); if (err) { add("state", st.id, err); return 0; }
+  // every note goes by itself (round 10: "Couldn't open the share sheet" stayed in the preview's message box for
+  // minutes): the Undo toast, then a failed share, each gone within 15 s, and the message box left empty
+  if (st.id === "design-toast") {
+    const goes = async (what) => {
+      for (let i = 0; i < 75; i++) { if (await ev("!!document.getElementById('st-toast')?.hidden")) return; await sleep(200); }
+      add("toast-stays", "#st-toast", `${what}: still showing after 15 s`);
+    };
+    await goes("Removed … Undo");
+    await ev(`(()=>{Object.defineProperty(navigator,"share",{value:()=>Promise.reject(new Error("no share sheet")),configurable:true});const b=document.getElementById('share');b.hidden=false;b.click();return 1})()`);
+    let said = false;
+    for (let i = 0; i < 20 && !said; i++) { await sleep(100); said = await ev("!document.getElementById('st-toast').hidden"); }
+    if (!said) add("toast-missing", "#share", "a failed share said nothing in a toast");
+    if (await ev("!document.getElementById('error').hidden")) add("toast-stays", "#error", "a failed share was said in the preview's message box, which stays");
+    await goes("failed share");
+    return 2;
+  }
   await ev(`document.activeElement?.blur(); window.scrollTo(0, 0)`);
   // 1. Tab through every stop
   const stops = []; let first = null;
@@ -409,6 +425,18 @@ async function keyboard(t, vp, st, problems) {
     const r = await ev(`(()=>{const v=document.querySelector('details.views');v.open=true;const s=v.querySelector('select');if(!s)return '';s.focus();s.selectedIndex=(s.selectedIndex+1)%s.options.length;s.dispatchEvent(new Event('change',{bubbles:true}));
       return v.open&&document.activeElement===s?'':'menu '+(v.open?'open':'shut')+', focus on '+(document.activeElement.id||document.activeElement.tagName)})()`);
     if (r) add("focus-lost", "#show-bg", "changing the Background: " + r);
+    // (round 10: each tick shut the menu, so trying Hoop, Thickness and Realistic thread took a menu trip each) a tick
+    // by Space keeps the menu open with focus on it; Escape then shuts it and focus goes back to View
+    for (const id of await ev(`[...document.querySelectorAll('details.views input[type=checkbox]')].map((c)=>c.id)`)) {
+      await ev(`(()=>{document.querySelector('details.views').open=true;document.getElementById(${JSON.stringify(id)}).focus();return 1})()`);
+      await key(t, " "); await sleep(150);
+      const r2 = await ev(`(()=>{const v=document.querySelector('details.views');return v.open&&document.activeElement.id===${JSON.stringify(id)}?'':'menu '+(v.open?'open':'shut')+', focus on '+(document.activeElement.id||document.activeElement.tagName)})()`);
+      if (r2) add("menu-shut", "#" + id, "ticking it: " + r2);
+      await key(t, " "); await sleep(150);
+    }
+    await key(t, "Escape"); await sleep(150);
+    const r3 = await ev(`(()=>{const v=document.querySelector('details.views');return !v.open&&document.activeElement===v.querySelector('summary')?'':'menu '+(v.open?'open':'shut')+', focus on '+(document.activeElement.id||document.activeElement.tagName)})()`);
+    if (r3) add("menu-left-open", "details.views", "Escape: " + r3);
     await t.load(st);
   }
   // 2. press each one, the way a keyboard user would

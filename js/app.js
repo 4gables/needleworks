@@ -20,7 +20,7 @@ const store = {
   get(k, d) { try { return JSON.parse(localStorage.getItem("nw:" + k)) ?? d; } catch { return d; } },
   set(k, v) {
     try { localStorage.setItem("nw:" + k, JSON.stringify(v)); }
-    catch { if (k === "studio" && !store.warned) { store.warned = true; showError("This design is too big to keep in the browser between visits. Use Save design to keep it."); } }
+    catch { if (k === "studio" && !store.warned) { store.warned = true; toast("This design is too big to keep in the browser between visits. Use Save design to keep it."); } }
   },
   del(k) { try { localStorage.removeItem("nw:" + k); } catch {} },
 };
@@ -35,7 +35,7 @@ const state = {
   machine: store.get("machine", DEFAULT_MACHINE),
   hoopId: store.get("hoop", null),
   view: null,          // { pattern, bytes, filename, file (the bytes read back), shown, cache, fabric, fabricShapeBlock, hide,
-                       //   steps, sheet, split, verifyAgainst, threadLabel }
+                       //   steps, sheet, split, verifyAgainst, fileNote }
   views: {},           // last view per mode
   zoom: 1, pan: [0, 0], upto: null,
   step: null,   // Design tab: show the design as it is after that colour block
@@ -148,19 +148,23 @@ function setView(v) {
     offCentre(v, fits) ? `<span class="note">Off centre here: the machine centres it <button type="button" class="link" id="recentre">Centre it</button></span>` : "",
     snips ? `<span${tip("The machine only trims moves between parts longer than its “jump stitch not to trim” setting (5 mm at the lowest). The thread is locked at both ends, so these are safe to snip after stitching.")}>${snips} loose ${snips === 1 ? "thread" : "threads"} to snip after</span>` : "",
   ].join("");
-  const seen = new Set(), mt = machineThreadList(v);
-  // (a thread the design comes back to gets a chip again where it's sewn: White, Red, Blue, Gold, Blue read White, Red,
-  // Blue, Gold. Only blocks in a row in one thread (pauses) share one, and past 12 changes each thread is listed once)
-  const again = v.cache.blocks.filter((b, i, all) => !i || b.color !== all[i - 1].color).length <= 12;
-  let lastKey = "";
-  // (every thread in the order it's sewn, hidden placement lines too: an ornament's chips read Blue, Red while its
-  // steps and Have ready said Red, Blue, because its first red block is a placement line hidden in the preview)
-  $("threads").innerHTML = v.cache.blocks
-    .map((b) => {
-      const t = mt[b.index] || nearestBrotherThread(b.color), label = v.threadLabel ? v.threadLabel(b, t) : `Brother ${t.name}`;
-      const k = b.color + label; if (again ? k === lastKey : seen.has(k)) return ""; seen.add(k); lastKey = k;
-      return `<li><i style="background:${b.color}"></i><span>${label}${spool(b.color, t.name) ? `<br><small>${spool(b.color, t.name)}</small>` : ""}</span></li>`;
-    }).join("");
+  // One chip per thread, in the order each is first put on, with how many times it's put on: a chip per colour block
+  // (Black, Red, Black) named one thread twice, each with its own note, and the row grew over the preview. Blocks in a
+  // row in one thread (pauses) are one time. Every thread, hidden placement lines too: an ornament's chips read Blue,
+  // Red while its steps and Have ready said Red, Blue, because its first red block is a placement line hidden in the
+  // preview. (the chip's note is the short one; the whole label is its tooltip, and the steps say it in full)
+  const mt = machineThreadList(v), chips = new Map();
+  let last = "";
+  for (const b of v.cache.blocks) {
+    const t = mt[b.index] || nearestBrotherThread(b.color), l = threadLabel(b.color, t.name), name = l.name;
+    if (!chips.has(name)) chips.set(name, { color: b.color, l, file: v.fileNote?.(b, t) || "", times: 0 });
+    if (name !== last) chips.get(name).times++;
+    last = name;
+  }
+  $("threads").innerHTML = [...chips].map(([name, { color, l, file, times }]) => {
+    const small = [file, l.short, times > 1 ? `used ${times === 2 ? "twice" : `${times} times`}` : ""].filter(Boolean).join(" · ");
+    return `<li${l.note ? ` title="${escapeHtml(`${name} · ${l.note}`)}"` : ""}><i style="background:${color}"></i><span>${escapeHtml(name)}${small ? `<br><small>${escapeHtml(small)}</small>` : ""}</span></li>`;
+  }).join("");
   v.facts = [`${st.widthMm.toFixed(0)} × ${st.heightMm.toFixed(0)} mm (${inch(st.widthMm)} × ${inch(st.heightMm)} in)`, `${st.stitches.toLocaleString()} stitches`,
     counts[0] + counts[1] ? stopWords(...counts) : "no thread changes", `≈ ${minutes} min`, `${h.machineName} ${h.name}`];
   // (`block`: a design that can't be sewn as it is, such as words wrapped round into themselves: no file until it's fixed)
@@ -204,7 +208,7 @@ function stopCounts(p, n = designStats(p).colorChanges) { const same = Math.min(
 // The same words go to Sew along and the sew sheet (`v.sheet`: they said only "Thread the machine…")
 function picSteps(v, st) {
   const mt = machineThreadList(v), blocks = v.cache.blocks, heavy = st.stitches > 8000;
-  const thread = (b) => ownSpool(b.color) ? `your ${ownSpool(b.color)}` : `Brother ${(mt[b.index] || nearestBrotherThread(b.color)).name}`;
+  const thread = (b) => { const n = threadLabel(b.color, (mt[b.index] || nearestBrotherThread(b.color)).name).name; return n.startsWith("Your ") ? "your" + n.slice(4) : n; };
   const ready = [heavy ? "Cut-away stabilizer (or two layers of tear-away on woven fabric): this is a lot of stitching." : "Tear-away stabilizer under woven fabric; cut-away under knits (T-shirts, sweatshirts), which stretch.",
     `${threadList(blocks.map((b) => b.color), (h) => state.pic.machineName?.get(h) || nearestBrotherThread(h).name)} They are sewn in this order.`];
   // (each thread named: "thread this colour" left the colour to the swatch)
@@ -215,7 +219,7 @@ function picSteps(v, st) {
   $("pic-steps").innerHTML = problemsItems(shownOn(problemsOf(v), "steps")) + (turned() ? `<li class="after"><b>Hooping</b><span class="turned">${TURN_PIC}${escapeHtml($("done-turn").textContent)}</span></li>` : "")
     + `<li class="after"><b>Have ready</b><ul class="ready">${ready.map((r) => `<li>${escapeHtml(r)}</li>`).join("")}</ul></li>`
     + blocks.map((b, i) => { const t = mt[b.index] || nearestBrotherThread(b.color);
-      return `<li><b><span class="n">${i + 1}</span><i style="background:${b.color}"></i>Brother ${escapeHtml(t.name)}${spool(b.color, t.name) ? ` <small>${escapeHtml(spool(b.color, t.name))}</small>` : ""}</b>${youHtml(steps[i].you, escapeHtml)}</li>`; }).join("")
+      return `<li><b><span class="n">${i + 1}</span><i style="background:${b.color}"></i>${threadHtml(b.color, t.name)}</b>${youHtml(steps[i].you, escapeHtml)}</li>`; }).join("")
     + `<li class="after"><b>When it's done</b><span>${escapeHtml(after)}</span></li>`;
 }
 // A design reaching past 204.8 mm from its centre (only a too-big or split design's whole view, never a file to sew)
@@ -246,6 +250,28 @@ function showError(msg, fix) {
   if (msg && fix) { const b = document.createElement("button"); b.type = "button"; b.className = "link"; b.textContent = fix.label; b.onclick = fix.run; e.append(" ", b); }
   if (msg || !was) paintSoon();   // (the preview keeps clear of the message)
 }
+// A moment's note at the bottom ("Removed Monogram aMs. Undo", "Couldn't open the share sheet"), on every tab. One
+// rule for how long: every note goes by itself, after time to read it (2.5 s and 0.3 s a word, 3-8 s), and one with a
+// one-tap action 4 s longer, at least 10 s (6 s went before a newcomer found Undo). A failed share said in the
+// preview's message box stayed there for minutes: what went wrong with a tap is a toast; the box is for what's wrong
+// with the design until it changes.
+const toastBox = Object.assign(document.createElement("div"), { id: "st-toast", className: "toast", hidden: true });
+toastBox.setAttribute("role", "status"); document.body.append(toastBox);
+let toastTimer = 0, toastAt = 0;
+const toastMs = (msg, action) => { const read = Math.min(8000, Math.max(3000, 2500 + 300 * msg.split(/\s+/).length)); return action ? Math.max(10000, read + 4000) : read; };
+// Going, it fades and keeps catching taps for a moment before it's hidden: a late tap on Undo just after it went
+// landed on "+ Appliqué letters" under it, and so did a second tap on Undo
+function toastGone() {
+  if (toastBox.hidden || toastBox.classList.contains("gone")) return;
+  toastBox.classList.add("gone"); clearTimeout(toastTimer); toastTimer = setTimeout(() => { toastBox.hidden = true; toastBox.classList.remove("gone"); }, 700);
+}
+function toast(msg, action) {
+  toastBox.innerHTML = `<span>${escapeHtml(msg)}</span>${action ? `<button type="button" class="link">${escapeHtml(action.label)}</button>` : ""}`;
+  if (action) toastBox.querySelector("button").onclick = () => { if (toastBox.classList.contains("gone")) return; toastGone(); action.run(); };
+  toastBox.classList.remove("gone"); toastBox.hidden = false; toastAt = Date.now(); clearTimeout(toastTimer); toastTimer = setTimeout(toastGone, toastMs(msg, action));
+}
+// a note with an action ("Removed … Undo") goes with the next change, once it's been up a moment
+function hideToast() { if (Date.now() - toastAt > 400 && toastBox.querySelector("button")) toastGone(); }
 function busy(on, text = "Stitching…") { $("busy").hidden = !on; $("busy-text").textContent = text; }
 
 // zoom & pan
@@ -358,14 +384,13 @@ document.addEventListener("focusin", shutTip); document.addEventListener("pointe
 $("show-real").onchange = (e) => { state.real = e.target.checked; store.set("real", state.real); if (state.real && state.zoom < 3) { state.zoom = 3; } paint(); };
 $("show-hoop").checked = state.showHoop;
 $("show-hoop").onchange = (e) => { state.showHoop = e.target.checked; store.set("showHoop", state.showHoop); paint(); };
-// the View menu closes once something in it is chosen (it stayed open over the preview, hiding what changed), on a
-// click anywhere else, when focus leaves it and on Escape; focus goes back to View. (Capture, so "On my item" closes it
-// before its dialog opens and the dialog hands focus back to View, not to a button in a shut menu.) Background stays
-// open on its list: the arrow keys step through the cloths one change at a time (each one shut the menu), and the
-// whole view round the menu shows the new cloth.
+// the View menu stays open while its ticks and Background change the view (it sits beside the preview, which shows
+// each change; shutting on every tick made trying Hoop, Thickness and Realistic thread one menu trip each), and closes
+// on a click anywhere else, when focus leaves it and on Escape, focus going back to View. "On my item" closes it
+// (capture, so it closes before its dialog opens and the dialog hands focus back to View, not to a button in a shut
+// menu).
 const views = document.querySelector(".views"), viewsBtn = views.querySelector("summary");
 const shutViews = (focus) => { if (!views.open) return; views.open = false; if (focus) viewsBtn.focus(); };
-views.querySelector(".views-menu").addEventListener("change", (e) => { if (e.target.tagName !== "SELECT") shutViews(true); });
 views.addEventListener("focusout", (e) => { if (e.relatedTarget && !views.contains(e.relatedTarget)) shutViews(false); });
 views.querySelector(".views-menu").addEventListener("click", (e) => { if (e.target.closest("button")) shutViews(true); }, true);
 views.addEventListener("keydown", (e) => { if (e.key === "Escape" && views.open) { e.preventDefault(); shutViews(true); } });
@@ -397,7 +422,8 @@ function shareText(v) {
   const probs = shownOn(problemsOf(v), "share");
   for (const [level, head] of [[LOOK, LOOK_HEAD], [TIP, TIP_HEAD]]) { const l = probs.filter((q) => q.level === level); if (l.length) lines.push("", head + ":", ...l.map((q) => `- ${q.text}`)); }
   if (sheet.ready?.length) lines.push("", "Have ready:", ...sheet.ready.map((r) => `- ${r}`));
-  lines.push("", "Steps:", ...steps.map((st, i) => `${i + 1}. ${mt[i] ? `Brother ${mt[i].name}: ` : ""}${st.you || "Press Start."}`));
+  const thread = (i) => { const b = blocks.find((x) => x.index === i); return b ? threadLabel(b.color, mt[i].name).name : `Brother ${mt[i].name}`; };
+  lines.push("", "Steps:", ...steps.map((st, i) => `${i + 1}. ${mt[i] ? `${thread(i)}: ` : ""}${st.you || "Press Start."}`));
   if (sheet.after?.length) lines.push("", "When it's done: " + sheet.after.join(" "));
   const out = [];
   for (const l of lines) {
@@ -409,11 +435,11 @@ function shareText(v) {
 $("share").onclick = async () => {
   const v = state.view; if (!v) return;
   const r = handOut([{ name: v.filename, bytes: v.bytes, against: v.verifyAgainst }], { hoop: hoop(), share: { title: v.filename, text: shareText(v) } });
-  if (!r.ok) { showError("Sending stopped: " + r.error); return; }
+  if (!r.ok) { toast("Sending stopped: " + r.error); return; }
   try {
     await r.shared;
   } catch (err) {
-    if (err && err.name !== "AbortError") showError("Couldn't open the share sheet. Use Download instead.");
+    if (err && err.name !== "AbortError") toast("Couldn't open the share sheet. Use Download instead.");
   }
 };
 
@@ -557,7 +583,7 @@ $("done-close").onclick = () => { if ($("done-never").checked) store.set("doneSe
 // sew sheet: the design at 1:1 on the hoop field, the steps, appliqué shapes; printed from a hidden block
 function fillSheet() {
   const v = state.view; if (!v?.file || v.split) return false;
-  $("sheet").innerHTML = sewSheet({ pattern: v.file, filename: v.filename, hoop: hoop(), facts: v.facts, threads: machineThreadList(v), hide: v.hide, sheet: v.sheet, spool, problems: shownOn(problemsOf(v), "sheet") });
+  $("sheet").innerHTML = sewSheet({ pattern: v.file, filename: v.filename, hoop: hoop(), facts: v.facts, threads: machineThreadList(v), hide: v.hide, sheet: v.sheet, label: threadLabel, problems: shownOn(problemsOf(v), "sheet") });
   return true;
 }
 $("sheet-print").onclick = () => { if (fillSheet()) window.print(); };
@@ -661,8 +687,8 @@ function alongShow() {
     $("along-ready").hidden = $("along-turn").hidden = $("along-look").hidden = true;
     $("along-sews").textContent = ""; $("along-time").textContent = ""; $("along-wrong").hidden = true;
   } else {
-    const s = steps[i], t = mt[i], sp = s.block && spool(s.block.color, t?.name);
-    $("along-title").innerHTML = `<i style="background:${s.block?.color || "#999"}"></i>${s.title ? escapeHtml(s.title) + " · " : ""}Brother ${escapeHtml(t?.name || "")}${sp ? ` <small>${escapeHtml(sp)}</small>` : ""}`;
+    const s = steps[i], t = mt[i];
+    $("along-title").innerHTML = `<i style="background:${s.block?.color || "#999"}"></i>${s.title ? escapeHtml(s.title) + " · " : ""}${s.block ? threadHtml(s.block.color, t?.name || "") : `Brother ${escapeHtml(t?.name || "")}`}`;
     $("along-ready").hidden = !s.ready; $("along-ready").querySelector("ul").innerHTML = (s.ready || []).map((r) => `<li>${escapeHtml(r)}</li>`).join("");
     $("along-turn").hidden = !s.turn; $("along-turn").innerHTML = s.turn ? TURN_PIC + escapeHtml(s.turn) : "";
     // (what's still wrong, and worth knowing, on the first screen, as the steps and the sew sheet say it: words.js)
@@ -797,15 +823,27 @@ $("names-make").onclick = async () => {
 };
 
 // ---------- thread brand ----------
-// "≈ Isacord 1306", or the nearest spool they own ("your Isacord 1902"); "" when they use Brother thread. `machine`: the
-// name the file gives the colour, so Brother's spool number is that thread's
-function spool(hex, machine) {
-  if (!state.brand) return "";
+// One label for a thread on every surface (chips, steps, Sew along, sew sheet, Picture palette, the editor): `name`
+// leads, `note` follows in small. A spool they own and use for the colour leads ("Your Sulky Rayon 1076 Royal Blue",
+// note "the machine calls it Wisteria Violet": "Brother Wisteria Violet · your Sulky 1076 Royal Blue" read as the wrong
+// thread); otherwise the machine's name, with "≈ Isacord 1306", "spool 007" or a far owned spool in the note; `short`:
+// the chips' note (a long "nearest of yours … is quite different" under each chip shrank the preview: it's the tooltip).
+// `machine`: the name the file gives the colour, so Brother's spool number is that thread's
+function threadLabel(hex, machine) {
+  const lead = { name: `Brother ${machine}`, note: "", short: "" };
+  if (!state.brand) return lead;
   const own = state.spools[state.brand], s = nearestSpool(state.brand, hex, own);
+  if (!s) return lead;
   // (an owned spool far from the colour isn't a match: white showed as "your Isacord 5513", a green; `far` in brands.js)
   // (Brother's own spools match the machine's colours exactly: just the number of the thread the machine names)
-  return !s ? "" : !own?.length ? (state.brand === "brother" ? `spool ${brotherNum(machine) || s.num}` : `≈ ${s.label}`) : s.far ? `nearest of yours, ${s.label}, is quite different` : `your ${s.label}`;
+  if (!own?.length) { const note = state.brand === "brother" ? `spool ${brotherNum(machine) || s.num}` : `≈ ${s.label}`; return { ...lead, note, short: note }; }
+  if (s.far) return { ...lead, note: `nearest of yours, ${s.label}, is quite different`, short: "none of yours is close" };
+  return { name: `Your ${s.label}`, note: `the machine calls it ${machine}`, short: `the machine calls it ${machine}` };
 }
+// the label as one line ("Your Isacord 1902 · the machine calls it Red"), for text without a small note
+const threadLine = (hex, machine) => { const l = threadLabel(hex, machine); return l.note ? `${l.name} · ${l.note}` : l.name; };
+// as html: the name, then the note in small (`sep` before it)
+const threadHtml = (hex, machine, sep = " ") => { const l = threadLabel(hex, machine); return `${escapeHtml(l.name)}${l.note ? `${sep}<small>${escapeHtml(l.note)}</small>` : ""}`; };
 // the spool they own for a colour ("Isacord 0015 White"), for supply lists; "" when they haven't listed one close to it
 function ownSpool(hex) {
   const own = state.brand && state.spools[state.brand], s = own?.length && nearestSpool(state.brand, hex, own);
@@ -1161,7 +1199,7 @@ function paletteUI() {
   $("pic-merged").textContent = state.pic.merged ? `${asked} asked for, ${cols.length} used: this picture has only ${cols.length} ${cols.length === 1 ? "colour" : "colours"} different enough to need ${cols.length === 1 ? "a thread of its own" : "threads of their own"} (the rest are shades of ${cols.length === 1 ? "it" : "these"} or of the fabric).` : "";
   ownedNote();
   $("pic-palette").innerHTML = cols.map((c) => `<button type="button" data-id="${c.id}" aria-pressed="${!state.pic.skip.includes(c.id)}">
-    <i style="background:${c.hex}"></i><span>Brother ${state.pic.machineName?.get(c.hex) || c.thread.name}${spool(c.hex, state.pic.machineName?.get(c.hex) || c.thread.name) ? `<small>${spool(c.hex, state.pic.machineName?.get(c.hex) || c.thread.name)}</small>` : ""}</span></button>`).join("");
+    <i style="background:${c.hex}"></i><span>${threadHtml(c.hex, state.pic.machineName?.get(c.hex) || c.thread.name, "")}</span></button>`).join("");
 }
 // "Use only threads I own": say which of the picture's colours share one spool, and which have none close (the
 // Design tab says "quite different"; here yellow and pink sewed in one spool without a word)
@@ -1413,7 +1451,7 @@ function showOpened(p, bytes, check, changed) {
       o.damaged ? { id: "damaged", level: LOOK, text: "The file you opened looks damaged: what's shown is what the machine would sew from it, which may not be the design." }
         : o.disagree && { id: "disagree", level: LOOK, text: "The file you opened holds two different designs, one for PE-DESIGN and one for the machine: the copy saved here is the one the machine sews, so both show the same." }].filter(Boolean),
     // (the machine's name, then what the file calls it: a design made here names its threads after its pieces)
-    threadLabel: (b, t) => `Brother ${t.name}${fileCalls(b.name, t.name, b.color)}` };
+    fileNote: (b, t) => fileCalls(b.name, t.name, b.color) };
   if (fixed) v.filename = fixedName(v.filename);
   state.views.open = v; setView(v);
   // (what the checkup warns of beyond the file's verdict is the view's problem too: said beside Download and after)
@@ -1434,7 +1472,7 @@ function fileCalls(name, machine, hex) {
     const [l, a, b] = lab(hexToRgb(c));
     if (Math.hypot(l - L, a - A, b - B) > 70) return "";
   }
-  return `<br><small>the file calls it “${escapeHtml(name)}”</small>`;
+  return `the file calls it “${name}”`;
 }
 // the file card: what the file is, and whether it fits as it now stands (resized past the hoop it still said "Fits"
 // in green beside "Too big", and gave the stitch count of the file as it came)
@@ -1691,7 +1729,7 @@ function showStep(i) {
   state.step = i; document.dispatchEvent(new CustomEvent("nw:step", { detail: i })); paint();
 }
 const studio = initStudio({
-  hoop: designHoop, machineHoop: hoop, turned: designTurned, unturn: () => { if (state.turn.design) { state.turn.design = false; store.set("turn", state.turn); $("turn").setAttribute("aria-pressed", false); } }, fit: () => { state.zoom = 1; state.pan = [0, 0]; }, store, showError, busy, safeName, escapeHtml, handOut, keepFocus, showStep, step: () => state.step, paint: () => state.mode === "design" && paint(), setMode, spool, ownSpool, threadList, ownedSpools,
+  hoop: designHoop, machineHoop: hoop, turned: designTurned, unturn: () => { if (state.turn.design) { state.turn.design = false; store.set("turn", state.turn); $("turn").setAttribute("aria-pressed", false); } }, fit: () => { state.zoom = 1; state.pan = [0, 0]; }, store, showError, busy, safeName, escapeHtml, handOut, keepFocus, showStep, step: () => state.step, paint: () => state.mode === "design" && paint(), setMode, toast, hideToast, threadLine, threadHtml, ownSpool, threadList, ownedSpools,
   // (undo, redo and Open saved put the hoop's turn back as it was; the caller rebuilds)
   setTurn: (on) => { state.turn.design = !!on; store.set("turn", state.turn); $("turn").setAttribute("aria-pressed", designTurned()); },
   hoopId: () => hoop().id,

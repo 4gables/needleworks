@@ -119,13 +119,13 @@ export function cutName(design, groups, ext) {
 }
 
 // sheet: { steps: [{ title?, you?, sews? }], ready: [] (one "Have ready" list), after: [], notes: [], cut: [[loop...]...] }, thread names as the machine shows them
-export function sewSheet({ pattern, filename, hoop, facts, threads, hide, sheet = {}, spool = () => "", problems = [] }) {
+export function sewSheet({ pattern, filename, hoop, facts, threads, hide, sheet = {}, label = (hex, name) => ({ name: `Brother ${name}`, note: "" }), problems = [] }) {
   const { blocks } = colorBlocks(pattern);
   const steps = sheet.steps?.length ? sheet.steps : blocks.map((b, i) => ({ you: nextThread(blocks, i, threads[i] && `Brother ${threads[i].name}`) }));
   const after = sheet.after?.length ? sheet.after : [FINISH];
   const rows = steps.map((s, i) => {
-    const b = blocks.find((x) => x.index === i), t = threads[i];
-    return `<li><b><span class="sw" style="background:${b?.color || t?.color || "#999"}"></span>${s.title ? esc(s.title) + " · " : ""}Brother ${esc(t?.name || "")}${b && spool(b.color, t?.name) ? ` <small>(${esc(spool(b.color, t?.name))})</small>` : ""}</b>
+    const b = blocks.find((x) => x.index === i), t = threads[i], l = b ? label(b.color, t?.name || "") : { name: `Brother ${t?.name || ""}`, note: "" };
+    return `<li><b><span class="sw" style="background:${b?.color || t?.color || "#999"}"></span>${s.title ? esc(s.title) + " · " : ""}${esc(l.name)}${l.note ? ` <small>(${esc(l.note)})</small>` : ""}</b>
       ${s.you ? youHtml(s.you, esc, "p") : ""}${s.sews ? `<p>${esc(s.sews)}</p>` : ""}</li>`;
   }).join("");
   const cut = sheet.cut?.length ? sheet.cut : null;

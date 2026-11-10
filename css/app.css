@@ -535,8 +535,10 @@ label:has(> .sr-file:focus-visible), label:has(+ .sr-file:focus-visible) { outli
 }
 /* up to 1480 wide one header row has no room for the tagline under the logo */
 @media (min-width: 1366px) and (max-width: 1480px) { .tag { display: none; } }
-/* an error with a one-tap fix reads as one sentence, wide enough not to wrap the button word by word */
-.error { display: block; width: max-content; max-width: min(90%, 560px); }
+/* an error with a one-tap fix reads as one sentence, wide enough not to wrap the button word by word; up to 680 px, so
+   a long "too big" message keeps to four lines and leaves the hoop room above it (at 560 px its six lines left a 190 px
+   hoop at 1413 x 717) */
+.error { display: block; width: max-content; max-width: min(90%, 680px); }
 .error .link { display: inline; white-space: nowrap; font-weight: 700; }
 /* dark colour dots (navy, black threads) need an edge on the dark page */
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .pieces .pick i, :root:not([data-theme="light"]) .threads i, :root:not([data-theme="light"]) .st-steps i { border-color: rgba(255,255,255,.45); } }
