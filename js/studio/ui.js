@@ -183,7 +183,7 @@ export function initStudio(api) {
     history.push(now); if (history.length > 60) history.shift();
     future.length = 0; buttons();
   }
-  const buttons = () => { $("st-undo").disabled = !history.length; $("st-redo").disabled = !future.length; };
+  const buttons = () => { $("st-undo").disabled = $("bar-undo").disabled = !history.length; $("st-redo").disabled = !future.length; };
   function restore(h) {
     let turn; ({ pieces, sel, fabric, baste, thread = "auto", fitted = false, two = false, turn } = JSON.parse(h));
     if (turn != null) api.setTurn(turn);
@@ -286,6 +286,9 @@ export function initStudio(api) {
     + `<span class="custom"><input type="color" data-${k}-any value="${p[k]}" aria-label="Any colour"></span>`
     + ((own) => own.length ? `<span class="own-swatches" role="group" aria-label="Your threads"><span class="hint">Yours:</span>${own.map((s) => `<button type="button" data-${k}="${s.hex}" style="background:${s.hex}" aria-pressed="${s.hex === p[k]}" title="${api.escapeHtml(swatchTip(s.hex, p[k], s.label))}" aria-label="Your ${api.escapeHtml(s.label)}"></button>`).join("")}</span>` : "")(api.ownedSpools?.() || []);
   const fontSelect = (p) => `<select data-k="font">${FONTS.map((f) => `<option value="${f.family}" ${f.family === p.font ? "selected" : ""}>${f.name}${f.print ? " (print)" : ""}</option>`).join("")}</select>`;
+  // every font's name in its own lettering, in a row under the list to tap (names alone said nothing of the look); the
+  // list stays the keyboard's and a screen reader's way to pick one
+  const fontRow = (p, list = FONTS) => `<div class="font-row" role="group" aria-label="Fonts as they look">${list.map((f) => `<button type="button" tabindex="-1" data-font="${f.family}" aria-pressed="${f.family === p.font}" style="font-family:'${f.family}',cursive">${f.name}</button>`).join("")}</div>`;
   // (a size set past the slider's end, by Fit to hoop, stretches it: Fit set 67 mm on a slider that stopped at 60)
   const range = (k, lab, min, max, v, unit = "mm", step = 1) => `<label class="range"><span>${lab}</span><input type="range" data-k="${k}" data-unit="${unit}" min="${Number.isFinite(v) ? Math.min(min, Math.floor(v)) : min}" max="${Number.isFinite(v) ? Math.max(max, Math.ceil(v)) : max}" step="${step}" value="${v}"><output>${shown(v, unit)}</output></label>`;
   // one letter pair closer or further apart (print fonts): `kern` = { index of the pair's first letter in the words: % of
@@ -357,7 +360,7 @@ export function initStudio(api) {
         h += `<div class="seg swash" role="group" aria-label="${kind}es" title="Or type ~ at the start or end of the words">`
           + `<button type="button" data-swash="lead" aria-pressed="${lead}">${kind} before</button><button type="button" data-swash="tail" aria-pressed="${tail}">${kind} after</button></div>`;
       }
-      h += `<label class="field"><span>Font</span>${fontSelect(p)}</label>`;
+      h += `<label class="field"><span>Font</span>${fontSelect(p)}</label>${fontRow(p)}`;
       h += range("size", "Height", 5, 60, p.size);
       h += `<p class="hint">About 10 mm for a pocket or cuff, 15-20 mm for a T-shirt's chest, 20-30 mm for a onesie, pillow or blanket corner, 30-50 mm for a towel.</p>`;
       h += seg("shape", TEXT_SHAPES, p.shape);
@@ -382,7 +385,7 @@ export function initStudio(api) {
       // (what it does, measured: the middle letter comes out 1.24-1.49 x as tall as the others in every font. "Stitched
       // biggest" read as more than a tall, thin script J gave)
       h += `<p class="hint">${initials(p.letters).length === 3 ? "Traditional order: first, LAST, middle. The middle letter is sewn about 1½ times as tall as the other two." : "Three initials go first, LAST, middle, with the middle one sewn about 1½ times as tall. One or two are sewn the same height."}</p>`;
-      h += `<label class="field"><span>Font</span>${fontSelect(p)}</label>`;
+      h += `<label class="field"><span>Font</span>${fontSelect(p)}</label>${fontRow(p)}`;
       h += range("size", "Height", 15, 90, p.size);
       h += stitchSeg(p);
     } else if (p.kind === "motif") {
@@ -392,7 +395,7 @@ export function initStudio(api) {
       if (p.style === "applique") h += `<p class="hint">Sews an outline, pauses for you to lay fabric on and trim it, then sews satin stitch round the edges. 50 mm or bigger cuts most easily.</p>`;
     } else if (p.kind === "letters") {
       h += `<label class="field"><span>Letters</span><input type="text" data-k="text" value="${api.escapeHtml(p.text)}" data-max="${MAX_INITIALS}" autocomplete="off" spellcheck="false"></label>` + cutHint;
-      h += `<label class="field"><span>Font</span><select data-k="font">${APPLIQUE_FONTS.map((f) => `<option value="${f.family}" ${f.family === p.font ? "selected" : ""}>${f.name} (${f.note})</option>`).join("")}</select></label>`;
+      h += `<label class="field"><span>Font</span><select data-k="font">${APPLIQUE_FONTS.map((f) => `<option value="${f.family}" ${f.family === p.font ? "selected" : ""}>${f.name} (${f.note})</option>`).join("")}</select></label>${fontRow(p, APPLIQUE_FONTS)}`;
       h += range("size", "Height", 20, 120, p.size);
       h += `<p class="hint">Cut from fabric: the machine sews an outline, pauses for you to lay fabric on and trim it, then sews satin stitch round the edges. Letters 30 mm or taller cut and sew most easily.</p>`;
     } else if (p.kind === "frame") {
@@ -431,7 +434,11 @@ export function initStudio(api) {
     h += range("rot", "Turn", -180, 180, p.rot || 0, "°", 5);
     if (p.kind !== "file") h += `<div class="field"><span>Thread</span><div class="swatches">${swatches(p)}</div><p class="hint" data-thread-of="color">${api.escapeHtml(threadOf(p))}</p></div>`;
     const old = drawnId === p.id && $("st-edit").querySelector("[data-warn]");
+    const was = drawnId === p.id ? $("st-edit").querySelector(".font-row")?.scrollLeft : undefined;
     $("st-edit").innerHTML = h; drawnId = p.id;
+    // (the font row keeps where it was scrolled to, else shows the font in use)
+    const row = $("st-edit").querySelector(".font-row"), on = row?.querySelector('[aria-pressed="true"]');
+    if (row) row.scrollLeft = was ?? (on ? on.offsetLeft - (row.clientWidth - on.offsetWidth) / 2 : 0);
     // (lettering not worked out yet, after a font change: the warnings a moment later, after the preview, the last ones
     // kept up meanwhile; worked out here the menu held for 0.8 s)
     const w = $("st-edit").querySelector("[data-warn]");
@@ -440,7 +447,7 @@ export function initStudio(api) {
     clearTimeout(warnTimer); warnTimer = setTimeout(warn, 300);
   }
   let drawnId = null;
-  function ui() { api.keepFocus($("panel-design"), () => { list(); editor(); sewnOn(); }); }
+  function ui() { api.keepFocus($("panel-design"), () => { list(); editor(); sewnOn(); }); api.paint?.(); }
   function sewnOn() {
     $("st-fabric").innerHTML = Object.entries(FABRICS).map(([k, f]) => `<button type="button" data-fab="${k}" aria-pressed="${k === fabric}">${f.name}</button>`).join("");
     $("st-baste").checked = baste; $("st-fabric-tip").textContent = fabricTip(); $("st-fabric-name").textContent = FABRICS[fabric].name + (baste ? ", basted" : "");
@@ -1419,7 +1426,7 @@ export function initStudio(api) {
     else if (b.dataset.op === "down" && i < pieces.length - 1) [pieces[i + 1], pieces[i]] = [pieces[i], pieces[i + 1]];
     else sel = id;
     const had = $("st-pieces").contains(document.activeElement);
-    save(); ui(); if (b.dataset.op) make();
+    save(); ui(); if (b.dataset.op) make(); else showEditor(true, $("st-pieces").querySelector(`li[data-id="${id}"]`));
     // (✕, or ↓ on what is now the last piece, leaves nothing focused: the list keeps the keyboard)
     if (had && !$("st-pieces").contains(document.activeElement)) roving()?.focus();
   };
@@ -1492,6 +1499,8 @@ export function initStudio(api) {
     if (e.target.matches("[data-file-scale]")) { const v = e.target.value / 100; change((p) => resizeFile(p, v), true); editor(); return; }
     if (e.target.dataset.k === "font" || e.target.dataset.k === "deco" || e.target.matches("[data-color-any], [data-fill-any], [data-blend-any]")) editor(); });
   edit.addEventListener("click", (e) => {
+    const fo = e.target.closest("[data-font]"), fs = fo && edit.querySelector('select[data-k="font"]');
+    if (fs) { fs.value = fo.dataset.font; for (const t of ["input", "change"]) fs.dispatchEvent(new Event(t, { bubbles: true })); return; }
     const c = e.target.closest("[data-color]");
     if (c) { change((p) => (p.color = c.dataset.color), true, true); editor(); return; }
     const mo = e.target.closest("[data-motif]");
@@ -1564,6 +1573,21 @@ export function initStudio(api) {
     }
   });
 
+  // a piece just picked: its controls are brought up into sight, enough of them to see what changed, keeping the list
+  // in view where that fits (at 1413 × 717 they opened ~800 px down, under the whole list, and nothing seemed to happen).
+  // From the preview only beside it: on a phone the page would scroll away from the piece under the finger.
+  function showEditor(page, keep) {
+    const f = $("st-edit").closest("fieldset"), box = f.closest(".controls");
+    const side = box && /auto|scroll/.test(getComputedStyle(box).overflowY);
+    if (!side && !page) return;
+    const sc = side ? box : document.scrollingElement, r = f.getBoundingClientRect();
+    const top = side ? box.getBoundingClientRect().top : 0;
+    const bottom = side ? box.getBoundingClientRect().bottom : innerHeight - (parseFloat(getComputedStyle(document.documentElement).scrollPaddingBottom) || 0);
+    if (r.top < bottom - 160) return;
+    const by = Math.min(r.top - top - 8, r.top - (bottom - Math.min(360, (bottom - top) * 0.6)), keep ? keep.getBoundingClientRect().top - top - 8 : Infinity);
+    if (by <= 0) return;
+    sc.scrollBy({ top: by, behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
+  }
   // drag a piece on the preview (mm in the hoop; the machine centres the whole design)
   let drag = null;
   // the smallest piece under the pointer, so letters inside a frame can be picked (the frame's box holds them all)
@@ -1579,7 +1603,7 @@ export function initStudio(api) {
   };
   function start(mm) {
     const p = hit(mm); if (!p) return false;
-    if (sel !== p.id) { sel = p.id; ui(); }
+    if (sel !== p.id) { sel = p.id; ui(); showEditor(false); }
     drag = { p, from: mm, x: p.x, y: p.y, moved: false };
     return true;
   }
@@ -1637,7 +1661,7 @@ export function initStudio(api) {
     if (draw) { save(); ui(); make(); }
   }
 
-  $("st-undo").onclick = undo;
+  $("st-undo").onclick = $("bar-undo").onclick = undo;
   $("st-redo").onclick = redo;
   // a design file to keep and change later (the pieces, not the stitches)
   $("st-save").onclick = () => {
@@ -1977,5 +2001,5 @@ export function initStudio(api) {
 
   cards(); ui();
   const starter = (id, tweak) => pickStarter(STARTERS.find((x) => x.id === id), tweak);
-  return { make, addWords, starter, relabel: () => { ui(); make(); }, start, move, end, nudge, deselect, forNames, remember, recentre: () => { remember(); recentre(); save(); ui(); make(); } };
+  return { make, addWords, starter, selBox: () => { const p = current(); return p ? pieceBounds(p) : null; }, relabel: () => { ui(); make(); }, start, move, end, nudge, deselect, forNames, remember, recentre: () => { remember(); recentre(); save(); ui(); make(); } };
 }

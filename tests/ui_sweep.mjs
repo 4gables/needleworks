@@ -76,6 +76,7 @@ const STATES = [
   { id: "design-long", hash: "design", seed: studio([text(1, "Supercalifragilisticexpialidocious\nWWWWWWWWWWWWWWW", { font: "NW Quicksand", size: 6 })]), setup: async (p) => { await p.eval(`for (const d of document.querySelectorAll('#panel-design details')) d.open = true`); } },
   { id: "design-toobig-open", hash: "design", seed: studio([text(1, "W".repeat(60), { font: "NW Quicksand", size: 30 })]), setup: async (p) => { await p.eval(`for (const d of document.querySelectorAll('#panel-design details')) d.open = true`); } },
   { id: "design-threads", hash: "design", seed: studio(many) },
+  { id: "design-fix", hash: "design", seed: studio([{ id: 1, x: 0, y: 0, color: "#ed171f", kind: "frame", shape: "circle", w: 90, h: 90, border: "satin" }, text(2, "Emma bbe", { size: 3 })]), keys: true },
   { id: "design-toast", hash: "design", seed: studio([text(1, "Emma"), text(2, "Liam", { y: 25 })]), setup: async (p) => { await p.click('[data-op="del"]'); }, wait: "!document.getElementById('st-toast')?.hidden" },
   { id: "design-steps", hash: "design", seed: studio([{ id: 1, x: 0, y: 0, color: "#ed171f", kind: "frame", shape: "circle", w: 90, h: 90, border: "applique" }, text(2, "Emma")]),
     setup: async (p) => { await p.eval(`(()=>{const d=document.querySelector('#panel-design details.steps');d.open=true;d.scrollIntoView({block:'start'})})()`); await p.click("#st-steps [data-step]"); } },
@@ -94,7 +95,7 @@ const STATES = [
     setup: async (p) => { await p.eval(`(()=>{const s=document.getElementById('brand');s.value='@mine';s.dispatchEvent(new Event('change',{bubbles:true}))})()`); }, dialog: "spools" },
   { id: "dlg-along", hash: "design", seed: studio([{ id: 1, x: 0, y: 0, color: "#ed171f", kind: "frame", shape: "circle", w: 90, h: 90, border: "applique" }, text(2, "Emma")]), setup: async (p) => { await p.click("#along-open"); }, dialog: "along" },
   { id: "dlg-item", hash: "design", seed: studio([text(1, "Emma")]), setup: async (p) => { await p.click("#item-open"); }, dialog: "item", pre: async (p) => { await p.eval(`document.querySelector('details.views').open=true`); } },
-  { id: "view-menu", hash: "design", seed: studio([text(1, "Emma")]), setup: async (p) => { await p.click("details.views > summary"); } },
+  { id: "view-menu", hash: "design", seed: studio([text(1, "Emma")]), setup: async (p) => { await p.click("details.views > summary"); }, keys: true },
 ];
 const ONLY = arg("only", "") ? new Set(arg("only").split(",")) : null;
 let states = STATES.filter((s) => !ONLY || ONLY.has(s.id));
@@ -374,7 +375,8 @@ const FOCUS = String.raw`(() => {
   const lab = hit && hit.closest('label');
   const covered = seen && hit && e.id !== 'view' && !(hit === show || show.contains(hit) || hit.contains(show) || (lab && (lab === show || lab.control === e)));
   const ring = (s.outlineStyle !== 'none' && parseFloat(s.outlineWidth) >= 1.5) || (s.boxShadow !== 'none' && /\d+px \d+px 0px [1-9]/.test(s.boxShadow.replace(/rgba?\([^)]*\)/g, '')));
-  return { path: path(e), desc: d, tag: e.tagName, type: e.type || '', role: e.getAttribute('role') || '', href: e.getAttribute('href') || '', visible, seen, covered: covered ? (hit.id ? hit.tagName.toLowerCase() + '#' + hit.id : hit.tagName.toLowerCase() + '.' + [...hit.classList].join('.')) : '', ring, sy, ...where };
+  const menu = [...document.querySelectorAll('details[open].views')].some((m) => !m.contains(e));
+  return { menu, path: path(e), desc: d, tag: e.tagName, type: e.type || '', role: e.getAttribute('role') || '', href: e.getAttribute('href') || '', visible, seen, covered: covered ? (hit.id ? hit.tagName.toLowerCase() + '#' + hit.id : hit.tagName.toLowerCase() + '.' + [...hit.classList].join('.')) : '', ring, sy, ...where };
 })()`;
 
 async function keyboard(t, vp, st, problems) {
@@ -395,19 +397,31 @@ async function keyboard(t, vp, st, problems) {
     else if (!f.seen) add("focus-offscreen", f.desc, "Tab stop " + (i + 1) + " is out of view after the browser scrolled to it");
     else if (f.covered) add("focus-covered", f.desc, "Tab stop " + (i + 1) + " is under " + f.covered);
     if (f.visible && !f.ring) add("no-ring", f.desc, "no visible focus ring");
+    if (f.menu && !stops.some((g, k) => g.menu && k < stops.length - 1)) add("menu-left-open", f.desc, "Tab stop " + (i + 1) + ": the View menu is still open with focus outside it");
   }
   // the ways in and out of each tab are all reached by Tab (hidden file inputs once weren't)
   const mode = await ev("document.body.dataset.mode");
   const need = [...({ picture: ["#pic-file"], open: ["#open-file"], design: ["#st-load"] }[mode] || []), ...((await ev("!document.getElementById('download').disabled")) ? ["#download"] : [])];
   for (const sel of need) if (!stops.some((f) => f.path === sel)) add("not-tabbable", sel, "never reached by Tab");
+  // a list in the View menu (Background) keeps the menu open and focus on it while the arrow keys step through its
+  // choices (each change shut the menu and sent focus to View)
+  if (st.id === "view-menu") {
+    const r = await ev(`(()=>{const v=document.querySelector('details.views');v.open=true;const s=v.querySelector('select');if(!s)return '';s.focus();s.selectedIndex=(s.selectedIndex+1)%s.options.length;s.dispatchEvent(new Event('change',{bubbles:true}));
+      return v.open&&document.activeElement===s?'':'menu '+(v.open?'open':'shut')+', focus on '+(document.activeElement.id||document.activeElement.tagName)})()`);
+    if (r) add("focus-lost", "#show-bg", "changing the Background: " + r);
+    await t.load(st);
+  }
   // 2. press each one, the way a keyboard user would
   let n = 0;
   for (const s of stops) {
     if (/^https?:/.test(s.href) && !s.href.startsWith(t.origin)) continue;
     if (s.tag === "SELECT") continue;   // (a select's arrow keys change the machine or hoop: covered elsewhere)
-    const there = await ev(`(()=>{const e=document.querySelector(${JSON.stringify(s.path)});if(!e||!e.getClientRects().length)return false;e.focus();return document.activeElement===e})()`).catch(() => false);
+    // (each control remembers where it stood on the page and what came after it, to tell afterwards whether focus
+    // went back up the page: what followed it moving up into its place is fine)
+    const there = await ev(`(()=>{const e=document.querySelector(${JSON.stringify(s.path)});if(!e||!e.getClientRects().length)return false;e.focus();
+      const y=(n)=>{let t=n.getBoundingClientRect().top;for(let p=n.parentElement;p;p=p.parentElement)t+=p.scrollTop;return t};window.__y=y;const all=[...document.querySelectorAll('button,input,select,textarea,summary,a[href],[tabindex="0"]')];window.__was={e,top:y(e),next:all.slice(all.indexOf(e)+1).filter((n)=>!e.contains(n))};return document.activeElement===e})()`).catch(() => false);
     if (!there) continue;
-    const before = await ev(FOCUS);
+    const before = await ev(FOCUS), pick = await ev("!!document.activeElement?.matches('#st-pieces .pick')");
     const isText = s.tag === "TEXTAREA" || (s.tag === "INPUT" && /^(text|search|number|)$/.test(s.type));
     let how;
     if (isText) { how = "typed"; await send("Input.insertText", { text: s.type === "number" ? "5" : "a" }); }
@@ -424,9 +438,21 @@ async function keyboard(t, vp, st, problems) {
     else if (!after.seen) add("focus-offscreen", s.desc, `${what}: focus on ${after.desc}, out of view`);
     else if (after.covered) add("focus-covered", s.desc, `${what}: focus on ${after.desc}, under ${after.covered}`);
     if (isText && after.path !== before.path) add("focus-moved", s.desc, `typing moved focus to ${after.desc}`);
+    // a control redrawn away hands focus to what stands in its place or after it, never back up the page (a one-tap
+    // fix sent it to the Words box at the top of the editor, a turn fix to "Centre it"); a menu shut by its item hands
+    // it to the menu's own button
+    const back = await ev(`(()=>{const w=window.__was,a=document.activeElement;if(!w||!a||a===document.body||a===w.e||(w.e.isConnected&&w.e.getClientRects().length))return '';
+      if(a.tagName==='SUMMARY'&&a.parentElement.contains(w.e))return '';
+      const nx=w.next.find((n)=>n.isConnected&&n.getClientRects().length);if(nx&&(a===nx||nx.compareDocumentPosition(a)&Node.DOCUMENT_POSITION_FOLLOWING))return '';
+      return window.__y(a)<w.top-30?'went back up the page to '+(a.id||a.getAttribute('aria-label')||a.innerText||a.value||a.tagName).trim().slice(0,40):''})()`).catch(() => "");
+
+    if (back && after.path !== before.path && !after.dialog && after.mode === before.mode && after.hash === before.hash && after.pieces === before.pieces) add("focus-back", s.desc, `${what}: the control went and focus ${back}`);
     const moved = after.sy.reduce((a, v, i) => a + Math.abs(v - (before.sy[i] || 0)), 0);
     const ctx = after.dialog !== before.dialog || after.mode !== before.mode || after.hash !== before.hash || chooser || /^#/.test(s.href) || s.role === "tab";
-    if (!ctx && moved > Math.max(240, vp.h * 0.6)) add("scroll-jump", s.desc, `${what}: scrolled ${Math.round(moved)} px, focus on ${after.desc || "page"}`);
+    // (picking a piece in the list brings its controls up into view, the list row kept on screen: they opened ~800 px
+    // down at 1413 x 717 and nothing seemed to happen)
+    const picked = pick && after.path === s.path && after.seen;
+    if (!ctx && !picked && moved > Math.max(240, vp.h * 0.6)) add("scroll-jump", s.desc, `${what}: scrolled ${Math.round(moved)} px, focus on ${after.desc || "page"}`);
     // put things back: close a dialog (focus must come back), reload when the design or tab changed
     if (after.dialog) {
       await key(t, "Escape"); await sleep(400);

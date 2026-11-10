@@ -27,10 +27,23 @@ function shade(hex, f) {
   return `rgb(${c.map((v) => Math.round(v)).join(",")})`;
 }
 
-// thread pale enough to vanish on light fabric
-function pale(hex) {
-  const n = parseInt(hex.slice(1), 16);
-  return 0.3 * (n >> 16) + 0.59 * ((n >> 8) & 255) + 0.11 * (n & 255) > 0.85 * 255;
+// relative luminance (WCAG) of "#rrggbb" or "rgb(r, g, b)"
+function lum(c) {
+  const v = c[0] === "#" ? [1, 3, 5].map((i) => parseInt(c.slice(i, i + 2), 16)) : (c.match(/[\d.]+/g) || [255, 255, 255]).slice(0, 3).map(Number);
+  const [r, g, b] = v.map((x) => { x /= 255; return x <= 0.03928 ? x / 12.92 : ((x + 0.055) / 1.055) ** 2.4; });
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+}
+// what the stitches are seen against: the background picked, the field inside the hoop, else whatever the canvas sits
+// on (a starter card, a names thumbnail: white in light mode, dark in dark mode)
+function groundOf(canvas, opts) {
+  const bg = CLOTHS[opts.field];
+  if (bg) return bg.solid || bg.base;
+  if (opts.fieldColor && opts.hoop && opts.showHoop !== false) return opts.fieldColor;
+  for (let n = canvas; n && n.nodeType === 1; n = n.parentElement) {
+    const c = getComputedStyle(n).backgroundColor, a = c.match(/[\d.]+/g);
+    if (a && (a.length < 4 || +a[3] > 0.5)) return c;
+  }
+  return "#ffffff";
 }
 
 function bbox(blocks) {
@@ -64,7 +77,7 @@ export const CLOTHS = {
 // opts: { field (CLOTHS key: the background the design is shown on, inside the hoop; the whole view with the hoop
 //         hidden), fabric (CLOTHS key), fabricShapeBlock, hide: Set, upto, ghost (stitches after upto drawn faint), heat (Map "cx,cy" -> hits per mm²), backdrop ({ bmp, unit, center }: a photo under it), hoop: {w,h} (mm), showHoop, zoom, pan: [x,y], center: [x,y] (0.1 mm),
 //         pad, padTop, padBottom (px kept clear), cache (colorBlocks result), showNeedle (a needle at upto), fieldColor (fill inside the hoop), real (thread twist when zoomed in),
-//         boxes ([[x0, y0, x1, y1]] mm: each hooping of a split design) }
+//         boxes ([[x0, y0, x1, y1]] mm: each hooping of a split design), sel ([x0, y0, x1, y1] mm: the selected piece) }
 export function draw(canvas, design, opts = {}) {
   const dpr = window.devicePixelRatio || 1;
   const W = canvas.clientWidth, H = canvas.clientHeight;
@@ -154,7 +167,7 @@ export function draw(canvas, design, opts = {}) {
     ctx.restore();
   }
 
-  const upto = opts.upto ?? total;
+  const upto = opts.upto ?? total, lg = lum(groundOf(canvas, opts));
   const tw = Math.max(0.6, 5.6 * s);       // a stitched thread lies ~0.55 mm wide (it spreads)
   ctx.lineCap = "round"; ctx.lineJoin = "round";
   if (opts.ghost && upto < total) {   // what's still to sew, faint, under what's sewn
@@ -173,11 +186,16 @@ export function draw(canvas, design, opts = {}) {
   for (const b of blocks) {
     if (opts.hide && opts.hide.has(b.index)) continue;
     const base = b.color, dark = shade(base, -0.42), light = shade(base, 0.38);
-    // soft drop shadow under the whole colour block; white and cream thread get an edge too (they vanished on the
-    // off-white fabric)
+    // soft drop shadow under the whole colour block; thread close to what it's seen against gets a clear edge in the
+    // opposite tone (white on the white background was unreadable in the preview, the starter card and the names
+    // thumbnails; black on Black, yellow on white); one rule for every surface that draws stitches
     ctx.strokeStyle = "rgba(40,20,20,0.18)"; ctx.lineWidth = tw * 1.15;
     strokeSegs(ctx, b.segs, X, Y, upto, tw * 0.35);
-    if (pale(base)) { ctx.strokeStyle = "rgba(60,45,45,0.5)"; ctx.lineWidth = tw + 1.6; strokeSegs(ctx, b.segs, X, Y, upto, 0); }
+    const lt = lum(base), ratio = (Math.max(lt, lg) + 0.05) / (Math.min(lt, lg) + 0.05);
+    if (ratio < 1.6) {
+      ctx.strokeStyle = lg > 0.3 ? "rgba(50,38,38,0.72)" : "rgba(255,255,255,0.6)"; ctx.lineWidth = tw + Math.max(2, tw * 0.3);
+      strokeSegs(ctx, b.segs, X, Y, upto, 0);
+    }
     for (const seg of b.segs) {
       for (let i = 1; i < seg.length; i++) {
         if (seg[i][2] >= upto) break;
@@ -214,6 +232,13 @@ export function draw(canvas, design, opts = {}) {
       ctx.fillStyle = n > 24 ? "rgba(214,25,25,.9)" : n > 18 ? "rgba(240,120,20,.75)" : "rgba(235,190,20,.55)";
       ctx.fillRect(X(cx * 10), Y(cy * 10), 10 * s + 0.5, 10 * s + 0.5);
     }
+  }
+  if (opts.sel) {   // the selected piece (mm): a dashed box round it, dark and light so it shows on any background
+    const [a, b, c, d] = opts.sel, m = 1.5;
+    const x = X((a - m) * 10), y = Y((b - m) * 10), w = (c - a + 2 * m) * 10 * s, h = (d - b + 2 * m) * 10 * s;
+    ctx.save(); ctx.lineWidth = 3; ctx.strokeStyle = "rgba(255,255,255,0.85)"; roundRect(ctx, x, y, w, h, 4); ctx.stroke();
+    ctx.setLineDash([6, 4]); ctx.lineWidth = 1.5; ctx.strokeStyle = "#b0123b"; roundRect(ctx, x, y, w, h, 4); ctx.stroke();
+    ctx.restore();
   }
   if (opts.showNeedle && upto < total) {
     for (const b of blocks) for (const seg of b.segs) for (const p of seg) if (p[2] === upto) {
