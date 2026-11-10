@@ -13,7 +13,7 @@ import { HARD, MAX_BLOCKS, denseWords, moves, verdictOf } from "./quality.js";
 import { BLOCK, LOOK, LOOK_HEAD, TIP, TIP_HEAD, problemsHtml, problemsInline, problemsItems, problemsOf, shownOn, stopWords, stopsAt, mmText } from "./words.js";
 import { brief, safeName, tidy, uniqueName, withSwash } from "./core/typed.js";
 import { BRANDS, brotherNum, chartSpools, exampleSpools, lab, nearestSpool, nearestSpools, spools } from "./core/brands.js";
-import { COLORS as LINE_THREADS, initStudio } from "./studio/ui.js";
+import { COLORS as LINE_THREADS, initStudio, savedDesign } from "./studio/ui.js";
 
 const $ = (id) => document.getElementById(id);
 const store = {
@@ -283,7 +283,8 @@ function toast(msg, action) {
   toastBox.classList.remove("gone"); toastBox.hidden = false; toastAt = Date.now(); clearTimeout(toastTimer); toastTimer = setTimeout(toastGone, toastMs(msg, action));
 }
 // a note with an action ("Removed … Undo") goes with the next change, once it's been up a moment
-function hideToast() { if (Date.now() - toastAt > 400 && toastBox.querySelector("button")) toastGone(); }
+// (`now`: whatever its age, as Undo takes the design back past what the note was about)
+function hideToast(now = false) { if ((now || Date.now() - toastAt > 400) && toastBox.querySelector("button")) toastGone(); }
 function busy(on, text = "Stitching…") { $("busy").hidden = !on; $("busy-text").textContent = text; }
 
 // zoom & pan
@@ -1055,8 +1056,9 @@ function fillMachines() {
 }
 const sizeLabel = (v) => mmText(v);
 function hoopChanged() { if (state.mode !== "picture") state.pic.req++; for (const m of ["picture", "design"]) if (m !== state.mode) state.views[m] = null; fillMachines(); refresh(); }
-$("machine").onchange = (e) => { state.machine = e.target.value; state.hoopId = null; store.set("machine", state.machine); hoopChanged(); };
-$("hoop").onchange = (e) => { state.hoopId = e.target.value; store.set("hoop", state.hoopId); hoopChanged(); };
+// (on the Design tab a hoop change is an Undo step, as a turn is: Undo puts a design back in the hoop it was in)
+$("machine").onchange = (e) => { if (state.mode === "design") studio.remember(); state.machine = e.target.value; state.hoopId = null; store.set("machine", state.machine); hoopChanged(); };
+$("hoop").onchange = (e) => { if (state.mode === "design") studio.remember(); state.hoopId = e.target.value; store.set("hoop", state.hoopId); hoopChanged(); };
 function refresh() { if (state.mode === "picture") makePicture(); else if (state.mode === "design") studio.make(); else if (state.view) setView(state.view); }
 
 // ---------- tabs ----------
@@ -1567,6 +1569,9 @@ function pesVersion(v) {
 async function openDesign(file) {
   try {
     const bytes = new Uint8Array(await file.arrayBuffer());
+    // (a design saved from Design your own opens there, as Open saved opens it: dropped, shared to the app or opened
+    // here, it was "couldn't be read as an embroidery file... may be damaged")
+    if (savedDesign(bytes)) { studio.openSaved(file); return; }
     // (what the file is and what's saved from it: doctor.js `openedFile`, shared with tests/open_fuzz.test.mjs)
     const o = openedFile(bytes, file.name), { d, check, need } = o;
     const base = safeName(file.name.replace(/\.[^.]+$/, ""), "design"), st = designStats(d);
@@ -1943,7 +1948,7 @@ function showStep(i) {
   state.step = i; document.dispatchEvent(new CustomEvent("nw:step", { detail: i })); paint();
 }
 const studio = initStudio({
-  hoop: designHoop, machineHoop: hoop, turned: designTurned, unturn: () => { if (state.turn.design) { state.turn.design = false; store.set("turn", state.turn); $("turn").setAttribute("aria-pressed", false); } }, fit: () => { state.zoom = 1; state.pan = [0, 0]; }, store, showError, busy, safeName, escapeHtml, handOut, keepFocus, showStep, step: () => state.step, paint: () => state.mode === "design" && paint(), setMode, toast, hideToast, threadLine, threadHtml, ownSpool, threadList, ownedSpools,
+  hoop: designHoop, machineHoop: hoop, turned: designTurned, fit: () => { state.zoom = 1; state.pan = [0, 0]; }, store, showError, busy, safeName, escapeHtml, handOut, keepFocus, showStep, step: () => state.step, paint: () => state.mode === "design" && paint(), setMode, toast, hideToast, threadLine, threadHtml, ownSpool, threadList, ownedSpools,
   // (undo, redo and Open saved put the hoop's turn back as it was; the caller rebuilds)
   setTurn: (on) => { state.turn.design = !!on; store.set("turn", state.turn); $("turn").setAttribute("aria-pressed", designTurned()); },
   hoopId: () => hoop().id,
@@ -1983,4 +1988,4 @@ if (new URLSearchParams(location.search).has("shared")) (async () => {
 // a link to another tab on this page (#design, #open...) switches to it; #bookmark opens the Bookmark starter
 addEventListener("hashchange", () => { const m = location.hash.slice(1); if (m === "bookmark" || (m !== state.mode && MODES.includes(m))) setMode(m, false); });
 // for tests/surfaces.mjs: the view on screen, its problems and its share text (what every surface should agree on)
-globalThis.nwTest = { view: () => state.view, names: (name, shrink) => studio.forNames()?.build(name, shrink), sel: () => selBox(), problems: () => problemsOf(state.view), share: () => state.view && shareText(state.view), cut: (ext = "svg") => cutFiles(state.view, ext).map((f) => ({ ...judge(f), bytes: String(f.bytes) })), fine: () => state.pic.fine && { ...state.pic.fine, checking: state.pic.checking, fixes: state.pic.fixes?.map((f) => f.label) } };
+globalThis.nwTest = { view: () => state.view, names: (name, shrink) => studio.forNames()?.build(name, shrink), state: () => ({ zoom: state.zoom, pan: state.pan, step: state.step, turn: designTurned(), hoop: hoop().id, mode: state.mode }), sel: () => selBox(), problems: () => problemsOf(state.view), share: () => state.view && shareText(state.view), cut: (ext = "svg") => cutFiles(state.view, ext).map((f) => ({ ...judge(f), bytes: String(f.bytes) })), fine: () => state.pic.fine && { ...state.pic.fine, checking: state.pic.checking, fixes: state.pic.fixes?.map((f) => f.label) } };
