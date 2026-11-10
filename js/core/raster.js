@@ -311,16 +311,38 @@ export function skeletonEdges(mask, stroke, { spur = 1.3, dots = false, sk = nul
   };
   if (!dots) return done();
   // a dot (the i's, a full stop) thins to a lone point with no edge: give it a short stroke so it's stitched
-  const { labels, count } = label(mask), hit = new Uint8Array(count + 1), sum = new Float64Array((count + 1) * 3);
-  for (const [, , p] of out) for (const [x, y] of p) hit[labels[Math.round(y) * mask.w + Math.round(x)]] = 1;
+  // (an oval dot, over 1.25 times as long as wide (slanted i and j dots), gets its stroke along its length, as long as
+  // that less its width but under a stroke, so it's still sewn as a dot (`sewPart`): a level stroke across one sewed a
+  // 60 mm name's j dot as a tick across it)
+  // (and a blob that thins to a little star, ring or pair of strokes instead, round or oval, no longer than 2.2 strokes
+  // across, is a dot too: its strokes are dropped for one dot stroke. Yellowtail's i dot sewed as two thin bars beside
+  // each other, Sacramento's at 60 mm as a ring with a hole, Yellowtail's star of three short strokes loose threads)
+  const { labels, count } = label(mask), hit = new Uint8Array(count + 1), sum = new Float64Array((count + 1) * 6);
+  const lab = (q) => labels[Math.round(q[1]) * mask.w + Math.round(q[0])] || 0;
+  for (const [, , p] of out) for (const q of p) hit[lab(q)] = 1;
+  const x0 = new Float64Array(count + 1).fill(Infinity), x1 = new Float64Array(count + 1).fill(-Infinity), y0 = x0.slice(), y1 = x1.slice();
   for (let i = 0; i < labels.length; i++) if (labels[i]) {
-    const k = labels[i] * 3; sum[k] += i % mask.w; sum[k + 1] += Math.floor(i / mask.w); sum[k + 2]++;
+    const c = labels[i], k = c * 6, x = i % mask.w, y = Math.floor(i / mask.w);
+    sum[k] += x; sum[k + 1] += y; sum[k + 2]++; sum[k + 3] += x * x; sum[k + 4] += y * y; sum[k + 5] += x * y;
+    if (x < x0[c]) x0[c] = x; if (x > x1[c]) x1[c] = x; if (y < y0[c]) y0[c] = y; if (y > y1[c]) y1[c] = y;
   }
   for (let c = 1; c <= count; c++) {
-    const n = sum[c * 3 + 2];
-    if (hit[c] || n < stroke * stroke * 0.5) continue;   // already stitched, or a speck
-    const x = sum[c * 3] / n, y = sum[c * 3 + 1] / n, r = stroke * 0.3;
-    out.push([`dot${c}a`, `dot${c}b`, [[x - r, y], [x, y], [x + r, y]]]);
+    const n = sum[c * 6 + 2];
+    if (n < stroke * stroke * 0.5) continue;   // a speck
+    const x = sum[c * 6] / n, y = sum[c * 6 + 1] / n, r = stroke * 0.3;
+    const xx = sum[c * 6 + 3] / n - x * x, yy = sum[c * 6 + 4] / n - y * y, xy = sum[c * 6 + 5] / n - x * y;
+    const m = (xx + yy) / 2, d = Math.sqrt(((xx - yy) / 2) ** 2 + xy * xy), a = 2 * Math.sqrt(m + d), b = 2 * Math.sqrt(Math.max(0, m - d));
+    if (hit[c]) {
+      // (an apostrophe or a comma is longer than that, or thinner, and a degree sign has a hole: its own stroke stays)
+      const mine = out.filter((e) => e[2].every((q) => lab(q) === c)), W = x1[c] - x0[c] + 1, H = y1[c] - y0[c] + 1;
+      if (Math.max(W, H) > 2.2 * stroke || a > 2.2 * b || n < 0.6 * W * H || (mine.length < 2 && !mine.some((e) => e[0] === e[1]))) continue;
+      if (mine.length !== out.filter((e) => e[2].some((q) => lab(q) === c)).length) continue;   // (joined to something)
+      for (const e of mine) out.splice(out.indexOf(e), 1);
+    }
+    if (a > 1.25 * b && a - b > r) {
+      const t = 0.5 * Math.atan2(2 * xy, xx - yy), l = Math.min(a - b, stroke * 0.45), u = [Math.cos(t) * l, Math.sin(t) * l];
+      out.push([`dot${c}a`, `dot${c}b`, [[x - u[0], y - u[1]], [x, y], [x + u[0], y + u[1]]]]);
+    } else out.push([`dot${c}a`, `dot${c}b`, [[x - r, y], [x, y], [x + r, y]]]);
   }
   return done();
 }

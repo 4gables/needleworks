@@ -1,0 +1,67 @@
+<!doctype html><meta charset="utf-8"><title>Lettering look</title>
+<link rel="stylesheet" href="../../css/app.css">
+<style>body{display:block;padding:12px;font:13px monospace} pre{white-space:pre-wrap}</style>
+<p>Class guarded: lettering whose proportions aren't the font's (round 13: a Josefin "PWK" monogram's W sewn 1.26 times
+its P and K where the hint says 1½, the letters sized by their centre lines, which stop half a stroke inside a flat
+top but run to a pointed one's tip; a 60 mm Great Vibes "Raj" sewn as an even 2.6 mm marker line, its j's dot a
+tick). For every font: (1) each initial of a few monograms, sewn alone at the size the monogram sews it
+(<code>initialSizes</code>), is 0.68 of the middle letter's height (one or two: the same height) within 11 % (a script capital's flourish
+counts; Josefin's P was 16 % over), letters with a tail aside; (2) at 60 mm every lone dot (i, j) is round: its sewn box at least 0.6 as wide as long and at least
+the column wide; (3) at 60 mm, the script fonts drawn with thick and thin strokes (not the monoline Sacramento and Meow Script) sew them: the widest satin stitches at least 1.4
+times the narrowest (the middle 80 %). Run: serve tests/batch_server.py, open
+<code>tests/browser/lettering_look.html</code>. Title: <code>DONE checks problems</code>.</p>
+<pre id="log"></pre>
+<script type="module">
+import { FONTS } from "../../js/core/fonts.js";
+import { initialSizes, pieceBounds, pieceStitches } from "../../js/studio/pieces.js";
+import { initials } from "../../js/core/typed.js";
+
+const log = (s) => (document.getElementById("log").textContent += s + "\n");
+let checks = 0, bad = 0;
+const fail = (s) => { bad++; log("FAIL " + s); };
+const text = (t, font, size) => ({ id: 1, x: 0, y: 0, color: "#000", kind: "text", text: t, font, size, shape: "straight", radius: 30 });
+for (const { family } of FONTS) await document.fonts.load(`40px "${family}"`);
+
+// (1) monogram initials
+const SETS = ["PWK", "AMV", "OWL", "JKM", "TBS", "aMs", "HW", "VO"];
+for (const { family, name } of FONTS) for (const set of SETS) {
+  const chars = initials(set).slice(0, 3), { h, sizes } = initialSizes(chars, family, 30);
+  const H = chars.map((c, i) => { const b = pieceBounds(text(c, family, sizes[i])); return b ? b[3] - b[1] : 0; });
+  const ref = chars.length === 3 ? 1 : 0, want = chars.length === 3 ? [0.68, 1, 0.68] : chars.map(() => 1);
+  if (h[ref] || !H[ref]) continue;
+  chars.forEach((c, i) => {
+    if (i === ref || h[i] || !H[i]) return;
+    checks++;
+    const r = H[i] / H[ref];
+    if (Math.abs(r / want[i] - 1) > 0.11) fail(`${name} monogram ${set}: ${c} is ${r.toFixed(2)} of ${chars[ref]}'s height, not ${want[i]}`);
+  });
+}
+// (2) round dots and (3) thick and thin, at 60 mm
+const bbox = (q) => { let a = Infinity, b = Infinity, c = -Infinity, d = -Infinity; for (const [x, y] of q) { a = Math.min(a, x); b = Math.min(b, y); c = Math.max(c, x); d = Math.max(d, y); } return [a, b, c, d]; };
+for (const { family, name, print } of FONTS) {
+  const paths = pieceStitches(text("ij Ji", family, 60)), boxes = paths.map(bbox);
+  paths.forEach((q, k) => {
+    const [a, b, c, d] = boxes[k], w = c - a, l = d - b;
+    if (q.length < 6 || Math.max(w, l) > 8) return;
+    // (alone: no other path's box comes within 1 mm)
+    if (boxes.some((o, j) => j !== k && o[0] < c + 1 && o[2] > a - 1 && o[1] < d + 1 && o[3] > b - 1)) return;
+    checks++;
+    if (Math.min(w, l) < 0.6 * Math.max(w, l)) fail(`${name} 60 mm: a dot sewn ${w.toFixed(1)} × ${l.toFixed(1)} mm, not round`);
+  });
+  if (print || /Sacramento|Meow/.test(name)) continue;
+  // satin stitch lengths (consecutive points over 0.6 mm apart that turn back on the last)
+  const lens = [];
+  for (const q of pieceStitches(text("Raj Lily", family, 60))) for (let i = 2; i < q.length; i++) {
+    const u = [q[i - 1][0] - q[i - 2][0], q[i - 1][1] - q[i - 2][1]], v = [q[i][0] - q[i - 1][0], q[i][1] - q[i - 1][1]], lu = Math.hypot(...u), lv = Math.hypot(...v);
+    if (lu > 0.6 && lv > 0.6 && (u[0] * v[0] + u[1] * v[1]) / (lu * lv) < -0.8) lens.push(lv);
+  }
+  lens.sort((x, y) => x - y);
+  if (lens.length < 100) continue;
+  checks++;
+  const lo = lens[Math.floor(lens.length * 0.1)], hi = lens[Math.floor(lens.length * 0.9)];
+  log(`${name} 60 mm satin ${lo.toFixed(2)}-${hi.toFixed(2)} mm`);
+  if (hi < 1.4 * lo) fail(`${name} 60 mm: satins ${lo.toFixed(2)}-${hi.toFixed(2)} mm, one even width`);
+}
+log(`${checks} checks, ${bad} problems`);
+document.title = `DONE ${checks} ${bad}`;
+</script>

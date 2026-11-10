@@ -310,7 +310,7 @@ function column(p, scale = 1, keep = false) {
   const dist = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1]), mid = (v) => v.sort((a, b) => a - b)[v.length >> 1];
   // the source's own spacing (hits on one edge, mm at its own size) where it's sane (sold designs 0.28-0.42); more
   // open or denser comes out at the nearest sane value
-  const gap = satinGap1(p, scale);
+  const gap = satinGap1(p, scale, keep);
   // (an open zigzag, underlay mostly, stays as it was: it's under the satin, and resampled it missed spots the scaled
   // original covered where peace.pes's bars meet its ring)
   if (gap > OPEN) return [line(p)];
@@ -506,11 +506,14 @@ const EXT = 0.5, SATIN = [0.3, 0.5], ROWS = [0.15, 0.5];
 const clamp = (v, [a, b]) => Math.min(b, Math.max(a, v));
 // a satin column's gap between hits on one edge, at the source's own size, brought into SATIN. Over OPEN it's a
 // zigzag underlay (or meant open) and stays a line: rebuilt as satin, peace.pes's underlay took 81 % more thread.
-// (Satins in the samples measure 0.2-0.9, underlay 1.0-3.)
-const OPEN = 1;
-function satinGap1(p, scale) {
+// (Satins in the samples measure 0.2-0.9, underlay 1.0-3.) Evened out in place (`even`: `respace`), too open comes back
+// fuller the more open it was: 0.5 just past SATIN, down to `FULL` 0.4 (the middle, Ink/Stitch's default) from 0.7: a
+// DST at 0.85 "evened out" to 0.5 still showed the fabric. (Gradually: 0.51 to 0.4 would sew a satin barely open a
+// third more thread.) Re-stitched at another size it keeps the nearest sane gap, as near the source's look as it can.
+const OPEN = 1, FULL = 0.4;
+function satinGap1(p, scale, even = false) {
   const g = p.slice(2).map((q, k) => Math.hypot(q[0] - p[k][0], q[1] - p[k][1])).sort((a, b) => a - b), raw = g[g.length >> 1] / scale;
-  return raw > OPEN ? raw : clamp(raw, SATIN);
+  return raw > OPEN ? raw : even && raw > SATIN[1] ? SATIN[1] - (SATIN[1] - FULL) * Math.min(1, (raw - SATIN[1]) / 0.2) : clamp(raw, SATIN);
 }
 // fills: the area their stitches cover (closed over 1.2 mm on a 4 px/mm grid) filled again at the source's row
 // spacing (`scale` given; else 0.4 mm), started from the end nearer `from`, less what

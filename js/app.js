@@ -894,7 +894,8 @@ $("names-make").onclick = async () => {
   // that isn't the name as typed (Zoë is Zoe.pes, a second Emma Emma_2.pes: the note names files, the machine shows them)
   // (a name sewn as a thin line where the design is bold stands out: it was one more word in the brackets)
   // (how much smaller, said: "(smaller)" was all a name made at 28 % said)
-  const notes = (m) => [m.smaller ? `smaller, ${m.pct} %` : "", m.lines ? "on two lines" : "", m.sideways ? "hoop turned" : "", m.runs ? `runs into ${m.runs}` : ""].filter(Boolean).join(", ");
+  // (and its loose threads, as the design's chip says them: Björk's 2 and Zoe's 1 were said nowhere)
+  const notes = (m) => { const k = shortJumps(m.pattern); return [m.smaller ? `smaller, ${m.pct} %` : "", m.lines ? "on two lines" : "", m.sideways ? "hoop turned" : "", m.runs ? `runs into ${m.runs}` : "", k ? `${k} loose ${k === 1 ? "thread" : "threads"} to snip after` : ""].filter(Boolean).join(", "); };
   $("names-thumbs").innerHTML = made.map((m, i) => `<figure data-size="${m.size.map((v) => +(v || 0).toFixed(2)).join(" ")}"><canvas data-i="${i}"></canvas><figcaption>${escapeHtml(m.name)}${m.file !== `${m.name}.pes` ? ` · ${escapeHtml(m.file)}` : ""}${notes(m) ? ` (${escapeHtml(notes(m))})` : ""}${m.thin ? `<br><strong class="names-thin">Thin line, not bold</strong>` : ""}</figcaption></figure>`).join("");
   for (const c of $("names-thumbs").querySelectorAll("canvas")) {
     const m = made[+c.dataset.i]; draw(c, m.shown || m.pattern, { pad: 6, fabric: "white" });   // (3 px: an arched name's top sat on the edge)

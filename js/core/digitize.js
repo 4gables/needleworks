@@ -1401,7 +1401,36 @@ function lineArt(img, analysis, opts) {
   const fabric = colors.find((c) => c.background), labOf = new Map(colors.map((c) => [c.id, srgbToLab(...hexToRgb(c.picture || c.hex))]));
   const colOf = (l) => (mine.has(l) ? labOf.get(l) : fabric ? labOf.get(fabric.id) : null);
   const alike = (a, b) => !!a && !!b && deltaE2000(a, b) < 15;
-  const toFabric = fabric ? fabric.id : -1, before = labels.slice(), moves = [];
+  const toFabric = fabric ? fabric.id : -1, moves = [];
+  // JPEG noise: a thin piece (nowhere 1.5 mm across) under 5 mm long of a strong colour (30 or more from the fabric,
+  // ΔE00) whose own pixels are faint, under 30 % as far from the fabric as its colour is, is the ringing a JPEG leaves
+  // beside a hard edge, not a line: it's fabric. A flower's JPEG drew a 3 mm streak over its lettering. (A real line a
+  // pixel or two wide is anti-aliased, but keeps most of its colour. A pale colour's lines are faint all along, as
+  // faint as noise: at 40 % of etsy_1's lavender, 16 from the paper, its stems came out in pieces.)
+  if (fabric) {
+    const fl = labOf.get(fabric.id), { data } = img;
+    for (const col of used) {
+      const mask = { w, h, data: new Uint8Array(w * h) };
+      for (let i = 0; i < w * h; i++) mask.data[i] = labels[i] === col.id ? 1 : 0;
+      const dt = distanceTransform(mask), { labels: cl, count } = label(mask), wide = new Uint8Array(count + 1);
+      const x0 = new Int32Array(count + 1).fill(w), x1 = new Int32Array(count + 1).fill(-1), y0 = new Int32Array(count + 1).fill(h), y1 = new Int32Array(count + 1).fill(-1);
+      for (let i = 0; i < w * h; i++) {
+        const c = cl[i]; if (!c) continue;
+        if (dt[i] > 0.75 * res) wide[c] = 1;
+        const x = i % w, y = (i - x) / w;
+        if (x < x0[c]) x0[c] = x; if (x > x1[c]) x1[c] = x; if (y < y0[c]) y0[c] = y; if (y > y1[c]) y1[c] = y;
+      }
+      const short = (c) => !wide[c] && Math.max(x1[c] - x0[c], y1[c] - y0[c]) + 1 < 5 * res, full = deltaE2000(labOf.get(col.id), fl);
+      if (full < 30) continue;
+      const sum = new Float64Array(count + 1), n = new Int32Array(count + 1);
+      for (let i = 0; i < w * h; i++) {
+        const c = cl[i]; if (!c || !short(c)) continue;
+        sum[c] += deltaE2000(srgbToLab(data[i * 4], data[i * 4 + 1], data[i * 4 + 2]), fl); n[c]++;
+      }
+      for (let i = 0; i < w * h; i++) { const c = cl[i]; if (c && n[c] && sum[c] / n[c] < 0.3 * full) labels[i] = toFabric; }
+    }
+  }
+  const before = labels.slice();
   for (const col of used) {
     const mask = { w, h, data: new Uint8Array(w * h) };
     for (let i = 0; i < w * h; i++) mask.data[i] = before[i] === col.id ? 1 : 0;

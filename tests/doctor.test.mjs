@@ -3,7 +3,7 @@
 import { readFileSync, readdirSync, existsSync } from "fs";
 import { designStats, readEmbroidery, validatePES, writePES } from "../js/core/formats.js";
 import { checkup, fitFix, fix, landJumps, openedFile, sortColors } from "../js/doctor.js";
-import { moves, verdictOf } from "../js/quality.js";
+import { moves, satinGap, verdictOf } from "../js/quality.js";
 import { distanceTransform } from "../js/core/raster.js";
 
 // Thread laid per mm² in each colour block (stitch length over the area its stitches cover, closed over 1.2 mm on a
@@ -68,6 +68,10 @@ for (const dir of dirs) for (const f of readdirSync(dir).filter((x) => /\.(pes|d
     n++;
     const p = fix(d, { satin: true }), v = validatePES(writePES(p), p);
     if (!v.ok) { bad++; console.error(`FAIL ${f} satin: ${v.error}`); }
+    // (a satin far too open comes back full, about 0.4, not at the top of the range: rosacea.dst's 0.85 came back 0.5,
+    // still showing the fabric; one in range stays where it was)
+    const g0 = satinGap(d.stitches), g1 = satinGap(p.stitches);
+    if (g0 !== null && g1 !== null && (g0 >= 0.7 ? g1 > 0.44 : g0 >= 0.3 && g0 <= 0.5 && Math.abs(g1 - g0) > 0.05)) { bad++; console.error(`FAIL ${f} satin evened out ${g0} -> ${g1}`); }
   }
   for (const scale of [0.5, 0.7, 1, 1.5, 2.5]) for (const sort of [false, true]) {
     n++;
