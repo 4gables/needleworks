@@ -52,3 +52,44 @@ export function problemsItems(list, tag = "li", cls = "after") {
 }
 // in a line of text (beside Download, the download dialog): one span each, a space between
 export const problemsInline = (list) => list.map((p) => `<span data-problem="${esc(p.id)}">${esc(p.text)}</span>`).join(" ");
+
+// ---------- sizes ----------
+// Supply sizes, as a ruler shows them: centimetres (whole from 10 cm, else to the millimetre) and inches in eighths
+// (a tape measure's marks), both from the true size. `up`: fabric to cut, never short of it. ("15 × 12 cm (5.7 × 4.5 in)"
+// was 5.9 in, and "½ in (1 cm)" 1.3 cm: each was rounded from the other, to tenths no ruler has.)
+const EIGHTHS = ["", "⅛", "¼", "⅜", "½", "⅝", "¾", "⅞"];
+const step = (v, up) => (up ? Math.ceil(v - 1e-6) : Math.round(v));
+export function inches(mm, up = false) {
+  const e = step((mm / 25.4) * 8, up), w = Math.floor(e / 8), f = EIGHTHS[e % 8];
+  return `${w || !f ? w : ""}${f}`;
+}
+export const cm = (mm, up = false) => String(mm >= 100 ? step(mm / 10, up) : step(mm, up) / 10);
+// "15 cm (6 in)", "15 × 12 cm (5⅞ × 4¾ in)"; in a sentence about inches, inches first: "½ in (1.3 cm)"
+export const measure = (mm, up = false) => `${cm(mm, up)} cm (${inches(mm, up)} in)`;
+export const measure2 = (w, h, up = false) => `${cm(w, up)} × ${cm(h, up)} cm (${inches(w, up)} × ${inches(h, up)} in)`;
+export const inchFirst = (mm, up = false) => `${inches(mm, up)} in (${cm(mm, up)} cm)`;
+
+// ---------- words explained ----------
+// Sewing words a newcomer may not know (round 10: "stabilizer" and "topper" were never explained, and the loose-thread
+// note led with the machine's setting), explained once, after the sentence that first uses them on a surface: Have
+// ready, the steps, When it's done, read in that order (`explained`). Every surface takes them from there.
+export const GLOSSARY = [
+  [/\bstabilizer\b/i, "Stabilizer is a backing sheet, sold next to embroidery thread, that keeps the fabric from puckering while it's sewn."],
+  [/\btopper\b/i, "A topper is a thin film laid on top of a fluffy fabric so the stitches don't sink into it; it tears or washes away."],
+  [/\bloose threads?\b/i, "A loose thread is a short thread the machine leaves between two parts instead of cutting it."],
+];
+// `texts` in reading order, each with each word explained after its first sentence that uses it (where it isn't yet)
+export function explained(texts) {
+  const left = GLOSSARY.filter(([, say]) => !texts.some((t) => t?.includes(say)));
+  return texts.map((t) => {
+    if (!t) return t;
+    for (let i = 0; i < left.length; i++) {
+      const m = left[i][0].exec(t); if (!m) continue;
+      const end = /[.!?](?=\s|$)/g; end.lastIndex = m.index;
+      const e = end.exec(t), at = e ? e.index + 1 : t.length;
+      t = `${t.slice(0, at)} ${left[i][1]}${t.slice(at)}`;
+      left.splice(i--, 1);
+    }
+    return t;
+  });
+}

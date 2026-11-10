@@ -6,7 +6,7 @@ import { DEFAULT_MACHINE, MACHINES, MARGIN, hoop as getHoop } from "./core/machi
 import { DENSITY, LEARN, contentBox, picturePlan, pictureImage } from "./core/digitize.js";
 import { hexToRgb, nearestBrotherThread, pecThread } from "./core/threads.js";
 import { CLOTHS, colorBlocks, draw } from "./render.js";
-import { FINISH, FIRST_STEP, TURNED, TURN_PIC, cutDXF, cutName, cutSVG, nextThread, sewMinutes, sewSheet, youHtml } from "./sheet.js";
+import { TURNED, TURN_PIC, cutDXF, cutName, cutSVG, firstStep, sewMinutes, sewSheet, told, youHtml } from "./sheet.js";
 import { handOut, judge } from "./gate.js";
 import { DST_COLOURS, checkup, fewerBlocks, fix, heat, openedFile, pauses, shortJumps, sortedChanges } from "./doctor.js";
 import { HARD, MAX_BLOCKS, denseWords, moves, verdictOf } from "./quality.js";
@@ -146,7 +146,7 @@ function setView(v) {
     // (the Design tab never said it fits, as the Open tab's file card does)
     v.split ? `<span>${v.split.length} hoopings</span>` : fits ? (state.mode === "design" ? `<span>Fits ${escapeHtml(h.name.replace(/ hoop$/, ""))}</span>` : "") : `<span class="bad">Too big for the ${h.name}</span>`,
     offCentre(v, fits) ? `<span class="note">Off centre here: the machine centres it <button type="button" class="link" id="recentre">Centre it</button></span>` : "",
-    snips ? `<span${tip("The machine only trims moves between parts longer than its “jump stitch not to trim” setting (5 mm at the lowest). The thread is locked at both ends, so these are safe to snip after stitching.")}>${snips} loose ${snips === 1 ? "thread" : "threads"} to snip after</span>` : "",
+    snips ? `<span${tip("Short threads the machine leaves between two parts instead of cutting them. They're locked at both ends, so snip them after stitching. (The machine only cuts moves longer than its “jump stitch not to trim” setting, 5 mm at the lowest.)")}>${snips} loose ${snips === 1 ? "thread" : "threads"} to snip after</span>` : "",
   ].join("");
   // One chip per thread, in the order each is first put on, with how many times it's put on: a chip per colour block
   // (Black, Red, Black) named one thread twice, each with its own note, and the row grew over the preview. Blocks in a
@@ -212,15 +212,15 @@ function picSteps(v, st) {
   const ready = [heavy ? "Cut-away stabilizer (or two layers of tear-away on woven fabric): this is a lot of stitching." : "Tear-away stabilizer under woven fabric; cut-away under knits (T-shirts, sweatshirts), which stretch.",
     `${threadList(blocks.map((b) => b.color), (h) => state.pic.machineName?.get(h) || nearestBrotherThread(h).name)} They are sewn in this order.`];
   // (each thread named: "thread this colour" left the colour to the swatch)
-  const steps = blocks.map((b, i) => ({ you: i ? `Change to ${thread(b)} and press Start.` : `Hoop the fabric with the stabilizer under it. Put on ${thread(b)}. Press Start.`, sews: "" }));
+  const steps = blocks.map((b, i) => ({ you: i ? `Change to ${thread(b)} and press Start.` : firstStep(v.filename, thread(b), "Hoop the fabric with the stabilizer under it"), sews: "" }));
   const after = "Take the hoop off and snip any loose threads between parts. Tear-away stabilizer: tear it off gently, holding the stitches down with your thumb. Cut-away: trim it about ¼ in from the stitching (don't tear it: it keeps the design in shape).";
-  v.sheet = { ...v.sheet, ready, steps, after: [after] };
+  const said = v.sheet = told({ ...v.sheet, ready, steps, after: [after] });
   $("pic-steps-count").textContent = `· ${blocks.length} ${blocks.length === 1 ? "thread" : "threads"}`;
   $("pic-steps").innerHTML = problemsItems(shownOn(problemsOf(v), "steps")) + (turned() ? `<li class="after"><b>Hooping</b><span class="turned">${TURN_PIC}${escapeHtml($("done-turn").textContent)}</span></li>` : "")
-    + `<li class="after"><b>Have ready</b><ul class="ready">${ready.map((r) => `<li>${escapeHtml(r)}</li>`).join("")}</ul></li>`
+    + `<li class="after"><b>Have ready</b><ul class="ready">${said.ready.map((r) => `<li>${escapeHtml(r)}</li>`).join("")}</ul></li>`
     + blocks.map((b, i) => { const t = mt[b.index] || nearestBrotherThread(b.color);
-      return `<li><b><span class="n">${i + 1}</span><i style="background:${b.color}"></i>${threadHtml(b.color, t.name)}</b>${youHtml(steps[i].you, escapeHtml)}</li>`; }).join("")
-    + `<li class="after"><b>When it's done</b><span>${escapeHtml(after)}</span></li>`;
+      return `<li><b><span class="n">${i + 1}</span><i style="background:${b.color}"></i>${threadHtml(b.color, t.name)}</b>${youHtml(said.steps[i].you, escapeHtml)}</li>`; }).join("")
+    + `<li class="after"><b>When it's done</b><span>${escapeHtml(said.after.join(" "))}</span></li>`;
 }
 // A design reaching past 204.8 mm from its centre (only a too-big or split design's whole view, never a file to sew)
 // overflows the PEC box's signed 12 bits and reads back shifted: put it back where it was made, or a piece dragged
@@ -413,9 +413,9 @@ $("share").hidden = !canShareFile();
 // what goes with a shared file: what to have ready and the steps, short and plain (it said only "Embroidery file for a
 // Brother PE900. Copy it to a USB stick"), cut at a line past ~1800 characters so a text message can carry it
 function shareText(v) {
-  const sheet = v.sheet || {}, blocks = v.cache?.blocks || [], mt = machineThreadList(v);
-  const steps = sheet.steps?.length ? sheet.steps : blocks.map((b, i) => ({ you: nextThread(blocks, i, mt[i] && `Brother ${mt[i].name}`) }));
-  const lines = [`Embroidery file for a ${hoop().machineName} (${hoop().name}). Copy it to a USB stick, plug it into the machine and pick the design.`];
+  const blocks = v.cache?.blocks || [], mt = machineThreadList(v), sheet = told(v.sheet, blocks, mt, v.filename), steps = sheet.steps;
+  // (copy it to a USB stick: how it's picked on the machine is step 1, as everywhere)
+  const lines = [`Embroidery file for a ${hoop().machineName} (${hoop().name}). Copy it to a USB stick.`];
   if (turnedFile()) lines.push("", $("done-turn").textContent);
   // (what's still wrong, and worth knowing, as every other surface says it: before the steps, so a long list of steps
   // can't cut it off)
@@ -542,6 +542,9 @@ function downloaded(v, zipped, files = [], saved = true) {
     : part ? `It opens ${what}, but only part of the design is in it: the file it came from ends early. Download that file again if you can.` : `Checked: it opens ${what}.`;
   $("done-checked").className = bad.length || part ? "warn" : "good";
   $("done-zip").hidden = !zipped;
+  // (several designs saved this session: a newcomer asked which order to sew them in)
+  if (saved) (downloaded.names ||= new Set()).add(v.filename);
+  $("done-own").hidden = !saved || (downloaded.names?.size || 0) < 2;
   $("done-phone").hidden = !matchMedia("(pointer: coarse)").matches;
   // (an Android phone has no Lightning port, nor an iPhone a "Files by Google")
   $("done-phone").textContent = /Android/i.test(navigator.userAgent)
@@ -662,10 +665,10 @@ $("item-done").onclick = () => {
 const along = { i: 0, lock: null };
 function alongSteps(v) {
   const blocks = v.cache.blocks, mt = machineThreadList(v);
-  const steps = [...(v.sheet?.steps?.length ? v.sheet.steps : blocks.map((b, i) => ({ you: nextThread(blocks, i, mt[i] && `Brother ${mt[i].name}`), sews: "" })))];
+  const sheet = told(v.sheet, blocks, mt, v.filename), steps = [...sheet.steps];
   // (the first screen says what to have by the machine and how to hoop it, each on its own: they ran together as one
   // bold paragraph with the action at the end)
-  if (v.sheet?.ready?.length && steps.length) steps[0] = { ...steps[0], ready: v.sheet.ready };
+  if (sheet.ready.length && steps.length) steps[0] = { ...steps[0], ready: sheet.ready };
   if (turnedFile() && steps.length) steps[0] = { ...steps[0], turn: $("done-turn").textContent };
   return steps.map((s, i) => {
     const b = blocks.find((x) => x.index === i), n = b ? b.segs.reduce((a, sg) => a + sg.length, 0) : 0;
@@ -683,7 +686,7 @@ function alongShow() {
   let look = { hide: v.hide, fabricShapeBlock: v.fabricShapeBlock };
   if (done) {
     $("along-title").textContent = "Finished";
-    $("along-you").innerHTML = youHtml((v.sheet?.after || []).join(" ") || FINISH, escapeHtml, "p");
+    $("along-you").innerHTML = youHtml(told(v.sheet, v.cache.blocks, mt, v.filename).after.join(" "), escapeHtml, "p");
     $("along-ready").hidden = $("along-turn").hidden = $("along-look").hidden = true;
     $("along-sews").textContent = ""; $("along-time").textContent = ""; $("along-wrong").hidden = true;
   } else {
@@ -694,7 +697,7 @@ function alongShow() {
     // (what's still wrong, and worth knowing, on the first screen, as the steps and the sew sheet say it: words.js)
     const probs = i ? "" : problemsItems(shownOn(problemsOf(v), "along"), "div", "");
     $("along-look").hidden = !probs; $("along-look").innerHTML = probs;
-    $("along-you").innerHTML = s.you || !i ? youHtml(s.you || FIRST_STEP, escapeHtml, "p") : "";
+    $("along-you").innerHTML = s.you || !i ? youHtml(s.you || firstStep(v.filename), escapeHtml, "p") : "";
     $("along-sews").textContent = s.sews || "";
     $("along-time").textContent = `About ${s.minutes} min of sewing.`;
     // (what to do when the wrong thread went on: nothing said, a tester stopped and started over)
