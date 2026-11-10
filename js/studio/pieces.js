@@ -31,6 +31,23 @@ function recent(map, key) { const v = map.get(key); map.delete(key); map.set(key
 // kept that lettering after the font arrived.
 // (a family name the CSS parser can't read, from a crafted saved design, is a font that isn't ready, not a DOMException)
 const fontReady = (family) => { try { return !family || typeof document === "undefined" || document.fonts.check(`40px "${family}"`); } catch { return false; } };
+// A script's thick and thin: the ink's width across each stroke at every point of its line, px (2 x the distance to the
+// paper, less the pixel), as { start, w } (null off the ink), smoothed to the 35th percentile of the next stroke's
+// width either way so a junction's blob or a crossing doesn't widen the column there.
+function inkWidths(edges, info) {
+  const { w: W, h: H } = info.mask, dt = distanceTransform(info.mask), r = Math.max(2, Math.round(info.stroke * 1.2));
+  return edges.map((e) => {
+    const p = e[2];
+    if (!Array.isArray(p) || p.length < 2) return null;
+    const raw = p.map(([x, y]) => { const X = Math.round(x), Y = Math.round(y); return X >= 0 && Y >= 0 && X < W && Y < H && dt[Y * W + X] > 0 ? 2 * dt[Y * W + X] - 1 : null; });
+    const w = raw.map((v, i) => {
+      if (v === null) return null;
+      const win = raw.slice(Math.max(0, i - r), i + r + 1).filter((u) => u !== null).sort((a, b) => a - b);
+      return win[Math.floor(win.length * 0.35)];
+    });
+    return { start: p[0], w };
+  });
+}
 // Swashes: lengths in x-heights, as the bookmark had them (a script tail longer than its lead-in; print fonts get
 // straight dashes either side instead)
 const SWASH = { lead: 1.8, tail: 2.6, dash: 2.2 };
@@ -52,7 +69,7 @@ function letterStrokes(text, family, spacing = 0, kern = null, lead = false, tai
   // (how the ink ends round a loose end, px: `endShape` in raster.js)
   const ends = edges.map((e) => (e[5] ? { start: e[2][0], ...e[5] } : null));
   const sides = edges.map((e) => (e[6] ? { start: e[2][0], w: e[6], path: e[2] } : null));
-  const out = { edges, comps: order(edges), info, counters, notches: notches(edges, info.stroke), tapers, ends, sides };
+  const out = { edges, comps: order(edges), info, counters, notches: notches(edges, info.stroke), tapers, ends, sides, thick: print ? null : inkWidths(edges, info) };
   drawn++;
   if (fontReady(family)) {
     lettering.set(key, out);
@@ -74,7 +91,7 @@ function letters(text, family, size, style = "auto", spacing = 0, kern = null, c
   if (kern && (sw.cut[0] || sw.cut[1])) kern = kern.slice(sw.cut[0], kern.length - sw.cut[1]);
   text = sw.text;
   if (!text) return { parts: [], satinW: 0 };
-  const { edges, info, counters, notches, tapers, ends, sides, ...ls } = letterStrokes(text, family, spacing, kern && kern.some((v) => v) ? kern : null, sw.lead, sw.tail);
+  const { edges, info, counters, notches, tapers, ends, sides, thick, ...ls } = letterStrokes(text, family, spacing, kern && kern.some((v) => v) ? kern : null, sw.lead, sw.tail);
   let comps = ls.comps;
   const all = comps.flatMap((c) => c.flatMap(([p]) => p));
   if (!all.length) return { parts: [], satinW: 0 };
@@ -152,7 +169,22 @@ function letters(text, family, size, style = "auto", spacing = 0, kern = null, c
     const rows = t.w.map((v, i) => [same ? at[i] / L : 1 - at[i] / L, v && (same ? v[0] : v[1]) * s, v && (same ? v[1] : v[0]) * s]);
     return same ? rows : rows.reverse();
   };
-  const parts = comps.flatMap((c, k) => c.map(([p, mode, e], j) => [p.map(([x, y]) => [(x - cx) * s, (y - info.baseline) * s]), mode, print && k > 0 && j === 0, caps.get(e) || 0, taperOf(p, e), endsOf(p, e), sidesOf(p, e)]));
+  // (the eighth: a script's thick and thin, [[fraction along, column width mm], ...] as its path runs, once its column
+  // is 2 mm or more (big lettering): the ink's width, from `THIN` mm (hairlines) to the column's cap. A 60 mm Great
+  // Vibes name sewed as an even 2.6 mm line, a marker pen's, and its j's dot a tick. Smaller, the ink's hairlines are
+  // narrower than a column can be sewn and its thick strokes hardly wider than the column.)
+  const calli = thick && satinW >= 2 && style !== "line", lo = Math.max(THIN, satinW * 0.45);
+  const thickOf = (p, e) => {
+    const t = calli && thick[e];
+    if (!t) return null;
+    // (by point: a walk may start part way along a stroke, so p can be some of it, either way round)
+    const at = t.map || (t.map = new Map(edges[e][2].map(([x, y], i) => [x + "," + y, t.w[i]]))), d = [0];
+    for (let i = 1; i < p.length; i++) d.push(d[i - 1] + Math.hypot(p[i][0] - p[i - 1][0], p[i][1] - p[i - 1][1]));
+    const hi = Math.min(WIDE, xh * 0.2, caps.get(e) || Infinity);
+    const L = d[d.length - 1] || 1, rows = p.map(([x, y], i) => { const v = at.get(x + "," + y); return [d[i] / L, v == null ? null : Math.min(hi, Math.max(lo, v * s))]; });
+    return rows.some((r) => r[1] !== null) ? rows : null;
+  };
+  const parts = comps.flatMap((c, k) => c.map(([p, mode, e], j) => [p.map(([x, y]) => [(x - cx) * s, (y - info.baseline) * s]), mode, print && k > 0 && j === 0, caps.get(e) || 0, taperOf(p, e), endsOf(p, e), sidesOf(p, e), thickOf(p, e)]));
   const open = Math.min(satinW || Infinity, ...caps.values());
   const pockets = counters.map((c) => ({ peak: c.peak * s, saddle: c.saddle * s }));
   return { parts, satinW, xh, stroke, open, pockets, top: (y0 - info.baseline) * s, bottom: (y1 - info.baseline) * s };
@@ -474,12 +506,29 @@ function densify(p, step) {
 // one); towel lettering has its knockdown underneath instead (a zigzag on top of it took the towel name to 24
 // hits/mm²); cotton, felt and denim sew as they always have. `small` lettering (under a 6 mm x-height, where the steps
 // suggest 60 wt thread) gets a 0.34 mm satin: the thinner thread needs it closer to cover.
+// a big script's column width along it (`thickOf`'s rows, [fraction, mm]): { at(t), max }. Gaps (off the ink) take
+// the width either side.
+const THIN = 1.2;
+function inkAt(rows, w, least = 0) {
+  const ok = rows.filter((r) => r[1] !== null);
+  // (sewn as it was where that's the ink's width anyway)
+  if (!ok.some((r) => Math.abs(Math.max(least, r[1]) - w) > 0.05 * w)) return null;
+  const f = ok.map((r) => r[0]), v = ok.map((r) => Math.max(least, r[1]));
+  const at = (t) => {
+    let lo = 0, hi = f.length - 1;
+    if (t <= f[0]) return v[0];
+    if (t >= f[hi]) return v[hi];
+    while (hi - lo > 1) { const m = (lo + hi) >> 1; if (f[m] <= t) lo = m; else hi = m; }
+    return f[hi] > f[lo] ? v[lo] + ((v[hi] - v[lo]) * (t - f[lo])) / (f[hi] - f[lo]) : v[lo];
+  };
+  return { at, max: Math.max(...v) };
+}
 function stitchLetters(parts, satinW, fab = "cotton", small = false) {
   const zz = fab === "knit" ? 1.5 : 2.5, pull = fab === "knit" ? 0.3 : 0;
   const density = wt === "auto" ? (fab === "knit" ? 0.42 : small ? 0.34 : 0.38) : THREADS[wt].satin + (fab === "knit" ? 0.04 : 0);
-  let gap = false, last = null;   // (a skipped stroke hands its jump on to the next one sewn)
+  let gap = false, last = null, lastW = satinW;   // (a skipped stroke hands its jump on to the next one sewn)
   if (!satinW) parts = pointed(parts);
-  return parts.map(([p0, mode, g, cap, taper, ends, sides]) => {
+  return parts.map(([p0, mode, g, cap, taper, ends, sides, thick]) => {
     // (a corner is narrowed to the ink, and stops where that's under the narrowest column: not on a towel, which
     // keeps its wide columns, nor in a fine line (`pointed`); its centre run goes on to where the point is)
     const w = cap && fab !== "towel" ? Math.min(cap, satinW) : satinW;   // (a towel keeps its wide column)
@@ -487,7 +536,13 @@ function stitchLetters(parts, satinW, fab = "cotton", small = false) {
     const shaped = satinW && fab !== "towel" && !tp, clip = shaped && sides ? sideClip(p, sides, w) : null;
     const en = shaped && ends ? endCut(p, ends, w, clip) : clip ? { p, shape: clip, first: 0, last: 0 } : null;
     const q = en && mode !== "run" ? en.p : p;
-    const r = q.length < 2 ? [] : sewPart(q, mode, w, tp ? tp.wAt || CENTRE : null, p0, en);
+    // (a big script's column follows the ink's thick and thin, from THIN to WIDE, a fifth of the x-height or a
+    // counter's cap: `thickOf`)
+    // (its way out under it is a centre run: the zigzag, as wide as the usual column less 0.8, stuck out of hairlines)
+    // (a short stroke, a dot's or a hook's, is never narrower than the usual column: thinning leaves a little ring in a
+    // round dot, and its ink measured from there to the dot's edge sewed it as a ring)
+    const big = thick && !tp && fab !== "towel", ink = big ? inkAt(thick, w, length(p) < 4 * w ? w : 0) : null;
+    const r = q.length < 2 ? [] : sewPart(q, mode, ink && mode !== "run" ? ink.max : w, tp ? tp.wAt || CENTRE : ink?.at, p0, en, w, !!big);
     gap ||= !!g;
     if (gap && r.length) { r.gap = true; gap = false; }
     // (a run satined back over: a lock at its start goes 1 mm in along the stroke, under that satin; never past halfway)
@@ -495,11 +550,14 @@ function stitchLetters(parts, satinW, fab = "cotton", small = false) {
     // (a run out from the node the last column came back to: the needle is on that column, at most half of it from
     // the centre line, and stitches to it under the column rather than jumping: from WIDE columns' edges it was over
     // 2 mm, a trim and locks at each junction)
-    const from = last; last = p0[p0.length - 1];
-    if (mode === "run" && satinW && r.length && !r.gap && from && Math.hypot(p0[0][0] - from[0], p0[0][1] - from[1]) < 1e-6) r.reach = (satinW + 0.3 + pull) / 2 + 0.1;
+    // (the column before may be a big script's thick stroke, wider than w: `lastW`)
+    const from = last, fromW = lastW; last = p0[p0.length - 1]; lastW = ink && mode !== "run" ? Math.max(w, ink.max) : satinW;
+    const on = satinW && r.length && !r.gap && from && Math.hypot(p0[0][0] - from[0], p0[0][1] - from[1]) < 1e-6;
+    if (mode === "run" && on) r.reach = (fromW + 0.3 + pull) / 2 + 0.1;
+    else if (on && r.reach) r.reach = Math.max(r.reach, (fromW + 0.3 + pull) / 2 + 0.1);
     return r;
   });
-  function sewPart(p, mode, satinW, wAt = null, self = p, en = null) {
+  function sewPart(p, mode, satinW, wAt = null, self = p, en = null, base = satinW, ink = false) {
     // thin lettering: a stroke under ~0.6 mm is a speck of the skeleton; skip it (the next stroke picks up there),
     // unless it stands alone: that's a dot (a full stop, an i's dot) and sews as a 0.7 mm stroke out and back
     // (small print lettering lost its full stops: "Sam R." sewed as "Sam R")
@@ -518,13 +576,23 @@ function stitchLetters(parts, satinW, fab = "cotton", small = false) {
     // a satin dot (an i's, a full stop: a lone stroke shorter than the column) is one short satin, 1 mm long at least
     // and with no run under it: its lock in, run, satin and lock off all fell in one square mm, the densest spot in
     // the file (Sacramento's i at 14 mm: 24 hits/mm², at the limit)
-    if (satinW && length(p) < satinW) {
+    // (by the usual column `base`, as its run is: a big script's satin may be wider, and a stroke sewn out as a run and
+    // back as a dot left the walk 2-3 mm off, a loose thread)
+    if (satinW && length(p) < base) {
       const c = p[p.length >> 1];
-      if (!parts.some(([q]) => q !== self && length(q) >= satinW && q.some(([x, y]) => Math.hypot(x - c[0], y - c[1]) < satinW))) {
+      if (!parts.some(([q]) => q !== self && length(q) >= base && q.some(([x, y]) => Math.hypot(x - c[0], y - c[1]) < base))) {
         if (mode === "run") return [];
         const a = p[0], b = p[p.length - 1], L = Math.hypot(b[0] - a[0], b[1] - a[1]), u = L > 0.01 ? [(b[0] - a[0]) / L, (b[1] - a[1]) / L] : [1, 0];
-        const h = Math.max(L, 1) / 2, e1 = [c[0] - u[0] * h, c[1] - u[1] * h], e2 = [c[0] + u[0] * h, c[1] + u[1] * h];
-        return [e1, ...satin([e1, c, e2], satinW, density, 0.1 + pull)];
+        // (a big script's dot (`inkAt`) is the ink's size: as wide as it, at least the usual column, and its line plus
+        // most of that long, rounded at its ends. As a 1.3 mm satin it was a tick on the j of a 60 mm name)
+        // (a round dot's line is 0.6 of a stroke, about 0.55 of its width: `skeletonEdges`)
+        // (only a dot alone: several short strokes from one point (Yellowtail's i dot thins to a little star) stay as
+        // they were, or the bigger dots left loose threads between them)
+        // (its own run is the same points the other way)
+        const twin = (q) => q.length === self.length && q.every((v, i) => { const w = self[self.length - 1 - i]; return v[0] === w[0] && v[1] === w[1]; });
+        const alone = ink && !parts.some(([q]) => q !== self && !twin(q) && [q[0], q[q.length - 1]].some((e) => self.some((f) => Math.hypot(e[0] - f[0], e[1] - f[1]) < 0.5)));
+        const dw = alone ? Math.max(base, satinW) : base, h = Math.max(alone ? dw + Math.max(0, L - 0.6 * dw) : L, 1) / 2, e1 = [c[0] - u[0] * h, c[1] - u[1] * h], e2 = [c[0] + u[0] * h, c[1] + u[1] * h];
+        return [e1, ...satin([e1, c, e2], dw, density, 0.1 + pull, false, false, alone ? (t) => dw * Math.max(0.5, Math.sqrt(Math.max(0, 1 - (2 * t - 1) ** 2))) : null)];
       }
     }
     // the way out under a satin: a centre run, or a zigzag under wide columns (Ink/Stitch fonts' usual underlay), 0.4 mm
@@ -546,8 +614,8 @@ function stitchLetters(parts, satinW, fab = "cotton", small = false) {
     // knit's wider pull took that past the 2 mm jump rule: a Satisfy Z sewed 8 trims and locks round one junction,
     // 26 hits/mm²: tests/browser/engine_fuzz.html)
     if (satinW) {
-      const pc = (satinW >= 1.5 ? 0.3 : 0.1) + pull, r = [p[0], ...satin(p, satinW, density, pc, false, false, wAt, en?.shape)];
-      r.reach = (satinW + pc) / 2 + 0.1;
+      const pc = (base >= 1.5 ? 0.3 : 0.1) + pull, r = [p[0], ...satin(p, satinW, density, pc, false, false, wAt, en?.shape)];
+      r.reach = (Math.max(base, satinW) + pc) / 2 + 0.1;
       return r;
     }
     const r = spaced(followRun(p, 1.6, 0.1, 0.8)), back = r.slice().reverse();   // the walk's way back: back, forth and back again
@@ -1574,12 +1642,31 @@ function hangs(c, font) {
 // The size each initial is sewn at (three letters: small, BIG, small) and its `hangs`. Long tails (a script g's loop
 // is longer than the letter) would make the monogram far taller than asked: then every letter shrinks alike so it's
 // at most a quarter taller than its size (Sacramento "gp" at 20 mm was 45 mm tall), keeping the shared baseline.
-function initialSizes(chars, font, size) {
+// Each letter's ink is matched to the others' (`inkK`): a letter is sized by its strokes' centre lines, which stop half a
+// stroke inside a flat top or foot but run to a pointed one's tip, so Josefin's P and K sewed as tall as the W meant to
+// be 1½ times them (1.26). The middle letter (the first of one or two) keeps its size; the others are sized to its ink.
+export function initialSizes(chars, font, size) {
   const h = chars.map((c) => hangs(c, font)), n = chars.length === 3 ? [0.68, 1, 0.68] : chars.map(() => 1);
   // (bodies centred on the middle: each letter's top and bottom from there)
   const top = Math.max(...n.map((v, i) => v * ((h[i] ? h[i].up : 1) - 0.5))), bottom = Math.max(...n.map((v, i) => v * (0.5 + (h[i] ? h[i].down : 0))));
   const f = Math.min(1, 1.25 / (top + bottom));
-  return { h, base: n.map((v) => v * f * size), sizes: n.map((v, i) => v * f * (h[i] ? h[i].k : 1) * size) };
+  // (a letter with a tail is sized by its x-height, `hangs`: left as it is, and no measure for the others)
+  const ref = chars.length === 3 ? 1 : 0, r = h[ref] ? 0 : inkK(chars[ref], font), k = chars.map((c, i) => (r && !h[i] && i !== ref ? r / (inkK(c, font) || r) : 1));
+  return { h, base: n.map((v) => v * f * size), sizes: n.map((v, i) => v * f * (h[i] ? h[i].k : k[i]) * size) };
+}
+// a letter's ink height over the height it's sized by (its strokes, before their ends reach out), or 0
+const inks1 = new Map();
+function inkK(c, font) {
+  const key = font + "\n" + c;
+  if (inks1.has(key)) return inks1.get(key);
+  const { info } = letterStrokes(c, font), { w, h, data } = info.mask;
+  let a = Infinity, b = -Infinity;
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) if (data[y * w + x]) { if (y < a) a = y; b = y; break; }
+  let y0 = Infinity, y1 = -Infinity;
+  for (const [, y] of info.sized) { if (y < y0) y0 = y; if (y > y1) y1 = y; }
+  const v = b >= a && y1 - y0 > 0 ? (b - a + 1) / (y1 - y0) : 0;
+  if (fontReady(font)) inks1.set(key, v);
+  return v;
 }
 
 function monogram(p, fab = "cotton") {

@@ -97,6 +97,14 @@ await open("#design");
     await __sf.wait(() => document.querySelectorAll("#names-thumbs figcaption").length >= 2, 30000);
     const c = [...document.querySelectorAll("#names-thumbs figcaption")].map((f) => f.textContent); __sf.close(); return c;`);
   check("Names batch: a name saved under another file name says which", n.length === 2 && /· Zoe_2\.pes/.test(n[1]) && !/·/.test(n[0]), JSON.stringify(n));
+  // (round 13: Björk's 2 loose threads and Zoe's 1 were said nowhere; each made file says its own, as the chips do)
+  const l = await run(`await __sf.load(${JSON.stringify(design([words({ text: "Abbie dog", font: "NW Quicksand", size: 5 })]))});
+    const { shortJumps } = await import("/js/doctor.js"), names = ["Björk", "Zoe", "Abbie dog", "Ann"];
+    const want = names.map((n) => shortJumps(nwTest.names(n, true).pattern));
+    document.getElementById("names-open").click(); document.getElementById("names-list").value = names.join("\\n"); document.getElementById("names-make").click();
+    await __sf.wait(() => document.querySelectorAll("#names-thumbs figcaption").length >= 4, 30000);
+    const c = [...document.querySelectorAll("#names-thumbs figcaption")].map((f) => f.textContent); __sf.close(); return [want, c];`);
+  check("Names batch: each file's loose threads are said under it", l[0].some((k) => k > 0) && l[0].every((k, i) => (k ? new RegExp(`\\b${k} loose threads? to snip`).test(l[1][i]) : !/loose thread/.test(l[1][i]))), JSON.stringify(l));
 }
 // ---- Arch up on lettering a frame shrank keeps its sewn size
 {
