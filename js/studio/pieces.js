@@ -1185,10 +1185,15 @@ function motifStitches(loops, style) {
 
 // a satin edge round a closed outline: as wide as `max`, narrower round a small hole (a 2.8 mm satin in the top of an
 // A overlaps itself), over an edge walk and a zigzag
-function edgeSatin(l, max, min = 1.2) {
-  const [x0, y0, x1, y1] = bounds(l), w = Math.max(min, Math.min(max, Math.min(x1 - x0, y1 - y0) / 3.5));
-  return [edgeWalk(l, w, true, Math.min(0.4, w / 4), true), loop(zigzag(l, w * 0.7, 2.0, true, true)), loop(satin(l, w, sd(0.4), w > 2 ? 0.3 : 0.2, true, true))];
+// (`top`: its satin, worked out already by `edgeTop`)
+function edgeSatin(l, max, min = 1.2, top = null) {
+  const w = edgeWidth(l, max, min);
+  return [edgeWalk(l, w, true, Math.min(0.4, w / 4), true), loop(zigzag(l, w * 0.7, 2.0, true, true)), top || edgeTop(l, max, min)];
 }
+const edgeWidth = (l, max, min) => { const [x0, y0, x1, y1] = bounds(l); return Math.max(min, Math.min(max, Math.min(x1 - x0, y1 - y0) / 3.5)); };
+// the satin of `edgeSatin` on its own (where it ends decides where the next outline's satin goes: the underlay is built
+// only for the start that's taken)
+function edgeTop(l, max, min = 1.2) { const w = edgeWidth(l, max, min); return loop(satin(l, w, sd(0.4), w > 2 ? 0.3 : 0.2, true, true)); }
 
 // a point inside closed loops (even-odd)
 function insideLoops(loops, [x, y]) {
@@ -1290,8 +1295,11 @@ function applRoutes(loops) {
   // nearby spots on two outlines, closest first (candidate places to move between them)
   const near = (i, j, max) => {
     const c = [], T = cum[i][cum[i].length - 1];
+    const [x0, y0, x1, y1] = box[j];
     for (let s = 0; s < T; s += 0.5) {
       const p = at(loops[i], i, s).p; let bd = Infinity, bs = 0;
+      // (further than max from outline j's box: no spot here, whatever its nearest point)
+      if (Math.hypot(Math.max(0, x0 - p[0], p[0] - x1), Math.max(0, y0 - p[1], p[1] - y1)) > max + 1e-9) continue;
       const l = loops[j];
       for (let k = 0; k < l.length; k++) {
         const a = l[k], b = l[(k + 1) % l.length], dx = b[0] - a[0], dy = b[1] - a[1], L2 = dx * dx + dy * dy;
@@ -1339,8 +1347,8 @@ function applRoutes(loops) {
           }
           // satin: sewn from this spot round (either way), it ends on one edge; the move goes from there
           for (const rev of [false, true]) {
-            const sat = edgeSatin(from(out[i], i, c.si, rev), width[i], Math.min(2.0, width[i])), e = sat[sat.length - 1][sat[sat.length - 1].length - 1], b = nearestOn(out[j], e);
-            if (hidden(e, b, ok, 0.3)) return { j, s: c.si, sat, bridge: [e, b], sj: arcOf(out[j], j, b) };
+            const l = from(out[i], i, c.si, rev), top = edgeTop(l, width[i], Math.min(2.0, width[i])), e = top[top.length - 1], b = nearestOn(out[j], e);
+            if (hidden(e, b, ok, 0.3)) return { j, s: c.si, sat: edgeSatin(l, width[i], Math.min(2.0, width[i]), top), bridge: [e, b], sj: arcOf(out[j], j, b) };
           }
         }
       }
@@ -2161,9 +2169,12 @@ function build(pieces, hoop, opts) {
   const hits = (a, b) => a[0] < b[2] && b[0] < a[2] && a[1] < b[3] && b[1] < a[3];
   const order = [], last = [], edges = [], staged = pieces.map((p) => pieceStages(p, fab).map((st) => ({ label: label(p, true), ...st })));
   pieces.forEach((p, i) => { if (QUILTED(p)) staged[i] = withQuilt(p, staged[i], staged.filter((_, j) => j !== i).flat(), opts.dragging, opts.later); });
-  // patches: no fill under what's sewn on them (fine-line lettering excepted)
+  // patches: no fill under what's sewn on them (fine-line lettering excepted). Not while dragging, nor when only the
+  // size is wanted (`measure`: does it fit the hoop?): the holes are cut 2.5 mm or more inside the patch's outline, well
+  // within its satin edge, so they never change the design's size (the same to 0.1 mm on every starter at 50-150 %,
+  // tests/browser/measure.html), and carving each new patch size held "Make the frames fit" up ~0.6 s.
   pieces.forEach((p, i) => {
-    if (p.kind !== "frame" || p.border !== "patch" || opts.dragging) return;
+    if (p.kind !== "frame" || p.border !== "patch" || opts.dragging || opts.measure) return;
     const above = pieces.slice(i + 1).map((q, k) => (q.kind === "frame" || q.style === "line" ? [] : staged[i + 1 + k].filter((s) => !s.under && !s.fabric)));
     staged[i] = carve(p, staged[i], above, fab);
   });
@@ -2260,10 +2271,15 @@ function build(pieces, hoop, opts) {
   if (owed.length) after.unshift(trimsFor(owed, "").trim());
   tidySteps(steps, gangs);
   if (opts.baste) after.push("Unpick the basting box (snip every few stitches on the back, then pull it out from the front).");
-  d.finish({ untiny: true });
+  // (too big for the hoop: the error carries the design all the same, finished, so the too-big preview shows it
+  // without building it all again in a bigger hoop; only basting is sized to the hoop)
+  let over = null;
+  try { d.finish({ untiny: true }); } catch (err) { if (!err.overBy) throw err; over = err; }
   // step 1 starts with hooping: the bare stabilizer for in-the-hoop projects, the patch fabric for a patch
   const first = order[0], hoopIt = first?.bare ? "Hoop tear-away stabilizer on its own (no fabric yet)" : first?.patch ? "Hoop the felt or twill with the stabilizer under it"
     : order.some((s) => s.sandwich) ? "Hoop the quilt sandwich (or float it on hooped tear-away stabilizer)" : FABRICS[fab].hoop;
   // (`bare`: nothing but stabilizer is hooped, so a turned hoop's note says where the fabric's top goes, not "Hoop the fabric")
-  return { design: d, steps, after, before, hoop: hoopIt, bare: !!first?.bare, tip: FABRICS[fab].tip };
+  const done = { design: d, steps, after, before, hoop: hoopIt, bare: !!first?.bare, tip: FABRICS[fab].tip };
+  if (over) throw Object.assign(over, { composed: opts.baste ? null : done });
+  return done;
 }
