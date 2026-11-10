@@ -33,17 +33,40 @@ function lum(c) {
   const [r, g, b] = v.map((x) => { x /= 255; return x <= 0.03928 ? x / 12.92 : ((x + 0.055) / 1.055) ** 2.4; });
   return 0.2126 * r + 0.7152 * g + 0.0722 * b;
 }
+// CIELAB (D65) of a colour as lum() reads it: thread and ground a few ΔE apart vanish into each other even when their
+// luminance differs a little (pink thread on pink gingham's stripes)
+function lab(c) {
+  const v = c[0] === "#" ? [1, 3, 5].map((i) => parseInt(c.slice(i, i + 2), 16)) : (c.match(/[\d.]+/g) || [255, 255, 255]).slice(0, 3).map(Number);
+  const [r, g, b] = v.map((x) => { x /= 255; return x <= 0.04045 ? x / 12.92 : ((x + 0.055) / 1.055) ** 2.4; });
+  const f = (t) => (t > 0.008856 ? Math.cbrt(t) : 7.787 * t + 16 / 116);
+  const X = f((0.4124 * r + 0.3576 * g + 0.1805 * b) / 0.95047), Y = f(0.2126 * r + 0.7152 * g + 0.0722 * b), Z = f((0.0193 * r + 0.1192 * g + 0.9505 * b) / 1.08883);
+  return [116 * Y - 16, 500 * (X - Y), 200 * (Y - Z)];
+}
+// the colours of a gingham as the eye sees them: the base, a stripe over it, the crossing
+function mix(a, b, t) {
+  const p = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16)), x = p(a), y = p(b);
+  return `rgb(${x.map((v, i) => Math.round(v + (y[i] - v) * t)).join(",")})`;
+}
+// thread that can't be told from what it's seen against: luminance within 1.6:1 (yellow on white) or under ΔE 20
+// (white on the White background, pink on pink gingham's stripes, navy on Black)
+function blends(thread, grounds) {
+  const lt = lum(thread), a = lab(thread);
+  return grounds.some((g) => {
+    const lg = lum(g), b = lab(g);
+    return (Math.max(lt, lg) + 0.05) / (Math.min(lt, lg) + 0.05) < 1.6 || Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]) < 20;
+  });
+}
 // what the stitches are seen against: the background picked, the field inside the hoop, else whatever the canvas sits
 // on (a starter card, a names thumbnail: white in light mode, dark in dark mode)
 function groundOf(canvas, opts) {
   const bg = CLOTHS[opts.field];
-  if (bg) return bg.solid || bg.base;
-  if (opts.fieldColor && opts.hoop && opts.showHoop !== false) return opts.fieldColor;
+  if (bg) return bg.solid ? [bg.solid] : [bg.base, mix(bg.base, bg.stripe, 0.55), bg.cross];
+  if (opts.fieldColor && opts.hoop && opts.showHoop !== false) return [opts.fieldColor];
   for (let n = canvas; n && n.nodeType === 1; n = n.parentElement) {
     const c = getComputedStyle(n).backgroundColor, a = c.match(/[\d.]+/g);
-    if (a && (a.length < 4 || +a[3] > 0.5)) return c;
+    if (a && (a.length < 4 || +a[3] > 0.5)) return [c];
   }
-  return "#ffffff";
+  return ["#ffffff"];
 }
 
 function bbox(blocks) {
@@ -76,7 +99,7 @@ export const CLOTHS = {
 
 // opts: { field (CLOTHS key: the background the design is shown on, inside the hoop; the whole view with the hoop
 //         hidden), fabric (CLOTHS key), fabricShapeBlock, hide: Set, upto, ghost (stitches after upto drawn faint), heat (Map "cx,cy" -> hits per mm²), backdrop ({ bmp, unit, center }: a photo under it), hoop: {w,h} (mm), showHoop, zoom, pan: [x,y], center: [x,y] (0.1 mm),
-//         pad, padTop, padBottom (px kept clear), cache (colorBlocks result), showNeedle (a needle at upto), fieldColor (fill inside the hoop), real (thread twist when zoomed in),
+//         pad, padTop, padBottom (px kept clear), fit (px per 0.1 mm, held), cache (colorBlocks result), showNeedle (a needle at upto), fieldColor (fill inside the hoop), real (thread twist when zoomed in),
 //         boxes ([[x0, y0, x1, y1]] mm: each hooping of a split design), sel ([x0, y0, x1, y1] mm: the selected piece) }
 export function draw(canvas, design, opts = {}) {
   const dpr = window.devicePixelRatio || 1;
@@ -113,6 +136,7 @@ export function draw(canvas, design, opts = {}) {
   }
   // a drag holds the fit and centre it began with (`opts.base`, from the last result): the view refitted to "too big"
   // as a piece went past the hoop and the piece ran off several times faster than the pointer
+  if (opts.fit) fit = opts.fit;   // (a scale held from an earlier draw: typing in the Words box, app.js `typeFit`)
   let my = top + (H - bot - top) / 2;
   if (opts.base) ({ fit, my, cxd, cyd } = opts.base);
   const s = fit * (opts.zoom || 1), pan = opts.pan || [0, 0];
@@ -167,19 +191,21 @@ export function draw(canvas, design, opts = {}) {
     ctx.restore();
   }
 
-  const upto = opts.upto ?? total, lg = lum(groundOf(canvas, opts));
+  const upto = opts.upto ?? total, grounds = groundOf(canvas, opts);
+  // (a gingham's checks break a thin line up: every thread on one gets a halo of the cloth's base colour, so a
+  // running-stitch outline and a step view's faint name still read on blue gingham in Sew along)
+  const busy = bg && !bg.solid && !bd ? bg.base : null;
   const tw = Math.max(0.6, 5.6 * s);       // a stitched thread lies ~0.55 mm wide (it spreads)
   ctx.lineCap = "round"; ctx.lineJoin = "round";
   if (opts.ghost && upto < total) {   // what's still to sew, faint, under what's sewn
-    ctx.globalAlpha = 0.16; ctx.lineWidth = Math.max(0.6, tw * 0.5);
+    const gw = Math.max(0.6, tw * 0.5);
     for (const b of blocks) {
       if (opts.hide && opts.hide.has(b.index)) continue;
-      ctx.strokeStyle = b.color; ctx.beginPath();
-      for (const seg of b.segs) {
-        let on = false;
-        for (const [x, y, n] of seg) { if (n + 1 < upto) continue; if (on) ctx.lineTo(X(x), Y(y)); else { ctx.moveTo(X(x), Y(y)); on = true; } }
-      }
-      ctx.stroke();
+      // (a ghost that blends into the ground gets the same edge as sewn thread, faint too: white still to sew on white)
+      const edge = busy ? busy : blends(b.color, grounds) ? (lum(b.color) > 0.3 ? "#3a2c2c" : "#ffffff") : null;
+      if (edge) { ctx.globalAlpha = busy ? 0.8 : 0.3; ctx.strokeStyle = edge; ctx.lineWidth = gw + 2.5; ghostSegs(ctx, b.segs, X, Y, upto); }
+      ctx.globalAlpha = busy ? 0.4 : 0.16; ctx.lineWidth = gw;
+      ctx.strokeStyle = b.color; ghostSegs(ctx, b.segs, X, Y, upto);
     }
     ctx.globalAlpha = 1;
   }
@@ -189,11 +215,13 @@ export function draw(canvas, design, opts = {}) {
     // soft drop shadow under the whole colour block; thread close to what it's seen against gets a clear edge in the
     // opposite tone (white on the white background was unreadable in the preview, the starter card and the names
     // thumbnails; black on Black, yellow on white); one rule for every surface that draws stitches
+    if (busy) { ctx.strokeStyle = busy; ctx.globalAlpha = 0.85; ctx.lineWidth = tw + 3; strokeSegs(ctx, b.segs, X, Y, upto, 0); ctx.globalAlpha = 1; }
     ctx.strokeStyle = "rgba(40,20,20,0.18)"; ctx.lineWidth = tw * 1.15;
     strokeSegs(ctx, b.segs, X, Y, upto, tw * 0.35);
-    const lt = lum(base), ratio = (Math.max(lt, lg) + 0.05) / (Math.min(lt, lg) + 0.05);
-    if (ratio < 1.6) {
-      ctx.strokeStyle = lg > 0.3 ? "rgba(50,38,38,0.72)" : "rgba(255,255,255,0.6)"; ctx.lineWidth = tw + Math.max(2, tw * 0.3);
+    // (the edge is the thread's opposite tone, about 1 px a side, firm enough to read in a 120 px names thumbnail:
+    // at 72 % white on white still looked pale there and on the stocking cuff)
+    if (blends(base, busy ? [busy] : grounds)) {
+      ctx.strokeStyle = lum(base) > 0.3 ? "rgba(58,44,44,0.9)" : "rgba(255,255,255,0.8)"; ctx.lineWidth = tw + Math.max(2.2, tw * 0.3);
       strokeSegs(ctx, b.segs, X, Y, upto, 0);
     }
     for (const seg of b.segs) {
@@ -271,6 +299,16 @@ function rings(seg) {
   if (!out.length) return [seg];
   out.push(seg.slice(start));
   return out;
+}
+
+// the stitches from `upto` on (a step view's faint rest of the design)
+function ghostSegs(ctx, segs, X, Y, upto) {
+  ctx.beginPath();
+  for (const seg of segs) {
+    let on = false;
+    for (const [x, y, n] of seg) { if (n + 1 < upto) continue; if (on) ctx.lineTo(X(x), Y(y)); else { ctx.moveTo(X(x), Y(y)); on = true; } }
+  }
+  ctx.stroke();
 }
 
 function strokeSegs(ctx, segs, X, Y, upto, off) {

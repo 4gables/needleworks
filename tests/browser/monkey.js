@@ -329,7 +329,8 @@ async function setRange(el, v, burst) {
   go(Math.max(lo, Math.min(hi, v))); fire(el, "change");
 }
 // selects a piece that has fixes in its editor (or the one picked) and returns the fix buttons there
-function editFixes() { return all("#st-edit [data-warn] button"); }
+// (and the fit note's: "Turn it to run up the frame", "Put it on two lines" for words a frame shrank)
+function editFixes() { return all("#st-edit [data-warn] button, #st-edit [data-fit] button"); }
 async function withFixes(u) {
   if (editFixes().length) return editFixes();
   const picks = all("#st-pieces .pick");
@@ -361,10 +362,32 @@ async function exec(d) {
       let v = el.dataset.k === "letters" || el.tagName === "INPUT" ? at(INITIALS, d.b) : at(WORDS, d.b);
       if (el.maxLength > 0) v = v.slice(0, el.maxLength);
       act.what = JSON.stringify(v); el.focus();
-      if (d.c < 0.3) for (let k = 1; k < v.length; k++) { el.value = v.slice(0, k); fire(el, "input"); await sleep(90); }   // typed, a letter at a time
+      // typed, a letter at a time; the preview's scale holds while the design fits (round 13: the hoop jumped in and out
+      // as each letter changed the note and the Download button under the preview)
+      if (d.c < 0.3) {
+        const scales = new Set();
+        for (let k = 1; k < v.length; k++) {
+          el.value = v.slice(0, k); fire(el, "input"); await sleep(90);
+          const s = W.nwTest?.state(); if (s && !s.whole && D.activeElement === el && s.scale) scales.add(+s.scale.toFixed(4)); else scales.clear();
+          if (scales.size > 1) { act.extra.push({ kind: "stale", msg: `the preview's scale changed while typing ${JSON.stringify(v.slice(0, k))} (${[...scales].join(", ")})` }); break; }
+        }
+      }
       el.value = v; fire(el, "input"); fire(el, "change"); el.blur(); break;
     }
-    case "swatch": { const bs = all("#st-edit [data-color], #st-edit [data-fill], #st-edit button[data-blend]"); if (!bs.length) return { ...act, skipped: true }; at(bs, d.a).click(); break; }
+    case "swatch": {
+      const bs = all("#st-edit [data-color], #st-edit [data-fill], #st-edit button[data-blend]"); if (!bs.length) return { ...act, skipped: true }; at(bs, d.a).click();
+      // (round 13: "Use this thread for everything", offered when a piece's thread differs and it saves thread changes,
+      // must leave one thread on every piece and the thread changes it promised fewer)
+      await idle(); const one = D.querySelector("#st-edit [data-all-thread-set]");
+      if (one && d.b < 0.5) {
+        const said = +(one.parentElement.textContent.match(/(\d+) fewer/) || [])[1], count = () => +(($("facts").textContent.match(/(\d+) thread change/) || [0, 0])[1]);
+        const was = count(); act.what = "for everything"; one.click(); await idle();
+        const cs = new Set((studio()?.pieces || []).filter((q) => q.kind !== "file" && q.color).map((q) => q.color));
+        if (cs.size > 1) act.extra.push({ kind: "stale", msg: `"Use this thread for everything" left ${cs.size} threads` });
+        if (count() !== was - said) act.extra.push({ kind: "stale", msg: `"Use this thread for everything" said ${said} fewer thread changes, went ${was} -> ${count()}` });
+      }
+      break;
+    }
     case "motif": { const bs = all("#st-edit [data-motif]"); if (!bs.length) return { ...act, skipped: true }; at(bs, d.a).click(); break; }
     case "listop": {
       const bs = all("#st-pieces button[data-op]:not([disabled])"); if (!bs.length) return { ...act, skipped: true };
@@ -552,9 +575,12 @@ async function tryFix(b, undo) {
   const bad = [], label = b.textContent.trim(), span = b.closest("#st-edit [data-warn] > span"), k = span ? kindOf(span.textContent) : null;
   const f0 = fresh(), d0 = design(), sel0 = studio()?.sel, sc0 = screen().kind, k0 = kinds(screen().edit), g0 = globalKinds(screen().warn);
   const where = span ? `“${span.textContent.slice(0, 90)}”` : "";
+  const promised = b.closest("[data-fit]") && +((b.closest("[data-fit]").textContent.match(/can be ([\d.]+) mm/) || [])[1]);
   b.click(); await idle();
   const f1 = fresh(), d1 = design(), sc = screen(), sel1 = studio()?.sel;
   const add = (kind, msg) => bad.push({ kind, msg: `“${label}”: ${msg}${where ? ` (from ${where})` : ""}` });
+  // (the size the fit note promised is the size it's sewn at)
+  if (promised && f1.s?.pieces) { const q = f1.s.pieces.find((o) => o.id === sel1), got = q && (P.fittedSizes(f1.s.pieces).get(q.id) ?? q.size); if (got != null && Math.abs(got - promised) > 0.26) add("fix", `promised ${promised} mm, sewn at ${got} mm`); }
   if (same(d0, d1) && !/two hoopings/.test(label)) add("fix", "changed nothing");
   else if (f0.sig != null && f0.sig === f1.sig && f0.fits === f1.fits && !/two hoopings|turn the hoop|Turn the hoop/.test(label)) add("fix", "changed nothing that's sewn");
   if (sel1 === sel0) {
