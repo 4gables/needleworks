@@ -2251,6 +2251,13 @@ export function initStudio(api) {
   // (a motif under the size it's said too small at, too: + Motif put a filled heart in at 20 mm, then said it was too
   // small to fill)
   const readable = (q) => !minSize(q) && !(fabric === "towel" && (q.kind === "text" || q.kind === "monogram") && towelMin(q) > q.size * 1.04) && !(q.size < MOTIF_MIN(q));
+  // a patch whose satin edge p (as sewn) would lie on: over the patch's box but not 3 mm inside its outline (collisions
+  // leave patches out, as lettering sits on their fill: "Move it to the free space" put a flower on a patch's edge
+  // inside a circle that was its target)
+  function patchEdge(p, ps = pieces) {
+    const b = pieceBounds(p);
+    return b && ps.find((f) => f.kind === "frame" && f.border === "patch" && f.id !== p.id && !(f.rot || 0) && ((c) => c && b[0] < c[2] && b[2] > c[0] && b[1] < c[3] && b[3] > c[1])(pieceBounds(f)) && !inFrame(p, f, 3));
+  }
   // x, y that put p in the middle of frame f's front (a zipper pouch's is below the zipper)
   function middleOf(f, p) {
     const fb = pieceBounds({ ...p, x: 0, y: 0 }), [t, b] = frontPanel(f);
@@ -2325,7 +2332,7 @@ export function initStudio(api) {
           if (f.border === "zip" && q.y + fb[1] < t + 3) continue;
           // (measured at the size the frame then sews it: "Shrunk to 23.5 mm so it fits" under a monogram just put in at 24)
           const ps = pieces.some((o) => o.id === p.id) ? pieces.map((o) => (o.id === p.id ? q : o)) : [...pieces, q], s = sewnAt(q, ps);
-          if ((s.size !== q.size && !readable(s)) || !inFrame(s, f, f.border === "patch" ? 3 : 4) || touching(s, others)) continue;
+          if ((s.size !== q.size && !readable(s)) || !inFrame(s, f, f.border === "patch" ? 3 : 4) || touching(s, others) || patchEdge(s, others)) continue;
           // (as a fix, nor a size that brings a problem of its own, as `landing` checks every other fix: "Move it to the
           // free space in the heart appliqué, 15.5 mm" filled the loops of "Abbie goes", monkey gang-keyfob seed 1)
           if (fix && pieces.some((o) => o.id === p.id) && newProblem(p, q, ps, { size })) continue;

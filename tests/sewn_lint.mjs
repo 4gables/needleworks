@@ -21,6 +21,7 @@ const NOT_PIECES = new Set(["advice", "pointers", "opened", "mine", "dataset", "
 // each because what it measures is already the sewn piece, or a candidate size it fits before using, or a piece no
 // frame fits
 const RAW_MEASURE = process.env.EMPTY ? [] : [
+  ["js/studio/ui.js", "patchEdge", "p is passed in as sewn (sewnAt) by its callers; f is a patch frame (never fitted)"],
   ["js/studio/ui.js", "pieceProblems", "q is the piece at its fitted size (fit.get), made at the top"],
   ["js/studio/ui.js", "warnNow", "candidate sizes fitted with fittedSizes on the same line (two lines, the size fix)"],
   ["js/studio/ui.js", "roundAll", "a first frame drawn round the pieces as asked, so it shrinks none of them"],
