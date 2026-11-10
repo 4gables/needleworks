@@ -15,7 +15,7 @@
 import assert from "node:assert/strict";
 import { glyphs } from "../js/core/glyphs.js";
 import { APPLIQUE_FONTS, FONTS } from "../js/core/fonts.js";
-import { MAX_INITIALS, MAX_WORDS, graphemes, initials, lacks, latin, safeName, tidy, uniqueName, unswashed } from "../js/core/typed.js";
+import { MAX_INITIALS, MAX_WORDS, graphemes, initials, lacks, latin, reswashed, safeName, swashes, swashless, tidy, uniqueName, unswashed } from "../js/core/typed.js";
 import { cleanPiece, label } from "../js/studio/pieces.js";
 import { FIXED, VARIANTS, corpus } from "./text_corpus.mjs";
 
@@ -120,6 +120,19 @@ for (const s of ALL) {
     if (p.kind === "monogram") check("initials are letters", initials(q.letters).every((g) => !/^\p{M}/u.test(g) || g === initials(q.letters)[0]), show(s));
   }
 }
+
+// ---- (round 13) the Words box: words shown without the swash marks the buttons stand for, retyped words keep the
+// swashes, a ~ typed at either end still puts one on, and what's sewn is what was typed
+for (const s0 of ALL) {
+  const s = tidy(s0, { lines: 3, max: MAX_WORDS }); if (!unswashed(s).trim()) continue;
+  const ls = s.split("\n"), ends = { lead: swashes(ls[0]).lead, tail: swashes(ls.at(-1)).tail }, box = swashless(s);
+  check("Words box: no swash marks at its ends", !swashes(box.split("\n")[0]).lead && !swashes(box.split("\n").at(-1)).tail, show(s));
+  check("Words box: the same words sewn", unswashed(reswashed(box, ends)) === unswashed(s), show(s));
+  const back = reswashed(box, ends).split("\n");
+  check("Words box: swashes kept", swashes(back[0]).lead === ends.lead && swashes(back.at(-1)).tail === ends.tail, show(s));
+  check("Words box: retyped, swashes kept", swashes(reswashed("Emma", ends)).lead === ends.lead && swashes(reswashed("Emma", ends)).tail === ends.tail, show(s));
+}
+check("Words box: a ~ typed still puts one on", reswashed("~Emma", { lead: false, tail: false }) === "~Emma" && reswashed("Emma~", { lead: true, tail: false }) === "~Emma~", "typed ~");
 
 console.log(`text: ${ALL.length} strings, ${FAMILIES.length} fonts, ${checks} checks, ${fails} failed`);
 for (const [k, v] of failed) console.log(`  FAIL ${k}: ${v.join(" | ")}`);

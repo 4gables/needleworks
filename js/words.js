@@ -38,12 +38,27 @@ export function problemsOf(v) {
 // said beside Download, in that dialog and in the Open tab's checkup, not with the steps of the design.
 const FILE_ON = new Set(["download", "done"]);
 export const shownOn = (list, surface) => list.filter((p) => SHOWS[surface].includes(p.level) && (!p.file || FILE_ON.has(surface)));
-const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+const esc0 = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+// What's quoted in a sentence (a name, a letter) is set apart for direction (<bdi>): Hebrew letters listed in an English
+// warning ran together right to left and took the quotes and commas with them (“מ”, “ו” read ”מ“ ”ו“). On escaped
+// text or markup whose attributes hold no curly quotes.
+export const isolate = (html) => html.replace(/“([^“”<>]*)”/g, "“<bdi>$1</bdi>”");
+const esc = (s) => isolate(esc0(s));
+// The same words for several pieces said once, with how many ("“Ashley” is too small to stitch cleanly (3 pieces).");
+// the item carries every piece's id. Three copies of a name and two hearts made a Download note of nine sentences, five
+// of them repeats.
+export function folded(list) {
+  const by = new Map();
+  for (const p of list) { const k = p.level + "\n" + p.text, g = by.get(k); if (g) g.push(p); else by.set(k, [p]); }
+  return [...by.values()].map((g) => (g.length === 1 ? g[0]
+    : { ...g[0], id: g.map((p) => p.id).join(" "), text: g[0].text.replace(/([.!?:]?)\s*$/, ` (${g.length} pieces)$1`) }));
+}
 // as a list; each item carries its id (`data-problem`) so a check can tell what's shown where
 export function problemsHtml(list, cls = "problems") {
+  list = folded(list);
   return list.length ? `<ul class="${cls}">${list.map((p) => `<li data-problem="${esc(p.id)}" class="${p.level}">${esc(p.text)}</li>`).join("")}</ul>` : "";
 }
-export const problemsText = (list) => list.map((p) => p.text).join(" ");
+export const problemsText = (list) => folded(list).map((p) => p.text).join(" ");
 // at the top of "How to stitch it" (and the sew sheet, Sew along): what's still wrong, then what's worth knowing
 export function problemsItems(list, tag = "li", cls = "after") {
   const look = list.filter((p) => p.level === LOOK), tips = list.filter((p) => p.level === TIP);
@@ -51,7 +66,7 @@ export function problemsItems(list, tag = "li", cls = "after") {
     + (tips.length ? `<${tag} class="${cls} tips"><b>${TIP_HEAD}</b>${problemsHtml(tips)}</${tag}>` : "");
 }
 // in a line of text (beside Download, the download dialog): one span each, a space between
-export const problemsInline = (list) => list.map((p) => `<span data-problem="${esc(p.id)}">${esc(p.text)}</span>`).join(" ");
+export const problemsInline = (list) => folded(list).map((p) => `<span data-problem="${esc(p.id)}">${esc(p.text)}</span>`).join(" ");
 
 // ---------- sizes ----------
 // Every size a user reads comes from here. Supply sizes, as a ruler shows them: centimetres (whole from 10 cm, else

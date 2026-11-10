@@ -6,12 +6,13 @@
 // Checks, in the browser:
 // - Open a design: a PNG, JPEG, zip, PDF or empty file named .pes says what it is; a picture offers "Turn it into
 //   stitches", which opens it on the Picture tab. + Design file says the same.
-// - The download dialog's "design of its own" line only after two different files saved on that tab.
+// - The download dialog says which file to sew only for files that belong together: a file and its fixed copy ("Sew
+//   peace_fixed.pes, not peace.pes"), never after separate designs (it said "each a design of its own, any order").
 // - Rename: the name asked for is on the Download button and every file the Design tab makes (PES, saved design,
 //   cutter files, names ZIP), is kept with the saved design and back when it's opened; a starter clears it. A design
 //   of motifs alone is named after its starter and motifs.
 // - Picture -> Design your own: "start a new design with it" (the picture alone, a file piece) and "add it to my
-//   design" (one piece more), both with the picture's threads.
+//   design" (one piece more), both with the picture's threads; a starter picked over the picture offers to bring it.
 // - A picture colour's chip swaps its thread: the file then carries the thread picked, and Back undoes it.
 // - Threads I own: a search for an unlisted brand says it isn't listed; a colour picked shows the nearest spools.
 // - (round 12) One for each name: a name saved under another file name (Zoë as Zoe.pes, a second Emma as Emma_2.pes)
@@ -69,19 +70,33 @@ for (const [bytes, says, pic] of [[png, /is a picture \(PNG\)/, true], ["new Uin
   check("+ Design file says a picture is a picture", /is a picture \(PNG\)/.test(t), t);
 }
 
-// ---- the dialog's "a design of its own": two different files saved on this tab
+// ---- the dialog's "which one to sew": only for a file and its fixed copy saved on this tab
 {
   await open("#open");
   const golden = (f) => `new Uint8Array(await (await fetch("tests/fixtures/golden/${f}")).arrayBuffer())`;
   // (opened, the file is the view's: an untouched one's button says "Save a copy", not its name. "not saved" when the
   // dialog never opened, so the checks can't pass on a file that wasn't saved)
-  const save = async (f) => run(`__ff.close(); __ff.put("#open-file", ${golden(f)}, "${f}"); await __ff.wait(() => nwTest.view()?.filename === "${f}" && !document.getElementById("download").disabled);
-    document.getElementById("download").click(); return await __ff.wait(() => document.getElementById("done").open, 5000) ? document.getElementById("done-own").hidden : "not saved";`);
+  const save = async (f, bytes = golden(f)) => run(`__ff.close(); __ff.put("#open-file", ${bytes}, "${f}"); await __ff.wait(() => nwTest.view()?.filename.replace(/_fixed/, "") === "${f}" && !document.getElementById("download").disabled);
+    document.getElementById("download").click(); return await __ff.wait(() => document.getElementById("done").open, 5000) ? (document.getElementById("done-own").hidden || document.getElementById("done-own").textContent) : "not saved";`);
   // (a save on the Design tab first: not this tab's)
   await run(`location.hash = "#design"; await __ff.wait(() => document.body.dataset.mode === "design" && !document.getElementById("download").disabled); document.getElementById("download").click(); await __ff.wait(() => document.getElementById("done").open, 5000); __ff.close(); location.hash = "#open"; await __ff.wait(() => document.body.dataset.mode === "open");`);
-  check("one save on this tab: no \"design of its own\"", await save("multi.pes") === true);
-  check("the same file again: still one design", await save("multi.pes") === true);
-  check("a second file saved on this tab: said", await save("ashley_v3.pes") === false);
+  check("one save on this tab: nothing said of other files", await save("multi.pes") === true);
+  check("the same file again: still nothing", await save("multi.pes") === true);
+  // (two separate designs saved in one visit read as parts of one: "each file you've saved is a design of its own")
+  check("a second, unrelated file saved: nothing said", await save("ashley_v3.pes") === true);
+  // a failing file saved as it came, then its fixed copy from the dialog: which one to sew, the fixed one
+  if (await ev(`fetch("tests/external/pes/peace.pes").then((r) => r.ok)`).catch(() => false)) {
+    const peace = `new Uint8Array(await (await fetch("tests/external/pes/peace.pes")).arrayBuffer())`;
+    const first = await run(`__ff.close(); __ff.put("#open-file", ${peace}, "peace.pes"); await __ff.wait(() => /^peace/.test(nwTest.view()?.filename || "") && !document.getElementById("download").disabled);
+      __ff.got.length = 0; document.getElementById("download").click(); await __ff.wait(() => document.getElementById("done").open, 5000);
+      const own = document.getElementById("done-own").hidden; const b = [...document.querySelectorAll("#done-bad button")].find((x) => /fixed/.test(x.textContent));
+      if (b) b.click(); return { own, fixed: !!b, got: __ff.got.slice(), now: document.getElementById("done-own").hidden ? "" : document.getElementById("done-own").textContent };`);
+    check("peace.pes: saved and its fixed copy offered", first.fixed && first.got.length === 2, JSON.stringify(first));
+    if (first.fixed && first.got.length === 2) {
+      check("a failing file saved: nothing said before its fixed copy", first.own === true, JSON.stringify(first));
+      check("its fixed copy saved too: sew the fixed one, never both", /^Sew \S+_fixed\.pes at the machine, not \S+\.pes/.test(first.now) && !/any order/.test(first.now), JSON.stringify(first));
+    }
+  }
 }
 
 // ---- names: a motif design, Rename and every exit
@@ -128,6 +143,13 @@ for (const [bytes, says, pic] of [[png, /is a picture \(PNG\)/, true], ["new Uin
     return { want, got: threads(), pieces: [...document.querySelectorAll("#st-pieces .pick")].map((b) => b.textContent.trim()) };`);
   check("start a new design with the picture: it alone, as a file piece", r.pieces.length === 1 && /sample-flower/.test(r.pieces[0]), r.pieces.join(", "));
   check("the picture keeps its threads in Design your own", r.want === r.got, `${r.want} -> ${r.got}`);
+  // (round 13) a starter picked while the design is the picture: it can come along (it was gone, Undo the only way back)
+  const b = await run(`document.querySelector("[data-start=tote]").click(); await new Promise((r) => setTimeout(r, 1500)); const n = document.querySelectorAll("#st-pieces .pick").length;
+    const t = document.getElementById("st-toast"), go = [...t.querySelectorAll("button")].find((x) => /^Add sample-flower/.test(x.textContent)); const said = t.hidden ? "" : t.textContent;
+    if (go) go.click(); await new Promise((r) => setTimeout(r, 2000));
+    return { said, n, now: [...document.querySelectorAll("#st-pieces .pick")].map((x) => x.textContent.trim()) };`);
+  check("a starter over the picture offers to bring the picture along", /Replaced your design/.test(b.said) && /Add sample-flower[^ ]* to it/.test(b.said), b.said);
+  check("brought along: the starter's pieces and the picture", b.now.length === b.n + 1 && b.now.some((t) => /sample-flower/.test(t)), `${b.n} -> ${b.now.join(", ")}`);
   const a = await run(`document.querySelector("[data-start=tote]").click(); await new Promise((r) => setTimeout(r, 1500)); const before = document.querySelectorAll("#st-pieces .pick").length;
     location.hash = "#picture"; await __ff.wait(() => document.body.dataset.mode === "picture" && !document.getElementById("pic-add").hidden); document.getElementById("pic-add").click();
     await __ff.wait(() => document.body.dataset.mode === "design"); await new Promise((r) => setTimeout(r, 1500));
@@ -142,6 +164,22 @@ for (const [bytes, says, pic] of [[png, /is a picture \(PNG\)/, true], ["new Uin
     return { hex, swapped, back: !has(), shown: document.getElementById("pic-swap").hidden };`);
   check("a swapped thread is the one in the file", w.swapped, JSON.stringify(w));
   check("Back to the matched thread undoes the swap", w.back, JSON.stringify(w));
+}
+
+// ---- (round 13) the first draw asks only for the fonts it needs: the font row in all 16 faces and the starters' cards
+// loaded every font with the design's, and on a slow connection the preview waited ~31 s for its one font. Every
+// other font is asked for only once the design's own have come.
+{
+  await ev(`localStorage.clear(), 1`);
+  await call("goto", `${base}/?v=fonts${Date.now()}#design`);
+  // (the first-visit design: one lettering, selected, its font in the editor)
+  const r = await run(`await __ff.wait(() => document.body.dataset.mode && !document.getElementById("download").disabled && document.querySelector('#st-edit select[data-k="font"]'), 30000);
+    await new Promise((r) => setTimeout(r, 1500));
+    const used = [document.querySelector('#st-edit select[data-k="font"]').value].map((f) => f.replace(/^NW /, "").replace(/ /g, "").toLowerCase());
+    const all = performance.getEntriesByType("resource").filter((e) => e.name.includes("/fonts/") && e.name.endsWith(".woff2")).map((e) => ({ f: e.name.split("/").pop(), start: e.startTime, end: e.responseEnd }));
+    const mine = all.filter((x) => used.some((u) => x.f.toLowerCase().startsWith(u))), came = Math.max(...mine.map((x) => x.end));
+    return { used, mine: mine.map((x) => x.f), early: all.filter((x) => !mine.includes(x) && !/^Sacramento/.test(x.f) && x.start < came).map((x) => x.f) };`);
+  check("the design's fonts load first, the others after", r.mine.length && !r.early.length, JSON.stringify(r));
 }
 
 // ---- Threads I own: a brand not listed

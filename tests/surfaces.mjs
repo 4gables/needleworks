@@ -83,6 +83,9 @@ const CASES = [
   design("same as patch", [F("circle", 70, 70, "patch", { fill: "#0e1f7c" }), T("Sam", 18, { color: "#0e1f7c" })]),
   design("letters pushed", [T("AVA", 20, { font: PRINT, kern: { 0: -30, 1: -30 } })]),
   design("missing letters", [T("Emma 日本", 20)]),
+  // (round 13) Hebrew letters the font lacks, and the same problem on three names and two hearts: said once each
+  design("repeats and Hebrew", [T("שרה ומשה", 20, { y: -40 }), T("Ashley", 5, { x: -40, y: 0 }), T("Ashley", 5, { x: 0, y: 0 }), T("Ashley", 5, { x: 40, y: 0 }),
+    M("heart", 15, { x: -30, y: 40 }), M("heart", 15, { x: 30, y: 40 })]),
   design("tight arch", [T("Oliver", 28, { shape: "up", radius: 20 })]),
   design("wrapped arch", [T("Happy Birthday Grandma", 14, { shape: "up", radius: 10 })]),
   design("runs into", [T("Emma", 24, { y: 0 }), T("Noah", 24, { y: 8 })]),
@@ -169,7 +172,14 @@ const READ = String.raw`(async () => {
   const out = { mode: document.body.dataset.mode, texts: [], attrs: [], numbered: [], labels2: [] };
   // (each numbered sub-step's own words, without the aside beside it)
   const numbered = (el) => out.numbered.push(...[...el.querySelectorAll("ol.sub > li")].map((li) => [...li.childNodes].filter((n) => !n.classList?.contains("aside")).map((n) => n.textContent).join("").trim()));
-  const grab = (el) => { if (!el) return; out.texts.push(el.innerText); numbered(el); for (const e of el.querySelectorAll("[title],[aria-label],[data-tip]")) out.attrs.push(e.title || "", e.getAttribute("aria-label") || "", e.dataset.tip || ""); };
+  // (round 13) a problem's quoted names and letters set apart for direction (<bdi>: Hebrew letters in a warning ran
+  // together right to left, quotes and commas flipped), and the same words for several pieces said once with a count
+  // ("“Ashley” is too small" three times over in the Download note)
+  out.unisolated = []; out.repeats = [];
+  const quoted = (el) => { for (const p of el.querySelectorAll("[data-problem]")) { const w = document.createTreeWalker(p, NodeFilter.SHOW_TEXT);
+    for (let n; (n = w.nextNode());) if (/“[^“”]+”/.test(n.textContent)) out.unisolated.push(n.textContent.trim().slice(0, 80)); } };
+  const twice = (el) => { const seen = new Map(); for (const p of el.querySelectorAll("[data-problem]")) { const k = p.parentElement; const t = p.textContent.trim(); const m = seen.get(k) || new Set(); if (m.has(t)) out.repeats.push(t.slice(0, 80)); m.add(t); seen.set(k, m); } };
+  const grab = (el) => { if (!el) return; quoted(el); twice(el); out.texts.push(el.innerText); numbered(el); for (const e of el.querySelectorAll("[title],[aria-label],[data-tip]")) out.attrs.push(e.title || "", e.getAttribute("aria-label") || "", e.dataset.tip || ""); };
   for (let i = 0; i < 150 && !nwTest.view(); i++) await sleep(100);
   await sleep(1200);
   for (let i = 0; i < 50 && $("#busy") && !$("#busy").hidden; i++) await sleep(200);
@@ -441,6 +451,8 @@ for (const c of CASES) {
       if (said) ne("When it's done's loose threads vs the chips'", said, f.snips);
       if (r.card) { ne("the file card's stitches vs the chips'", r.card.stitches, f.stitches); if (r.card.threads) ne("the file card's threads vs the chips'", r.card.threads, f.threads); }
     }
+    for (const t of new Set(r.unisolated || [])) fail(c.name, `a quoted name not set apart for direction (<bdi>): "${t}"`);
+    for (const t of new Set(r.repeats || [])) fail(c.name, `the same problem said twice in one place: "${t}"`);
     // jargon in anything a user reads
     const all = [...r.texts, ...r.attrs, r.share];
     // (round 12) a hoop is named as the hoop list names it ('5" × 7" hoop'): the bookmark's tip said "the 5 × 7 hoop"

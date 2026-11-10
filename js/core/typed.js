@@ -75,6 +75,16 @@ export function withSwash(s, end, on) {
   ls[i] = `${(end === "lead" ? on : w.lead) ? "~" : ""}${w.text}${(end === "tail" ? on : w.tail) ? "~" : ""}`;
   return ls.join("\n");
 }
+// The Words box shows the words without the marks the Swash buttons stand for (a ~ before the first line, after the
+// last): newcomers read them as typos, and retyping the name dropped the swashes with nothing said. What's typed there
+// keeps the swashes the words had (`ends`, as the buttons show them); a ~ typed at either end still puts one on.
+export const swashless = (s) => withSwash(withSwash(s, "lead", false), "tail", false);
+export function reswashed(box, ends) {
+  let t = String(box ?? "");
+  if (ends.lead) t = withSwash(t, "lead", true);
+  if (ends.tail) t = withSwash(t, "tail", true);
+  return t;
+}
 
 // Characters the font doesn't have (the browser would draw them from a stand-in font), one per letter as a reader
 // sees it, in the order typed. Accents count as part of their letter (Sacramento has é but no loose \u25cc\u0301); a variation
