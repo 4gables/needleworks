@@ -197,6 +197,10 @@ async function openTab(url0) {
       for (const type of ["mouseMoved", "mousePressed", "mouseReleased"]) await send("Input.dispatchMouseEvent", { type, x: c[0], y: c[1], button: "left", clickCount: 1 });
       await sleep(500);
     },
+    async clickAt(x, y) {
+      for (const type of ["mouseMoved", "mousePressed", "mouseReleased"]) await send("Input.dispatchMouseEvent", { type, x, y, button: "left", clickCount: 1 });
+      await sleep(300);
+    },
     async upload(sel, file) {
       const doc = await send("DOM.getDocument", {});
       const { nodeId } = await send("DOM.querySelector", { nodeId: doc.root.nodeId, selector: sel });
@@ -477,6 +481,21 @@ async function keyboard(t, vp, st, problems) {
       const r2 = await ev(`(()=>{const v=document.querySelector('details.views');return v.open&&document.activeElement.id===${JSON.stringify(id)}?'':'menu '+(v.open?'open':'shut')+', focus on '+(document.activeElement.id||document.activeElement.tagName)})()`);
       if (r2) add("menu-shut", "#" + id, "ticking it: " + r2);
       await key(t, " "); await sleep(150);
+    }
+    // (round 13: closing the View menu by tapping the preview also picked the piece under the finger) a press outside
+    // a popup only closes it: the menu shuts and the piece under the pointer is not selected
+    {
+      const at = await ev(`(()=>{const r=document.getElementById('view').getBoundingClientRect();return [r.x+r.width/2,r.y+r.height/2,r.x+8,r.y+r.height-8]})()`);
+      await ev(`(()=>{document.querySelector('details.views').open=false;document.getElementById('fact-tip')?.remove();return 1})()`);
+      await t.page.clickAt(at[2], at[3]);   // (empty preview, nothing open: nothing selected)
+      await ev(`(()=>{document.querySelector('details.views').open=true;return 1})()`);
+      await t.page.clickAt(at[0], at[1]);   // (on the piece in the middle)
+      const r4 = await ev(`(()=>{const v=document.querySelector('details.views');return [v.open?'menu still open':'',nwTest.sel()?'the piece under the pointer was selected':''].filter(Boolean).join(', ')})()`);
+      // (and the press after it is an ordinary one again: it picks the piece)
+      await t.page.clickAt(at[0], at[1]);
+      if (!r4 && !(await ev(`!!nwTest.sel()`))) add("popup-tap-through", "#view", "with the menu shut, a press on the piece didn't pick it");
+      if (r4) add("popup-tap-through", "details.views", "a press on the preview with the menu open: " + r4);
+      await ev(`(()=>{document.querySelector('details.views').open=true;document.querySelector('details.views summary').focus();return 1})()`);
     }
     await key(t, "Escape"); await sleep(150);
     const r3 = await ev(`(()=>{const v=document.querySelector('details.views');return !v.open&&document.activeElement===v.querySelector('summary')?'':'menu '+(v.open?'open':'shut')+', focus on '+(document.activeElement.id||document.activeElement.tagName)})()`);

@@ -535,10 +535,10 @@ export function initStudio(api) {
     if (p.kind !== "frame") h += `<p class="hint warn" data-warn aria-live="polite" hidden></p>`;
     h += range("rot", "Turn", -180, 180, p.rot || 0, "°", 5);
     // (a patch has two: "Thread" under "Fill thread" read as the fill's own)
-    if (p.kind !== "file") h += `<div class="field"><span>${p.kind === "frame" && p.border === "patch" ? "Edge thread" : "Thread"}</span><div class="swatches">${swatches(p)}</div><p class="hint" data-thread-of="color">${api.escapeHtml(threadOf(p))}</p></div>`;
+    if (p.kind !== "file") h += `<div class="field"><span>${p.kind === "frame" && p.border === "patch" ? "Edge thread" : "Thread"}</span><div class="swatches">${swatches(p)}</div><p class="hint" data-thread-of="color">${api.escapeHtml(threadOf(p))}</p><p class="hint" data-all-thread hidden></p></div>`;
     const old = drawnId === p.id && $("st-edit").querySelector("[data-warn]");
     const was = drawnId === p.id ? $("st-edit").querySelector(".font-row")?.scrollLeft : undefined;
-    $("st-edit").innerHTML = h; drawnId = p.id;
+    $("st-edit").innerHTML = h; drawnId = p.id; allThread(lastSteps);
     // (the font row keeps where it was scrolled to while the font in use shows there, else brings it into the middle: a
     // font picked from the list stayed out of sight in the row)
     const row = $("st-edit").querySelector(".font-row");
@@ -685,8 +685,12 @@ export function initStudio(api) {
         // (shrunk as far as it goes and still past the frame, said so: "Shrunk to 5 mm so it fits inside the frame" stood
         // beside 60 letters running 127 mm past a heart and the hoop)
         const host = fs && fitFrame(p, pieces), past = host && !inFrame({ ...p, size: fs }, host, 0);
-        fit.hidden = !fs; fit.innerHTML = past ? `Shrunk to ${fs} mm, the smallest it goes, and it still runs past the frame: use fewer words, or make the frame bigger.`
-          : fs ? `Shrunk to ${fs} mm so it fits inside the frame.${up ? ` Turned to run up the frame it can be ${up} mm: <button type="button" class="link" data-run-up="${up}">Turn it to run up the frame</button>` : ""}` : "";
+        // (and words shrunk a lot by their frame, on two lines: a patch's one-line words went 20 -> 5.5 mm and a quilt
+        // label's top line 7 -> 5 mm, thin, with no way back said)
+        const two = fs && !up ? frameLines(p, fs) : null;
+        const lines = two ? ` On two lines it can be ${two.size} mm: <button type="button" class="link" data-lines="" data-text="${encodeURIComponent(two.text)}"${two.fits === "turn" ? " data-turn" : ""}>Put it on two lines${two.fits === "turn" ? " and turn the hoop" : ""}</button>` : "";
+        fit.hidden = !fs; fit.innerHTML = past ? `Shrunk to ${fs} mm, the smallest it goes, and it still runs past the frame: use fewer words, or make the frame bigger.${lines}`
+          : fs ? `Shrunk to ${fs} mm so it fits inside the frame.${up ? ` Turned to run up the frame it can be ${up} mm: <button type="button" class="link" data-run-up="${up}">Turn it to run up the frame</button>` : lines}` : "";
       }
       if ((await apart()) || go()) return;
       // what's wrong with it, worked out once (`pieceProblems`) as every other surface says it; here each with its fix
@@ -1058,6 +1062,16 @@ export function initStudio(api) {
     }
     return best;
   }
+  // Words of one line its frame shrank under 80 % of the size asked, on two lines at the size asked: { text, size (as
+  // the frame then sews it), fits } when that's at least a quarter bigger and lands (`landing`), else null
+  function frameLines(p, fs) {
+    if (fs > p.size * 0.8) return null;
+    const text = twoLines(p); if (!text) return null;
+    const size = fittedSizes(pieces.map((r) => (r.id === p.id ? { ...p, text } : r))).get(p.id) ?? p.size;
+    if (size < fs * 1.25) return null;
+    const l = landing(p, { text });
+    return l.fits ? { text, size, fits: l.fits } : null;
+  }
   // one line of three or more words split into three lines as even as they can be (the longest line shortest)
   function threeLines(p) {
     if (p.kind !== "text" || (p.shape && p.shape !== "straight") || p.text.includes("\n")) return null;
@@ -1419,8 +1433,32 @@ export function initStudio(api) {
   // (their spool's tooltip in the words every surface uses: app.js `threadLabel`)
   function swatchTip(hex, was, own, p) { const m = machineName(hex, was, p); return own ? api.threadLine(hex, m) : `Brother ${m}`; }
   // after the design is made: the editor's thread labels and swatch tooltips as the file now names them
-  function relabelThreads() {
+  // One thread for the whole design, offered beside a piece's thread when others differ and it saves thread changes
+  // (newcomer, round 13: a name in its own pink added two thread changes to the bookmark, and nothing said "use Pink for
+  // the whole bookmark"). Counted on the design composed with every piece in it (`steps`: a change is a step in another
+  // colour than the one before); quilting and fills aren't worked out for it (they sew in their frame's thread).
+  function changesOf(steps) { return steps.filter((st, i) => i && !st.rehoop && !steps[i - 1].rehoop && st.color !== steps[i - 1].color).length; }
+  function allThread(steps) {
+    const p = current(), el = $("st-edit").querySelector("[data-all-thread]");
+    if (!el) return;
+    const others = p && p.color && p.kind !== "file" ? pieces.filter((q) => q !== p && q.kind !== "file" && q.color && q.color !== p.color) : [];
+    let fewer = 0;
+    if (others.length && steps?.length && !steps.some((st) => st.rehoop)) {
+      // (worked out once per design made and thread: the editor is drawn again on every pick)
+      if (allMemo.steps !== steps || allMemo.color !== p.color) {
+        allMemo = { steps, color: p.color, fewer: 0 };
+        try { allMemo.fewer = changesOf(steps) - changesOf(compose(oneThread(p.color), api.hoop(), { fabric, baste, thread, later: [], unquilted: [], fillLater: true }).steps); } catch {}
+      }
+      fewer = allMemo.fewer;
+    }
+    el.hidden = fewer < 1;
+    el.innerHTML = fewer < 1 ? "" : `<button type="button" class="link" data-all-thread-set="${p.color}">Use Brother ${api.escapeHtml(machineName(p.color))} for everything</button>: ${fewer === 1 ? "1 fewer thread change" : `${fewer} fewer thread changes`}.`;
+  }
+  let allMemo = {}, lastSteps = null;
+  function oneThread(c) { return pieces.map((q) => (q.kind !== "file" && q.color ? { ...q, color: c } : q)); }
+  function relabelThreads(steps) {
     const p = current(); if (!p || drawnId !== p.id) return;
+    allThread(steps);
     for (const el of $("st-edit").querySelectorAll("[data-thread-of]")) el.textContent = threadOf(p, el.dataset.threadOf);
     for (const k of ["color", "fill", "blend"]) for (const b of $("st-edit").querySelectorAll(`button[data-${k}]`)) {
       const own = (api.ownedSpools?.() || []).find((s) => s.hex === b.dataset[k]);
@@ -1713,7 +1751,7 @@ export function initStudio(api) {
   // pause: the steps said "2 pauses" where the download said "no pauses")
   function stepsUI(steps, after = [], small = false, before = [], waiting = "", first = "") {
     guides = new Set(steps.filter((st) => !st.rehoop && st.under && steps.every((o) => o.rehoop || o.color !== st.color || o.under)).map((st) => st.color));
-    applGuide(steps); relabelThreads();
+    lastSteps = steps; applGuide(steps); relabelThreads(steps);
     // (stops in the words the facts beside the preview use: "2 thread changes and 1 pause", not "3 pauses"; a split
     // design's rehooping between its files is neither)
     const rehoops = steps.filter((st) => st.rehoop).length, count = steps.length - rehoops;
@@ -2020,6 +2058,8 @@ export function initStudio(api) {
   edit.addEventListener("click", (e) => {
     const fo = e.target.closest("[data-font]"), fs = fo && edit.querySelector('select[data-k="font"]');
     if (fs) { fs.value = fo.dataset.font; for (const t of ["input", "change"]) fs.dispatchEvent(new Event(t, { bubbles: true })); return; }
+    const one = e.target.closest("[data-all-thread-set]");
+    if (one) { remember(); const c = one.dataset.allThreadSet; pieces = oneThread(c); save(); ui(); make(); return; }
     const c = e.target.closest("[data-color]");
     if (c) { const was = current()?.color; change((p) => (p.color = c.dataset.color), true, true); editor(); ungang(current(), was); return; }
     const mo = e.target.closest("[data-motif]");
@@ -2721,9 +2761,10 @@ export function initStudio(api) {
       // Each name is checked like the design itself: a letter the font lacks is refused (a stand-in glyph was stitched),
       // and a name that runs into another piece is made smaller with `shrink` (Lily-Rose's y in the bib's heart) or
       // said. shrink: a name too long for the hoop, or running into something, is tried at 90 %, 80 %… down to half.
-      // With the hoop turned every file is turned like the design (`turned`), as the steps and the hooping note say:
-      // names that fit upright came out upright beside turned ones, and a towel hooped sideways for the batch sewed
-      // them across it. Each name is drawn at the design's own letter scale (`inkHeight`: the size is the height of
+      // With the hoop turned, a name that sews as it is (same size, nothing run into, as bold) with the hoop upright
+      // is made upright; only the ones that need the room are turned (`turned`), each said so in its caption and the
+      // note (Bo and Grace fitted upright but were turned with Benjamin: every file hooped sideways for nothing).
+      // Each name is drawn at the design's own letter scale (`inkHeight`: the size is the height of
       // the word's strokes, so "emma", with no capital, came out twice Emma's size); fewer initials grow to the
       // monogram's width (`monoSize`).
       // (`hp`: another hoop to try it in, the turned one, to see whether the hoop turned would spare shrinking it)
@@ -2731,7 +2772,15 @@ export function initStudio(api) {
       // design's own lettering isn't) is refused, said with the size it would have been: in the oval a 36-letter name
       // fitted across the frame came out at 28 % with 2 mm letters, "(smaller)" all it said. A name of two or more
       // words is tried on two lines first (`lines: 2`).
-      build: (name, shrink = false, hp = api.hoop()) => {
+      build: (name, shrink = false, hp) => {
+        const h = api.hoop();
+        if (!hp && api.turned() && h.w !== h.h) {
+          try { const u = whole(name, false, { ...h, w: h.h, h: h.w }); if (!u.smaller && !u.runs && !u.thin && !u.lines) return { ...u, turned: false }; } catch {}
+        }
+        return whole(name, shrink, hp || h);
+      },
+    };
+    function whole(name, shrink, hp) {
         const m = once(name, shrink, hp);
         // (and one shrunk under 70 % whose letters come out a quarter bigger on two lines)
         if (!m.small && !(m.smaller && m.pct < 70)) return m;
@@ -2744,8 +2793,7 @@ export function initStudio(api) {
         }
         if (!m.small) return m;
         throw new Error(`too long to sew clearly in this design: its letters would be ${m.small.toFixed(1)} mm tall`);
-      },
-    };
+    }
     // why a name can't be made, from its letters alone (said as it's typed, and by Make: the same checks), else ""
     function refused(name) {
       if (!/[\p{L}\p{N}]/u.test(name)) return "no letters to stitch";

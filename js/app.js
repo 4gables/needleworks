@@ -98,11 +98,19 @@ function stepLook(v, i, block) {
   return { upto: block ? block.segs.reduce((m, sg) => Math.max(m, sg[sg.length - 1][2]), 0) + 1 : undefined,
     hide: new Set([...(v.hide || [])].filter((k) => k < i)), fabricShapeBlock: fab != null && i <= fab ? undefined : fab };
 }
+// While words are typed into a piece, the preview keeps the scale it had (`typeFit`) until focus leaves the box: each
+// letter changed the note under the preview, the threads row and the Download button's name, the preview's height
+// with them, and the hoop jumped in and out as the name was typed (newcomer, round 13). Not while the design is too
+// big for the hoop: then it's fitted whole, as it must be to be seen.
+const typing = () => state.mode === "design" && document.activeElement?.matches?.("#controls textarea, #controls input[type=text], #controls input:not([type])");
+document.addEventListener("input", (e) => { if (typing() && e.target === document.activeElement && state.tf && !state.view?.whole) state.typeFit ??= state.tf.base.fit; }, true);
+document.addEventListener("focusout", () => setTimeout(() => { if (state.typeFit && !typing()) { state.typeFit = null; paint(); } }), true);
 function paint() {
   const v = state.view;
+  if (state.typeFit && (!typing() || !v || v.whole || state.hold)) state.typeFit = null;
   $("empty").hidden = !!v || !$("error").hidden;   // (an error says what's wrong; "Nothing to stitch yet" under it misled)
   // (room kept clear for the chips at the top and a message at the bottom: the too-big note covered the hoop on phones)
-  const err = $("error"), room = { padTop: $("facts").offsetHeight + 16, padBottom: err.hidden ? undefined : err.offsetHeight + 28, corner: zoomCorner(), base: state.hold };
+  const err = $("error"), room = { padTop: $("facts").offsetHeight + 16, padBottom: err.hidden ? undefined : err.offsetHeight + 28, corner: zoomCorner(), base: state.hold, fit: state.typeFit };
   const field = { hoop: shownHoop(), showHoop: state.showHoop && !state.backdrop, field: state.bg };
   // (nothing to stitch yet: the hoop stays, so there's still something to put the first piece in)
   if (!v) { state.tf = draw(canvas, null, { ...field, ...room, zoom: state.zoom, pan: state.pan }); return; }
@@ -466,7 +474,7 @@ function factTip(el) {
 }
 // (it closes when focus or a tap goes elsewhere: left open, it covered the zoom buttons tabbed to next)
 const shutTip = (e) => { if (!e.target.closest?.("#facts, #fact-tip")) $("fact-tip")?.remove(); };
-document.addEventListener("focusin", shutTip); document.addEventListener("pointerdown", shutTip, true);
+document.addEventListener("focusin", shutTip);
 $("show-real").onchange = (e) => { state.real = e.target.checked; store.set("real", state.real); if (state.real && state.zoom < 3) { state.zoom = 3; } paint(); };
 $("show-hoop").checked = state.showHoop;
 $("show-hoop").onchange = (e) => { state.showHoop = e.target.checked; store.set("showHoop", state.showHoop); paint(); };
@@ -480,7 +488,23 @@ const shutViews = (focus) => { if (!views.open) return; views.open = false; if (
 views.addEventListener("focusout", (e) => { if (e.relatedTarget && !views.contains(e.relatedTarget)) shutViews(false); });
 views.querySelector(".views-menu").addEventListener("click", (e) => { if (e.target.closest("button")) shutViews(true); }, true);
 views.addEventListener("keydown", (e) => { if (e.key === "Escape" && views.open) { e.preventDefault(); shutViews(true); } });
-document.addEventListener("pointerdown", (e) => { if (!views.contains(e.target)) shutViews(false); });
+// One rule for every popup (the View menu, a chip's tip): a tap outside one only closes it. Closing the View menu by
+// tapping the preview also picked the piece under the finger (newcomer, round 13); the press, the mouse press and the
+// click it makes are all swallowed, so nothing under the finger is pressed, focused or dragged.
+let swallow = 0;
+document.addEventListener("pointerdown", (e) => {
+  swallow = 0;
+  // (each open popup, and whether the press is inside it: a chip's tip counts the chips, so another chip swaps it)
+  const open = [];
+  if (views.open) open.push(views.contains(e.target));
+  if ($("fact-tip")) open.push(!!e.target.closest?.("#facts, #fact-tip"));
+  if (!open.length || open.includes(true)) return;
+  shutViews(false); $("fact-tip")?.remove();
+  e.preventDefault(); e.stopPropagation(); swallow = e.timeStamp;
+}, true);
+for (const t of ["mousedown", "mouseup", "click", "pointerup", "touchend"]) document.addEventListener(t, (e) => {
+  if (swallow && e.timeStamp - swallow < 1000) { e.preventDefault(); e.stopPropagation(); if (t === "click") swallow = 0; }
+}, true);
 $("turn").onclick = () => {
   if (square()) return;
   if (state.mode === "design") studio.remember();   // (a turn is undone like any other change)
@@ -2239,4 +2263,4 @@ if (new URLSearchParams(location.search).has("shared")) (async () => {
 // a link to another tab on this page (#design, #open...) switches to it; #bookmark opens the Bookmark starter
 addEventListener("hashchange", () => { const m = location.hash.slice(1); if (m === "bookmark" || (m !== state.mode && MODES.includes(m))) setMode(m, false); });
 // for tests/surfaces.mjs: the view on screen, its problems and its share text (what every surface should agree on)
-globalThis.nwTest = { view: () => state.view, names: (name, shrink) => studio.forNames()?.build(name, shrink), state: () => ({ zoom: state.zoom, pan: state.pan, step: state.step, turn: designTurned(), hoop: hoop().id, mode: state.mode }), sel: () => selBox(), problems: () => problemsOf(state.view), share: () => state.view && shareText(state.view), cut: (ext = "svg") => cutFiles(state.view, ext).map((f) => ({ ...judge(f), bytes: String(f.bytes) })), fine: () => state.pic.fine && { ...state.pic.fine, checking: state.pic.checking, fixes: state.pic.fixes?.map((f) => f.label) } };
+globalThis.nwTest = { view: () => state.view, names: (name, shrink) => studio.forNames()?.build(name, shrink), state: () => ({ zoom: state.zoom, scale: state.tf?.scale, whole: !!state.view?.whole, pan: state.pan, step: state.step, turn: designTurned(), hoop: hoop().id, mode: state.mode }), sel: () => selBox(), problems: () => problemsOf(state.view), share: () => state.view && shareText(state.view), cut: (ext = "svg") => cutFiles(state.view, ext).map((f) => ({ ...judge(f), bytes: String(f.bytes) })), fine: () => state.pic.fine && { ...state.pic.fine, checking: state.pic.checking, fixes: state.pic.fixes?.map((f) => f.label) } };
