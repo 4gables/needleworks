@@ -768,6 +768,13 @@ export function initStudio(api) {
       // (a style change is checked too: bold is wider, and "Make it bold" ran “Emma” into the “Emma” beside it)
       const no = (l) => `${l.out ? "go outside" : l.hit ? `run into ${api.escapeHtml(label(l.hit))}` : l.worse ? worseSaid(l.worse) : "be too big for the hoop"}`;
       const bold = ids("thin") ? landing(p, { style: "satin" }) : null, line = ids("loops") ? landing(p, { style: "line" }) : null;
+      // (one piece of advice per size: where bold would fill the loops, "Make it bold" isn't offered, as bold there says
+      // "Thin line keeps them open": a birth announcement's name flipped between the two at 14.5 and 20.5 mm)
+      // (the size it sews bold with its loops open, found by trying: loops scale with the satin's width, which doesn't
+      // grow with the size: measured at 12 mm the bold loops wanted 19, at 19 they wanted 24)
+      let boldFills = bold ? loopsFill({ ...q, style: "satin" }) : 0;
+      for (let i = 0; i < 4 && boldFills > q.size && boldFills <= 60; i++) { const r = { ...p, size: boldFills }, n = fineLine(r) ? boldFills + 1 : loopsFill(r); if (!n || n <= boldFills) break; boldFills = n; }
+      const boldAt = boldFills > q.size && boldFills <= 60 && !fineLine({ ...p, size: boldFills }) && !(loopsFill({ ...p, size: boldFills }) > boldFills) ? landing(p, sizeChange(p, boldFills)) : null;
       // (too small, thin, or loops filling on one long line, as Fit to hoop leaves a long name: two lines may be much
       // bigger; said with the problem it fixes)
       const lines = !d.fs && (m || fills || (d.thin && fabric !== "towel")) ? ((c) => (c ? ` On ${c.n === 2 ? "two" : "three"} lines${c.turn ? " with the hoop turned" : ""} it can be ${c.size} mm. ${btn(`data-lines="${c.size}" data-text="${encodeURIComponent(c.text)}"`, `Put it on ${c.n === 2 ? "two" : "three"} lines`, { fits: c.turn ? "turn" : "fits" })}` : ""))(lineChoice(p)) : "";
@@ -781,7 +788,8 @@ export function initStudio(api) {
         small: size, towel: size, arch: arc, runs: hit,
         empty: p.kind === "monogram" ? "No initials yet: type them above, or remove this piece." : "No words yet: type some above, or remove this piece.",
         undrawn: "These words come out as no stitches at all: use fewer or other letters.",
-        thin: bold && `At this size it sews as a thin line.${bold.fits ? ` ${btn(`data-seg-set="style:satin"`, "Make it bold", bold)} (small loops may fill in).` : ` Bold, it would ${no(bold)}.`}`,
+        thin: bold && (boldFills > q.size ? `At this size it sews as a thin line, which keeps the small loops open: bold, they'd fill in.${boldAt?.fits ? ` From ${boldFills} mm it sews bold with them open: ${btn(`data-size="${boldFills}"`, `Make it ${boldFills} mm`, boldAt)}.` : ""}`
+          : `At this size it sews as a thin line.${bold.fits ? ` ${btn(`data-seg-set="style:satin"`, "Make it bold", bold)} (small loops may fill in).` : ` Bold, it would ${no(bold)}.`}`),
         loops: line && `At this size the small loops (the holes in letters like b and e) fill in.${line.fits ? ` ${btn(`data-seg-set="style:line"`, "Thin line", line)} keeps them open` : ""}${fillsAt?.fits ? `${line.fits ? ", or" : ""} ${btn(`data-size="${fills}"`, `${line.fits ? "make" : "Make"} it ${fills} mm`, fillsAt)}` : ""}${fillsGrow ? `${line.fits ? ", or" : ""} ${line.fits ? fillsGrow.replace(">Make", ">make") : fillsGrow}` : ""}${line.fits || fillsAt?.fits || fillsGrow ? "." : ""}` };
       if (pacer.hit) return;   // (a run stopped on the way: said by the next)
       w.innerHTML = [...new Set(list.map((x) => x.kind))].map((k) => tag(k, said[k] + (k === withLines ? lines : ""))).filter(Boolean).join(" <br>");   // (a space too: read aloud or copied, "lines.On two lines")
