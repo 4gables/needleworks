@@ -79,6 +79,11 @@ const STATES = [
   { id: "design-toobig-open", hash: "design", seed: studio([text(1, "W".repeat(60), { font: "NW Quicksand", size: 30 })]), setup: async (p) => { await p.eval(`for (const d of document.querySelectorAll('#panel-design details')) d.open = true`); } },
   { id: "design-threads", hash: "design", seed: studio(many) },
   { id: "design-fix", hash: "design", seed: studio([{ id: 1, x: 0, y: 0, color: "#ed171f", kind: "frame", shape: "circle", w: 90, h: 90, border: "satin" }, text(2, "Emma bbe", { size: 3 })]), keys: true },
+  // (a print font's letter pair pushed together: "Space Re as the font does" sent focus to the Turn slider)
+  // (a font picked from the list, far along the row: it stayed out of sight there)
+  { id: "design-longname", hash: "design", seed: studio([text(1, "Happy Birthday\nGrandma Rose", { size: 14 })]) },
+  { id: "design-font-end", hash: "design", seed: studio([text(1, "Emma")]), setup: async (p) => { await p.eval(`(()=>{const s=document.querySelector('#st-edit select[data-k="font"]');s.value=[...s.options].at(-1).value;s.dispatchEvent(new Event('input',{bubbles:true}));s.dispatchEvent(new Event('change',{bubbles:true}));return 1})()`); await sleep(1500); } },
+  { id: "design-kern", hash: "design", seed: studio([text(1, "Rebecca", { font: "NW Josefin Sans", kern: { 0: -30 } })]), keys: true },
   { id: "design-toast", hash: "design", seed: studio([text(1, "Emma"), text(2, "Liam", { y: 25 })]), setup: async (p) => { await p.click('[data-op="del"]'); }, wait: "!document.getElementById('st-toast')?.hidden", keys: true },
   { id: "design-steps", hash: "design", seed: studio([{ id: 1, x: 0, y: 0, color: "#ed171f", kind: "frame", shape: "circle", w: 90, h: 90, border: "applique" }, text(2, "Emma")]),
     setup: async (p) => { await p.eval(`(()=>{const d=document.querySelector('#panel-design details.steps');d.open=true;d.scrollIntoView({block:'start'})})()`); await p.click("#st-steps [data-step]"); } },
@@ -94,6 +99,9 @@ const STATES = [
   { id: "open-file", hash: "open", seed: {}, setup: async (p) => { await p.upload("#open-file", PES); }, wait: "!document.getElementById('open-info').hidden", keys: true },
   { id: "open-bad", hash: "open", seed: {}, setup: async (p) => { await p.upload("#open-file", path.join(FILES, "junk.pes")); }, wait: "!document.getElementById('error').hidden" },
   { id: "dlg-done", hash: "design", seed: studio([text(1, "Emma")]), setup: async (p) => { await p.click("#download"); }, dialog: "done" },
+  // (taller than a phone: two bookmarks, turned, with the cutter note)
+  { id: "dlg-done-long", hash: "design", seed: studio([]), setup: async (p) => { await p.eval(`(async()=>{const w=(ms)=>new Promise((r)=>setTimeout(r,ms));document.querySelector('[data-start="bookmark"]').click();await w(2500);document.querySelector("#st-pieces .pick").click();await w(800);document.querySelector("[data-two-up]").click();
+    for(let i=0;i<100&&document.getElementById("download").disabled;i++)await w(100);await w(1500);document.getElementById("download").click();return 1})()`); }, dialog: "done" },
   { id: "dlg-names", hash: "design", seed: studio([text(1, "Emma")]), setup: async (p) => { await p.click("#names-open"); await p.eval(`(()=>{const t=document.getElementById('names-list');t.value='Emma\\nLiam\\nOlivia\\nAlexandrina-Wilhelmina\\nNoah';t.dispatchEvent(new Event('input',{bubbles:true}))})()`); await sleep(1500); }, dialog: "names" },
   { id: "dlg-spools", hash: "design", seed: { ...studio([text(1, "Emma")]), "nw:brand": "isacord", "nw:spools": { isacord: ["0015", "1902", "3541"] } },
     setup: async (p) => { await p.eval(`(()=>{const s=document.getElementById('brand');s.value='@mine';s.dispatchEvent(new Event('change',{bubbles:true}))})()`); }, dialog: "spools" },
@@ -232,6 +240,13 @@ const MEASURE = String.raw`(async (opts) => {
   const opacity = (e) => { let o = 1; for (let n = e; n && n.nodeType === 1; n = n.parentElement) o *= +getComputedStyle(n).opacity; return o; };
   const sr = (e) => { const r = e.getBoundingClientRect(); return r.width <= 2 || r.height <= 2 || e.closest('.sr, .sr-file'); };
   const scrollers = () => [document.scrollingElement, ...document.querySelectorAll('*')].filter((n) => { const s = getComputedStyle(n); return n === document.scrollingElement || (/(auto|scroll)/.test(s.overflowY + s.overflowX) && (n.scrollHeight > n.clientHeight + 1 || n.scrollWidth > n.clientWidth + 1)); });
+  // 0. a dialog opens at its top (the download dialog on a phone opened at its bottom, title and verdict out of sight)
+  if (dlg && dlg.scrollTop > 2) out.push({ kind: 'dialog-scrolled', el: desc(dlg), detail: 'opened ' + Math.round(dlg.scrollTop) + ' px down from its top' });
+  // (round 13) the Download button's file name whole on a window 900 px or wider ("Download Happy_Birthday_Grandma_Rose.p…" at 960)
+  { const d = document.getElementById('download'); if (W >= 900 && d && d.getClientRects().length && d.scrollWidth > d.clientWidth + 1) out.push({ kind: 'cut-short', el: desc(d), detail: 'the file name is cut short: ' + d.scrollWidth + ' px in ' + d.clientWidth }); }
+  // (round 13) a sideways chip row shows the chip that's picked (a font picked from the list stayed out of sight in the row)
+  for (const row of document.querySelectorAll('.font-row')) { const on = row.querySelector('[aria-pressed="true"]'); if (!on || !row.getClientRects().length) continue;
+    const a = row.getBoundingClientRect(), b = on.getBoundingClientRect(); if (b.left < a.left - 1 || b.right > a.right + 1) out.push({ kind: 'picked-hidden', el: desc(on), detail: 'the picked chip is scrolled out of its row' }); }
   const saved = scrollers().map((n) => [n, n.scrollLeft, n.scrollTop]);
   // clipping box: the viewport cut by every overflow-clipping ancestor
   // (opts2.scrolls: scrolling boxes clip too, for what's on screen now; otherwise only boxes that cut their content off)
@@ -397,14 +412,24 @@ async function keyboard(t, vp, st, problems) {
   const { ev, send, events } = t;
   const add = (kind, el, detail) => problems.push({ vp: vp.id, scheme: "light", state: st.id, kind, el, detail });
   let err = await t.load(st); if (err) { add("state", st.id, err); return 0; }
-  // every note goes by itself (round 10: "Couldn't open the share sheet" stayed in the preview's message box for
-  // minutes): the Undo toast, then a failed share, each gone within 15 s, and the message box left empty
+  // A note with an action stays until it's used or dismissed (round 13: "Make it as big as…" and "Make them 42 mm and
+  // add another" went in 10-12 s, before a newcomer reached them, with a keyboard user's focus on the button falling to
+  // the page): the Undo toast is still up after 15 s, and its × takes it away with focus back where it was. A note
+  // with nothing to do goes by itself (round 10: "Couldn't open the share sheet" stayed in the preview's message box
+  // for minutes): a failed share's, gone within 15 s, and the message box left empty
   if (st.id === "design-toast") {
     const goes = async (what) => {
       for (let i = 0; i < 75; i++) { if (await ev("!!document.getElementById('st-toast')?.hidden")) return; await sleep(200); }
       add("toast-stays", "#st-toast", `${what}: still showing after 15 s`);
     };
-    await goes("Removed … Undo");
+    await sleep(15000);
+    if (await ev("!!document.getElementById('st-toast')?.hidden")) add("toast-gone", "#st-toast", "Removed … Undo: gone by itself before it was used");
+    else {
+      await ev(`(()=>{document.querySelector('#st-toast .toast-x').focus();return 1})()`); await key(t, "Enter"); await sleep(900);
+      const r = await ev(`(()=>{const a=document.activeElement;return {hidden:document.getElementById('st-toast').hidden,body:!a||a===document.body}})()`);
+      if (!r.hidden) add("toast-stays", "#st-toast", "its × didn't take it away");
+      if (r.body) add("focus-lost", "#st-toast", "dismissed with focus on it: focus went to the page");
+    }
     await ev(`(()=>{Object.defineProperty(navigator,"share",{value:()=>Promise.reject(new Error("no share sheet")),configurable:true});const b=document.getElementById('share');b.hidden=false;b.click();return 1})()`);
     let said = false;
     for (let i = 0; i < 20 && !said; i++) { await sleep(100); said = await ev("!document.getElementById('st-toast').hidden"); }
@@ -461,7 +486,7 @@ async function keyboard(t, vp, st, problems) {
     // (each control remembers where it stood on the page and what came after it, to tell afterwards whether focus
     // went back up the page: what followed it moving up into its place is fine)
     const there = await ev(`(()=>{const e=document.querySelector(${JSON.stringify(s.path)});if(!e||!e.getClientRects().length)return false;e.focus();
-      const y=(n)=>{let t=n.getBoundingClientRect().top;for(let p=n.parentElement;p;p=p.parentElement)t+=p.scrollTop;return t};window.__y=y;const all=[...document.querySelectorAll('button,input,select,textarea,summary,a[href],[tabindex="0"]')];window.__was={e,top:y(e),next:all.slice(all.indexOf(e)+1).filter((n)=>!e.contains(n))};return document.activeElement===e})()`).catch(() => false);
+      const y=(n)=>{let t=n.getBoundingClientRect().top;for(let p=n.parentElement;p;p=p.parentElement)t+=p.scrollTop;return t};window.__y=y;const all=[...document.querySelectorAll('button,input,select,textarea,summary,a[href],[tabindex="0"]')];window.__was={e,top:y(e),next:all.slice(all.indexOf(e)+1).filter((n)=>!e.contains(n)),fix:e.matches('[data-warn] button, [data-fit] button, button[data-follow]')};return document.activeElement===e})()`).catch(() => false);
     if (!there) continue;
     const before = await ev(FOCUS), pick = await ev("!!document.activeElement?.matches('#st-pieces .pick')");
     const isText = s.tag === "TEXTAREA" || (s.tag === "INPUT" && /^(text|search|number|)$/.test(s.type));
@@ -488,7 +513,11 @@ async function keyboard(t, vp, st, problems) {
       const nx=w.next.find((n)=>n.isConnected&&n.getClientRects().length);if(nx&&(a===nx||nx.compareDocumentPosition(a)&Node.DOCUMENT_POSITION_FOLLOWING))return '';
       return window.__y(a)<w.top-30?'went back up the page to '+(a.id||a.getAttribute('aria-label')||a.innerText||a.value||a.tagName).trim().slice(0,40):''})()`).catch(() => "");
 
-    if (back && after.path !== before.path && !after.dialog && after.mode === before.mode && after.hash === before.hash && after.pieces === before.pieces) add("focus-back", s.desc, `${what}: the control went and focus ${back}`);
+    // a one-tap fix hands focus to the control it changed or the problems left, in the piece's controls: never the Turn
+    // slider that stood after the fix (the next arrow key rotated the lettering), nor out of the editor
+    const fix = await ev(`(()=>{const w=window.__was,a=document.activeElement;if(!w?.fix||!a||a===document.body)return null;return {rot:a.matches('input[data-k="rot"]'),edit:!!a.closest('#st-edit, #st-fabric')}})()`).catch(() => null);
+    if (fix && !after.dialog && after.mode === before.mode && (fix.rot || !fix.edit)) add("fix-landing", s.desc, `${what}: focus went to ${after.desc}, not the control the fix changed or the problems left`);
+    if (back && !fix?.edit && after.path !== before.path && !after.dialog && after.mode === before.mode && after.hash === before.hash && after.pieces === before.pieces) add("focus-back", s.desc, `${what}: the control went and focus ${back}`);
     const moved = after.sy.reduce((a, v, i) => a + Math.abs(v - (before.sy[i] || 0)), 0);
     const ctx = after.dialog !== before.dialog || after.mode !== before.mode || after.hash !== before.hash || chooser || /^#/.test(s.href) || s.role === "tab";
     // (picking a piece in the list brings its controls up into view, the list row kept on screen: they opened ~800 px

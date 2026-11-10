@@ -25,7 +25,7 @@
 //     [--only words,initials,letters,fonts,bookmark,names,saved,share,marks,layout]
 //   (about 15 min, quick about 5; prints "DONE <checks> <problems>" and exits 1 on a problem)
 import { FONTS, APPLIQUE_FONTS } from "../js/core/fonts.js";
-import { MAX_WORDS, brief, initials, lackList, lacks, safeName, tidy } from "../js/core/typed.js";
+import { MAX_WORDS, brief, initials, lackList, lacks, safeName, swashless, tidy } from "../js/core/typed.js";
 import { FIXED, LONG, VARIANTS, corpus, rng } from "./text_corpus.mjs";
 
 const [CDP, HTTP] = process.argv.slice(2);
@@ -228,7 +228,10 @@ async function roundTrip(strings) {
   for (const s of strings) {
     const want = tidy(s, { lines: 3, max: 60 });
     if (!want.trim()) continue;
+    // (the Words box keeps the swashes its buttons show, round 13: they're switched off first, so the words saved are
+    // the words typed)
     const got = await ev(`(async () => {
+      for (const b of document.querySelectorAll('#st-edit [data-swash][aria-pressed="true"]')) { b.click(); await __tf.settle(200); }
       __tf.set(document.querySelector('#st-edit textarea[data-k="text"]'), ${JSON.stringify(s)}); await __tf.settle(400);
       __tf.files.length = 0; document.getElementById("st-save").click(); await new Promise((r) => setTimeout(r, 100)); await Promise.all(__tf.files.map((f) => f.ready));
       const saved = __tf.files[0];
@@ -240,7 +243,8 @@ async function roundTrip(strings) {
     })()`);
     check("Save design: file name", fileOk(got.name), got.name);
     check("Save design: saves the words as shown", got.text === want, `${show(s)}: ${show(got.text)}`);
-    check("Open saved: the words come back", got.back === want, `${show(s)}: ${show(got.back)}`);
+    // (the box shows them without the swash marks its buttons stand for)
+    check("Open saved: the words come back", got.back === swashless(want), `${show(s)}: ${show(got.back)}`);
     check("Open saved: nothing said cut", !/cut|shortened/i.test(got.toast) || want.length >= 60, `${show(s)}: ${got.toast}`);
     check("Save/Open: nothing throws", !got.errors.length, got.errors.join(" "));
   }

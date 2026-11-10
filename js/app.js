@@ -10,7 +10,7 @@ import { TURNED, TURN_PIC, cutDXF, cutName, cutSVG, firstStep, sewSheet, sewTime
 import { handOut, judge } from "./gate.js";
 import { DST_COLOURS, blockLoads, checkup, fewerBlocks, fix, heat, openedFile, pauses, shortJumps, sortedChanges } from "./doctor.js";
 import { HARD, MAX_BLOCKS, denseWords, moves, verdictOf } from "./quality.js";
-import { BLOCK, LOOK, LOOK_HEAD, TIP, TIP_HEAD, problemsHtml, problemsInline, problemsItems, problemsOf, shownOn, stopWords, stopsAt, mmText } from "./words.js";
+import { BLOCK, LOOK, LOOK_HEAD, TIP, TIP_HEAD, isolate, problemsHtml, problemsInline, problemsItems, problemsOf, shownOn, stopWords, stopsAt, mmText } from "./words.js";
 import { brief, safeName, tidy, uniqueName, withSwash } from "./core/typed.js";
 import { BRANDS, apart, brotherNum, chartSpools, exampleSpools, lab, nearestSpool, nearestSpools, ownSpoolOf, spools } from "./core/brands.js";
 import { COLORS as LINE_THREADS, initStudio, savedDesign } from "./studio/ui.js";
@@ -198,6 +198,8 @@ function setView(v) {
   // (and the size controls: "Largest that fits the 5x7" stayed after the hoop was changed to 4x4 on another tab)
   if (state.mode === "open" && state.opened) { openInfo(v, st, fits); if ($("doc-scale")) sizeUI(); }
   $("download").textContent = v.split ? `Download ${v.split.length} files (.zip)` : !fits ? "Too big for this hoop" : blocked ? v.blockLabel || "Fix the lettering first" : v.action || `Download ${v.filename}`;
+  // (the whole name where the button cuts it short)
+  $("download").title = $("download").textContent;
   paint();
 }
 let qTimer = 0;
@@ -261,6 +263,13 @@ function machineThreadList(v) {
   const p = v.file;
   return p.pec ? p.pec.map(pecThread) : machineThreads(p.threads);
 }
+// A dialog opens at its top. Taller than the window (the download dialog on a phone, two bookmarks), its button's
+// autofocus scrolled it to the bottom: the title and the verdict were above the fold and it opened mid hooping note.
+// Then focus goes to its title instead, and Tab goes on from there.
+function modal(d) {
+  d.showModal();
+  if (d.scrollTop > 0) { d.scrollTop = 0; const h = d.querySelector("h2"); if (h) { h.tabIndex = -1; h.focus({ preventScroll: true }); } }
+}
 // an error in plain words, with a one-tap fix when there is one ({ label, run })
 // (`fix`: one { label, run } or a list of them, joined by "or")
 function showError(msg, fix) {
@@ -268,29 +277,49 @@ function showError(msg, fix) {
   if (msg) [].concat(fix || []).forEach((f, i) => { const b = document.createElement("button"); b.type = "button"; b.className = "link"; b.textContent = f.label; b.onclick = f.run; e.append(i ? ", or " : " ", b); });
   if (msg || !was) paintSoon();   // (the preview keeps clear of the message)
 }
-// A moment's note at the bottom ("Removed Monogram aMs. Undo", "Couldn't open the share sheet"), on every tab. One
-// rule for how long: every note goes by itself, after time to read it (2.5 s and 0.3 s a word, 3-8 s), and one with a
-// one-tap action 4 s longer, at least 10 s (6 s went before a newcomer found Undo). A failed share said in the
-// preview's message box stayed there for minutes: what went wrong with a tap is a toast; the box is for what's wrong
-// with the design until it changes.
+// A moment's note at the bottom ("Removed Monogram aMs. Undo", "Couldn't open the share sheet"), on every tab. A note
+// that only says something goes by itself after time to read it (2.5 s and 0.3 s a word, 3-8 s), held while the
+// pointer or focus is on it. A note with a one-tap action stays until it's used, dismissed (its ×, Escape), the design
+// changes (`hideToast`) or the tab does: on a timer it went before people got to it (10-12 s: a newcomer reading 35
+// words, a keyboard user 14 Tabs away with focus already on its button, a first click on nothing). A failed share said
+// in the preview's message box stayed there for minutes: what went wrong with a tap is a toast; the box is for what's
+// wrong with the design until it changes.
 const toastBox = Object.assign(document.createElement("div"), { id: "st-toast", className: "toast", hidden: true });
 toastBox.setAttribute("role", "status"); document.body.append(toastBox);
-let toastTimer = 0, toastAt = 0;
-const toastMs = (msg, action) => { const read = Math.min(8000, Math.max(3000, 2500 + 300 * msg.split(/\s+/).length)); return action ? Math.max(10000, read + 4000) : read; };
+let toastTimer = 0, toastAt = 0, toastAct = false, toastLeft = 0, toastFrom = null;
+const toastMs = (msg) => Math.min(8000, Math.max(3000, 2500 + 300 * msg.split(/\s+/).length));
 // Going, it fades and keeps catching taps for a moment before it's hidden: a late tap on Undo just after it went
-// landed on "+ Appliqué letters" under it, and so did a second tap on Undo
+// landed on "+ Appliqué letters" under it, and so did a second tap on Undo. Focus in it goes back where it came from
+// (hidden with focus on its button, focus fell to the page and the next Tab started from the top).
 function toastGone() {
   if (toastBox.hidden || toastBox.classList.contains("gone")) return;
+  const had = toastBox.contains(document.activeElement);
   toastBox.classList.add("gone"); clearTimeout(toastTimer); toastTimer = setTimeout(() => { toastBox.hidden = true; toastBox.classList.remove("gone"); }, 700);
+  if (had) (toastFrom && live(toastFrom) && !toastFrom.disabled ? toastFrom : $("view")).focus({ preventScroll: true });
 }
+// (`action`: { label, run }, or a list of them)
 function toast(msg, action) {
-  toastBox.innerHTML = `<span>${escapeHtml(msg)}</span>${action ? `<button type="button" class="link">${escapeHtml(action.label)}</button>` : ""}`;
-  if (action) toastBox.querySelector("button").onclick = () => { if (toastBox.classList.contains("gone")) return; toastGone(); action.run(); };
-  toastBox.classList.remove("gone"); toastBox.hidden = false; toastAt = Date.now(); clearTimeout(toastTimer); toastTimer = setTimeout(toastGone, toastMs(msg, action));
+  const acts = [].concat(action || []);
+  toastBox.innerHTML = `<span>${isolate(escapeHtml(msg))}</span>${acts.map((a) => `<button type="button" class="link">${escapeHtml(a.label)}</button>`).join("")}${acts.length ? `<button type="button" class="toast-x" aria-label="Dismiss this note" title="Dismiss">×</button>` : ""}`;
+  const bs = toastBox.querySelectorAll("button");
+  acts.forEach((a, i) => { bs[i].onclick = () => { if (toastBox.classList.contains("gone")) return; toastGone(); a.run(); }; });
+  if (acts.length) bs[acts.length].onclick = () => toastGone();
+  toastAct = acts.length > 0; toastBox.classList.remove("gone"); toastBox.hidden = false; toastAt = Date.now(); clearTimeout(toastTimer);
+  toastLeft = toastAct ? 0 : toastMs(msg); if (toastLeft) toastTimer = setTimeout(toastGone, toastLeft);
 }
+// (held while it's being read or reached for, then given a moment more)
+const toastHold = (on) => {
+  if (!toastLeft || toastBox.hidden || toastBox.classList.contains("gone")) return;
+  clearTimeout(toastTimer); if (!on && !toastBox.matches(":hover, :focus-within")) toastTimer = setTimeout(toastGone, Math.max(2000, toastLeft - (Date.now() - toastAt)));
+};
+toastBox.addEventListener("pointerenter", () => toastHold(true)); toastBox.addEventListener("pointerleave", () => toastHold(false));
+toastBox.addEventListener("focusin", () => toastHold(true)); toastBox.addEventListener("focusout", () => setTimeout(() => toastHold(false)));
+// (where focus was before it came into the note, to go back to)
+document.addEventListener("focusin", (e) => { if (e.target instanceof Element && !toastBox.contains(e.target)) toastFrom = e.target; });
+toastBox.addEventListener("keydown", (e) => { if (e.key === "Escape") { e.stopPropagation(); toastGone(); } });
 // a note with an action ("Removed … Undo") goes with the next change, once it's been up a moment
 // (`now`: whatever its age, as Undo takes the design back past what the note was about)
-function hideToast(now = false) { if ((now || Date.now() - toastAt > 400) && toastBox.querySelector("button")) toastGone(); }
+function hideToast(now = false) { if ((now || Date.now() - toastAt > 400) && toastAct) toastGone(); }
 function busy(on, text = "Stitching…") { $("busy").hidden = !on; $("busy-text").textContent = text; }
 
 // zoom & pan
@@ -528,10 +557,26 @@ function badReport(el, files, zipName) {
   if (fixable) {
     const btn = document.createElement("button"); btn.type = "button"; btn.className = "primary";
     btn.textContent = zipName ? `Save fixed copies (${fixedName(zipName)})` : `Save a fixed copy (${fixedName(bad[0].name)})`;
-    btn.onclick = () => { const r = saveFixed(files, bad, zipName); btn.disabled = true; btn.textContent = r.ok ? "Saved to your downloads" : "Couldn't save it: " + r.error; };
+    btn.onclick = () => {
+      const r = saveFixed(files, bad, zipName); btn.disabled = true; btn.textContent = r.ok ? "Saved to your downloads" : "Couldn't save it: " + r.error;
+      // (the original was saved too, unless the gate refused it: say which of the two to sew)
+      const name = zipName ? fixedName(zipName) : fixedName(bad[0].name);
+      if (r.ok) { savedNames().add(name); ownNote(name); }
+    };
     el.append(btn);
   }
   return bad;
+}
+// Files saved on this tab that belong together: a file and its fixed copy, whichever was saved first. Then which one
+// to sew is said (`done-own`). It said "each file you've saved is a design of its own: sew them in any order" after
+// any two saves, so separate projects in one visit read as parts of one, and a failing file and its fixed copy as two
+// designs to sew. (Two hoopings say their order in the steps; names come as one .zip of their own.)
+const savedNames = () => ((downloaded.names ||= {})[state.mode] ||= new Set());
+function ownNote(name) {
+  const plain = name && name.replace(/_fixed(?=\.\w+$)/, ""), fixed = name && fixedName(name);
+  const both = name && savedNames().has(plain) && savedNames().has(fixed) && plain !== fixed;
+  $("done-own").hidden = !both;
+  if (both) $("done-own").textContent = `Sew ${fixed} at the machine, not ${plain}: that one is the file as it came, with the problems the check found.`;
 }
 // what was checked and the next steps at the machine, until "Don't show this again" (a file that fails the quality
 // check always says so)
@@ -563,12 +608,8 @@ function downloaded(v, zipped, files = [], saved = true) {
     : part ? `It opens ${what}, but only part of the design is in it: the file it came from ends early. Download that file again if you can.` : `Checked: it opens ${what}.`;
   $("done-checked").className = bad.length || part ? "warn" : "good";
   $("done-zip").hidden = !zipped;
-  // (several designs saved this session: a newcomer asked which order to sew them in) Counted per tab: saves on
-  // another tab said "each file you've saved is a design of its own" after one save of one opened file. Pictures and
-  // Design your own count together (each makes a design of its own: a picture saved after two names didn't say it)
-  const mine = ((downloaded.names ||= {})[state.mode === "open" ? "open" : "made"] ||= new Set());
-  if (saved) mine.add(v.filename);
-  $("done-own").hidden = !saved || mine.size < 2;
+  if (saved) savedNames().add(v.filename);
+  ownNote(saved && v.filename);
   $("done-phone").hidden = !matchMedia("(pointer: coarse)").matches;
   // (an Android phone has no Lightning port, nor an iPhone a "Files by Google")
   $("done-phone").textContent = /Android/i.test(navigator.userAgent)
@@ -595,7 +636,7 @@ function downloaded(v, zipped, files = [], saved = true) {
     : escapeHtml(`Pick the design and press Start. ${ch ? `At each thread change, put on the next thread listed with the preview${same ? "; at a pause, keep the same thread on" : ""}` : "At each pause, keep the same thread on"} (Sew along shows each step).`);
   // (fabric shapes to cut: the Cutter file is said here too, not only under Download)
   $("done-cut").hidden = !saved || !v.sheet?.cut?.length;
-  $("done").showModal();
+  modal($("done"));
 }
 $("done-turn").insertAdjacentHTML("afterbegin", TURN_PIC);   // (the note's text stays its textContent)
 // the dialog's “How to stitch it”: closed, the steps opened and shown, focus on their heading
@@ -639,7 +680,7 @@ $("cut-dxf").onclick = cutFile("dxf");
 const cal = { bmp: null, a: [0.25, 0.5], b: [0.75, 0.5], drag: null };
 $("item-open").onclick = () => {
   if (state.backdrop) { state.backdrop = null; $("item-open").textContent = "On my item"; state.zoom = 1; state.pan = [0, 0]; paint(); return; }
-  $("item-done").disabled = !cal.bmp; $("item").showModal(); calDraw();
+  $("item-done").disabled = !cal.bmp; modal($("item")); calDraw();
 };
 $("item-file").onchange = async (e) => {
   const f = e.target.files[0]; e.target.value = ""; if (!f) return;
@@ -733,7 +774,7 @@ function alongShow() {
 }
 $("along-open").onclick = async () => {
   if (!state.view?.cache) return;
-  along.i = 0; along.at = null; $("along").showModal(); alongShow();
+  along.i = 0; along.at = null; modal($("along")); alongShow();
   try { along.lock = await navigator.wakeLock?.request("screen"); } catch { along.lock = null; }
 };
 $("along-next").onclick = () => { if (along.i >= alongSteps(state.view).length) { $("along").close(); return; } along.i++; alongShow(); };
@@ -760,7 +801,7 @@ function namesFor() {
 $("rename-open").onclick = () => {
   const auto = studio.autoName();
   $("rename-name").value = studio.title(); $("rename-name").placeholder = auto;
-  renameNote(); $("rename").showModal(); $("rename-name").select();
+  renameNote(); modal($("rename")); $("rename-name").select();
 };
 // (60 letters at most, as the Design tab keeps it: a field's maxlength cut a pasted name with nothing said)
 function renameNote() {
@@ -785,7 +826,7 @@ $("names-open").onclick = () => {
   $("names-note").textContent = n.monogram ? "One set of initials per line, up to 40. You get one file for each, in a single .zip." : "One name per line, up to 40. You get one file for each, in a single .zip.";
   $("names-shrink-row").hidden = false;
   $("names-thumbs").innerHTML = ""; $("names-cancel").textContent = "Cancel";
-  $("names").showModal();
+  modal($("names"));
   // (last time's list, all selected: typing replaces it. The caret at its end glued "Ava" onto "Name35")
   $("names-list").focus(); $("names-list").select();
 };
@@ -988,7 +1029,7 @@ function openSpools() {
   $("spools-list").value = (state.spools[$("spools-brand").value] || []).join(" ");
   $("spools-find").value = ""; spoolNear = null; spoolsMine = state.mine.map((o) => ({ ...o }));
   $("spools-own").hidden = true; $("own-brand").value = $("own-num").value = ""; $("own-hint").textContent = "";
-  spoolsGrid(); $("spools").showModal();
+  spoolsGrid(); modal($("spools"));
 }
 // (examples in the brand's own numbers: Brother's showed Isacord-like "0020 1902 3541")
 const spoolsHint = () => { $("spools-list").placeholder = `The numbers on your spools, e.g. ${exampleSpools($("spools-brand").value)}`; };
@@ -1138,6 +1179,7 @@ function setMode(mode, push = true) {
   for (const m of TABS) { const on = m === mode; $("tab-" + m).setAttribute("aria-selected", on); $("tab-" + m).tabIndex = on ? 0 : -1; }
   if (push) history.replaceState(null, "", "#" + mode);
   showError(""); busy(false);   // (a picture still stitching from the last tab)
+  hideToast();   // (a note's action is about the tab it was said on)
   $("empty").textContent = mode === "picture" ? "Choose a picture to see it as stitches." : mode === "open" ? "Open a PES, PEC or DST file to see it here." : mode === "design" ? "Nothing to stitch yet: type some words, or pick a starting idea." : "";
   // (the file chooser in the preview too: at 960 x 540 the panel's was below the fold, under an empty hoop)
   if (mode === "open") $("empty").append(Object.assign(document.createElement("button"), { type: "button", className: "primary", textContent: "Choose a design file", onclick: () => $("open-file").click() }));
@@ -1430,7 +1472,7 @@ function ownedNote() {
   const text = said.length ? `With only your threads, the picture's ${said.join(" Its ")}` : "";
   state.pic.ownedProblem = text ? { id: "owned", level: LOOK, text } : null;
   p.hidden = !said.length;
-  p.innerHTML = text ? `<span data-problem="owned">${escapeHtml(text)} Add a closer spool in Threads I own, or untick “Use only threads I own”.</span>` : "";
+  p.innerHTML = text ? isolate(`<span data-problem="owned">${escapeHtml(text)} Add a closer spool in Threads I own, or untick “Use only threads I own”.</span>`) : "";
   if (state.view && state.view === state.views.picture) warnUI(state.view);
 }
 $("pic-palette").onclick = (e) => {
@@ -1491,11 +1533,11 @@ function fineUI(fine) {
   $("pic-fine").hidden = !gaps && !hair && !lost;
   // (each fix was sewn first and keeps them: checkLost)
   const fixes = (p.fixes || []).map((f, i) => `<button type="button" class="link" data-fix="${i}">${escapeHtml(f.label)}</button>`).join(" ");
-  $("pic-fine").innerHTML = [
+  $("pic-fine").innerHTML = isolate([
     gaps ? `<span data-problem="gaps">${gap} ${p.size < (p.max || 0) ? "A bigger Size keeps more of them open." : "This is as big as the hoop allows."}</span>` : "",
     hair ? `<span data-problem="hairline">${line} Draw it thicker in the picture to have it sewn.</span>` : "",
     lost ? `<span data-problem="lost">${escapeHtml(gone.replace(/\.$/, ringed + "."))} ${fixes || (p.checking ? "" : k.lost === 1 ? "Draw it bigger or bolder in the picture to have it sewn." : "Draw them bigger or bolder in the picture to have them sewn.")}</span>` : "",
-  ].filter(Boolean).join(" ");
+  ].filter(Boolean).join(" "));
   if (state.view && state.view === state.views.picture) warnUI(state.view);
 }
 $("pic-fine").onclick = (e) => {
@@ -2067,7 +2109,7 @@ function showStep(i) {
   state.step = i; document.dispatchEvent(new CustomEvent("nw:step", { detail: i })); paint();
 }
 const studio = initStudio({
-  hoop: designHoop, machineHoop: hoop, turned: designTurned, fit: () => { state.zoom = 1; state.pan = [0, 0]; }, store, showError, busy, safeName, escapeHtml, handOut, keepFocus, showStep, step: () => state.step, paint: () => state.mode === "design" && paint(), setMode, toast, hideToast, threadLine, threadHtml, ownSpool, threadList, ownedSpools,
+  hoop: designHoop, machineHoop: hoop, turned: designTurned, fit: () => { state.zoom = 1; state.pan = [0, 0]; }, store, showError, busy, safeName, escapeHtml, handOut, keepFocus, showStep, step: () => state.step, paint: () => state.mode === "design" && paint(), setMode, toast, hideToast, keyboard: () => keyboard, threadLine, threadHtml, ownSpool, threadList, ownedSpools,
   // (undo, redo and Open saved put the hoop's turn back as it was; the caller rebuilds)
   setTurn: (on) => { state.turn.design = !!on; store.set("turn", state.turn); $("turn").setAttribute("aria-pressed", designTurned()); },
   hoopId: () => hoop().id,
