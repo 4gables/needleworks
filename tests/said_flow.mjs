@@ -96,7 +96,7 @@ await open("#design");
     document.getElementById("names-open").click(); document.getElementById("names-list").value = "Zoe\\nZoë"; document.getElementById("names-make").click();
     await __sf.wait(() => document.querySelectorAll("#names-thumbs figcaption").length >= 2, 30000);
     const c = [...document.querySelectorAll("#names-thumbs figcaption")].map((f) => f.textContent); __sf.close(); return c;`);
-  check("Names batch: a name saved under another file name says which", n.length === 2 && /file Zoe_2\.pes/.test(n[1]) && !/file /.test(n[0]), JSON.stringify(n));
+  check("Names batch: a name saved under another file name says which", n.length === 2 && /· Zoe_2\.pes/.test(n[1]) && !/·/.test(n[0]), JSON.stringify(n));
 }
 // ---- Arch up on lettering a frame shrank keeps its sewn size
 {
