@@ -518,7 +518,15 @@ export function initStudio(api) {
   function ui() { api.keepFocus($("panel-design"), () => { list(); editor(); sewnOn(); }); api.paint?.(); }
   function sewnOn() {
     $("st-fabric").innerHTML = Object.entries(FABRICS).map(([k, f]) => `<button type="button" data-fab="${k}" aria-pressed="${k === fabric}">${f.name}</button>`).join("");
-    $("st-tip").hidden = !tip; $("st-tip").textContent = tip;
+    // (Make another, under the starter too for a lone in-the-hoop project: in the frame's own settings only, a newcomer
+    // making two bookmarks didn't find it and made one for each name instead)
+    const ith = pieces.filter((f) => f.kind === "frame" && (f.border === "ith" || f.border === "zip") && !(f.rot || 0)), lone = ith.length === 1 ? ith[0] : null;
+    $("st-tip").hidden = !tip && !lone; $("st-tip").textContent = tip;
+    if (lone) {
+      const b = Object.assign(document.createElement("button"), { type: "button", className: "link", textContent: "Make another in the hoop" });
+      b.dataset.tipTwo = ""; b.onclick = () => { const f = pieces.find((o) => o.id === lone.id); if (f) twoUp(f); };
+      $("st-tip").append(tip ? " " : "", b);
+    }
     $("st-baste").checked = baste; $("st-fabric-tip").textContent = fabricTip(); $("st-fabric-name").textContent = FABRICS[fabric].name + (baste ? ", basted" : "");
     // (numeric keys come first in an object, so the order is spelled out)
     $("st-thread").innerHTML = `<span class="chips-label">Thread</span>` + ["auto", "30", "40", "60"].map((k) => `<button type="button" data-thread="${k}" aria-pressed="${k === thread}" title="${WT_TITLE[k]}">${THREADS[k].name}</button>`).join("");
