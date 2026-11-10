@@ -1113,8 +1113,9 @@ function localStages(p, fab = "cotton") {
         { color: p.color, pause: true, last: true,
           ...seamStage(2 / 3, (f) => [loop(run(seamAt(edge, f), 2.0, true)), ...(eye ? eyeRing(eye) : []), ...satinBorder(seamAt(edge, f))]),
           // (one sentence per action: the steps show them numbered. "On the front" was read while the hoop was upside
-          // down, so the ribbon goes on once it's back on the machine, the embroidered side up)
-          you: `Take the hoop off the machine (leave the fabric in the hoop) and turn it upside down. Tape the backing fabric over the stabilizer, right side facing you, reaching ${PAST} the ${name} outline all round. Turn the hoop back over and put it back on the machine.${hang ? ` For the loop, fold the ribbon in half and tape it on the embroidered side at the top of the ${name}, loop pointing in toward the middle, ends ½ in past the outline.` : ""} Press Start.`,
+          // down, so the ribbon goes on once it's turned back over, the embroidered side up; and before the hoop goes
+          // back on the machine, while it's in hand: round 11 put the hoop back, then taped the loop)
+          you: `Take the hoop off the machine (leave the fabric in the hoop) and turn it upside down. Tape the backing fabric over the stabilizer, right side facing you, reaching ${PAST} the ${name} outline all round. Turn the hoop back over.${hang ? ` For the loop, fold the ribbon in half and tape it on the embroidered side at the top of the ${name}, loop pointing in toward the middle, ends ½ in past the outline.` : ""} Put the hoop back on the machine and press Start.`,
           sews: `Tacks the backing on and covers the edge${eye ? " and a ribbon ring" : ""} with satin stitch through every layer.`,
           after: `Take it out of the hoop, tear the stabilizer away and cut round the ${name} as close to the satin stitches as you can without nicking them${hang ? " (keep the ribbon loop clear of the scissors). Flip the ribbon loop up." : "."} Run Fray Check along the cut edge and let it dry, then snip off any fibres still poking out.${eye ? " Dab Fray Check inside the ribbon ring and let it dry, then snip out the hole inside it and loop a ribbon through." : ""}` },
       ];

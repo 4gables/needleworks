@@ -26,6 +26,9 @@
 //    share text says it once;
 //  - every sewing word (words.js GLOSSARY: stabilizer, topper, loose thread) used is explained once, where it's first
 //    used, and the loose-thread tooltip leads with what one is, not the machine's setting;
+//  - (round 11) sizes via tests/sizes_lint.mjs (one cm or mm value, one inch value); what's done with the hoop in hand
+//    (tape, turn it over) comes before "put the hoop back"; asides (threading, a word explained) never numbered; the
+//    loose threads the file leaves are said in When it's done (a patch with print lettering, "loose");
 //  - Sew along's preview keeps one size from step to step (it zoomed with the length of each step's words);
 // then the download dialog (turned bookmark: its note, the Cutter file line, the How to stitch it link opening the
 // steps), Open > Add words after a felt starter (the fabric goes back to cotton), and the file names of lettering split
@@ -37,6 +40,11 @@
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { GLOSSARY } from "../js/words.js";
+import { THREADING } from "../js/sheet.js";
+import { GLOSSARY as WORDS } from "../js/words.js";
+// (what isn't something to do: sheet.js ASIDES)
+const ASIDES = [THREADING, ...WORDS.map(([, say]) => say)];
+import { sizes } from "./sizes_lint.mjs";
 
 const [port, base, only] = process.argv.slice(2);
 if (!port || !base) { console.log("usage: node tests/steps_lint.mjs CDP_PORT BASE_URL [starters]"); process.exit(2); }
@@ -75,20 +83,10 @@ const READ = `(async () => {
     frames: document.querySelectorAll("#st-pieces .pick").length,
     colors: [...document.querySelectorAll("#st-steps [data-step] b i")].map((i) => i.style.background),
     file: v.filename, share: nwTest.share(), fabricTip: v.sheet.notes?.[2] || "",
+    numbered: [...document.querySelectorAll("#st-steps ol.sub > li")].map((li) => [...li.childNodes].filter((n) => !n.classList?.contains("aside")).map((n) => n.textContent).join("").trim()),
     looseTip: [...document.querySelectorAll("#facts [data-tip]")].map((e) => e.dataset.tip).find((t) => /loose|between two parts/i.test(t)) || "" };
 })()`;
 const sentences = (t) => String(t || "").split(/(?<=[.!?])\s+/).map((x) => x.trim()).filter(Boolean);
-// one size in two units: "15 × 12 cm (5¾ × 4⅝ in)", "½ in (1.3 cm)"; the inches in eighths
-const FR = "⅛¼⅜½⅝¾⅞", inch = (t) => { const m = /^(\d*)([⅛¼⅜½⅝¾⅞]?)$/.exec(t); return m && (m[1] || m[2]) ? (+m[1] || 0) + (m[2] ? (FR.indexOf(m[2]) + 1) / 8 : 0) : NaN; };
-const IN = `\\d*[${FR}]?`, NUM = "\\d+(?:\\.\\d+)?";
-const CM_IN = new RegExp(`(${NUM})(?: × (${NUM}))? cm \\((${IN})(?: × (${IN}))? in\\)`, "g"), IN_CM = new RegExp(`(${IN}) in \\((${NUM}) cm\\)`, "g");
-function sizes(t) {
-  const bad = [], agree = (c, i, what) => { const v = inch(i); if (!(Math.abs(+c * 10 - v * 25.4) <= (+c >= 10 ? 10 : 1.6))) bad.push(`"${what}": ${c} cm isn't ${i} in`); };
-  for (const m of t.matchAll(CM_IN)) { agree(m[1], m[3], m[0]); if (m[2] && m[4]) agree(m[2], m[4], m[0]); }
-  for (const m of t.matchAll(IN_CM)) agree(m[2], m[1], m[0]);
-  for (const m of t.matchAll(/\d\.\d+\s?in\b/g)) bad.push(`"${m[0]}": inches a ruler doesn't show (eighths: ⅛ ¼ ⅜ ½ …)`);
-  return bad;
-}
 // stabilizer kinds a tip may name
 const KINDS = [[/sticky|self-adhesive/i, "sticky"], [/cut-away/i, "cut-away"], [/tear-away/i, "tear-away"], [/topper|water-soluble/i, "topper"], [/spray adhesive/i, "spray adhesive"]];
 const SIZE = /\d+(?:\.\d+)?\s?(?:in|cm)\b/g;
@@ -108,6 +106,10 @@ function lint(name, d, gang) {
     if (next && /put the hoop back\.$/.test(st.you || "") && /^(Change to [^.]*\. )?Take the hoop off/.test(next.you || ""))
       bad.push(`step ${i + 1} puts the hoop back, step ${i + 2} takes it off`);
     if (/covering (it|them|the \w+) by/.test(st.you || "")) bad.push(`step ${i + 1}: "covering it by ½ in" (unclear)`);
+    // (round 11) what's done with the hoop in hand is done before it goes back on the machine: the ornament put the hoop
+    // back, then taped the ribbon loop on
+    const said = sentences(st.you), back = said.findIndex((x) => /\bput (it|the hoop) back\b/i.test(x));
+    if (back >= 0 && said.slice(back + 1).some((x) => /\b(tape|turn the hoop|turn it)\b/i.test(x))) bad.push(`step ${i + 1} puts the hoop back, then: "${said.slice(back + 1).join(" ").slice(0, 80)}"`);
   });
   if (new Set(d.ready).size !== d.ready.length) bad.push("Have ready lists a line twice");
   const ready = d.ready.join(" ");
@@ -155,6 +157,11 @@ function lint(name, d, gang) {
     const n = all.join(" ").split(say).length - 1;
     if (n !== 1 || !all[first].includes(say)) bad.push(`"${re.source}" explained ${n} times${n ? ", not where first used" : ""}`);
   }
+  // (round 11) an aside (where threading is shown, a word explained) is never a numbered sub-step: step 1's "New to
+  // threading the machine?" and its answer were sub-steps 4 and 5
+  for (const t of d.numbered || []) if (/\?$/.test(t) || ASIDES.some((a) => a.includes(t))) bad.push(`an aside numbered as a sub-step: "${t.slice(0, 60)}"`);
+  // (round 11) the loose threads the chips count are said in When it's done (a patch's chip said 2, its finish nothing)
+  if (d.snips && !d.after.some((t) => /loose threads?/i.test(t))) bad.push(`${d.snips} loose threads, When it's done doesn't say to snip them`);
   if (d.looseTip && /^[^.]*jump stitch/i.test(d.looseTip)) bad.push("the loose-thread tooltip leads with the machine's setting");
   const want = Math.max(1, Math.round(d.stitches / 550 + Math.max(0, d.trims - d.snips) / 10 + d.stops / 2));
   if (d.min !== want) bad.push(`time ${d.min} min, want ${want} (${d.stitches} stitches, ${d.trims - d.snips} trims, ${d.stops} pauses)`);
@@ -240,6 +247,18 @@ for (const id of ["mugrug", "applique"]) {
   console.log(`${id} sew along: ${bad || "ok"}`);
 }
 
+// (round 11) a patch with print lettering whose moves between letters are loose threads (the hobbyist's CRAFT CLUB:
+// the chip said 2 to snip, When it's done nothing), on the 4x4 (or alone: "loose")
+if (!only || only.split(",").includes("loose")) {
+  await call("goto", `${base}/manifest.webmanifest`);
+  const pieces = [{ id: 1, kind: "frame", shape: "circle", w: 90, h: 90, border: "patch", fill: "#0e1f7c", x: 0, y: 0, color: "#f0f0f0" },
+    { id: 2, kind: "text", text: "CRAFT CLUB", size: 6.5, font: "NW Josefin Sans", x: 0, y: 0, color: "#f0f0f0" }];
+  await ev(`(() => { localStorage.setItem("nw:studio", ${JSON.stringify(JSON.stringify({ pieces, sel: 2, fabric: "cotton", thread: "auto" }))}); localStorage.setItem("nw:hoop", '"4x4"'); localStorage.setItem("nw:turn", '{"design":false}'); return 1 })()`);
+  await open("#design"); await settle();
+  const d = await ev(READ);
+  if (d && !d.snips) problems.push("patch CRAFT CLUB: no loose threads any more (pick another case)");
+  lint("patch CRAFT CLUB", d, false);
+}
 // file names of lettering split into pieces: Arch up on two lines, two hoopings at a word gap (or alone: "names")
 if (!only || only.split(",").includes("names")) {
   const T = (text, size) => ({ id: 1, kind: "text", text, size, font: "NW Yellowtail", x: 0, y: 0, color: "#0e1f7c" });

@@ -10,6 +10,9 @@
 // stop counts and thread names must agree between the chips, the steps, the sew sheet, Sew along and the dialog, and
 // a lint over all the text a user reads fails on jargon (underlay, "the pile", PEC, jumps, stops, colour blocks, satin
 // on its own...).
+// Round 11: sizes said one way everywhere (tests/sizes_lint.mjs: cm or mm and inches agree, eighths), no aside
+// (where threading is shown, a word explained) numbered as a sub-step, no two editor controls of one piece with one
+// label, and loose threads the chips count said in When it's done (the steps and the share text).
 // Threads (round 9: the editor said "Brother Dark Gray · your Isacord 3554" while the chips, steps and sew sheet said
 // Olive Green; Have ready listed Isacord 3541 three times): with a thread brand or spools of their own, each colour has
 // one label (the machine's name and the spool) on the editor, the chips, the steps and the sew sheet; a swatch's
@@ -20,6 +23,11 @@
 // ~12 minutes (76 cases); prints one line per case and "DONE <cases> <problems>"; exit code 1 when anything disagrees.
 import { writePES } from "../js/core/formats.js";
 import { brotherNum } from "../js/core/brands.js";
+import { THREADING } from "../js/sheet.js";
+import { GLOSSARY as WORDS } from "../js/words.js";
+// (what isn't something to do: sheet.js ASIDES)
+const ASIDES = [THREADING, ...WORDS.map(([, say]) => say)];
+import { sizes } from "./sizes_lint.mjs";
 
 const [port, base, only] = process.argv.slice(2);
 if (!port || !base) { console.log("usage: node tests/surfaces.mjs CDP_PORT BASE_URL [filter]"); process.exit(2); }
@@ -92,6 +100,8 @@ const CASES = [
   design("threads: my Sulky, back again", [T("Ann", 16, { color: "#5a5a8b", y: -14 }), T("Bo", 16, { color: "#ed171f", y: 0 }), T("Cy", 16, { color: "#5a5a8b", y: 12 })], { brand: "sulky", spools: { sulky: ["1076", "1005"] } }),
   // (words typed away to nothing: a saved design drops such a piece, so they're cleared in the editor, `act`)
   { ...design("empty lettering", [F("heart", 84, 76, "applique"), T("Emma", 16)]), act: `const t = document.querySelector('#st-edit textarea[data-k="text"]'); t.value = "  "; t.dispatchEvent(new Event("input", { bubbles: true }));` },
+  // (round 11: a patch's chip counted 2 loose threads, its When it's done said nothing; its edge thread was "Thread")
+  design("patch loose threads", [F("circle", 90, 90, "patch", { fill: "#0e1f7c", color: "#f0f0f0" }), T("CRAFT CLUB", 6.5, { font: PRINT, color: "#f0f0f0" })], { hoop: "4x4" }),
   design("quilted frame + name", [F("square", 100, 100, "satin", { quilt: "stipple" }), T("Ava", 7, { font: ROUND })]),
   // (an old #bookmark link: the Bookmark starter with the old panel's saved name)
   { name: "bookmark", tab: "bookmark" },
@@ -154,8 +164,10 @@ const READ = String.raw`(async () => {
   const $ = (s) => document.querySelector(s), $$ = (s) => [...document.querySelectorAll(s)];
   const ids = (sel) => [...new Set($$(sel).flatMap((e) => e.dataset.problem.split(" ")))].sort();
   const textOf = (el) => (el ? [...el.childNodes].filter((n) => n.nodeType === 3).map((n) => n.textContent).join("").trim() : "");
-  const out = { mode: document.body.dataset.mode, texts: [], attrs: [] };
-  const grab = (el) => { if (!el) return; out.texts.push(el.innerText); for (const e of el.querySelectorAll("[title],[aria-label],[data-tip]")) out.attrs.push(e.title || "", e.getAttribute("aria-label") || "", e.dataset.tip || ""); };
+  const out = { mode: document.body.dataset.mode, texts: [], attrs: [], numbered: [], labels2: [] };
+  // (each numbered sub-step's own words, without the aside beside it)
+  const numbered = (el) => out.numbered.push(...[...el.querySelectorAll("ol.sub > li")].map((li) => [...li.childNodes].filter((n) => !n.classList?.contains("aside")).map((n) => n.textContent).join("").trim()));
+  const grab = (el) => { if (!el) return; out.texts.push(el.innerText); numbered(el); for (const e of el.querySelectorAll("[title],[aria-label],[data-tip]")) out.attrs.push(e.title || "", e.getAttribute("aria-label") || "", e.dataset.tip || ""); };
   for (let i = 0; i < 150 && !nwTest.view(); i++) await sleep(100);
   await sleep(1200);
   for (let i = 0; i < 50 && $("#busy") && !$("#busy").hidden; i++) await sleep(200);
@@ -175,6 +187,7 @@ const READ = String.raw`(async () => {
       ids("#st-edit [data-warn] [data-problem]").forEach((x) => all.add(x));
       untagged.push(...$$("#st-edit [data-warn] > span:not([data-problem])").map((e) => e.textContent));
       grab($("#st-edit"));
+      out.labels2.push($$("#st-edit .field > span").map((e) => e.textContent.trim()));
     }
     out.editor = [...all].sort(); out.untagged = untagged;
     out.steps = ids("#st-steps [data-problem]"); out.stepsCount = $("#st-steps-count").innerText;
@@ -183,12 +196,14 @@ const READ = String.raw`(async () => {
     out.labels = { steps: $$("#st-steps [data-step] b").map((b) => [colorOf(b.querySelector("i")), textOf(b), b.querySelector("small")?.textContent || ""]),
       chips: $$("#threads li").map((li) => [colorOf(li.querySelector("i")), textOf(li.querySelector("span")), li.title]) };
     out.ready = $$("#st-steps .ready li").map((l) => l.textContent);
+    out.finish = $$("#st-steps li.after").filter((l) => /When it's done/.test(l.querySelector("b")?.textContent || "")).map((l) => l.textContent).join(" ");
     grab($("#st-steps"));
   } else if (out.mode === "picture") {
     out.editor = ids("#pic-fine [data-problem], #pic-owned [data-problem]");
     out.untagged = [...$$("#pic-fine, #pic-owned")].filter((e) => !e.hidden && e.textContent.trim() && !e.querySelector("[data-problem]")).map((e) => e.textContent);
     out.steps = ids("#pic-steps [data-problem]"); out.stepsCount = $("#pic-steps-count").innerText;
     out.stepThreads = []; grab($("#pic-steps"));
+    out.finish = $$("#pic-steps li.after").filter((l) => /When it's done/.test(l.querySelector("b")?.textContent || "")).map((l) => l.textContent).join(" ");
   } else if (out.mode === "open") {
     out.editor = ids("#open-info [data-problem], #doctor-list [data-problem]");
     out.untagged = $$("#doctor-list li.warn:not([data-problem])").map((e) => e.textContent);
@@ -371,6 +386,17 @@ for (const c of CASES) {
     }
     // jargon in anything a user reads
     const all = [...r.texts, ...r.attrs, r.share];
+    // (round 11) one size, one way: cm or mm and inches that agree, inches in eighths, on every surface
+    for (const t of all) for (const b of sizes(t || "")) fail(c.name, `size: ${b}`);
+    // an aside (where threading is shown, a word explained) is never a numbered sub-step
+    for (const t of r.numbered) if (/\?$/.test(t) || ASIDES.some((a) => a.includes(t))) fail(c.name, `an aside numbered as a sub-step: "${t.slice(0, 60)}"`);
+    // two controls on one piece never share a label (a patch: "Fill thread", then "Thread" for its edge)
+    for (const l of r.labels2) if (new Set(l).size !== l.length || (l.includes("Fill thread") && l.includes("Thread"))) fail(c.name, `the editor's labels: ${l.join(", ")}`);
+    // the loose threads the chips count are said where the finish is (the steps, the share text)
+    if (/loose threads? to snip/.test(r.facts)) {
+      if (r.finish != null && !/loose threads?/i.test(r.finish)) fail(c.name, `the chips count loose threads, When it's done doesn't say to snip them: "${r.finish.slice(0, 100)}"`);
+      if (r.share && !/The rest is on the sew sheet/.test(r.share) && !/^When it's done:.*loose threads?/im.test(r.share)) fail(c.name, "the chips count loose threads, the share text's When it's done doesn't");
+    }
     for (const [re, what] of JARGON) for (const t of all) {
       const m = t.match(re); if (!m) continue;
       const i = t.indexOf(m[0]); fail(c.name, `jargon "${what}": …${t.slice(Math.max(0, i - 60), i + 60).replace(/\s+/g, " ")}…`); break;

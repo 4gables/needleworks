@@ -10,7 +10,7 @@ import { TURNED, TURN_PIC, cutDXF, cutName, cutSVG, firstStep, sewMinutes, sewSh
 import { handOut, judge } from "./gate.js";
 import { DST_COLOURS, checkup, fewerBlocks, fix, heat, openedFile, pauses, shortJumps, sortedChanges } from "./doctor.js";
 import { HARD, MAX_BLOCKS, denseWords, moves, verdictOf } from "./quality.js";
-import { BLOCK, LOOK, LOOK_HEAD, TIP, TIP_HEAD, problemsHtml, problemsInline, problemsItems, problemsOf, shownOn, stopWords, stopsAt } from "./words.js";
+import { BLOCK, LOOK, LOOK_HEAD, TIP, TIP_HEAD, problemsHtml, problemsInline, problemsItems, problemsOf, shownOn, stopWords, stopsAt, mmText } from "./words.js";
 import { brief, safeName, tidy, uniqueName, withSwash } from "./core/typed.js";
 import { BRANDS, brotherNum, chartSpools, exampleSpools, lab, nearestSpool, spools } from "./core/brands.js";
 import { COLORS as LINE_THREADS, initStudio } from "./studio/ui.js";
@@ -122,7 +122,6 @@ function setView(v) {
   // (a split design is checked part by part when it's downloaded)
   const fits = !!v.split || (st.widthMm <= h.w - 2 * MARGIN && st.heightMm <= h.h - 2 * MARGIN);
   v.whole = !!v.split || !fits;
-  const inch = (mm) => (mm / 25.4).toFixed(1), over = (v, side) => (v > side - 2 * MARGIN && Math.round(v) <= side - 2 * MARGIN ? v.toFixed(1) : v.toFixed(0));
   // (two hoopings: the pauses the machine makes in the two files, as the steps and the done dialog count them; the whole
   // design's colour changes said "1 pause" beside steps with none)
   const stops = v.split ? v.split.reduce((a, p) => a + designStats(p.pattern).colorChanges, 0) : st.colorChanges;
@@ -135,7 +134,7 @@ function setView(v) {
     // (a size just over the field isn't rounded down to read as if it fits: 126.4 showed as 126 beside "fits 126")
     // (which way round, where it can differ: a bookmark is 169 × 54 in the Design tab, hoop turned, and its file
     // 54 × 169 in the Open tab, as the machine's screen shows it)
-    `<span>${over(shown.widthMm, shownHoop().w)} × ${over(shown.heightMm, shownHoop().h)} mm · ${inch(shown.widthMm)} × ${inch(shown.heightMm)} in</span>`,
+    `<span>${mmText([shown.widthMm, shown.heightMm], [shownHoop().w - 2 * MARGIN, shownHoop().h - 2 * MARGIN])}</span>`,
     orient === "turned" ? `<span${tip(`The size across × down with the hoop turned sideways, as shown here. The machine's screen shows it on its side: ${st.widthMm.toFixed(0)} × ${st.heightMm.toFixed(0)} mm.`)}>Hoop turned</span>`
       : orient ? `<span${tip("The size across × down with the hoop upright, as the machine's screen shows it. A design made with the hoop turned reads the other way round here.")}>As the machine shows it</span>` : "",
     `<span>${st.stitches.toLocaleString()} stitches</span>`,
@@ -165,7 +164,7 @@ function setView(v) {
     const small = [file, l.short, times > 1 ? `used ${times === 2 ? "twice" : `${times} times`}` : ""].filter(Boolean).join(" · ");
     return `<li${l.note ? ` title="${escapeHtml(`${name} · ${l.note}`)}"` : ""}><i style="background:${color}"></i><span>${escapeHtml(name)}${small ? `<br><small>${escapeHtml(small)}</small>` : ""}</span></li>`;
   }).join("");
-  v.facts = [`${st.widthMm.toFixed(0)} × ${st.heightMm.toFixed(0)} mm (${inch(st.widthMm)} × ${inch(st.heightMm)} in)`, `${st.stitches.toLocaleString()} stitches`,
+  v.facts = [mmText([st.widthMm, st.heightMm], [h.w - 2 * MARGIN, h.h - 2 * MARGIN]), `${st.stitches.toLocaleString()} stitches`,
     counts[0] + counts[1] ? stopWords(...counts) : "no thread changes", `≈ ${minutes} min`, `${h.machineName} ${h.name}`];
   // (`block`: a design that can't be sewn as it is, such as words wrapped round into themselves: no file until it's fixed)
   const blocked = blocking(v);
@@ -526,7 +525,7 @@ function downloaded(v, zipped, files = [], saved = true) {
   const h = hoop(), s = v.shown && designStats(v.shown);
   // (a design in two hoopings: each hooping's size, not the whole design's 136 × 170 that the hoop can't take)
   const parts = v.split?.map((p) => designStats(turned() ? turnPattern(p.pattern, false) : p.pattern));
-  const size = parts ? `in ${parts.length} hoopings, ${parts.map((q) => `${q.widthMm.toFixed(0)} × ${q.heightMm.toFixed(0)} mm`).join(" and ")}, each fitting the hoop` : s ? `${s.widthMm.toFixed(0)} × ${s.heightMm.toFixed(0)} mm` : "";
+  const size = parts ? `in ${parts.length} hoopings, ${parts.map((q) => mmText([q.widthMm, q.heightMm])).join(" and ")}, each fitting the hoop` : s ? mmText([s.widthMm, s.heightMm]) : "";
   const [ch, same] = (v.split ? v.split.map((q) => stopCounts(q.pattern)) : [stopCounts(v.file)]).reduce((a, b) => [a[0] + b[0], a[1] + b[1]]);
   const what = `on a ${h.machineName} in the ${h.name}${s ? `, ${size}, ${ch + same ? `${stopWords(ch, same)}${parts ? " in all" : ""}` : parts ? "no thread changes in either" : "no thread changes"}` : ""}`;
   // ("Checked" only when the stitches pass too: it said so for files tests/pe900_check.py fails; and not for a file cut
@@ -996,7 +995,7 @@ function fillMachines() {
   $("pic-size").max = max;
   if (state.pic.size > max) { state.pic.size = max; $("pic-size").value = max; $("pic-size-out").textContent = sizeLabel(max); }
 }
-const sizeLabel = (v) => `${v} mm · ${(v / 25.4).toFixed(1)} in`;
+const sizeLabel = (v) => mmText(v);
 function hoopChanged() { if (state.mode !== "picture") state.pic.req++; for (const m of ["picture", "design"]) if (m !== state.mode) state.views[m] = null; fillMachines(); refresh(); }
 $("machine").onchange = (e) => { state.machine = e.target.value; state.hoopId = null; store.set("machine", state.machine); hoopChanged(); };
 $("hoop").onchange = (e) => { state.hoopId = e.target.value; store.set("hoop", state.hoopId); hoopChanged(); };
@@ -1293,7 +1292,8 @@ function fineUI(fine) {
   const p = state.pic, gaps = fine?.narrowMm2 >= Math.max(2, 0.015 * (fine.inkMm2 || 0)), k = fine?.kept, lost = lostMuch(k);
   let hair = fine?.lost >= 0.05;
   // (the picture's problems, said beside Download and after too: words.js)
-  const gap = "Some gaps (like inside or between small letters) are narrower than ½ mm and will close up.", line = "A very thin line in the picture is finer than thread and is left out.";
+  // (said of any picture: "like inside or between small letters" was said of drawings with no letters in them)
+  const gap = "Some gaps between parts of one colour are narrower than ½ mm, so they close up once sewn.", line = "A very thin line in the picture is finer than thread and is left out.";
   let gone = "";
   if (lost) {
     // (no colour named: a thin line's learned colour is its blend with the fabric, and etsy_7's pink doodles read "warm gray")
@@ -1576,7 +1576,7 @@ function openInfo(v, st, fits) {
   $("open-info").innerHTML = `<b>${escapeHtml(o.name)}</b>
     <span title="${d.format.toUpperCase()}${pesVersion(d.version)}">${st.stitches.toLocaleString()} stitches · ${o.colourless ? `no thread colours in the file (${threads === 1 ? "shown in one colour" : `shown in ${threads} colours to tell the parts apart`})` : `${threads} thread ${threads === 1 ? "colour" : "colours"}`}</span>
     ${fits ? `<span class="good">Fits the ${h.machineName} ${h.name}.</span>`
-      : `<span class="warn">Too big for the ${h.name}: it's ${st.widthMm.toFixed(0)} × ${st.heightMm.toFixed(0)} mm. ${big.scale >= 0.5 ? `<button type="button" class="link" id="doc-largest">Make it the largest that fits (${big.pct} %)</button>` : "Even at half size it won't fit this hoop."}</span>`}
+      : `<span class="warn">Too big for the ${h.name}: it's ${mmText([st.widthMm, st.heightMm], [h.w - 2 * MARGIN, h.h - 2 * MARGIN])}. ${big.scale >= 0.5 ? `<button type="button" class="link" id="doc-largest">Make it the largest that fits (${big.pct} %)</button>` : "Even at half size it won't fit this hoop."}</span>`}
     ${o.damaged ? `<span class="warn" data-problem="damaged">This file looks damaged: its parts don't agree with each other, as happens when a download or copy goes wrong. What's shown is what your machine would sew from it, which may not be the design at all. Download it again from where it came from if you can.</span>`
       : o.disagree ? `<span class="warn" data-problem="disagree">This file holds two different designs: PE-DESIGN would open one, and your machine would sew the other. The copy saved here is the one the machine sews (shown here), so both will show the same.</span>` : ""}
     ${o.short ? `<span class="warn" data-problem="short">This file ends early: it may be damaged (cut short or changed when it was downloaded or copied), so only part of the design is here. Download it again from where it came from if you can. A copy saved here is complete for the part that's left.</span>` : ""}

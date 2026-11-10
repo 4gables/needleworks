@@ -4,10 +4,11 @@ import { APPLIQUE_FONTS, FONTS, loadFont } from "../core/fonts.js";
 import { MAX_INITIALS, MAX_WORDS, initials, lackList, lacks, swashes, tidy, tidyField, unswashed, withSwash } from "../core/typed.js";
 import { nearestBrotherThread } from "../core/threads.js";
 import { designStats, machineThreads, readEmbroidery } from "../core/formats.js";
-import { BLOCK, LOOK, TIP, explained, inchFirst, inches, problemsItems, shownOn, stopWords } from "../words.js";
+import { BLOCK, LOOK, TIP, explained, inchFirst, mmText, problemsItems, shownOn, stopWords } from "../words.js";
 import { FILL_PATTERNS } from "../core/digitize.js";
 import { draw } from "../render.js";
-import { THREADING, TURN_PIC, pickIt, turnedNote, youHtml } from "../sheet.js";
+import { THREADING, TURN_PIC, pickIt, snipsSaid, turnedNote, youHtml } from "../sheet.js";
+import { shortJumps } from "../doctor.js";
 import { QUILTS, quiltOf } from "./quilt.js";
 import { MOTIFS } from "./motifs.js";
 import { quiltDone, scaledFit, BORDERS, FABRICS, THREADS, SHAPES, TEXT_SHAPES, splitPieces, archFit, archStart, frontPanel, inkHeight, monoSize, archRoom, archShrink, archTight, cleanPiece, clearSize, collision, collisions, inFrame, letterMetrics, underPatch, crossName, crossStep, layoutSize, touching, touchingAll, towelMin, fineLine, loopsFill, compose, fileBlocks, blocksPattern, scaleBlocks, FILE_SCALE, fittedSizes, sewnBoxes, followFrame, label, minSize, pieceBounds, pieceStitches, previewLook, smallText, bulkReady } from "./pieces.js";
@@ -354,7 +355,7 @@ export function initStudio(api) {
   const missing = lacks, probe = document.createElement("canvas").getContext("2d");
   // mm with inches beside them (US sewists think in inches)
   const own = (o, k) => typeof k === "string" && Object.hasOwn(o, k);
-  const shown = (v, unit) => (unit === "mm" ? `${v} mm · ${(v / 25.4).toFixed(2)} in` : `${v} ${unit}`);
+  const shown = (v, unit) => (unit === "mm" ? mmText(v) : `${v} ${unit}`);
   const seg = (k, opts, v) => `<div class="seg" data-seg="${k}">${Object.entries(opts).map(([key, name]) => `<button type="button" data-v="${key}" aria-pressed="${key === v}">${name}</button>`).join("")}</div>`;
 
   // satin and fine line, said plainly: bold columns or a thin outline of the letter
@@ -446,7 +447,7 @@ export function initStudio(api) {
       if (p.border === "zip") h += `<p class="hint">A lined zipper pouch made in the hoop: the zipper, the front in two folded pieces, what goes on the front (the pieces below it in the list), then the back and one seam through everything. Fabric sizes are under “How to stitch it”.</p>`;
       if (p.border === "patch") {
         p.fill ||= NAVY;
-        h += `<div class="field"><span>Fill thread</span><div class="swatches">${swatches(p, "fill")}</div><p class="hint"><span data-thread-of="fill">${api.escapeHtml(threadOf(p, "fill"))}</span>. The edge uses the thread below.</p></div>`;
+        h += `<div class="field"><span>Fill thread</span><div class="swatches">${swatches(p, "fill")}</div><p class="hint"><span data-thread-of="fill">${api.escapeHtml(threadOf(p, "fill"))}</span>. The edge uses the Edge thread below.</p></div>`;
         // (what `carve` in pieces.js does, in plain words)
         h += `<p class="hint">Under a filled motif or big bold letters the fill is left out, so they don't sit on two layers of thread. Thinner letters sew on top of the fill.</p>`;
         // the expert fills, folded away: a stitch texture, and a second colour fading in across the patch
@@ -471,7 +472,8 @@ export function initStudio(api) {
     if (p.kind === "text" || p.kind === "monogram") h += `<p class="hint" data-fit hidden></p>`;
     if (p.kind !== "frame") h += `<p class="hint warn" data-warn aria-live="polite" hidden></p>`;
     h += range("rot", "Turn", -180, 180, p.rot || 0, "°", 5);
-    if (p.kind !== "file") h += `<div class="field"><span>Thread</span><div class="swatches">${swatches(p)}</div><p class="hint" data-thread-of="color">${api.escapeHtml(threadOf(p))}</p></div>`;
+    // (a patch has two: "Thread" under "Fill thread" read as the fill's own)
+    if (p.kind !== "file") h += `<div class="field"><span>${p.kind === "frame" && p.border === "patch" ? "Edge thread" : "Thread"}</span><div class="swatches">${swatches(p)}</div><p class="hint" data-thread-of="color">${api.escapeHtml(threadOf(p))}</p></div>`;
     const old = drawnId === p.id && $("st-edit").querySelector("[data-warn]");
     const was = drawnId === p.id ? $("st-edit").querySelector(".font-row")?.scrollLeft : undefined;
     $("st-edit").innerHTML = h; drawnId = p.id;
@@ -625,7 +627,7 @@ export function initStudio(api) {
         size = l.fits ? `${what} ${btn(`data-size="${need}"`, `Make it ${need} mm`, l)}`
           : l.capped ? `${what} ${roomIn(p, l, need)}`
           : l.hit ? `${what} At ${need} mm it would ${l.out ? "go outside" : "run into"} ${api.escapeHtml(label(l.hit))}: give it more room first.`
-          : `${what} At ${need} mm it would be ${l.w.toFixed(0)} × ${l.h.toFixed(0)} mm, too big for the hoop even turned. Use fewer or shorter lines${onTowel ? ", or a bolder font (Yellowtail, Satisfy)." + cotton : "."}`;
+          : `${what} At ${need} mm it would be ${mmText([l.w, l.h])}, too big for the hoop even turned. Use fewer or shorter lines${onTowel ? ", or a bolder font (Yellowtail, Satisfy)." + cotton : "."}`;
       }
     }
     // an arch too tight or wrapped too far round: a wider curve, or smaller letters, whichever lands in the hoop
@@ -637,7 +639,7 @@ export function initStudio(api) {
       arc = (room ? `The words wrap most of the way round the curve${room.full ? " and run into themselves" : ""}.` : "The curve is too tight for letters this tall: they'd bunch up.")
         + (fixes.length ? " " + fixes.map((f, i) => (i ? f.replace(">Make", ">make") : f)).join(" or ")
           : wl?.hit ? ` A curve wide enough would ${wl.out ? "go outside" : "run into"} ${api.escapeHtml(label(wl.hit))}: use fewer words.`
-          : wl ? ` A curve wide enough would be ${wl.w.toFixed(0)} × ${wl.h.toFixed(0)} mm, too big for the hoop: use fewer words.` : " Use fewer words.");
+          : wl ? ` A curve wide enough would be ${mmText([wl.w, wl.h])}, too big for the hoop: use fewer words.` : " Use fewer words.");
     }
     // run into another piece: the size that clears it (lettering centred in a frame isn't dragged apart, it's made smaller)
     let hit = "";
@@ -1048,7 +1050,7 @@ export function initStudio(api) {
   function fileSize(p, f) {
     let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
     for (const b of p.orig || p.blocks) for (const q of b.paths) for (const [x, y] of q) { x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y); }
-    return `${Math.round(f * 100)} % · ${Math.round((x1 - x0) * f)} × ${Math.round((y1 - y0) * f)} mm`;
+    return `${Math.round(f * 100)} % · ${mmText([Math.round((x1 - x0) * f), Math.round((y1 - y0) * f)])}`;
   }
   let fileWorker = null, fileJob = null;
   function restitchFiles() {
@@ -1124,7 +1126,7 @@ export function initStudio(api) {
     const ready = [own(before) ? "" : fl ? fl.ready : FABRICS[fabric].ready, fl && towel ? "A water-soluble topper (like Solvy) for on top of the terry." : "", ...before,
       appliqued() ? `A piece of fabric for each appliqué shape, ${inchFirst(25.4)} bigger than its outline${steps.some((st) => st.cut) ? " (or cut to shape with the Cutter file, then there's nothing to trim)" : ""}, and small curved scissors (iron-on fusible web on the back stops cotton fraying).` : "",
       api.threadList(named.map((st) => st.color), (hex) => named.find((st) => st.color === hex)?.machine || nearestBrotherThread(hex).name)].filter(Boolean),
-      done = [own(after) ? "" : fl ? fl.after + (towel ? " Tear the topper away (a damp cloth melts the bits left in the letters)." : "") : FABRICS[fabric].after, ...after].filter(Boolean);
+      done = snipsSaid([own(after) ? "" : fl ? fl.after + (towel ? " Tear the topper away (a damp cloth melts the bits left in the letters)." : "") : FABRICS[fabric].after, ...after].filter(Boolean), shortJumps(design.pattern()));
     return { design, ...explainAll(ready, firstStep(named, hoop, fileName()), done), small, later };
   }
   // step 1 says what to do too: hoop it, put the thread on, Start (a one-step design said only "Sews “Leo”."), one
@@ -1215,12 +1217,11 @@ export function initStudio(api) {
         // and never rounded down to look as if it fits ("126 × 23 mm, but the hoop fits 126 × 176" for 126.4)
         // (the preview first, so the note's size is the size chip's: the file read back, not the stitches before it)
         const { steps, done, ready, small } = stepsOf(composed);
-        const st = api.setView(big.pattern(), fileName(), { fabric: "linen", steps: 0, problems, fixHint: fixHint() }) || designStats(big.pattern()), mm = (v, lim) => (v > lim && Math.round(v) <= lim ? v.toFixed(1) : v.toFixed(0));
+        const st = api.setView(big.pattern(), fileName(), { fabric: "linen", steps: 0, problems, fixHint: fixHint() }) || designStats(big.pattern());
         // (the stitches' box counts moves too: only where that's what takes it past the field does it say so)
         const side = (v, b, lim) => (v <= lim && b > lim ? lim + 0.1 : v), w = side(st.widthMm, x1 - x0, hoop.w - 4), h = side(st.heightMm, y1 - y0, hoop.h - 4);
-        // (inches too: the size chip says both, the message said mm only)
-        const inch = (v, lim) => (v > lim && (v / 25.4).toFixed(1) === (lim / 25.4).toFixed(1) ? (v / 25.4).toFixed(2) : (v / 25.4).toFixed(1));
-        msg = `This design is ${mm(w, hoop.w - 4)} × ${mm(h, hoop.h - 4)} mm (${inch(w, hoop.w - 4)} × ${inch(h, hoop.h - 4)} in), but the ${hoop.name} fits ${hoop.w - 4} × ${hoop.h - 4} mm (${((hoop.w - 4) / 25.4).toFixed(1)} × ${((hoop.h - 4) / 25.4).toFixed(1)} in).`;
+        // (inches too, as the size chip says it)
+        msg = `This design is ${mmText([w, h], [hoop.w - 4, hoop.h - 4])}, but the ${hoop.name} fits ${mmText([hoop.w - 4, hoop.h - 4])}.`;
         turn = hoop.w !== hoop.h && x1 - x0 <= hoop.h - 4 && y1 - y0 <= hoop.w - 4;   // fits with the long side across
         // the steps kept up to date while it doesn't fit (they still said "Emma" and had no 30 wt tip), marked as waiting
         stepsUI(steps, done, small, ready, "These are the steps for the design as it is now. It doesn't fit the hoop yet: they apply once it does.");
@@ -1260,8 +1261,8 @@ export function initStudio(api) {
     const [c1, c2] = built.map(mid), m = parts[1].marks[0], onMachine = ([x, y]) => (api.turned() ? [-y, x] : [x, y]);
     const [sx, sy] = onMachine([c1[0] - c2[0], c1[1] - c2[1]]), [ox, oy] = onMachine([m[0] - c2[0], m[1] - c2[1]]), across = Math.abs(sx) >= Math.abs(sy);
     const side = (v) => (across ? (v < 0 ? "left" : "right") : v < 0 ? "top" : "bottom"), dist = Math.hypot(sx, sy), off = across ? ox : oy;
-    const inch = (mm) => inches(mm), from = across ? `${side(off)} of` : off < 0 ? "above" : "below";
-    const move = `Hoop the fabric again with fresh stabilizer under it, slid about ${dist.toFixed(0)} mm (${inch(dist)} in) toward the ${side(across ? sx : sy)} of the hoop from where it was, as straight as you can. The crosses from the first hooping should sit ${Math.abs(off) < 3 ? "on the hoop's centre line" : `about ${Math.abs(off).toFixed(0)} mm (${inch(Math.abs(off))} in) ${from} the hoop's centre`} (the hoop's grid sheet helps).`;
+    const from = across ? `${side(off)} of` : off < 0 ? "above" : "below";
+    const move = `Hoop the fabric again with fresh stabilizer under it, slid about ${mmText(Math.round(dist))} toward the ${side(across ? sx : sy)} of the hoop from where it was, as straight as you can. The crosses from the first hooping should sit ${Math.abs(off) < 3 ? "on the hoop's centre line" : `about ${mmText(Math.round(Math.abs(off)))} ${from} the hoop's centre`} (the hoop's grid sheet helps).`;
     const b1 = built[0].steps, s2 = built[1].steps[0], change = s2.color !== b1[b1.length - 1].color ? "Change to the next thread. " : "Keep the same thread on. ";
     built[1].steps[0] = { ...s2, you: change + crossStep({ pts: parts[1].marks, which: which(parts[1]), move }) };
     // the whole design for the preview (a big pretend hoop) with the crosses the files sew, and every step of both

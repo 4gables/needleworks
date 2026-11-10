@@ -3,7 +3,7 @@
 // Designer, DXF for Silhouette's free edition).
 // Stitch units are 0.1 mm, cut outlines mm; the machine centres the design in the hoop, so the template does too.
 import { colorBlocks } from "./render.js";
-import { explained, problemsItems } from "./words.js";
+import { GLOSSARY, explained, problemsItems } from "./words.js";
 
 // Step 1 starts at the machine, on every tab and surface, once (the first file's first step): the design picked from
 // the USB stick as the PE900's screen has it, and where to learn threading. A newcomer's Sew along began "Hoop the
@@ -13,6 +13,9 @@ export const THREADING = "New to threading the machine? The threading pages of i
 // (`hoop`: the project's own hooping; a file that says nothing of its fabric (an opened design): stabilizer, plainly)
 export const firstStep = (file, thread = "the first thread", hoop = "Hoop the fabric with stabilizer under it") =>
   `${pickIt(file)} ${hoop}. Put on ${thread}. ${THREADING} Press Start.`;
+// When it's done names the loose threads the chips count (round 11: a patch's "2 loose threads to snip after" chip,
+// and nothing in its finishing words): said once, where the finish doesn't already say to snip them
+export const snipsSaid = (after, n) => (n && !after.some((t) => /loose threads?/i.test(t)) ? [...after, `Snip the ${n === 1 ? "loose thread" : `${n} loose threads`} between parts.`] : after);
 export const FINISH = "Take the hoop off and snip any loose threads. Tear-away stabilizer: tear it off gently, holding the stitches down with your thumb. Cut-away: trim it about ¼ in from the stitching (don't tear it).";
 
 // The hooping note for a turned hoop, on every surface (steps, download dialog, sew sheet, share text, Sew along).
@@ -51,10 +54,20 @@ export function told(sheet, blocks = [], names = [], file = "") {
 export function actions(text) {
   return String(text ?? "").split(/(?<=[.!?])\s+(?=[A-Z“"(])/).map((a) => a.trim().replace(/^Then (\w)/, (_, c) => c.toUpperCase())).filter(Boolean);
 }
+// Sentences that aren't something to do: where threading is shown, what a sewing word means. They stay with the
+// action before them, never numbered (round 11: step 1's "New to threading the machine?" and its answer were sub-steps
+// 4 and 5, and "Stabilizer is a backing sheet..." one more).
+export const ASIDES = [THREADING, ...GLOSSARY.map(([, say]) => say)];
+const aside = (a) => ASIDES.some((x) => x.includes(a));
 // as HTML: three or more actions as numbered sub-steps, else one line (in `tag`, with the class `you`)
 export function youHtml(text, escape = esc, tag = "span") {
-  const a = actions(text);
-  return a.length >= 3 ? `<ol class="you sub">${a.map((x) => `<li>${escape(x)}</li>`).join("")}</ol>` : `<${tag} class="you">${escape(text)}</${tag}>`;
+  const items = [];
+  for (const a of actions(text)) {
+    if (aside(a) && items.length) items.at(-1).aside.push(a);
+    else items.push({ a, aside: [] });
+  }
+  return items.length >= 3 ? `<ol class="you sub">${items.map((x) => `<li>${escape(x.a)}${x.aside.length ? ` <span class="aside">${escape(x.aside.join(" "))}</span>` : ""}</li>`).join("")}</ol>`
+    : `<${tag} class="you">${escape(text)}</${tag}>`;
 }
 
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);

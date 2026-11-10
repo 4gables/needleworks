@@ -54,20 +54,37 @@ export function problemsItems(list, tag = "li", cls = "after") {
 export const problemsInline = (list) => list.map((p) => `<span data-problem="${esc(p.id)}">${esc(p.text)}</span>`).join(" ");
 
 // ---------- sizes ----------
-// Supply sizes, as a ruler shows them: centimetres (whole from 10 cm, else to the millimetre) and inches in eighths
-// (a tape measure's marks), both from the true size. `up`: fabric to cut, never short of it. ("15 × 12 cm (5.7 × 4.5 in)"
-// was 5.9 in, and "½ in (1 cm)" 1.3 cm: each was rounded from the other, to tenths no ruler has.)
+// Every size a user reads comes from here. Supply sizes, as a ruler shows them: centimetres (whole from 10 cm, else
+// to the millimetre) and inches in eighths (a tape measure's marks). The second unit is worked out from the first as
+// shown, so the two read as one size ("15 × 12 cm (5.7 × 4.5 in)" was 5.9 in, "½ in (1 cm)" 1.3 cm; round 11: fabric
+// rounded up to "12 cm (4⅜ in)", 12 cm being 4¾ in, and "11 × 11 cm (4⅜ × 4¼ in)"). `up`: fabric to cut, never short.
 const EIGHTHS = ["", "⅛", "¼", "⅜", "½", "⅝", "¾", "⅞"];
 const step = (v, up) => (up ? Math.ceil(v - 1e-6) : Math.round(v));
 export function inches(mm, up = false) {
   const e = step((mm / 25.4) * 8, up), w = Math.floor(e / 8), f = EIGHTHS[e % 8];
   return `${w || !f ? w : ""}${f}`;
 }
-export const cm = (mm, up = false) => String(mm >= 100 ? step(mm / 10, up) : step(mm, up) / 10);
+// the centimetres shown, in mm
+const cmMm = (mm, up) => (mm >= 100 ? step(mm / 10, up) * 10 : step(mm, up));
+export const cm = (mm, up = false) => String(cmMm(mm, up) / 10);
+const inchMm = (mm, up) => (step((mm / 25.4) * 8, up) * 25.4) / 8;
 // "15 cm (6 in)", "15 × 12 cm (5⅞ × 4¾ in)"; in a sentence about inches, inches first: "½ in (1.3 cm)"
-export const measure = (mm, up = false) => `${cm(mm, up)} cm (${inches(mm, up)} in)`;
-export const measure2 = (w, h, up = false) => `${cm(w, up)} × ${cm(h, up)} cm (${inches(w, up)} × ${inches(h, up)} in)`;
-export const inchFirst = (mm, up = false) => `${inches(mm, up)} in (${cm(mm, up)} cm)`;
+// (fabric, `up`: the eighth at or above the centimetres shown, so never short of either)
+const inchesOf = (mm, up) => inches(cmMm(mm, up), up);
+export const measure = (mm, up = false) => `${cm(mm, up)} cm (${inchesOf(mm, up)} in)`;
+export const measure2 = (w, h, up = false) => `${cm(w, up)} × ${cm(h, up)} cm (${inchesOf(w, up)} × ${inchesOf(h, up)} in)`;
+export const inchFirst = (mm, up = false) => `${inches(mm, up)} in (${cm(inchMm(mm, up), up)} cm)`;
+// A design's size (the chips, sliders, notes): mm, whole unless a tenth matters, inches in eighths from the mm shown:
+// "90 × 90 mm (3½ × 3½ in)" (round 11: "90 × 90 mm · 3.6 × 3.6 in" was 3.5 in, and the sliders said 3.54). `lim`
+// (one per size): the field it must fit; a size just over it shows the tenth (126.4 showed as 126 beside "fits 126")
+// and, where its inches would read the field's, "just over".
+export function mmText(sizes, lim = []) {
+  const vs = [].concat(sizes).map(Number), ls = [].concat(lim);
+  // (with a field: whole mm; a slider's own value as set, to a tenth)
+  const mm = vs.map((v, i) => (ls[i] != null ? (v > ls[i] && Math.round(v) <= ls[i] ? v.toFixed(1) : v.toFixed(0)) : String(+v.toFixed(1))));
+  const ins = mm.map((s, i) => { const t = inches(+s); return ls[i] != null && +s > ls[i] && t === inches(ls[i]) ? `just over ${t}` : t; });
+  return `${mm.join(" × ")} mm (${ins.join(" × ")} in)`;
+}
 
 // ---------- words explained ----------
 // Sewing words a newcomer may not know (round 10: "stabilizer" and "topper" were never explained, and the loose-thread
