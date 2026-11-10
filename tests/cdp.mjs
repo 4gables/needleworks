@@ -18,6 +18,7 @@
 //   dark on|off            emulate prefers-color-scheme
 //   forced on|off          emulate forced-colors (high contrast)
 //   offline on|off
+//   slow on|off            a slow phone: 400 ms latency, 50 KB/s, CPU 4x slower (round 11's tester connection)
 //   console                console messages + uncaught exceptions since the last call
 //   reload                 hard reload
 import { spawn, execSync } from "node:child_process";
@@ -182,6 +183,13 @@ async function run(cmd, args) {
     case "forced":   // Windows high contrast (forced-colors: active)
       await s.send("Emulation.setEmulatedMedia", { features: [{ name: "forced-colors", value: args[0] === "on" ? "active" : "none" }] });
       out.push("forced", args[0]); break;
+    case "slow": {
+      const on = args[0] !== "off";
+      await s.send("Network.enable");
+      await s.send("Network.emulateNetworkConditions", on ? { offline: false, latency: 400, downloadThroughput: 50 * 1024, uploadThroughput: 50 * 1024 } : { offline: false, latency: 0, downloadThroughput: -1, uploadThroughput: -1 });
+      await s.send("Emulation.setCPUThrottlingRate", { rate: on ? 4 : 1 });
+      out.push("slow", on ? "on" : "off"); break;
+    }
     case "offline":
       await s.send("Network.enable");
       await s.send("Network.emulateNetworkConditions", { offline: args[0] === "on", latency: 0, downloadThroughput: -1, uploadThroughput: -1 });

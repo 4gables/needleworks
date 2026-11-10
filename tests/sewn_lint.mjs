@@ -42,6 +42,8 @@ const RAW_MEASURE = process.env.EMPTY ? [] : [
 // [file, function, reason]: functions that may read a piece's asked size
 const RAW_SIZE = process.env.EMPTY ? [] : [
   ["js/app.js", "makePicture", "s is the Picture tab's settings (the Size asked), compared with the file as sewn for the size note"],
+  ["js/studio/ui.js", "frameLines", "compares what the frame sews (fs, fittedSizes) with the size asked: the offer is for words shrunk under 80 % of it, tried at asked sizes down from it"],
+  ["js/app.js", "keepPicture", "blob.size is the picture file's bytes (the storage cap), not a piece"],
   ["js/studio/ui.js", "snug", "pieces no frame fits (fit.has excluded): asked = sewn; each size checked by landing()"],
   ["js/studio/ui.js", "snugWay", "sets the asked size snug() found (unfitted piece)"],
   ["js/studio/ui.js", "lineRest", "the line pitch from the size the lines were sewn at (set from sewn() just before)"],

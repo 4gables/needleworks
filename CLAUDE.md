@@ -178,6 +178,14 @@ measurements behind each number are in the code's comments.
 - Monograms: print ones spaced by their stitches in 0.5 mm bands (gap + 0.4); in a frame they fit both ways
   (`fittedSizes`, 0.92 of the frame less half the gap); `monoSize` grows only while clear of the frame; checks run per
   initial (`eachInitial`). Initials take 12 characters; a name there gets "Sew it as lettering" (`asText`).
+  `initialSizes` sizes side initials by ink (`inkK`: ink height over sized height) against the middle (or first of
+  one or two); centre lines stop half a stroke inside flat tops but reach pointed tips, so Josefin's W was 1.26x its P,
+  not 1.5x. Tail letters (`hangs`) untouched. Josefin's W crossing its middle strokes is the font's own.
+- Big script (column 2 mm or more) follows the ink's thick and thin (`inkWidths`, 35th percentile over ±1.2 strokes)
+  from `THIN` 1.2 / 0.45 x column up to min(WIDE, 0.2 xh, the counter cap); strokes under 4 columns never narrower than
+  the column; centre-run underlay; `reach` takes the previous column's width (without it +19 loose threads at 40-60
+  mm). A lone dot is a round satin as wide as its ink (Great Vibes j at 60 mm was a 1.4 mm tick); raster: an oval dot
+  (a > 1.25b) is stroked along its long axis, a small full blob that thins to a star, ring or bars is one dot.
 - Fonts: `@font-face` families `NW <Font>` (WOFF2 in `fonts/`), `document.fonts.load()` before drawing; a failed
   font stays failed until reload, so `loadFont` adds a second FontFace (Try again). `glyphs.js` = each font's
   characters (regenerate with `tests/make_glyphs.py`); `typed.js` `lacks` is the only glyph check, by grapheme, NFC
@@ -376,7 +384,32 @@ measurements behind each number are in the code's comments.
   Toasts with an action stay until used or dismissed (×, Escape, next design change, tab change); others time out
   (paused while hovered/focused). Dialogs open with `modal()` (a tall one at its top). The same problem for several
   pieces is said once "(N pieces)" (`folded`); quoted names are in <bdi> (`isolate`). The Words box hides the swash
-  marks (`swashless`/`reswashed`). A starter over a picture offers "Add <file> to it". The design's fonts load first.
+  marks (`swashless`/`reswashed`). A starter over a picture offers "Add <file> to it". The design's fonts load first
+  (`facesOn` once they're in, `fontsIn` for anything else drawing lettering: Recent thumbnails; a design with no
+  lettering waits 1.5 s, so a passing empty state doesn't ask for every font).
+- Round 14:
+  - Steps: `tidySteps` joins neighbouring "Sews <thing>." sentences; a stage may carry `many(n, all)` words for n in the
+    hoop (`gang` uses them: "both bookmark outlines", "each ribbon"); motifs are "the <name> motif"; two hoopings count
+    the files handed out. Every exit says what it saved (Save design, SVG, DXF with its mm size, Download after "Don't
+    show this again").
+  - Sliders: `range()` picks a step that holds the value; code sets them only with `setRange` (18.5 read 19).
+  - Beside Download "The fix is with the piece's settings: show it" (`fixHint {piece, many}`, `studio.showFix`).
+  - `monogramHelp()` (typed.js) is the only monogram help, in the user's letters. `tidy` keeps ZWJ/ZWNJ/tags only
+    inside emoji and flags; empty pieces are "<Kind> (empty)".
+  - Words a frame shrank under 80 % get "Put it on two (three) lines" at the biggest asked size up to the one asked
+    that lands (`frameLines`; at the asked size a quilt label's line ran into the name below, so nothing was offered).
+  - "Use <thread> for everything: N fewer thread changes" (`allThread`, counted by composing with one thread).
+  - A press outside an open popup (View menu, chip tip) only closes it (one capture rule in app.js).
+  - While a text box in the editor has focus the preview keeps its scale (`draw` `fit`): each letter changed the note,
+    threads row and Download name under it, so its height jumped.
+  - render.js: a thread that blends into the ground (luminance under 1.6:1 or ΔE under 20, against each ground colour,
+    gingham's three) gets an opposite-tone edge (90 %, at least 2.2 px); on gingham every thread a base-colour halo; the
+    step view's faint stitches too.
+  - Recent designs (`keep`/`recentUI`/`openDesign`): `newDesign()` keeps the design it replaces as Save design's JSON
+    in `nw:studio.recent` (8, ~1.5 MB, oldest dropped on quota), not when unchanged from a starter or first visit and
+    not downloaded (`edited`/`sent`; `studio.downloaded()`); opening one is an Undo step. Whole designs, not undo
+    history. The Picture tab keeps its own picture in IndexedDB (`needleworks`/`kept`, 15 MB) and settings in
+    `nw:pic.last` (`lastPicture()`); tests expecting the sample delete that database.
 ### Two hoopings (`splitPieces`)
 - On `overBy`, whole pieces (never a cut stitch) split along the long side at the most even cut where both fit.
   Basting crosses (`crossSpots`: 1.5 mm clear, near 1/4 and 3/4, 20 mm apart if possible) end the first file and
@@ -397,7 +430,10 @@ measurements behind each number are in the code's comments.
 ### One for each name
 - `main()` (biggest text or monogram, letters before a date) names the file and is swapped. Names drawn at the
   design's letter scale (`inkHeight`), keep bold, shrink to fit (90 %… 55 %) or are captioned; a missing glyph refuses
-  a name; past 40 are left out; turned batches turn every file. Each file validated and judged;
+  a name; past 40 are left out; with the hoop turned, a name that sews the same upright (size, nothing run into, as bold, one
+  line) is made upright, only names needing the room turned, each captioned "hoop turned" and named in the hooping note
+  (Bo and Grace were turned with Benjamin). Each file's caption says its loose threads (`shortJumps`). The dialog says
+  problems as names are typed (`namesTyped`/`namesSaid`, `forNames().refused` shared with Make). Each file validated and judged;
   `<starter or file>_<N>_names|monograms.zip`, names deduplicated ignoring case (emma/Emma collide on macOS, FAT).
 - Names batch: names that would shrink or not fit but fit full size turned get "Turn the hoop and make them" first
   (`build(name, shrink, hp)`, `canTurn`); no file leaves without its name. File names: a line break is a word gap
@@ -489,7 +525,8 @@ measurements behind each number are in the code's comments.
   per colour (centre lines if 80 % of its long pieces are strokes; fat letters outlined; marker lines up to 6 mm;
   spurs pruned at 0.6 width; narrow elongated parts of any colour centre-lined); text dots a short out-and-back line;
   `closeSlivers`; `lineEnds` reach the ink's edge; pieces under 2 mm dropped (`spur: 1`: pruning cut letters apart);
-  ends within 2 mm of another drawing joined (3 mm drew bars).
+  ends within 2 mm of another drawing joined (3 mm drew bars). JPEG ringing is fabric: thin pieces under 5 mm of a colour
+  at least 30 ΔE00 from the fabric whose own pixels are under 30 % of that (40 % with no floor cut etsy_1's lavender).
 - Cross-stitch (`cross` mm cells): a row is two diagonal zigzags out and back plus one straight stitch (climbing every
   edge drew bowties); runs chained by Dijkstra over cell corners, else a jump over 5 mm; a lone cell dropped only if
   nothing touches it.
@@ -520,7 +557,8 @@ measurements behind each number are in the code's comments.
 - `fix(pattern, { scale, tiny, thin, sort, join, satin })` in `doctor-worker.js`. Shrinking ticks Remove tiny and Thin.
   - `landJumps` (also on open): a jump lands on its first stitch (the writer puts the needle down where a jump ends:
     short-stopping jumps became loose threads); a first stitch followed by one over 12.1 mm becomes a jump.
-  - 80-120 %: scaled, rounded to 0.1 mm, zero-length dropped; `respace` brings satins into 0.3-0.5.
+  - 80-120 %: scaled, rounded to 0.1 mm, zero-length dropped; `respace` brings satins into 0.3-0.5, open ones toward
+    `FULL` 0.4 (0.4 from 0.7 up: a DST at 0.85 came out 0.50); re-stitching keeps the nearest sane gap (cover check).
   - Past that, `restitch` (50-250 %): zigzag columns rebuilt at the source density within `SATIN` 0.3-0.5, satin up to
     `WIDE` 30 mm (filling wide columns criss-crossed); zigzags over `OPEN` 1 mm stay lines (underlay); ends reach `EXT`
     0.5 mm only where the source sews (`COV`, `BOX`); fills refilled at `ROWS` 0.35-0.5 per block and direction,
@@ -632,7 +670,7 @@ measurements behind each number are in the code's comments.
 - Sew along (`#along`): a step per screen, minutes = stitches / 550, own Have ready, Screen Wake Lock (retaken on
   visibilitychange). Share text carries the steps (`shareText`). On my item (`#item`): a measured photo under the
   design at true size (`state.backdrop`), never uploaded or saved.
-- Offline (`sw.js`, `needleworks-v11`): precaches `FILES`, network first, cache after 3 s; add every new file to
+- Offline (`sw.js`, `needleworks-v12`): precaches `FILES`, network first, cache after 3 s; add every new file to
   `FILES`. https only. Share target: POST `./?share` -> `needleworks-shared` cache -> `./?shared` -> `route()`.
 - A hoop change drops other tabs' designs. Min/max over stitches uses loops (`Math.min(...pts)` overflows past ~110k).
 
@@ -717,6 +755,12 @@ Automated checks that each guard a bug class (add a line with every new guard):
   - Round 13: ui_sweep fix-landing, dialog-scrolled, picked-hidden, cut-short, toasts stay; surfaces <bdi>, said-twice,
     owned-spool rules, Open fixed/as-it-came; monkey asked, arch, Fit-never-shrinks, patch edge, Make another never
     silent; doctor.test offered sizes fit as re-stitched; picture_corpus ground_line, framed; text.test Words box.
+  - Round 14: `tests/browser/lettering_look.html` (every font: monogram side initials 0.68 of the middle within 11 %,
+    lone dots round at 60 mm, big script thick/thin at least 1.4x; title `DONE checks problems`); steps_lint sentence
+    and plural rules; files_flow every exit says its file, names dialog notes, file counts; monkey slider value/label,
+    fit-note promises, one-thread offers, preview scale while typing; ui_sweep `popup-tap-through`, `design-recent`;
+    entry_state Recent designs byte-identical after reload, picture kept, storage refused; doctor.test Even out
+    toward 0.4; said_flow names loose threads. `cdp.mjs slow on` = a slow phone (400 ms, 50 KB/s, CPU 4x).
   - Doctor keeps cover: doctor.test.mjs checks each solid block's thread per mm² within 70-160 % at 50/80/120/250 %.
   - steps_lint also: step order (Press Start last), same-thread leads, inch/cm pairs, glossary once, Sew along zoom.
     ui_sweep: view-menu ticks, toasts time out, `cut-row`. Monkey: no empty <details>, size = "Shrunk to", note size =
@@ -740,6 +784,7 @@ Automated checks that each guard a bug class (add a line with every new guard):
   minimum satin, sewing all moves of 3 mm or less (lines between print letters), satin cut short at junctions (gaps
   in A and h), re-aiming print apex stubs.
 - 1 px source lines in Filled pictures, keeping the On my item photo across starters, undo across reloads.
+- Picture matcher for #803CC8: Brother Magenta (ΔE00 9.9) over Violet (11.8, 12 L darker); Violet stays in the swaps.
 - Busy pictures' trims are their separate shapes: no safe win.
 
 ## Open

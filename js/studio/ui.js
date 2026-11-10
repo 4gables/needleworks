@@ -363,9 +363,11 @@ export function initStudio(api) {
   // at once, and on a slow connection the preview waited ~31 s for the one font the design uses)
   let faces = false;
   const fontRow = (p, list = FONTS) => `<div class="font-row" role="group" aria-label="Fonts as they look">${list.map((f) => `<button type="button" tabindex="-1" data-font="${f.family}" aria-pressed="${f.family === p.font}"${faces || f.family === p.font ? ` style="font-family:'${f.family}',cursive"` : ""}>${f.name}</button>`).join("")}</div>`;
+  // (`fontsIn`: settles once the design's own fonts are in, for anything else that draws lettering)
+  let fontsDone; const fontsIn = new Promise((r) => (fontsDone = r));
   function facesOn() {
     if (faces) return;
-    faces = true; for (const b of document.querySelectorAll(".font-row [data-font]")) b.style.fontFamily = `'${b.dataset.font}',cursive`;
+    faces = true; fontsDone(); for (const b of document.querySelectorAll(".font-row [data-font]")) b.style.fontFamily = `'${b.dataset.font}',cursive`;
     thumbs();
   }
   // the font in use brought into the middle of its row when it's out of sight there (drawn while the tab was hidden, or
@@ -1132,7 +1134,9 @@ export function initStudio(api) {
     try {
       const fonts = [...new Set(pieces.filter((p) => p.font).map((p) => p.font))];
       await Promise.all(fonts.map(loadFont));
-      facesOn();   // (the design's own fonts first, then the rest)
+      // (the design's own fonts first, then the rest; a design with no lettering waits until it's still a moment, so a
+      // passing empty state, before the design is in, doesn't ask for every font at once)
+      if (fonts.length) facesOn(); else setTimeout(() => { if (s === seq) facesOn(); }, 1500);
       if (s !== seq) return;
       if (!dragging) restitchFiles();
       // (new words drawn in tasks of their own first: see `drawAhead`)
@@ -1338,7 +1342,13 @@ export function initStudio(api) {
       await idle();
       if (!c.isConnected) return;
       try {
-        const { design, steps } = compose(cleanPieces(d.pieces).pieces, { w: 1000, h: 1000, name: "" }, { fabric: d.fabric, thread: d.thread });
+        // (its fonts loaded first, after the design's own: drawn before, a thumbnail's lettering was the fallback font
+        // and the canvas asked for its fonts ahead of the design's)
+        const ps = cleanPieces(d.pieces).pieces;
+        await fontsIn;
+        await Promise.allSettled([...new Set(ps.filter((p) => p.font).map((p) => p.font))].map(loadFont));
+        if (!c.isConnected) return;
+        const { design, steps } = compose(ps, { w: 1000, h: 1000, name: "" }, { fabric: d.fabric, thread: d.thread });
         const look = previewLook(steps);
         draw(c, design.pattern(), { pad: 4, ...look, fabric: look.fabric || "white" });
       } catch { c.remove(); }
