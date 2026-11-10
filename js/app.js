@@ -88,8 +88,11 @@ function paint() {
     heat: state.heat ? (v.heat ||= heat(v.shown)) : null, backdrop: state.backdrop,
     ...field, zoom: state.zoom, pan: state.pan, showNeedle: state.upto != null,
     real: state.real, boxes: v.hoopings, ...room,
+    // (the selected piece, boxed on every screen size: on a phone the editor is far below and nothing showed which)
+    sel: state.mode === "design" && !block && state.upto == null && !v.hoopings ? selBox() : null,
   });
 }
+let selBox = () => null;   // (the Design tab's, once it's started)
 // the zoom pad's share of the preview's top-right corner ([w, h] px), kept clear by `draw`
 function zoomCorner() {
   const c = canvas.getBoundingClientRect(), z = document.querySelector(".zoom").getBoundingClientRect();
@@ -353,11 +356,14 @@ $("show-real").onchange = (e) => { state.real = e.target.checked; store.set("rea
 $("show-hoop").checked = state.showHoop;
 $("show-hoop").onchange = (e) => { state.showHoop = e.target.checked; store.set("showHoop", state.showHoop); paint(); };
 // the View menu closes once something in it is chosen (it stayed open over the preview, hiding what changed), on a
-// click anywhere else and on Escape; focus goes back to View. (Capture, so "On my item" closes it before its dialog
-// opens and the dialog hands focus back to View, not to a button in a shut menu.)
+// click anywhere else, when focus leaves it and on Escape; focus goes back to View. (Capture, so "On my item" closes it
+// before its dialog opens and the dialog hands focus back to View, not to a button in a shut menu.) Background stays
+// open on its list: the arrow keys step through the cloths one change at a time (each one shut the menu), and the
+// whole view round the menu shows the new cloth.
 const views = document.querySelector(".views"), viewsBtn = views.querySelector("summary");
 const shutViews = (focus) => { if (!views.open) return; views.open = false; if (focus) viewsBtn.focus(); };
-views.querySelector(".views-menu").addEventListener("change", () => shutViews(true));
+views.querySelector(".views-menu").addEventListener("change", (e) => { if (e.target.tagName !== "SELECT") shutViews(true); });
+views.addEventListener("focusout", (e) => { if (e.relatedTarget && !views.contains(e.relatedTarget)) shutViews(false); });
 views.querySelector(".views-menu").addEventListener("click", (e) => { if (e.target.closest("button")) shutViews(true); }, true);
 views.addEventListener("keydown", (e) => { if (e.key === "Escape" && views.open) { e.preventDefault(); shutViews(true); } });
 document.addEventListener("pointerdown", (e) => { if (!views.contains(e.target)) shutViews(false); });
@@ -949,7 +955,8 @@ document.addEventListener("focusin", (e) => {
   const attrs = [...f.attributes].filter((x) => x.name.startsWith("data-")).map((x) => `[${x.name}="${CSS.escape(x.value)}"]`).join("");
   const group = f.closest("[data-seg]");
   const up = []; for (let n = f.parentElement; n && n !== document.body; n = n.parentElement) up.push(n);
-  held = { el: f, up, sel: attrs || f.id ? (group ? `[data-seg="${CSS.escape(group.dataset.seg)}"] ` : "") + (f.id ? `#${CSS.escape(f.id)}` : f.tagName.toLowerCase() + attrs) : null };
+  held = { el: f, up, idx: up.map((n, i) => [...n.children].indexOf(i ? up[i - 1] : f)),
+    sel: attrs || f.id ? (group ? `[data-seg="${CSS.escape(group.dataset.seg)}"] ` : "") + (f.id ? `#${CSS.escape(f.id)}` : f.tagName.toLowerCase() + attrs) : null };
   // (the browser's own scrolling left a chip in the sideways-scrolling chip row out of sight, and a file chooser's
   // input is a pixel beside its label: the pixel was scrolled into view, the label stayed under the Download bar)
   if (keyed()) setTimeout(() => document.activeElement === f && inView(f.matches(".sr-file") ? f.closest("label") || document.querySelector(`label[for="${f.id}"]`) || f : f));
@@ -964,21 +971,35 @@ function inView(n) {
   }
   if (r.top < clip[0] || r.bottom > clip[1] || r.left < clip[2] - 1 || r.right > clip[3] + 1) n.scrollIntoView({ block: "nearest", inline: "nearest" });
 }
-function refocus() {
+function refocus(late) {
   const h = held; if (!h) return;
   const a = document.activeElement, gone = !live(h.el) || h.el.disabled;
   if (!gone) { if (a === h.el && keyed()) inView(a); return; }
   if (a && a !== document.body && a !== h.el) return;   // (focus has gone somewhere of its own accord)
-  for (const n of h.up) {
-    if (!live(n)) continue;
-    const same = h.sel && n.querySelector(h.sel), c = same && live(same) && !same.disabled ? same : keyboard && [...n.querySelectorAll(FOCUSABLE)].find(live);
-    if (!c) return;
-    const caret = "selectionStart" in h.el && "setSelectionRange" in c ? [h.el.selectionStart, h.el.selectionEnd] : null;
-    c.focus({ preventScroll: true });
-    if (caret) try { c.setSelectionRange(...caret); } catch {}
-    if (keyed()) inView(c);
-    return;
+  const i = h.up.findIndex(live); if (i < 0) return;
+  const n = h.up[i], same = h.sel && n.querySelector(h.sel);
+  let c = same && live(same) && !same.disabled ? same : null;
+  if (!c && keyboard) {
+    // (no such control: where it stood, once the redraw has settled; a message's words fill in a moment later)
+    if (late !== true) { if (!h.later) { h.later = true; setTimeout(() => { h.later = false; if (held === h) refocus(true); }); } return; }
+    c = next(n, h, i);
   }
+  if (!c) return;
+  const caret = "selectionStart" in h.el && "setSelectionRange" in c ? [h.el.selectionStart, h.el.selectionEnd] : null;
+  c.focus({ preventScroll: true });
+  if (caret) try { c.setSelectionRange(...caret); } catch {}
+  if (keyed()) inView(c);
+}
+// the control that now stands where the lost one stood, or the first after it in reading order (the first control in
+// the editor took it: a one-tap fix sent focus up to the Words box or "Centre it", the next Tab starting over)
+function next(n, h, i) {
+  const all = [...n.querySelectorAll(FOCUSABLE)].filter(live); if (!all.length) return null;
+  // (the same place in the new markup, child by child, as far as it goes)
+  let at = n, past = false;
+  for (let j = i; j >= 0; j--) { const c = at.children[h.idx[j]]; if (!c) { past = j < i || h.idx[j] > 0; break; } at = c; }
+  const after = (c) => past ? at.compareDocumentPosition(c) & Node.DOCUMENT_POSITION_FOLLOWING && !at.contains(c)
+    : at === c || at.contains(c) || at.compareDocumentPosition(c) & Node.DOCUMENT_POSITION_FOLLOWING;
+  return all.find(after) || all[all.length - 1];
 }
 new MutationObserver(refocus).observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ["hidden", "disabled", "open"] });
 // (redraws that check where focus is straight after can have it put back at once)
@@ -1605,7 +1626,7 @@ function showStep(i) {
   state.step = i; document.dispatchEvent(new CustomEvent("nw:step", { detail: i })); paint();
 }
 const studio = initStudio({
-  hoop: designHoop, machineHoop: hoop, turned: designTurned, unturn: () => { if (state.turn.design) { state.turn.design = false; store.set("turn", state.turn); $("turn").setAttribute("aria-pressed", false); } }, fit: () => { state.zoom = 1; state.pan = [0, 0]; }, store, showError, busy, safeName, escapeHtml, handOut, keepFocus, showStep, step: () => state.step, setMode, spool, ownSpool, threadList, ownedSpools,
+  hoop: designHoop, machineHoop: hoop, turned: designTurned, unturn: () => { if (state.turn.design) { state.turn.design = false; store.set("turn", state.turn); $("turn").setAttribute("aria-pressed", false); } }, fit: () => { state.zoom = 1; state.pan = [0, 0]; }, store, showError, busy, safeName, escapeHtml, handOut, keepFocus, showStep, step: () => state.step, paint: () => state.mode === "design" && paint(), setMode, spool, ownSpool, threadList, ownedSpools,
   // (undo, redo and Open saved put the hoop's turn back as it was; the caller rebuilds)
   setTurn: (on) => { state.turn.design = !!on; store.set("turn", state.turn); $("turn").setAttribute("aria-pressed", designTurned()); },
   hoopId: () => hoop().id,
@@ -1626,6 +1647,7 @@ const studio = initStudio({
   },
 });
 
+selBox = studio.selBox;
 setMode((location.hash || "#design").slice(1), false);
 
 // installable and offline (sw.js); a picture or design shared to the installed app opens straight away
