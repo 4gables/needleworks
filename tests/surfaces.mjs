@@ -23,6 +23,8 @@
 // ~12 minutes (76 cases); prints one line per case and "DONE <cases> <problems>"; exit code 1 when anything disagrees.
 import { writePES } from "../js/core/formats.js";
 import { brotherNum } from "../js/core/brands.js";
+import { MACHINES } from "../js/core/machines.js";
+const HOOP_NAMES = Object.values(MACHINES).flatMap((m) => Object.values(m.hoops).map((h) => h.name));
 import { THREADING } from "../js/sheet.js";
 import { GLOSSARY as WORDS } from "../js/words.js";
 // (what isn't something to do: sheet.js ASIDES)
@@ -176,6 +178,13 @@ const READ = String.raw`(async () => {
   out.download = ids("#dl-warn [data-problem]");
   out.facts = $("#facts").innerText; out.chips = $$("#threads li span").map((s) => textOf(s)); out.chipNotes = $$("#threads li span").map((s) => s.querySelector("small")?.textContent || "");
   grab(document.body);
+  // (round 12) the facts every surface says of the design, as each says them
+  const spans = $$("#facts > span").map((e) => e.textContent.trim()), num = (t) => (t || "").match(/\d[\d,]*/)?.[0]?.replace(/,/g, "");
+  out.fact = { size: spans[0] || "", stitches: num(spans.find((t) => / stitches$/.test(t))), time: num(spans.find((t) => /^≈ \d+ min$/.test(t))),
+    turned: spans.includes("Hoop turned"), snips: num(spans.find((t) => /loose threads? to snip/.test(t))) || "0", threads: $$("#threads li").length };
+  out.file = v.filename; out.dl = $("#download").textContent; out.sayings = {};
+  const pick = (t) => (t || "").match(/pick (\S+\.pes)\./)?.[1] || null;
+  if ($("#open-info") && !$("#open-info").hidden) { const t = $("#open-info").innerText; out.card = { stitches: num(t.match(/([\d,]+) stitches/)?.[0]), threads: num(t.match(/(\d+) thread colou?rs?\b/)?.[0]) }; }
   if (out.mode === "design") {
     const all = new Set(), untagged = [];
     // (the list is drawn again on every pick: each button found afresh)
@@ -197,12 +206,14 @@ const READ = String.raw`(async () => {
       chips: $$("#threads li").map((li) => [colorOf(li.querySelector("i")), textOf(li.querySelector("span")), li.title]) };
     out.ready = $$("#st-steps .ready li").map((l) => l.textContent);
     out.finish = $$("#st-steps li.after").filter((l) => /When it's done/.test(l.querySelector("b")?.textContent || "")).map((l) => l.textContent).join(" ");
+    out.sayings.steps = { count: num($("#st-steps-count").innerText.match(/(\d+) steps?/)?.[0]), file: pick($("#st-steps [data-step]")?.textContent), turned: !!$("#st-steps .turned") };
     grab($("#st-steps"));
   } else if (out.mode === "picture") {
     out.editor = ids("#pic-fine [data-problem], #pic-owned [data-problem]");
     out.untagged = [...$$("#pic-fine, #pic-owned")].filter((e) => !e.hidden && e.textContent.trim() && !e.querySelector("[data-problem]")).map((e) => e.textContent);
     out.steps = ids("#pic-steps [data-problem]"); out.stepsCount = $("#pic-steps-count").innerText;
     out.stepThreads = []; grab($("#pic-steps"));
+    out.sayings.steps = { count: num($("#pic-steps-count").innerText.match(/(\d+) steps?/)?.[0]), rows: $$("#pic-steps > li:not(.after)").length, file: pick($("#pic-steps > li:not(.after)")?.textContent), turned: !!$("#pic-steps .turned") };
     out.finish = $$("#pic-steps li.after").filter((l) => /When it's done/.test(l.querySelector("b")?.textContent || "")).map((l) => l.textContent).join(" ");
   } else if (out.mode === "open") {
     out.editor = ids("#open-info [data-problem], #doctor-list [data-problem]");
@@ -212,14 +223,17 @@ const READ = String.raw`(async () => {
   if (!$("#sheet-print").disabled) {
     dispatchEvent(new Event("beforeprint")); out.sheet = ids("#sheet [data-problem]");
     out.sheetThreads = $$("#sheet .list > li > b").map((b) => textOf(b)); grab($("#sheet"));
+    out.sayings.sheet = { line: $("#sheet header p")?.textContent || "", file: $("#sheet header h1")?.textContent || "", count: $$("#sheet .list > li").length, first: pick($("#sheet .list > li")?.textContent) };
     if (out.labels) out.labels.sheet = $$("#sheet .list > li > b").map((b) => [(b.querySelector(".sw")?.getAttribute("style") || "").match(/#[0-9a-f]{6}/i)?.[0].toLowerCase(), textOf(b).replace(/^.* · /, ""), (b.querySelector("small")?.textContent || "").replace(/^\((.*)\)$/, "$1")]); dispatchEvent(new Event("afterprint"));
   }
   out.share = nwTest.share() || "";
   if (!$("#along-open").disabled) {
     $("#along-open").click(); await sleep(400);
     out.along = ids("#along-look [data-problem]"); out.alongThreads = [];
+    out.sayings.along = { count: num($("#along-count").textContent.match(/of (\d+)/)?.[0]), file: pick($("#along-you").textContent), turned: !$("#along-turn").hidden, times: [] };
     for (let i = 0; i < 40 && $("#along").open; i++) {
       grab($("#along")); const t = textOf($("#along-title")); if (t && t !== "Finished") out.alongThreads.push(t);
+      if (t && t !== "Finished") out.sayings.along.times.push($("#along-time").textContent);
       if ($("#along-next").textContent === "Close") break;
       $("#along-next").click(); await sleep(120);
     }
@@ -231,6 +245,7 @@ const READ = String.raw`(async () => {
     if ($("#done").open) {
       out.done = ids("#done-warn [data-problem]"); out.doneBad = $$("#done-bad li").length;
       out.doneChecked = $("#done-checked").innerText; out.doneSew = $("#done-sew").innerText; grab($("#done"));
+      out.sayings.done = { turned: !$("#done-turn").hidden };
       $("#done-close").click();
     }
   }
@@ -384,8 +399,52 @@ for (const c of CASES) {
       if (c.brand === "brother") for (const [, name, sp] of r.labels.steps) { const n = brotherNum(name.replace(/^Brother /, "")); if (n && sp !== `spool ${n}`) fail(c.name, `${name} labelled "${sp}", its spool is ${n}`); }
       if (c.spools.isacord && !r.labels.steps.some(([col, , sp]) => col === "#fadade" && /quite different/.test(sp))) fail(c.name, "the pale pink sewn in their bluish white spool isn't called quite different");
     }
+    // (round 12) one fact, one way: what the chips say of the design (size, stitches, time, hoop turned, loose threads,
+    // the file's name, the number of steps and threads) is what every other surface says of it. The sew sheet said
+    // 54 × 169 mm for the turned bookmark the chips and the dialog called 169 × 54; Sew along's steps added up to
+    // 12 min beside the chips' 13; the dialog said sizes to the tenth beside the chips' whole mm.
+    if (r.fact && !r.split) {
+      const f = r.fact, S = r.sayings, ne = (what, a, b) => { if (String(a) !== String(b)) fail(c.name, `${what}: ${a} / ${b}`); };
+      const turnedSaid = f.turned && r.mode !== "open";
+      if (r.dl.startsWith("Download ") && !/files? \(\.zip\)/.test(r.dl)) ne("the Download button's file vs the view's", r.dl.slice(9), r.file);
+      if (S.sheet) {
+        const line = S.sheet.line.split(" · ");
+        ne("the sew sheet's size vs the chips'", line[0], f.size);
+        if (!line.includes(`${(+f.stitches).toLocaleString("en-US")} stitches`)) fail(c.name, `the sew sheet's line "${S.sheet.line}" hasn't the chips' ${f.stitches} stitches`);
+        if (!line.includes(`≈ ${f.time} min`)) fail(c.name, `the sew sheet's line "${S.sheet.line}" hasn't the chips' ≈ ${f.time} min`);
+        ne("the sew sheet says the hoop is turned vs the chips", line.some((x) => /^hoop turned/.test(x)), f.turned);
+        ne("the sew sheet's loose threads vs the chips'", line.find((x) => /loose threads? to snip/.test(x))?.match(/^\d+/)?.[0] || "0", f.snips);
+        ne("the sew sheet's title vs the file", S.sheet.file, r.file);
+        if (S.sheet.first) ne("the sew sheet's step 1 picks", S.sheet.first, r.file);
+        if (S.steps?.count) ne("the sew sheet's steps vs How to stitch it's", S.sheet.count, S.steps.count);
+      }
+      if (S.steps?.file) ne("step 1 picks", S.steps.file, r.file);
+      if (r.mode === "picture" && S.steps) ne("the Picture tab's step count vs its steps", S.steps.count, S.steps.rows);
+      if (S.along) {
+        if (S.along.file) ne("Sew along's step 1 picks", S.along.file, r.file);
+        if (S.steps?.count) ne("Sew along's steps vs How to stitch it's", S.along.count, S.steps.count);
+        // (each step's time, its pause included, adds up to the chips' time)
+        const mins = S.along.times.map((t) => (/^Under a minute/.test(t) ? 0 : +(t.match(/About (\d+) min/)?.[1] ?? NaN)));
+        if (f.time && mins.length && mins.reduce((a, b) => a + b, 0) !== +f.time) fail(c.name, `Sew along's steps take ${mins.join(" + ")} min, the chips say ≈ ${f.time} min`);
+        ne("Sew along's hooping note vs the chips' Hoop turned", S.along.turned, turnedSaid);
+      }
+      if (S.steps) ne("How to stitch it's hooping note vs the chips' Hoop turned", S.steps.turned, turnedSaid);
+      if (S.done) ne("the download dialog's turned note vs the chips'", S.done.turned, turnedSaid);
+      if (r.doneChecked) { const m = r.doneChecked.match(/, ([\d.]+ × [\d.]+ mm \([^)]*\))/); if (m) ne("the download dialog's size vs the chips'", m[1], f.size); }
+      if (r.share) {
+        const first = r.share.match(/pick (\S+\.pes)\./)?.[1]; if (first) ne("the share text's step 1 picks", first, r.file);
+        if (!/The rest is on the sew sheet/.test(r.share) && S.steps?.count) ne("the share text's steps vs How to stitch it's", (r.share.match(/^\d+\. /gm) || []).length, S.steps.count);
+        ne("the share text's turned note vs the chips'", /The hoop is turned/.test(r.share), turnedSaid);
+      }
+      // (the loose threads When it's done names, when it counts them)
+      const said = (r.finish || "").match(/Snip the (\d+) loose threads/)?.[1] || (/Snip the loose thread between/.test(r.finish || "") ? "1" : null);
+      if (said) ne("When it's done's loose threads vs the chips'", said, f.snips);
+      if (r.card) { ne("the file card's stitches vs the chips'", r.card.stitches, f.stitches); if (r.card.threads) ne("the file card's threads vs the chips'", r.card.threads, f.threads); }
+    }
     // jargon in anything a user reads
     const all = [...r.texts, ...r.attrs, r.share];
+    // (round 12) a hoop is named as the hoop list names it ('5" × 7" hoop'): the bookmark's tip said "the 5 × 7 hoop"
+    for (const t of all) for (const m of (t || "").matchAll(/(\d+["”]? ?[×x] ?\d+["”]?) hoop/g)) if (!HOOP_NAMES.includes(`${m[1]} hoop`)) fail(c.name, `a hoop named "${m[0]}", not as the hoop list names it (${HOOP_NAMES.join(", ")})`);
     // (round 11) one size, one way: cm or mm and inches that agree, inches in eighths, on every surface
     for (const t of all) for (const b of sizes(t || "")) fail(c.name, `size: ${b}`);
     // an aside (where threading is shown, a word explained) is never a numbered sub-step

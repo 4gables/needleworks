@@ -29,7 +29,21 @@ export const turnedNote = (bare) => bare
 
 // Sewing time in minutes: 550 stitches a minute, about 6 s for each thread the machine cuts (`trims`: it slows, cuts
 // and starts again; a picture with 275 trims said 27 min for ~55) and half a minute for each thread change or pause
-export const sewMinutes = (stitches, trims = 0, stops = 0) => Math.max(1, Math.round(stitches / 550 + trims / 10 + stops / 2));
+// (`loads`: doctor.js blockLoads, per colour block). The whole design's time, and each step's share of it whole
+// minutes that add up to it (Sew along's steps said 1 + 4 + 7 min beside the chips' 13: each step rounded on its own,
+// left out its pause and counted loose threads as cut). A step under half a minute's share is 0: "under a minute".
+// (`stops`: two hoopings count the pauses in their two files, not the whole design's)
+export function sewTime(loads, stops = loads.length - 1) {
+  const sum = (k) => loads.reduce((a, b) => a + b[k], 0);
+  const total = Math.max(1, Math.round(sum("stitches") / 550 + Math.max(0, sum("trims") - sum("snips")) / 10 + stops / 2));
+  const own = loads.map((b, i) => b.stitches / 550 + Math.max(0, b.trims - b.snips) / 10 + (i ? 0.5 : 0)), all = own.reduce((a, b) => a + b, 0) || 1;
+  const exact = own.map((m) => (m * total) / all), steps = exact.map(Math.floor);
+  const left = total - steps.reduce((a, b) => a + b, 0);
+  exact.map((m, i) => [m - steps[i], i]).sort((a, b) => b[0] - a[0] || a[1] - b[1]).slice(0, left).forEach(([, i]) => steps[i]++);
+  return { total, steps };
+}
+// a step's time, as Sew along says it
+export const stepTime = (m) => (m ? `About ${m} min of sewing.` : "Under a minute of sewing.");
 
 // the turned hoop as you face the machine: a house lying with its roof (the top) to the right, an arrow that way (no
 // text in it: the note it sits in is read by its textContent for the share text and Sew along)

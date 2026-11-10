@@ -46,18 +46,26 @@ export function checkup(pattern) {
 
 // moves between 1 and 5 mm, from the last stitch to the next: too short for the PE900 to trim (its lowest setting is
 // 5 mm), left as loose thread
-export function shortJumps(p) {
-  if (p.shortJumps != null) return p.shortJumps;
-  let n = 0, from = null, last = null;
+export const shortJumps = (p) => (p.shortJumps ??= blockLoads(p).reduce((a, b) => a + b.snips, 0));
+// What the machine does in each colour block (indexed as render.js colorBlocks counts them, a COLOR_CHANGE each):
+// stitches, threads cut (trims) and loose threads left (`snips`). The time and the loose threads every surface says
+// come from these counts (the chips said 13 min where Sew along's steps added up to 12: each step counted its own way).
+export function blockLoads(p) {
+  if (p.loads) return p.loads;
+  const out = [{ stitches: 0, trims: 0, snips: 0 }];
+  let from = null, last = null;
   for (const [x, y, c] of p.stitches) {
+    const b = out[out.length - 1];
     if (c === JUMP) { if (!from) from = last; last = [x, y]; continue; }
     if (c === STITCH) {
-      if (from) { const d = Math.hypot(x - from[0], y - from[1]); if (d > 10 && d <= 50) n++; from = null; }
+      b.stitches++;
+      if (from) { const d = Math.hypot(x - from[0], y - from[1]); if (d > 10 && d <= 50) b.snips++; from = null; }
       last = [x, y];
     }
-    if (c === COLOR_CHANGE) { from = null; last = null; }
+    if (c === TRIM) b.trims++;
+    if (c === COLOR_CHANGE) { from = null; last = null; out.push({ stitches: 0, trims: 0, snips: 0 }); }
   }
-  return (p.shortJumps = n);
+  return (p.loads = out);
 }
 
 // colour blocks: [{ stitches (no colour changes or END), thread }]

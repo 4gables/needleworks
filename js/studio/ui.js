@@ -51,7 +51,7 @@ export const STARTERS = [
     // (a short one on the 4x4: everything scaled down left the name 15 mm, too small to stitch cleanly)
     small: () => [frame({ shape: "bookmark", w: 95, h: 40, border: "ith", hang: false, eyelet: true, color: RED }),
       text({ text: "~Ashley~", font: SACRAMENTO, size: 22, x: 7, color: RED })],
-    tip: "Made in the hoop on tear-away stabilizer, cotton on the front and felt on the back. Full size needs the 5 × 7 hoop. Type ~ at either end of a name for a swash." },
+    tip: "Made in the hoop on tear-away stabilizer, cotton on the front and felt on the back. Full size needs the 5\" × 7\" hoop. Type ~ at either end of a name for a swash." },
   { id: "monogram", name: "Monogram", note: "3 initials in a frame", make: () => [frame({ shape: "circle", w: 90, h: 90, border: "satin" }), mono({ size: 23 })] },
   { id: "ring", name: "Name in a circle", note: "lettering around a ring", make: () => [
     frame({ shape: "circle", w: 92, h: 92, border: "bold" }),
