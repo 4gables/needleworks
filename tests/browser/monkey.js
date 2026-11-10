@@ -16,6 +16,10 @@
 //   stale     what's shown (size and stitch chips, Fits <hoop>, steps count, fabric/thread/turn buttons, the Open
 //             tab's "Largest that fits", the Picture tab's size) equals a fresh computation after any settings change
 //   undo      undo then redo, and Save design then Open saved, give back the same design
+//   toast     a note's action (Undo, "Make it as big as…", "Use the 5x7 instead", "Turn the hoop and add it", "Add it at
+//             N %", "… anyway") does what it says: changes the design or the hoop, leaves what the note was about
+//             behind (the same note isn't back), grows / fits / adds as its words say; and no note with an action
+//             outlives a change it wasn't about (Undo pressed later undid something else)
 //   slow      no action blocks the page longer than the budget (?budget, 1000 ms); every action settles in 15 s
 //   error     no uncaught exception or console error
 // Query: ?seed=1&steps=200&start=default|fifteen|fifteen-letters|random|<starter id>&budget=1000&shrink=1, or &replay=<base64 JSON of steps>.
@@ -280,7 +284,7 @@ const WORDS = ["Emma", "Olivia Rose", "HAPPY BIRTHDAY GRANDMA", "Sam & Alex", "M
 const INITIALS = ["aMs", "JKM", "R", "JD", "Max", "Ann", "ABCD", "ab", "Ł"];
 const WEIGHTS = { add: 9, select: 8, range: 12, seg: 7, menu: 5, text: 6, swatch: 2, motif: 2, listop: 5, fabric: 3, thread: 2, baste: 1, hoop: 4, turn: 4, fit: 4,
   undo: 4, redo: 2, center: 1, nudge: 3, drag: 3, starter: 3, paste: 2, openSaved: 2, file: 1, filescale: 2, names: 1, tab: 2, del: 1, escape: 1, recentre: 1,
-  undoredo: 2, reload: 1, fix: 12, bigfix: 4, toastfix: 2, fixall: 3, twoup: 1, sameon: 1, grow: 2 };
+  undoredo: 2, reload: 1, fix: 12, bigfix: 4, toastfix: 5, fixall: 3, twoup: 1, sameon: 1, grow: 2 };
 function gen(r) {
   const tot = Object.values(WEIGHTS).reduce((a, b) => a + b, 0);
   let x = r() * tot, t = "add";
@@ -386,7 +390,14 @@ async function exec(d) {
     }
     case "openSaved": {
       const was = design(), s = studio(); if (!s?.pieces.length) return { ...act, skipped: true };
-      const json = JSON.stringify({ needleworks: 1, pieces: s.pieces, fabric: s.fabric, baste: s.baste, thread: s.thread, fitted: s.fitted, hoop: $("hoop").value, turned: hoopNow().t });
+      // (now and then saved for another hoop it fits: opened, it switches to it and says so, with a way back)
+      let hp = $("hoop").value;
+      const other = d.b < 0.35 && [...$("hoop").options].find((o) => o.value !== hp);
+      if (other) {
+        const h = MC.hoop($("machine").value, other.value), t = hoopNow().t && h.w !== h.h;
+        try { P.compose(s.pieces, t ? { ...h, w: h.h, h: h.w } : h, { fabric: s.fabric, baste: s.baste, thread: s.thread, later: [], measure: true }); hp = other.value; act.what = `saved for ${hp}`; if (was) was.hoop = hp; } catch {}
+      }
+      const json = JSON.stringify({ needleworks: 1, pieces: s.pieces, fabric: s.fabric, baste: s.baste, thread: s.thread, fitted: s.fitted, hoop: hp, turned: hoopNow().t });
       const dt = new W.DataTransfer(); dt.items.add(new W.File([json], "monkey.needleworks.json", { type: "application/json" }));
       $("st-load").files = dt.files; fire($("st-load"), "change");
       await idle();
@@ -470,13 +481,31 @@ async function exec(d) {
     }
     case "toastfix": {
       const b = D.querySelector("#st-toast:not([hidden]) button"); if (!b || D.querySelector("#st-toast.gone")) return { ...act, skipped: true };
-      act.what = b.textContent.trim(); if (/anyway/.test(act.what)) act.allowBig = true; if (/^Undo$/.test(act.what)) act.t = "undo";
-      b.click(); break;
+      act.what = b.textContent.trim(); if (/anyway/.test(act.what)) act.allowBig = true;
+      act.extra.push(...(await tryToast(b))); act.done = true; if (/^Undo$/.test(act.what)) act.t = "undo"; break;
     }
   }
   return act;
 }
 let opened = null;
+// a note's action, pressed: it does what it says (see "toast" in the header)
+const toastText = () => { const t = $("st-toast"); return !t || t.hidden || t.classList.contains("gone") ? "" : t.querySelector("span")?.textContent || ""; };
+async function tryToast(b) {
+  const bad = [], label = b.textContent.trim(), said = toastText();
+  const f0 = fresh(), d0 = design(), n0 = d0?.pieces.length || 0;
+  const add = (msg) => bad.push({ kind: "toast", msg: `“${label}” (on “${said.slice(0, 80)}”): ${msg}` });
+  b.click(); await idle();
+  const f1 = fresh(), d1 = design();
+  if (same(d0, d1)) add("changed nothing");
+  if (toastText() === said) add("the same note is back after it");
+  const side = (f) => (f.vs ? Math.max(f.vs.widthMm, f.vs.heightMm) : 0);
+  if (/^Make it as big as/.test(label) && !(f1.fits && side(f1) > side(f0) * 1.02)) add(`didn't make it bigger and fitting (${side(f0).toFixed(1)} -> ${side(f1).toFixed(1)} mm, ${f1.fits ? "fits" : "too big"})`);
+  const m = /^(?:Use|Fit it to) the (.+?) instead$/.exec(label);
+  if (m && (!f1.h || !f1.h.name.startsWith(m[1]) || !f1.fits)) add(`left it ${f1.fits ? "fitting" : "too big"} in the ${f1.h?.name}`);
+  if (/^(Turn the hoop and add it|Add it at)/.test(label) && (!f1.fits || (d1?.pieces.length || 0) !== n0 + 1)) add(`${f1.fits ? "fits" : "too big"}, ${n0} -> ${d1?.pieces.length} pieces`);
+  if (/anyway$/.test(label) && (d1?.pieces.length || 0) <= n0) add(`added nothing (${n0} -> ${d1?.pieces.length} pieces)`);
+  return bad;
+}
 // the Open tab's size line against the file and the hoop now
 function openChecks() {
   const bad = [], note = $("doc-fit-note"); if (!note || !opened) return bad;
@@ -522,7 +551,10 @@ async function tryFix(b, undo) {
 
 // ---------- running ----------
 async function step(d, k) {
-  const before = { f: fresh() };
+  // (a note goes with the next change once it's been up 0.4 s, as anyone takes that long to read it: the monkey's next
+  // step can come sooner)
+  if ($("st-toast").querySelector("button") && toastText()) await sleep(450);
+  const before = { f: fresh(), toast: $("st-toast").querySelector("button") ? toastText() : "", note: $("st-toast").querySelector("span"), d: design() };
   // (the long task of the checks just made is reported a moment later: counted, it put ~300 ms on every step of a
   // 16-piece design)
   await sleep(30);
@@ -532,6 +564,11 @@ async function step(d, k) {
   if (D.body.dataset.mode !== "design") { $("tab-design")?.click(); await idle(); }
   const ms = performance.now() - t0, long = Math.max(0, ...W.__mk.long.slice(n0));
   const f = fresh(), sc = screen(), bad = [...act.extra, ...(act.skipped ? [] : checks(f, sc, act, before))];
+  // (the same note, not a new one saying the same: each note is drawn anew)
+  // (a note with an action stays only while the design is as it was about: "Replaced your design… Undo" stayed up
+  // after Undo, and pressed undid one step more)
+  if (before.toast && act.t !== "toastfix" && toastText() === before.toast && $("st-toast").querySelector("span") === before.note && !same(design(), before.d))
+    bad.push({ kind: "toast", msg: `“${before.toast.slice(0, 80)}” and its action stayed up after ${act.t} changed the design (${diff(before.d, design())})` });
   if (act.t === "add" && !act.skipped) {
     const s = f.s, p = s.pieces.length > act.added ? s.pieces.find((q) => q.id === s.sel) : null;
     const iths = s.pieces.filter((q) => q !== p && q.kind === "frame" && (q.border === "ith" || q.border === "zip") && !(q.rot || 0));

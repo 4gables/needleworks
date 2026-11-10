@@ -172,6 +172,14 @@ export const STARTERS = [
     tip: "Good on a flour-sack tea towel (pick Cotton) or an apron." },
 ];
 
+// A design saved from here (.needleworks.json), from a file's bytes, or null: dropped on the page, shared to it, opened on
+// the Open tab or added with + Design file, it was called a damaged embroidery file.
+export function savedDesign(bytes) {
+  let i = 0; while (i < bytes.length && (bytes[i] === 0x20 || bytes[i] === 0x0a || bytes[i] === 0x0d || bytes[i] === 0x09 || bytes[i] === 0xef || bytes[i] === 0xbb || bytes[i] === 0xbf)) i++;
+  if (bytes[i] !== 0x7b) return null;   // ({)
+  try { const d = JSON.parse(new TextDecoder().decode(bytes)); return d?.needleworks === 1 && Array.isArray(d.pieces) ? d : null; } catch { return null; }
+}
+
 // api: { hoop(), setView(pattern, filename, look) (null pattern: nothing to show), showError(msg), busy(on, text),
 //        safeName(s, fb), escapeHtml(s), handOut(files, opts) (gate.js: the only way a file leaves), store, showStep(i), step(), setMode(mode),
 //        threadLine(hex, machine name), threadHtml(hex, machine name) (app.js `threadLabel`: one thread label everywhere) }
@@ -203,16 +211,21 @@ export function initStudio(api) {
   // the file name they gave the design (Rename, beside Download), kept with it: every file it makes takes it (the PES,
   // two hoopings' ZIP, the names ZIP, the saved design, the cutter files). Empty: named from what's in it.
   let title = typeof saved?.title === "string" ? tidy(saved.title).slice(0, 60) : "";
+  // the starter's tip (shown under the starters, and on the sew sheet), kept with the design it came with: a starter's
+  // tip stayed up after Open saved and was printed on that design's sew sheet
+  let tip = typeof saved?.tip === "string" ? saved.tip : "";
 
   // the starter's own way of hooping, for a project that can't be hooped (a made bib: `float`)
   const floated = () => STARTERS.find((s) => s.name === from)?.float;
-  const save = () => api.store.set("studio", { pieces, sel, fabric, baste, thread, fitted, two, from, title });
+  const save = () => api.store.set("studio", { pieces, sel, fabric, baste, thread, fitted, two, from, title, tip });
   // undo: a snapshot before each change (a burst of slider moves counts as one), with the hoop's turn (a turned design
   // undone to unturned said Too big)
   // (a snapshot equal to the last one is skipped: picking a piece or a no-op starter made undo look dead for a press)
+  // (with everything a new design resets, and the hoop: undoing a starter lost the file's name and the hoop's turn, and
+  // undoing Open saved left the design it replaced in the hoop the saved one switched to, Too big)
   const history = [], future = [];
   let quiet = 0;
-  const snap = () => JSON.stringify({ pieces, sel, fabric, baste, thread, fitted, two, turn: api.turned() });
+  const snap = () => JSON.stringify({ pieces, sel, fabric, baste, thread, fitted, two, turn: api.turned(), title, from, tip, hoop: api.hoopId() });
   const sameDesign = (a, b) => { const x = JSON.parse(a), y = JSON.parse(b); delete x.sel; delete y.sel; return JSON.stringify(x) === JSON.stringify(y); };
   function remember(burst = false) {
     api.hideToast();   // (a "Removed … Undo" note goes with the next change)
@@ -225,8 +238,13 @@ export function initStudio(api) {
   }
   const buttons = () => { $("st-undo").disabled = $("bar-undo").disabled = !history.length; $("st-redo").disabled = !future.length; };
   function restore(h) {
-    let turn; ({ pieces, sel, fabric, baste, thread = "auto", fitted = false, two = false, turn } = JSON.parse(h));
+    let turn, hoop; ({ pieces, sel, fabric, baste, thread = "auto", fitted = false, two = false, turn, title = "", from = "", tip = "", hoop } = JSON.parse(h));
+    // (the hoop it was in, not offered as a roomier hoop: undoing Open saved said the 5x7 had room to make it bigger)
+    if (hoop && hoop !== api.hoopId()) { api.setHoop(hoop); lastHoop = null; }
     if (turn != null) api.setTurn(turn);
+    // (a note with an action is about the design as it was: "Replaced your design… Undo" stayed up after Undo, and
+    // pressed, undid one step more)
+    api.hideToast(true);
     quiet = 0; buttons(); save(); ui(); make();
   }
   function undo() {
@@ -498,6 +516,7 @@ export function initStudio(api) {
   function ui() { api.keepFocus($("panel-design"), () => { list(); editor(); sewnOn(); }); api.paint?.(); }
   function sewnOn() {
     $("st-fabric").innerHTML = Object.entries(FABRICS).map(([k, f]) => `<button type="button" data-fab="${k}" aria-pressed="${k === fabric}">${f.name}</button>`).join("");
+    $("st-tip").hidden = !tip; $("st-tip").textContent = tip;
     $("st-baste").checked = baste; $("st-fabric-tip").textContent = fabricTip(); $("st-fabric-name").textContent = FABRICS[fabric].name + (baste ? ", basted" : "");
     // (numeric keys come first in an object, so the order is spelled out)
     $("st-thread").innerHTML = `<span class="chips-label">Thread</span>` + ["auto", "30", "40", "60"].map((k) => `<button type="button" data-thread="${k}" aria-pressed="${k === thread}" title="${WT_TITLE[k]}">${THREADS[k].name}</button>`).join("");
@@ -635,6 +654,7 @@ export function initStudio(api) {
         size = l.fits ? `${what} ${btn(`data-size="${need}"`, `Make it ${need} mm`, l)}`
           : l.capped ? `${what} ${roomIn(p, l, need)}`
           : l.hit ? `${what} At ${need} mm it would ${l.out ? "go outside" : "run into"} ${api.escapeHtml(label(l.hit))}: give it more room first.`
+          : l.worse ? `${what} At ${need} mm it would ${worseSaid(l.worse)}.`
           : `${what} At ${need} mm it would be ${mmText([l.w, l.h])}, too big for the hoop even turned. Use fewer or shorter lines${onTowel ? ", or a bolder font (Yellowtail, Satisfy)." + cotton : "."}`;
       }
     }
@@ -647,6 +667,7 @@ export function initStudio(api) {
       arc = (room ? `The words wrap most of the way round the curve${room.full ? " and run into themselves" : ""}.` : "The curve is too tight for letters this tall: they'd bunch up.")
         + (fixes.length ? " " + fixes.map((f, i) => (i ? f.replace(">Make", ">make") : f)).join(" or ")
           : wl?.hit ? ` A curve wide enough would ${wl.out ? "go outside" : "run into"} ${api.escapeHtml(label(wl.hit))}: use fewer words.`
+          : wl?.worse ? ` A curve wide enough would ${worseSaid(wl.worse)}: use fewer words.`
           : wl ? ` A curve wide enough would be ${mmText([wl.w, wl.h])}, too big for the hoop: use fewer words.` : " Use fewer words.");
     }
     // run into another piece: the size that clears it (lettering centred in a frame isn't dragged apart, it's made smaller)
@@ -691,7 +712,7 @@ export function initStudio(api) {
       named = (t.length > 3 ? `A monogram has 3 initials at most, so only “${api.escapeHtml(t.slice(0, 3).join(""))}” would be sewn.`
         : `“${api.escapeHtml(word)}” looks like a name: a monogram sews initials (first, LAST, middle) with the middle one biggest, so it wouldn't read as “${api.escapeHtml(word)}”.`)
         + ((l) => (l.fits ? ` ${btn("data-as-text", `Sew “${api.escapeHtml(p.letters.trim())}” as lettering`, l)}`
-          : ` Sewn as lettering it would ${l.out ? "go outside" : l.hit ? `run into ${api.escapeHtml(label(l.hit))}` : "be too big for the hoop"}: make it smaller first.`))(landing(p, asLettering(p)));
+          : ` Sewn as lettering it would ${l.out ? "go outside" : l.hit ? `run into ${api.escapeHtml(label(l.hit))}` : l.worse ? worseSaid(l.worse) : "be too big for the hoop"}${l.worse ? "." : ": make it smaller first."}`))(landing(p, asLettering(p)));
     }
     // under a patch that sews after it (hidden), or sewn on a patch in nearly the same thread (it won't show)
     const under = d.cover ? `The ${api.escapeHtml(label(d.cover).toLowerCase())} patch sews after this and would cover it. <button type="button" class="link" data-after="${d.cover.id}">Sew it after the patch</button>` : "";
@@ -702,9 +723,9 @@ export function initStudio(api) {
     // with nothing said)
     // (offered where the lines then land: straight, "Lily / Rose" on two lines ran into the "Emma" under it)
     const straight = ids("lines") ? landing(p, { shape: "straight" }) : null;
-    const oneLine = straight ? `${TEXT_SHAPES[p.shape]} sews the words on one line, so the ${d.rows} lines are joined into one. ${straight.fits ? `${btn(`data-seg-set="shape:straight"`, "Make it straight", straight)} to keep the lines.` : `Straight, the lines would ${straight.out ? "go outside" : straight.hit ? `run into ${api.escapeHtml(label(straight.hit))}` : "be too big for the hoop"}: give it more room first.`}` : "";
+    const oneLine = straight ? `${TEXT_SHAPES[p.shape]} sews the words on one line, so the ${d.rows} lines are joined into one. ${straight.fits ? `${btn(`data-seg-set="shape:straight"`, "Make it straight", straight)} to keep the lines.` : `Straight, the lines would ${straight.out ? "go outside" : straight.hit ? `run into ${api.escapeHtml(label(straight.hit))}` : straight.worse ? worseSaid(straight.worse) : "be too big for the hoop"}: give it more room first.`}` : "";
     // (a style change is checked too: bold is wider, and "Make it bold" ran “Emma” into the “Emma” beside it)
-    const no = (l) => `${l.out ? "go outside" : l.hit ? `run into ${api.escapeHtml(label(l.hit))}` : "be too big for the hoop"}`;
+    const no = (l) => `${l.out ? "go outside" : l.hit ? `run into ${api.escapeHtml(label(l.hit))}` : l.worse ? worseSaid(l.worse) : "be too big for the hoop"}`;
     const bold = ids("thin") ? landing(p, { style: "satin" }) : null, line = ids("loops") ? landing(p, { style: "line" }) : null;
     // (too small, thin, or loops filling on one long line, as Fit to hoop leaves a long name: two lines may be much
     // bigger; said with the problem it fixes)
@@ -827,8 +848,22 @@ export function initStudio(api) {
     // nor a size its frame shrinks straight back (`fittedSizes`): "Make it 17 mm" left the words at 15, and the same
     // warning offered 17 again (Kitchen sign with hearts, Wedding keepsake's two names)
     if (change.size != null && fit != null && fit < change.size - 0.25) return { w, h, fits: null, capped: fit, host: frameOf(p) };
-    return { w, h, fits: w <= fw && h <= fh ? "fits" : w <= fh && h <= fw ? "turn" : null };
+    const fits = w <= fw && h <= fh ? "fits" : w <= fh && h <= fw ? "turn" : null;
+    // nor one that brings a problem of its own: "Make it straight" left a bridged name in a key fob too small to stitch
+    // (its frame shrank the two lines), a new warning for the old one
+    const worse = fits && newProblem(p, q, ps, change);
+    return worse ? { w, h, fits: null, worse } : { w, h, fits };
   }
+  // the first problem (said everywhere, not a tip) p changed to q in `ps` has that p hasn't, or null
+  // ("Make it bold" says on its button that small loops may fill in)
+  function newProblem(p, q, ps, change) {
+    const of = (r, set) => pieceProblems(r, fittedSizes(set)).list.filter((x) => x.level !== TIP);
+    const was = new Set(of(p, pieces).map((x) => x.kind));
+    return of(q, ps).find((x) => !was.has(x.kind) && !(x.kind === "loops" && change.style === "satin")) || null;
+  }
+  // a new problem said as what the fix would do (after "it would")
+  const worseSaid = (x) => ({ small: "come out too small to stitch cleanly", loops: "have small loops that fill in", towel: "close up on a towel", thin: "sew as a thin line",
+    arch: "bunch up on the curve", caps: "be hard to read" }[x.kind] || `bring a new problem (${x.text.replace(/\.$/, "").toLowerCase()})`);
   // a monogram that was given a name, made lettering: same font, thread and place, at the size that fits its frame
   // (checked like any fix before it's offered: "ABCD" as lettering took the design past the hoop)
   function asLettering(p) {
@@ -990,7 +1025,7 @@ export function initStudio(api) {
       const { design, steps, done, ready, small, later } = stepsOf(composed, true);
       stepsUI(steps, done, small, ready);
       const look = previewLook(steps);
-      const notes = [turnText(), $("st-tip").hidden ? "" : $("st-tip").textContent, fabricTip(), threadTip(small)];
+      const notes = [turnText(), tip, fabricTip(), threadTip(small)];
       api.setView(design.pattern(), fileName(), {
         ...look, problems, fixHint: fixHint(),
         block: resizing ? `Re-stitching ${resizing.name} at ${Math.round(resizing.scale * 100)} %…` : quilting ? "Working out the quilting…" : "",
@@ -1002,7 +1037,7 @@ export function initStudio(api) {
       if (later) setTimeout(() => {
         if (s !== seq) return;
         const now = smallNow(); if (now === small) return;
-        stepsUI(steps, done, now, ready); notes.splice(1, 3, $("st-tip").hidden ? "" : $("st-tip").textContent, fabricTip(), threadTip(now));
+        stepsUI(steps, done, now, ready); notes.splice(1, 3, tip, fabricTip(), threadTip(now));
       }, 350);
     } catch (err) {
       if (s !== seq) return;
@@ -1088,12 +1123,8 @@ export function initStudio(api) {
   // (`words` false: the design alone, selected: the Picture tab's "start a new design with it")
   function addWords(d, name, words = true) {
     const blocks = fileBlocks(d), had = pieces.length;
-    remember();
-    api.fit(); api.unturn();   // (whole and upright, as a starter opens: a turned stocking cuff left the file turned, "Waiting for a fit")
     const f = piece({ kind: "file", name, blocks, color: blocks[0].color }), t = words && text({ text: "Your words", font: SCRIPT });
-    pieces = [f]; fitted = false; two = false; from = name; title = "";
-    // (a new design starts on cotton, as a starter does: the last starter's felt stayed on, "Hoop the felt", unsaid)
-    fabric = "cotton"; baste = false; thread = "auto"; $("st-tip").hidden = true; $("st-tip").textContent = "";
+    newDesign([f], { from: name });
     if (t) { freeSpot(t, "down"); pieces.push(t); }
     sel = (t || f).id; recentre();
     api.setMode("design"); save(); ui(); make();
@@ -1101,6 +1132,21 @@ export function initStudio(api) {
     // (straight into the words, selected, so typing replaces them)
     const w = t && $("st-edit").querySelector('textarea[data-k="text"]');
     if (w) { w.focus(); w.select(); }
+  }
+  // A new design in place of the one there, one Undo away: a starter (and an old #bookmark link), Add words, a picture
+  // started as a new design, Open saved (and a saved design dropped, shared or opened on the Open tab), a whole design
+  // pasted into an empty one. Everything the last design set goes back to what a fresh page has, but what the new one
+  // brings (`o`: fabric, baste, thread, turn, fitted, two, from, title, tip): a towel stayed on for later starters, a
+  // starter's felt after Add words, a turned stocking cuff for the next file, the zoom, a step view and a starter's tip
+  // after Open saved, each unsaid.
+  function newDesign(ps, o = {}) {
+    remember();
+    api.fit(); api.showStep(null);
+    api.setTurn(!!o.turn);   // (a square hoop ignores it)
+    pieces = ps; sel = ps.length ? ps[ps.length - 1].id : null;
+    fabric = own(FABRICS, o.fabric) ? o.fabric : "cotton"; baste = o.baste === true; thread = own(THREADS, String(o.thread)) ? String(o.thread) : "auto";
+    fitted = o.fitted === true; two = o.two === true; refitted = false;
+    from = o.from || ""; title = o.title || ""; tip = o.tip || "";
   }
   // A design file (+ Design file, or the Picture tab's stitches: "Add it to my design") as a piece of this design, in
   // free space, above what's there (or below, if only that fits), not on top of it: centred, a bought design landed on
@@ -1516,15 +1562,13 @@ export function initStudio(api) {
     if (!s) return;
     const phone = matchMedia("(max-width: 600px)").matches;
     api.store.set("studio.guideSeen", true);   // (step 1 done: the guide isn't shown on the next visit)
-    api.fit();   // (a new design opens whole, not at the last one's zoom)
-    api.unturn();   // (and upright: the last starter's turned hoop made a bib hoop sideways; too big offers the turn)
-    if (s.turn) api.setTurn(true);   // (a starter laid out long side across, the bookmark; a square hoop ignores it)
     // (a design that was there is one Undo away, and said so: a 15-piece design went with one tap, no word)
     const had = pieces.length && snap();
-    remember(); pieces = s.make(); if (tweak) tweak(pieces); sel = pieces[pieces.length - 1].id;
-    fabric = s.fabric || "cotton";   // (a towel left on made every later starter towel-heavy, +40-75 % stitches)
-    baste = !!s.baste; fitted = false; two = false; from = s.name; title = "";
-    thread = s.thread || "auto";   // (30 wt stuck to every later starter, and through a reload, while fabric reset)
+    // (upright unless it's laid out long side across, the bookmark: the last starter's turned hoop made a bib hoop
+    // sideways; its own fabric and thread or cotton and automatic: a towel left on made every later starter
+    // towel-heavy, 30 wt stuck to every later starter)
+    newDesign(s.make(), { fabric: s.fabric, baste: s.baste, thread: s.thread, turn: s.turn, from: s.name, tip: s.tip });
+    if (tweak) tweak(pieces); sel = pieces[pieces.length - 1].id;
     // made to fit the hoop it's opened in, everything scaled together (the coaster, quilt block, mug rug and zipper
     // pouch opened Too big on the 4x4)
     // Lettering it made small enough for its loops to fill in goes back up to the size that keeps them open (up to its
@@ -1549,7 +1593,6 @@ export function initStudio(api) {
         if (loopsFill(q) || minSize(q) || archTight(q) || touching(q, pieces) || !fits()) pieces.forEach((o, i) => Object.assign(o, back[i]));
       }
     }
-    $("st-tip").hidden = !s.tip; $("st-tip").textContent = s.tip || "";
     save(); ui(); make();
     if (had && !sameDesign(had, snap())) toast(`Replaced your design with “${s.name}”.`, { label: "Undo", run: undo });
     // phones: the preview is above the cards, so the change happened off-screen (scrolled to its top, so the sewing
@@ -1919,8 +1962,9 @@ export function initStudio(api) {
     if (!r.ok) toast(r.error === "The saved design is empty." ? "Add a piece first: there's nothing to save yet." : r.error);
   };
   const bad0 = "it isn't a design saved from this page, or it's damaged (saved designs end in .needleworks.json)";
-  $("st-load").onchange = async (e) => {
-    const f = e.target.files[0]; e.target.value = ""; if (!f) return;
+  $("st-load").onchange = (e) => { const f = e.target.files[0]; e.target.value = ""; if (f) openSaved(f); };
+  // a saved design (Open saved, or dropped on the page, shared to it, opened on the Open tab) in place of this one
+  async function openSaved(f) {
     try {
       // (a damaged file said "Expected property name or '}' in JSON at position 1"; one wording for every file that
       // can't be read: it was four, one of them a raw "Maximum call stack size exceeded")
@@ -1935,27 +1979,33 @@ export function initStudio(api) {
       const cut = pairs.some(([p, q]) => q && typeof p.text === "string" && typeof q.text === "string" && q.text.length < tidy(p.text, { lines: 3 }).length) || pairs.some(([p, q]) => q?.letters && tidy(p.letters).length > q.letters.length);
       // (a setting it had that came out different; ones it lacked and got filled in aren't counted)
       const changed = pairs.filter(([p, q]) => q && Object.keys(p).some((k) => k !== "id" && k !== "text" && k !== "letters" && JSON.stringify(p[k]) !== JSON.stringify(q[k]))).length;
-      remember(); nextId = 1; pieces = loaded.map((p) => ({ ...p, id: nextId++ })); sel = pieces[pieces.length - 1].id;
-      fabric = own(FABRICS, data.fabric) ? data.fabric : "cotton"; baste = data.baste === true; thread = own(THREADS, data.thread) ? String(data.thread) : "auto"; fitted = data.fitted === true; two = data.two === true;
-      from = f.name.replace(/\.needleworks\.json$|\.json$/i, ""); title = typeof data.title === "string" ? tidy(data.title).slice(0, 60) : "";
+      api.setMode("design");
+      const hoop0 = api.hoopId(), hoopName0 = api.hoop().name, mh0 = api.machineHoop();
       // the hoop (when this machine has it) and the turn it was saved with
+      newDesign((nextId = 1, loaded.map((p) => ({ ...p, id: nextId++ }))), { fabric: data.fabric, baste: data.baste, thread: data.thread, fitted: data.fitted, two: data.two, turn: data.turned,
+        from: f.name.replace(/\.needleworks\.json$|\.json$/i, ""), title: typeof data.title === "string" ? tidy(data.title).slice(0, 60) : "" });
       // (said, with a way back to the hoop that was picked: it switched from the 5x7 to the 4x4 with nothing said)
-      const hoop0 = api.hoopId(), hoopName0 = api.hoop().name;
-      if (typeof data.hoop === "string") api.setHoop(data.hoop);
+      // (the hoop it was saved for isn't a bigger hoop picked, to offer filling: that note took the place of this one)
+      if (typeof data.hoop === "string" && data.hoop !== hoop0) { api.setHoop(data.hoop); lastHoop = null; }
       const otherHoop = api.hoopId() !== hoop0 && api.hoop().name;
-      api.setTurn(data.turned === true);
       // (a size past what any hoop holds, cut down to the biggest piece there can be, is then fitted to this hoop:
       // `size: 1e9` opened as a 486 mm "Emma")
       const huge = pairs.some(([p, q]) => q && ["size", "w", "h"].some((k) => typeof p[k] === "number" && q[k] < p[k]));
       if (huge) try { compose(pieces, api.hoop(), { fabric, baste, thread, later: [], measure: true }); } catch (err) { if (err.overBy) fitHoop(false); }
       settle(); save(); ui(); make();
-      if (otherHoop) toast(`Opened for the ${otherHoop} it was saved for.`, { label: `Use the ${hoopName0.replace(/ hoop$/, "")} instead`, run: () => api.setHoop(hoop0) });
+      // (the way back checked first: a 5x7 design taken back to the 4x4 was Too big there, so it's fitted to it, and
+      // said so on the button; an Undo step)
+      if (otherHoop) {
+        const there = api.turned() ? { ...mh0, w: mh0.h, h: mh0.w } : mh0, n0 = hoopName0.replace(/ hoop$/, "");
+        let fits = true; try { compose(pieces, there, { fabric, baste, thread, later: [], measure: true }); } catch (err) { if (!err.overBy) throw err; fits = false; }
+        toast(`Opened for the ${otherHoop} it was saved for.`, { label: fits ? `Use the ${n0} instead` : `Fit it to the ${n0} instead`, run: () => { remember(); api.setHoop(hoop0); if (!fits) fitHoop(); } });
+      }
       const left = data.pieces.length - loaded.length;
       if (left || changed || cut) toast([left ? `${left} ${left === 1 ? "piece" : "pieces"} in that file couldn't be read and ${left === 1 ? "was" : "were"} left out.` : "",
         cut ? "Words longer than this page takes (60 letters, 12 initials) were cut short." : "",
         changed ? `${changed === 1 ? "One piece had settings" : `${changed} pieces had settings`} this page doesn't have: ${changed === 1 ? "it was" : "they were"} set to the nearest that works.` : ""].filter(Boolean).join(" "), null, 12000);
     } catch (err) { console.error(err); toast("That design couldn't be opened: " + (err instanceof RangeError || err instanceof TypeError ? bad0 : err.message)); }
-  };
+  }
   document.addEventListener("keydown", (e) => {
     if (document.body.dataset.mode !== "design" || e.defaultPrevented || e.target.matches?.("input[type=text], textarea, [role=tab]")) return;
     const k = e.key.toLowerCase();
@@ -1977,7 +2027,9 @@ export function initStudio(api) {
   const onPage = (e) => document.body.dataset.mode === "design" && !typing(e.target) && !typing(document.activeElement) && !document.querySelector("dialog[open]") && !getSelection()?.toString();
   document.addEventListener("copy", (e) => {
     const p = current(); if (!onPage(e) || !pieces.length) return;
-    e.preventDefault(); e.clipboardData.setData("text/plain", JSON.stringify({ needleworks: 1, pieces: p ? [p] : pieces }));
+    // (the whole design with what it's sewn on and the hoop's turn: pasted into an empty design, in another window, it
+    // came out on cotton and upright)
+    e.preventDefault(); e.clipboardData.setData("text/plain", JSON.stringify({ needleworks: 1, pieces: p ? [p] : pieces, ...(p ? {} : { fabric, baste, thread, turned: api.turned(), ...(title ? { title } : {}) }) }));
     toast(p ? `Copied ${label(p)}. Paste to add a copy.` : `Copied the whole design. Paste to add a copy.`);
   });
   document.addEventListener("paste", (e) => {
@@ -1985,10 +2037,19 @@ export function initStudio(api) {
     let got; try { got = JSON.parse(e.clipboardData.getData("text/plain")); } catch { return; }
     const ps = got?.needleworks === 1 && Array.isArray(got.pieces) ? got.pieces.map(cleanPiece).filter(Boolean) : [];
     if (!ps.length) return;
-    e.preventDefault(); remember(); fitted = false;
+    e.preventDefault(); addPieces(ps, got);
+  });
+  // pieces pasted, or a saved design's added with + Design file: one where a new piece would go, several together in
+  // free space; a whole design (`got` with its fabric) into an empty one is that design, as it was sewn
+  function addPieces(ps, got = {}, verb = "Pasted") {
+    if (!pieces.length && own(FABRICS, got.fabric)) {
+      newDesign(ps.map((q) => ({ ...structuredClone(q), id: nextId++ })), { fabric: got.fabric, baste: got.baste, thread: got.thread, turn: got.turned, title: typeof got.title === "string" ? tidy(got.title).slice(0, 60) : "" });
+      settle(); save(); ui(); make(); toast(`${verb} the design.`); return;
+    }
+    remember(); fitted = false;
     const add = ps.map((q) => ({ ...structuredClone(q), id: nextId++ })), bs = add.map(pieceBounds).filter(Boolean);
     // one piece goes where a new one would (`place`): beside its original, or in a frame, or in free space
-    if (add.length === 1 && pieces.length) { if (place(add[0], (q) => pieces.push(q))) toast(`Pasted ${label(add[0])}.`); return; }
+    if (add.length === 1 && pieces.length) { if (place(add[0], (q) => pieces.push(q))) toast(`${verb} ${label(add[0])}.`); return; }
     // several in free space beside what's there (below, else above), moved together, then the layout recentred: it was
     // pasted just below the original, half out of the hoop; with no room left, said so (it went below anyway, into
     // two hoopings)
@@ -2000,11 +2061,11 @@ export function initStudio(api) {
     };
     if (bs.length && pieces.length) {
       const box = [Math.min(...bs.map((b) => b[0])), Math.min(...bs.map((b) => b[1])), Math.max(...bs.map((b) => b[2])), Math.max(...bs.map((b) => b[3]))], at = spotFor(box);
-      if (!at) { toast(`There's no free room in the hoop for ${add.length} more pieces. Make something smaller, or take something out first.`, { label: "Paste anyway", run: () => { remember(); fitted = false; go(box, spotFor(box, true)); } }); return; }
+      if (!at) { toast(`There's no free room in the hoop for ${add.length} more pieces. Make something smaller, or take something out first.`, { label: `${verb === "Pasted" ? "Paste" : "Add them"} anyway`, run: () => { remember(); fitted = false; go(box, spotFor(box, true)); } }); return; }
       go(box, at);
     } else go([0, 0, 0, 0], [0, 0]);
-    toast(add.length === 1 ? `Pasted ${label(add[0])}.` : `Pasted ${add.length} pieces.`);
-  });
+    toast(add.length === 1 ? `${verb} ${label(add[0])}.` : `${verb} ${add.length} pieces.`);
+  }
   // the smallest a new piece is made to fit a frame: half its size for lettering, what still stitches well for the
   // rest (a filled motif under 25 mm starts to lose its detail, and the editor says so, but inside the quilt block's
   // frame beats outside it)
@@ -2284,6 +2345,9 @@ export function initStudio(api) {
     try {
       // (a picture, a zip or an empty file said as what it is, as the Open tab says it)
       const bytes = new Uint8Array(await f.arrayBuffer()), not = notEmbroidery(bytes, f.name);
+      // (a design saved from here: its pieces added, as a paste adds them; it said the file couldn't be added)
+      const kept = savedDesign(bytes);
+      if (kept) { const ps = kept.pieces.map(cleanPiece).filter(Boolean); if (ps.length) { addPieces(ps, {}, "Added"); return; } }
       if (not) { toast(not.message); return; }
       addFile(readEmbroidery(bytes, f.name), f.name.replace(/\.[^.]+$/, ""));
     } catch (err) { toast("That file couldn't be added: " + err.message); }
@@ -2385,8 +2449,9 @@ export function initStudio(api) {
   cards(); ui();
   const starter = (id, tweak) => pickStarter(STARTERS.find((x) => x.id === id), tweak);
   // Rename (app.js): the name asked for, "" for the automatic one; the name it would have without one
-  const rename = (t) => { t = tidy(t || "").trim().slice(0, 60); if (t === title) return; title = api.safeName(t, "") ? t : ""; save(); make(); };
+  // (an Undo step of its own: undoing an earlier change took the name back with it)
+  const rename = (t) => { t = tidy(t || "").trim().slice(0, 60); if (t === title) return; remember(); title = api.safeName(t, "") ? t : ""; save(); make(); };
   // the Picture tab's stitches into this design (`fresh`: a new design of it alone), in Design your own
   const usePicture = (d, name, fresh) => { if (fresh || !pieces.length) { addWords(d, name, false); return; } api.setMode("design"); if (addFile(d, name)) toast(`Added ${name} to your design.`, { label: "Undo", run: undo }); };
-  return { make, addWords, usePicture, empty: () => !pieces.length, starter, rename, title: () => title, autoName: () => api.safeName(autoWords(), "design"), selBox: () => { const p = current(); return p ? pieceBounds(sewnAt(p)) : null; }, relabel: () => { ui(); make(); }, start, move, end, nudge, deselect, forNames, remember, recentre: () => { remember(); recentre(); save(); ui(); make(); } };
+  return { make, addWords, usePicture, openSaved, empty: () => !pieces.length, starter, rename, title: () => title, autoName: () => api.safeName(autoWords(), "design"), selBox: () => { const p = current(); return p ? pieceBounds(sewnAt(p)) : null; }, relabel: () => { ui(); make(); }, start, move, end, nudge, deselect, forNames, remember, recentre: () => { remember(); recentre(); save(); ui(); make(); } };
 }
