@@ -15,7 +15,7 @@
 import assert from "node:assert/strict";
 import { glyphs } from "../js/core/glyphs.js";
 import { APPLIQUE_FONTS, FONTS } from "../js/core/fonts.js";
-import { graphemes, initials, lacks, latin, safeName, tidy, uniqueName } from "../js/core/typed.js";
+import { MAX_INITIALS, MAX_WORDS, graphemes, initials, lacks, latin, safeName, tidy, uniqueName, unswashed } from "../js/core/typed.js";
 import { cleanPiece, label } from "../js/studio/pieces.js";
 import { FIXED, VARIANTS, corpus } from "./text_corpus.mjs";
 
@@ -98,7 +98,7 @@ for (const cp of union) {
 }
 for (const [from, to] of [["José", "Jose"], ["Jose\u0301", "Jose"], ["Łukasz", "Lukasz"], ["Søren", "Soren"], ["Анна", "Anna"], ["ЖЕНЯ", "ZHENYA"],
   ["Σοφία", "Sofia"], ["שרה", "Shrh"], ["Nguyễn Thị Hằng", "Nguyen_Thi_Hang"], ["O'Neil", "O_Neil"], ["O’Neil", "O_Neil"], ["CON", "CON_"],
-  ["Əli", "Eli"], ["Kɔfi", "Kofi"], ["Straße", "Strasse"], ["李明", "design"], ["❤\ufe0f", "design"], ["Emma ❤\ufe0f", "Emma"], ["Em\u200bma", "Emma"]])
+  ["Əli", "Eli"], ["Kɔfi", "Kofi"], ["Straße", "Strasse"], ["李明", "design"], ["❤\ufe0f", "design"], ["Emma ❤\ufe0f", "Emma"], ["Em\u200bma", "Emma"], ["Bev's\nKitchen", "Bev_s_Kitchen"], ["Lily\r\nRose", "Lily_Rose"]])
   assert.equal(safeName(from, "design"), to, from);
 
 // ---- one file per name: unique ignoring case, whatever the accents or how they were typed
@@ -111,10 +111,12 @@ for (const [from, to] of [["José", "Jose"], ["Jose\u0301", "Jose"], ["Łukasz",
 for (const s of ALL) {
   for (const p of [{ kind: "text", text: s, font: "NW Great Vibes", size: 20 }, { kind: "monogram", letters: s, size: 30 }, { kind: "letters", text: s, size: 60 }]) {
     const q = cleanPiece(p), k = p.kind === "monogram" ? "letters" : "text";
-    if (!q) { check("load keeps typed text", !tidy(s, p.kind === "text" ? { lines: 3, max: 60 } : { max: 12 }).trim(), show(s)); continue; }
-    check("load tidies", q[k] === tidy(q[k], { lines: p.kind === "text" ? 3 : 1, max: p.kind === "text" ? 60 : 12 }), `${p.kind} ${show(s)}`);
+    if (!q) { check("load keeps typed text", !tidy(s, p.kind === "text" ? { lines: 3, max: MAX_WORDS } : { max: MAX_INITIALS }).trim(), show(s)); continue; }
+    check("load tidies", q[k] === tidy(q[k], { lines: p.kind === "text" ? 3 : 1, max: p.kind === "text" ? MAX_WORDS : MAX_INITIALS }), `${p.kind} ${show(s)}`);
     check("load round trip", JSON.stringify(cleanPiece(JSON.parse(JSON.stringify(q)))) === JSON.stringify(q), `${p.kind} ${show(s)}`);
-    check("thread name ASCII", /^[\x20-\x7e]*$/.test(latin(label(q))), `${p.kind} ${show(s)}`);
+    check("thread name ASCII", /^[\x20-\x7e]*$/.test(latin(label(q, true))), `${p.kind} ${show(s)}`);
+    // (the page names long words briefly, the file's thread name keeps them: a design's saved bytes carry it)
+    if (p.kind === "text") check("label brief, whole in the file", graphemes(label(q)).length <= 34 && label(q, true).includes(unswashed(q.text).replace(/\s*\n\s*/g, " / ")), `${show(s)}`);
     if (p.kind === "monogram") check("initials are letters", initials(q.letters).every((g) => !/^\p{M}/u.test(g) || g === initials(q.letters)[0]), show(s));
   }
 }

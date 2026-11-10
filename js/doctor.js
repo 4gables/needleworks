@@ -745,7 +745,12 @@ export function openedFile(bytes, name) {
   // threads, too many thread changes) is never saved as it came: it's written again, or not saved at all. It was
   // "Save a copy", byte for byte, then "It opens on a Brother PE900" (pec_count_ff.pes, colours_121.pes).
   const hard = d.format === "pes" && !short ? verdictOf(bytes).filter((q) => HARD.has(q.key)) : [];
-  const misplaced = d.format === "pes" && !!d.misplaced, repair = misplaced || (d.format === "pes" && (short || disagree || hard.length > 0));
+  const misplaced = d.format === "pes" && !!d.misplaced;
+  // Two designs that don't agree, and the machine's own one broken as well (its design box, its thread list): a damaged
+  // file, said so, not "two different designs" (flipped.pes, 99 bytes changed in a download: 489 mm of scribble was
+  // called a second design, with three fixes said beside it)
+  const damaged = disagree && (misplaced || hard.some((q) => q.key === "colours" || q.key === "applique"));
+  const repair = misplaced || (d.format === "pes" && (short || disagree || hard.length > 0));
   const isPes = d.format === "pes" && !repair;
   // More colour blocks than the machine steps through (99; the PES writer refuses over 127: colors150.pes has 150,
   // and was called damaged): each thread's parts sewn together if that brings it under (`fewer`), else it's shown
@@ -761,6 +766,6 @@ export function openedFile(bytes, name) {
   // A file that's written again here anyway (a misplaced or cut-short PES, a DST) is written fixed: what it fails
   // is ticked. dense_k.pes was saved as "_fixed" with only its box mended, still 40 hits/mm².
   const need = new Set(isPes || stuck ? [] : check.verdict.map((q) => q.key));
-  return { d, out, check, need, isPes, repair, hard, misplaced, short, disagree, colourless, tooMany, blocks, stops, merged, stuck,
+  return { d, out, check, need, isPes, repair, hard, misplaced, short, disagree, damaged, colourless, tooMany, blocks, stops, merged, stuck,
     noFix: stuck || (tooMany && !fewer), fixBase: isPes && fewer ? fewer : null };
 }

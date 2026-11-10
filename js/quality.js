@@ -161,8 +161,17 @@ export function endsEarly(bytes, name = "") {
     };
     return !(ends(blk + 20) || (!(bytes[blk + 16] & 0x80 && bytes[blk + 18] & 0x80) && ends(blk + 16)));
   }
+  // (and a DST whose end code comes long before its records do: one changed byte in flipped.dst read as the end, and
+  // 356 of its 12,203 stitches opened as a whole design, "Fits", with nothing said)
   if (/\.dst$/i.test(name)) {
-    for (let i = 512; i + 3 <= bytes.length; i += 3) if ((bytes[i + 2] & 0xf3) === 0xf3) return false;
+    for (let i = 512; i + 3 <= bytes.length; i += 3) if ((bytes[i + 2] & 0xf3) === 0xf3) {
+      // (padding after it, zeros, spaces or 0x1A, or stitches that go nowhere, isn't more of the design)
+      const pad = (v) => v === 0 || v === 0x1a || v === 0x20;
+      let more = 0;
+      for (let j = i + 3; j + 3 <= bytes.length; j += 3)
+        if (!(pad(bytes[j]) && pad(bytes[j + 1]) && pad(bytes[j + 2])) && !(!bytes[j] && !bytes[j + 1] && (bytes[j + 2] & 0xf3) === 0x03)) more++;
+      return more > 2;
+    }
     return true;
   }
   return false;

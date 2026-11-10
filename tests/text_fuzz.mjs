@@ -25,7 +25,7 @@
 //     [--only words,initials,letters,fonts,bookmark,names,saved,share,marks,layout]
 //   (about 15 min, quick about 5; prints "DONE <checks> <problems>" and exits 1 on a problem)
 import { FONTS, APPLIQUE_FONTS } from "../js/core/fonts.js";
-import { initials, lackList, lacks, safeName, tidy } from "../js/core/typed.js";
+import { MAX_WORDS, brief, initials, lackList, lacks, safeName, tidy } from "../js/core/typed.js";
 import { FIXED, LONG, VARIANTS, corpus, rng } from "./text_corpus.mjs";
 
 const [CDP, HTTP] = process.argv.slice(2);
@@ -206,9 +206,10 @@ async function names(where, names, family) {
   for (const e of entries) check(`${where} names: file names ASCII, not a device`, fileOk(e), e);
   check(`${where} names: one file each, unique ignoring case`, new Set(entries.map((e) => e.toLowerCase())).size === entries.length, entries.join(" "));
   // every name is made, or said why not
-  const made = got.caps.length, refused = typed.filter((n) => lacks(n, family).length || !/[\p{L}\p{N}]/u.test(n));
+  // (past MAX_WORDS a name is refused, said: a 200-letter one drew nothing and its file held the frame alone)
+  const made = got.caps.length, refused = typed.filter((n) => lacks(n, family).length || !/[\p{L}\p{N}]/u.test(n) || n.length > MAX_WORDS);
   check(`${where} names: a file per name made`, made === entries.length, `${made} shown, ${entries.length} in the ZIP`);
-  for (const n of refused) check(`${where} names: lacking letters refused with a reason`, got.note.includes(n) && (/has no|no letters|3 initials/.test(got.note)), `${show(n)} in ${show(got.note.slice(0, 200))}`);
+  for (const n of refused) check(`${where} names: lacking letters refused with a reason`, got.note.includes(brief(n)) && (/has no|no letters|3 initials|too long/.test(got.note)), `${show(n)} in ${show(got.note.slice(0, 200))}`);
   check(`${where} names: every name accounted for`, made + (got.note.match(/Couldn't make: (.*?)\. (?:Left out|$)/)?.[1] || "").split(/\), /).filter(Boolean).length >= typed.length - refused.length || made >= typed.length - refused.length, `${made} made of ${typed.length}, ${refused.length} refused`);
   check(`${where} names dialog layout`, !got.overflow.length, got.overflow.join("; "));
   await ev(`(() => { const d = document.getElementById("names"); if (d.open) d.close(); return true; })()`);
@@ -356,7 +357,7 @@ await part("fonts", async () => {
 });
 await part("bookmark", () => bookmark(QUICK ? sample(12) : [...sample(50), "Анна", "Jose\u0301", "CON", "Zoë", "שרה", "❤\ufe0f", ".", "Jo.", "~", "~Emma~", "~ Emma ~", "Em~ma", "~~Jo", "~Ann\nLee~", "Hi!~"]));
 // names batches: corpus names plus names differing only by case or accent
-const batch = (n) => [...VARIANTS, "CON", "con", "nul", "Łukasz", "Søren", "Анна", "Σοφία", "שרה", "李明", "❤\ufe0f", "O'Neil", ".", ...sample(n)];
+const batch = (n) => [...VARIANTS, "CON", "con", "nul", "Łukasz", "Søren", "Анна", "Σοφία", "שרה", "李明", "❤\ufe0f", "O'Neil", ".", "B".repeat(200), ...sample(n)];
 await part("names", async () => {
   await load("#design"); await start("words");
   await names("Words", batch(QUICK ? 6 : 20), "NW Great Vibes");

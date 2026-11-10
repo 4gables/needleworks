@@ -1,7 +1,7 @@
 /*! Needleworks (c) 2026 4Gables. All rights reserved. Proprietary, see LICENSE. https://4gables.com/needleworks/ */
 // Design tab UI: start from a card, edit pieces in a short list, drag them on the preview.
 import { APPLIQUE_FONTS, FONTS, loadFont } from "../core/fonts.js";
-import { initials, lackList, lacks, swashes, tidy, tidyField, unswashed, withSwash } from "../core/typed.js";
+import { MAX_INITIALS, MAX_WORDS, initials, lackList, lacks, swashes, tidy, tidyField, unswashed, withSwash } from "../core/typed.js";
 import { nearestBrotherThread } from "../core/threads.js";
 import { designStats, machineThreads, readEmbroidery } from "../core/formats.js";
 import { BLOCK, LOOK, TIP, problemsItems, shownOn, stopWords } from "../words.js";
@@ -10,7 +10,7 @@ import { draw } from "../render.js";
 import { TURN_PIC, turnedNote, youHtml } from "../sheet.js";
 import { QUILTS, quiltOf } from "./quilt.js";
 import { MOTIFS } from "./motifs.js";
-import { quiltDone, scaledFit, BORDERS, FABRICS, THREADS, SHAPES, TEXT_SHAPES, splitPieces, archFit, archStart, frontPanel, inkHeight, monoSize, archRoom, archShrink, archTight, cleanPiece, clearSize, collision, collisions, inFrame, letterMetrics, underPatch, crossName, crossStep, layoutSize, touching, touchingAll, towelMin, fineLine, loopsFill, compose, fileBlocks, blocksPattern, scaleBlocks, FILE_SCALE, fittedSizes, followFrame, label, minSize, pieceBounds, previewLook, smallText, bulkReady } from "./pieces.js";
+import { quiltDone, scaledFit, BORDERS, FABRICS, THREADS, SHAPES, TEXT_SHAPES, splitPieces, archFit, archStart, frontPanel, inkHeight, monoSize, archRoom, archShrink, archTight, cleanPiece, clearSize, collision, collisions, inFrame, letterMetrics, underPatch, crossName, crossStep, layoutSize, touching, touchingAll, towelMin, fineLine, loopsFill, compose, fileBlocks, blocksPattern, scaleBlocks, FILE_SCALE, fittedSizes, followFrame, label, minSize, pieceBounds, pieceStitches, previewLook, smallText, bulkReady } from "./pieces.js";
 
 const SCRIPT = "NW Great Vibes", PRINT = "NW Josefin Sans", ROUND = "NW Quicksand";
 // exact Brother PEC thread colours, so the name on screen is the one the machine shows
@@ -341,12 +341,15 @@ export function initStudio(api) {
     if (head?.nodeType === 3) head.textContent = p ? "Selected piece " : "No piece selected ";
     if (!p) { $("st-edit").innerHTML = `<p class="hint">Tap a piece in the list above or on the preview to change it.</p>`; return; }
     let h = "";
+    // (said when typing or pasting goes past the most a piece takes, `MAX_WORDS` in typed.js: a field's maxlength cut a
+    // pasted 200-letter name to 60 without a word)
+    const cutHint = `<p class="hint" data-cut-hint aria-live="polite" hidden></p>`;
     if (p.kind === "text") {
       const lines = p.text.split("\n").length, arc = p.shape === "up" || p.shape === "down";
       // (a new line first: the parser drops one straight after <textarea>, so words starting on a new line lost it on
       // every redraw)
-      h += `<label class="field"><span>Words</span><textarea data-k="text" rows="${Math.min(3, lines)}" maxlength="60" autocomplete="off" spellcheck="false">\n${api.escapeHtml(p.text)}</textarea></label>`
-        + `<p class="hint" data-lines-hint aria-live="polite" hidden>Three lines is the most: that new line became a space.</p>`;
+      h += `<label class="field"><span>Words</span><textarea data-k="text" rows="${Math.min(3, lines)}" data-max="${MAX_WORDS}" autocomplete="off" spellcheck="false">\n${api.escapeHtml(p.text)}</textarea></label>`
+        + `<p class="hint" data-lines-hint aria-live="polite" hidden>Three lines is the most: that new line became a space.</p>` + cutHint;
       // swashes are typed (~ at either end of the words); these put them on or take them off
       {
         const ls = p.text.split("\n").filter((l) => l.trim()), lead = swashes(ls[0] || "").lead, tail = swashes(ls[ls.length - 1] || "").tail;
@@ -375,7 +378,7 @@ export function initStudio(api) {
         + (p.shape === "straight" && lines > 1 ? seg("align", { left: "Left", center: "Centre", right: "Right" }, p.align || "center") + range("leading", "Line spacing", 80, 200, p.leading ?? 130, "%", 5) : "");
       h += `<details class="more" ${moreOpen ? "open" : ""}><summary>More</summary>${more}</details>`;
     } else if (p.kind === "monogram") {
-      h += `<label class="field"><span>Initials</span><input type="text" data-k="letters" value="${api.escapeHtml(p.letters)}" maxlength="12" autocomplete="off" spellcheck="false"></label>`;
+      h += `<label class="field"><span>Initials</span><input type="text" data-k="letters" value="${api.escapeHtml(p.letters)}" data-max="${MAX_INITIALS}" autocomplete="off" spellcheck="false"></label>` + cutHint;
       // (what it does, measured: the middle letter comes out 1.24-1.49 x as tall as the others in every font. "Stitched
       // biggest" read as more than a tall, thin script J gave)
       h += `<p class="hint">${initials(p.letters).length === 3 ? "Traditional order: first, LAST, middle. The middle letter is sewn about 1½ times as tall as the other two." : "Three initials go first, LAST, middle, with the middle one sewn about 1½ times as tall. One or two are sewn the same height."}</p>`;
@@ -388,7 +391,7 @@ export function initStudio(api) {
       h += seg("style", { fill: "Filled", outline: "Outline", applique: "Appliqué" }, p.style || "fill");
       if (p.style === "applique") h += `<p class="hint">Sews an outline, pauses for you to lay fabric on and trim it, then sews satin stitch round the edges. 50 mm or bigger cuts most easily.</p>`;
     } else if (p.kind === "letters") {
-      h += `<label class="field"><span>Letters</span><input type="text" data-k="text" value="${api.escapeHtml(p.text)}" maxlength="12" autocomplete="off" spellcheck="false"></label>`;
+      h += `<label class="field"><span>Letters</span><input type="text" data-k="text" value="${api.escapeHtml(p.text)}" data-max="${MAX_INITIALS}" autocomplete="off" spellcheck="false"></label>` + cutHint;
       h += `<label class="field"><span>Font</span><select data-k="font">${APPLIQUE_FONTS.map((f) => `<option value="${f.family}" ${f.family === p.font ? "selected" : ""}>${f.name} (${f.note})</option>`).join("")}</select></label>`;
       h += range("size", "Height", 20, 120, p.size);
       h += `<p class="hint">Cut from fabric: the machine sews an outline, pauses for you to lay fabric on and trim it, then sews satin stitch round the edges. Letters 30 mm or taller cut and sew most easily.</p>`;
@@ -476,6 +479,14 @@ export function initStudio(api) {
     const fs = fit.get(p.id), q = fs ? { ...p, size: fs } : p, lettering = p.kind === "text" || p.kind === "monogram";
     const d = { fs, q, lettering, max: p.kind === "monogram" ? 90 : 60, onTowel: fabric === "towel" && lettering, m: 0, towel: 0, fills: 0, room: null, nears: [], near: null, gone: [], pushed: [], rows: 0, thin: false, cover: null, better: "" };
     if (p.kind === "frame") return { list, d };
+    // Lettering with no words sews nothing, and lettering that draws nothing (words past the most it takes, in a crafted
+    // design) is left out of the file: both said, never a file without the words asked for.
+    const words = p.kind === "monogram" ? p.letters : p.kind === "text" ? unswashed(p.text) : p.kind === "letters" ? p.text : null;
+    if (words !== null && !/[^\s]/u.test(words || "")) {
+      add("empty", LOOK, p.kind === "monogram" ? "A monogram has no initials yet: type them, or remove it." : "A lettering piece has no words yet: type some, or remove it.");
+      return { list, d };
+    }
+    if (words !== null && !pieceStitches(q).length) add("undrawn", BLOCK, `${L} comes out as no stitches at all: use fewer or other letters.`);
     d.m = minSize(q); d.room = archRoom(p); d.nears = touchingAll(q, pieces); d.near = d.nears[0] || null; d.fills = loopsFill(q);
     d.gone = missing(p.text ?? p.letters ?? "", p.font); d.thin = fineLine(q);
     d.towel = d.onTowel ? towelMin(d.m ? { ...q, size: d.m } : q) : 0;
@@ -585,7 +596,7 @@ export function initStudio(api) {
       const away = !inside && !to ? moveAway(p, near) : null;
       const go = away ? btn(`data-move-to="${away.x},${away.y}"`, `Move it ${away.where}`, away.l) : "";
       hit = inside ? `This runs into the ${frameName} around it${zip ? " (the zipper and its stitching are across the top)" : ""}. ${cs ? btn(`data-size="${cs}"`, `Make it ${cs} mm`) : move || full}`
-        : `This runs into ${api.escapeHtml(and(nears.map(label)))}. ${cs || go ? `${[cs ? btn(`data-size="${cs}"`, `Make it ${cs} mm`) : "", go].filter(Boolean).map((b, i) => (i ? b.replace(">Move", ">move") : b)).join(", ")} or drag it apart.` : move ? `${move}, or drag it apart.` : full || "Drag it apart."}`;
+        : `This runs into ${api.escapeHtml(and(nears.map((o) => label(o))))}. ${cs || go ? `${[cs ? btn(`data-size="${cs}"`, `Make it ${cs} mm`) : "", go].filter(Boolean).map((b, i) => (i ? b.replace(">Move", ">move") : b)).join(", ")} or drag it apart.` : move ? `${move}, or drag it apart.` : full || "Drag it apart."}`;
     }
     // a motif too small for its style: filled, the detail closes up under 25 mm; as an outline or appliqué the satin
     // edges run together under 30 mm (a 15 mm butterfly's antennae merged, a house's window filled in, and the
@@ -628,6 +639,8 @@ export function initStudio(api) {
     const said = { named, lines: oneLine, covered: under, hidden: same, pushed: kerned, motif: small,
       missing: gone.length ? `This font has no ${api.escapeHtml(lackList(gone))}: ${gone.length === 1 ? "it" : "they"} would be stitched in a stand-in letter. Take ${gone.length === 1 ? "it" : "them"} out or try another font.` : "",
       small: size, towel: size, arch: arc, runs: hit,
+      empty: p.kind === "monogram" ? "No initials yet: type them above, or remove this piece." : "No words yet: type some above, or remove this piece.",
+      undrawn: "These words come out as no stitches at all: use fewer or other letters.",
       thin: bold && `At this size it sews as a thin line.${bold.fits ? ` ${btn(`data-seg-set="style:satin"`, "Make it bold", bold)} (small loops may fill in).` : ` Bold, it would ${no(bold)}.`}`,
       loops: line && `At this size the small loops (the holes in letters like b and e) fill in.${line.fits ? ` ${btn(`data-seg-set="style:line"`, "Thin line", line)} keeps them open` : ""}${fillsAt?.fits ? `${line.fits ? ", or" : ""} ${btn(`data-size="${fills}"`, `${line.fits ? "make" : "Make"} it ${fills} mm`, fillsAt)}` : ""}${line.fits || fillsAt?.fits ? "." : ""}` };
     w.innerHTML = [...new Set(list.map((x) => x.kind))].map((k) => tag(k, said[k] + (k === withLines ? lines : ""))).filter(Boolean).join(" <br>");   // (a space too: read aloud or copied, "lines.On two lines")
@@ -1267,8 +1280,14 @@ export function initStudio(api) {
     const big = (ps) => ps.reduce((a, p) => (!a || p.size > a.size ? p : a), null), lettered = (p) => /\p{L}/u.test(p.text ?? p.letters ?? "");
     const pick = (ok) => big(pieces.filter((p) => ok(p) && p.kind === "text" && (p.shape || "straight") === "straight")) || big(pieces.filter((p) => ok(p) && p.kind === "monogram"))
       || big(pieces.filter((p) => ok(p) && (p.kind === "text" || p.kind === "monogram" || p.kind === "letters")));
-    const m = pick(lettered) || pick(() => true);
-    return (m?.kind === "monogram" ? m.letters : unswashed(m?.text)) || from || "design";   // (else the starter: a quilt block was design.pes)
+    // (only words a file name can carry: empty lettering named it after the starter, spaces alone design.pes)
+    const said = (p) => (p.kind === "monogram" ? p.letters : unswashed(p.text)), named = (p) => !!api.safeName(said(p), "");
+    const m = pick((p) => lettered(p) && named(p)) || pick(named);
+    if (!m) return from || "design";   // (else the starter: a quilt block was design.pes)
+    // its copies, the same kind, font and size (two bookmarks made in the hoop, Lily and Noah, were Lily.pes), named
+    // together in the order they sew
+    const twins = pieces.filter((q) => q.kind === m.kind && q.size === m.size && q.font === m.font && (q.shape || "straight") === (m.shape || "straight") && named(q));
+    return [...new Set((twins.length ? twins : [m]).map(said))].join(" ");
   };
   // the design's main lettering: the biggest straight-or-arched words or monogram (`letters`: appliqué letters too)
   // (words with letters before a date: One for each name swapped each name in for the pillow's "06.20.27")
@@ -1428,9 +1447,10 @@ export function initStudio(api) {
     // and a 4th Enter becomes a space, so words typed after it don't run into the line ("Line threeFour")
     // (not mid-way through a word an input method is still composing: changing the field then breaks it)
     if ((k === "text" || k === "letters") && !e.isComposing) {
-      const many = t.tagName === "TEXTAREA" && t.value.split("\n").length > 3;
-      tidyField(t, { lines: t.tagName === "TEXTAREA" ? 3 : 1, max: t.maxLength > 0 ? t.maxLength : Infinity });
+      const many = t.tagName === "TEXTAREA" && t.value.split("\n").length > 3, lines = t.tagName === "TEXTAREA" ? 3 : 1, max = +t.dataset.max || Infinity;
+      const whole = tidy(t.value, { lines }).length, cut = tidyField(t, { lines, max }).length < whole;
       if (many) setTimeout(() => { const hint = edit.querySelector("[data-lines-hint]"); if (hint) hint.hidden = false; });
+      setTimeout(() => { const hint = edit.querySelector("[data-cut-hint]"); if (hint && (cut || !hint.hidden)) { hint.textContent = `${max} letters and spaces is the most: the rest was left out.`; hint.hidden = !cut; } });
     }
     if (t.type === "range") t.nextElementSibling.textContent = shown(t.value, t.dataset.unit);
     change((p) => {
@@ -1910,6 +1930,9 @@ export function initStudio(api) {
       // monogram's width (`monoSize`).
       build: (name, shrink = false) => {
         if (!/[\p{L}\p{N}]/u.test(name)) throw new Error("no letters to stitch");
+        // (as long as the editor takes, `MAX_WORDS`: a 200-letter name drew nothing and its file held the heart alone)
+        const most = mono ? MAX_INITIALS : MAX_WORDS;
+        if (name.length > most) throw new Error(`too long: ${most} letters and spaces at most`);
         const gone = missing(name, p.font);
         if (gone.length) throw new Error(`the font has no ${lackList(gone)}`);
         if (mono && initials(name).length > 3) throw new Error("a monogram takes 3 initials at most");
@@ -1941,6 +1964,8 @@ export function initStudio(api) {
               if (!thin) lastBold = size;
               f -= 0.1; size = step(size0 * f); continue;
             }
+            // (never a file without the name in it)
+            if (!pieceStitches({ ...q, size: now }).length) throw new Error("it comes out as no stitches");
             return { pattern, name, turned, runs: hit ? label(hit) : "", smaller: now < ref * 0.95,   // (said from 5 % smaller: "Ben (smaller)" stood beside an Ava the same height)
              thin: fabric !== "towel" && fineLine({ ...q, size: now }) && !fineLine({ ...p, size: was }) };
           }

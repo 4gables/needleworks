@@ -11,7 +11,7 @@ import { handOut, judge } from "./gate.js";
 import { DST_COLOURS, checkup, fewerBlocks, fix, heat, openedFile, pauses, shortJumps, sortedChanges } from "./doctor.js";
 import { HARD, MAX_BLOCKS, denseWords, moves, verdictOf } from "./quality.js";
 import { BLOCK, LOOK, LOOK_HEAD, TIP, TIP_HEAD, problemsHtml, problemsInline, problemsItems, problemsOf, shownOn, stopWords, stopsAt } from "./words.js";
-import { safeName, tidy, uniqueName, withSwash } from "./core/typed.js";
+import { brief, safeName, tidy, uniqueName, withSwash } from "./core/typed.js";
 import { BRANDS, brotherNum, chartSpools, exampleSpools, lab, nearestSpool, spools } from "./core/brands.js";
 import { COLORS as LINE_THREADS, initStudio } from "./studio/ui.js";
 
@@ -730,7 +730,7 @@ $("names-make").onclick = async () => {
       const j = judge({ name: f + ".pes", bytes: writePES(pattern), against: pattern }, hoop());
       if (!j.ok) { used.delete(f.toLowerCase()); throw new Error(j.error); }
       files.push(j); made.push({ name, file: f + ".pes", pattern, shown, smaller, thin, sideways, runs });
-    } catch (err) { bad.push(`${name} (${/hoop fits|too big/i.test(err.message) ? "too long for the hoop" : err.message})`); }
+    } catch (err) { bad.push(`${brief(name)} (${/hoop fits|too big/i.test(err.message) ? "too long for the hoop" : err.message})`); }
   }
   $("names-make").disabled = false;
   // every name as it'll sew, to look over (is one crowded?), with what's different about it
@@ -1304,10 +1304,14 @@ async function openDesign(file) {
       check, longer: Math.max(st.widthMm, st.heightMm), size: [st.widthMm, st.heightMm], auto: false };
     $("doctor-fix").innerHTML = ""; $("doctor-fix").hidden = state.opened.noFix; setMode("open"); openView();
   } catch (err) {
-    // (nothing from an earlier file stays on screen to be saved by mistake)
-    if (!err.plain) console.error(err); state.opened = null; state.views.open = null; setMode("open"); setView(null);
-    $("open-info").hidden = true; $("doctor").hidden = true;
-    showError(err.plain ? err.message : `${file.name} couldn't be read as an embroidery file (PES, PEC or DST). It may be damaged: try downloading it again.`);
+    if (!err.plain) console.error(err);
+    const said = err.plain ? err.message : `${file.name} couldn't be read as an embroidery file (PES, PEC or DST). It may be damaged: try downloading it again.`;
+    // The design that was open stays, named as still open (a file that wouldn't open cleared it, and the design she'd
+    // been working on with it); with none, nothing is shown.
+    const was = state.opened;
+    if (!was) { state.views.open = null; setMode("open"); setView(null); $("open-info").hidden = true; $("doctor").hidden = true; }
+    else setMode("open");
+    showError(was ? `${said} ${was.name} is still open.` : said);
   }
 }
 // The fixes run in a worker (re-stitching star_badge.pes at 250 % froze the page for 10 s): one job at a time, only
@@ -1363,7 +1367,8 @@ function showOpened(p, bytes, check, changed) {
     // (what the file card says of it, in the one list every surface shows: words.js)
     problems: [o.stuck && { id: "stuck", level: BLOCK, text: `It has ${o.stops}, more than the machine can take in one design (${MAX_BLOCKS - 1} at most), so it can't be saved for it here.` },
       o.short && { id: "short", level: LOOK, text: "This file ends early: only part of the design is in it." },
-      o.disagree && { id: "disagree", level: LOOK, text: "The file you opened holds two different designs, one for PE-DESIGN and one for the machine: the copy saved here is the one the machine sews, so both show the same." }].filter(Boolean),
+      o.damaged ? { id: "damaged", level: LOOK, text: "The file you opened looks damaged: what's shown is what the machine would sew from it, which may not be the design." }
+        : o.disagree && { id: "disagree", level: LOOK, text: "The file you opened holds two different designs, one for PE-DESIGN and one for the machine: the copy saved here is the one the machine sews, so both show the same." }].filter(Boolean),
     // (the machine's name, then what the file calls it: a design made here names its threads after its pieces)
     threadLabel: (b, t) => `Brother ${t.name}${fileCalls(b.name, t.name, b.color)}` };
   if (fixed) v.filename = fixedName(v.filename);
@@ -1398,12 +1403,13 @@ function openInfo(v, st, fits) {
     <span title="${d.format.toUpperCase()}${pesVersion(d.version)}">${st.stitches.toLocaleString()} stitches · ${o.colourless ? `no thread colours in the file (${threads === 1 ? "shown in one colour" : `shown in ${threads} colours to tell the parts apart`})` : `${threads} thread ${threads === 1 ? "colour" : "colours"}`}</span>
     ${fits ? `<span class="good">Fits the ${h.machineName} ${h.name}.</span>`
       : `<span class="warn">Too big for the ${h.name}: it's ${st.widthMm.toFixed(0)} × ${st.heightMm.toFixed(0)} mm. ${big.scale >= 0.5 ? `<button type="button" class="link" id="doc-largest">Make it the largest that fits (${big.pct} %)</button>` : "Even at half size it won't fit this hoop."}</span>`}
-    ${o.disagree ? `<span class="warn" data-problem="disagree">This file holds two different designs: PE-DESIGN would open one, and your machine would sew the other. The copy saved here is the one the machine sews (shown here), so both will show the same.</span>` : ""}
-    ${o.short ? `<span class="warn" data-problem="short">This file ends early: it may be damaged (cut short when it was downloaded or copied), so only part of the design is here. Download it again from where it came from if you can. A copy saved here is complete for the part that's left.</span>` : ""}
+    ${o.damaged ? `<span class="warn" data-problem="damaged">This file looks damaged: its parts don't agree with each other, as happens when a download or copy goes wrong. What's shown is what your machine would sew from it, which may not be the design at all. Download it again from where it came from if you can.</span>`
+      : o.disagree ? `<span class="warn" data-problem="disagree">This file holds two different designs: PE-DESIGN would open one, and your machine would sew the other. The copy saved here is the one the machine sews (shown here), so both will show the same.</span>` : ""}
+    ${o.short ? `<span class="warn" data-problem="short">This file ends early: it may be damaged (cut short or changed when it was downloaded or copied), so only part of the design is here. Download it again from where it came from if you can. A copy saved here is complete for the part that's left.</span>` : ""}
     ${o.stuck ? `<span class="warn" data-problem="stuck">This design has ${o.stops}. Brother machines stop ${MAX_BLOCKS - 1} times at most in one design, and sewing each thread's parts together doesn't bring it under, so it can't be saved for your machine here${o.misplaced ? " (as it is, this file would also load cut off on a Brother machine)" : ""}. Ask where it came from for a version with fewer colours.</span>` : ""}
     ${o.merged ? `<span>It had ${o.stops}, more than the machine can take in one design (${MAX_BLOCKS - 1} at most). The copy here sews each thread's parts together where nothing in between is in the way: ${o.merged[1]} thread changes, and it looks the same.</span>` : ""}
-    ${o.stuck ? "" : hardWords(o) ? `<span class="warn">As it came, this file ${hardWords(o)}, which Brother machines don't take as it is. The copy saved here is fixed.</span>` : ""}
-    ${o.stuck ? "" : o.misplaced && !o.short ? `<span class="warn">As it is, this file would load cut off on a Brother machine (shifted, about half shown). The download here is fixed.</span>`
+    ${o.stuck || o.damaged ? "" : hardWords(o) ? `<span class="warn">As it came, this file ${hardWords(o)}, which Brother machines don't take as it is. The copy saved here is fixed.</span>` : ""}
+    ${o.stuck || o.damaged ? "" : o.misplaced && !o.short ? `<span class="warn">As it is, this file would load cut off on a Brother machine (shifted, about half shown). The download here is fixed.</span>`
       : o.isPes || o.short || hardWords(o) ? "" : `<span>You can download it as a PES file for your machine.</span>`}`;
 }
 // what an opened file broke of the machine's own rules, as it came (too many thread changes and two designs in one

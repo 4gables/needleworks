@@ -122,6 +122,23 @@ for (let i = 0; i < COUNT; i++) {
     } catch (err) { if (!/too many|nothing to stitch/i.test(err.message)) fail(`fixing it threw ${err.constructor.name}: ${err.message}`, f); }
   }
 }
+// Damage that still decodes is said as damage (round 9): a DST with its end code early opened as a whole design with
+// nothing said, and a PES with its design box and stitches changed in a download was "two different designs".
+let damage = 0;
+for (const src of seeds) {
+  const b = src.bytes, end = /\.dst$/i.test(src.name) ? [...Array(Math.floor((b.length - 512) / 3)).keys()].map((i) => 512 + 3 * i).find((i) => (b[i + 2] & 0xf3) === 0xf3) : -1;
+  if (end > 512 + 3 * 40) {
+    const d = b.slice(); d.set([0, 0, 0xf3], 512 + 3 * Math.floor((end - 512) / 6));
+    try { if (!openedFile(d, src.name).short) fail("a DST with its end code half way through opened with nothing said", { name: src.name, from: src.name, kind: "early end", bytes: d }); damage++; } catch {}
+  }
+  if (/\.pes$/i.test(src.name) && b.length > 12) {
+    const blk = u32(b, 8) + 512;
+    if (blk + 200 > b.length) continue;
+    const d = b.slice(); d[blk + 17] ^= 0x15; for (const k of [40, 77, 120]) d[blk + k] ^= 0x22;
+    try { const o = openedFile(d, src.name); if (o.disagree && !o.damaged) fail("a PES with its machine block damaged was called two different designs", { name: src.name, from: src.name, kind: "damaged", bytes: d }); damage++; } catch {}
+  }
+}
+console.log(`damage said: ${damage} damaged seeds checked`);
 console.log(`open fuzz: ${COUNT} files from ${seeds.length} seeds (seed ${SEED}): ${opened} opened (${tooBig} too big for the 5x7, ${shrunk} of them shrunk to fit, ${overshoot} still over after shrinking), ${refusedRead} refused as unreadable, ${fixed} fixed (${soft} still with quality notes), ${bad} problems, ${((Date.now() - t0) / 1000).toFixed(1)} s`);
 if (process.env.VERBOSE) console.log(reasons);
 process.exit(bad ? 1 : 0);

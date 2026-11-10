@@ -11,7 +11,7 @@ import { MARGIN } from "../core/machines.js";
 import { back, bounds, circle, edgeWalk, enter, filletPolygon, followRun, loop, moveCost, normals, rings, run, satin, zigzag } from "../core/geom.js";
 import { counterPockets, distanceTransform, order } from "../core/raster.js";
 import { strokes } from "../core/text.js";
-import { initials, latin, swashes, tidy, unswashed } from "../core/typed.js";
+import { MAX_INITIALS, MAX_WORDS, brief, initials, latin, swashes, tidy, unswashed } from "../core/typed.js";
 import { PEC_MATCH, pecThread } from "../core/threads.js";
 import { MOTIFS } from "./motifs.js";
 import { letterOutlines, motifOutlines } from "./outline.js";
@@ -1513,7 +1513,10 @@ function edgeGap([x, y], poly) {
   return d;
 }
 
-export const label = (p) => p.kind === "motif" ? `${(MOTIFS[p.motif] || MOTIFS.heart).name}` : p.kind === "text" ? `“${unswashed(p.text).replace(/\s*\n\s*/g, " / ")}”` : p.kind === "letters" ? `Appliqué ${p.text}` : p.kind === "monogram" ? `Monogram ${p.letters}`
+// A piece as the page names it, long words `brief` (`whole`: all of them, for the thread name in the file, which a
+// design's saved bytes carry)
+export const label = (p, whole = false) => p.kind === "motif" ? `${(MOTIFS[p.motif] || MOTIFS.heart).name}`
+  : p.kind === "text" ? `“${((t) => (whole ? t : brief(t)))(unswashed(p.text).replace(/\s*\n\s*/g, " / "))}”` : p.kind === "letters" ? `Appliqué ${p.text}` : p.kind === "monogram" ? `Monogram ${p.letters}`
   : p.kind === "file" ? p.name : `${shapeOf(p).name}${p.border === "applique" ? " appliqué" : ""}`;
 
 // A piece read from a saved design, the clipboard or the page's own storage, made safe to build: every field checked
@@ -1542,7 +1545,7 @@ export function cleanPiece(p) {
   const style = () => { if (q.style != null) q.style = pick(q.style, ["auto", "satin", "line"], "auto"); };
   if (p.kind === "text") {
     // (the words tidied as typing tidies them: tidy in core/typed.js; a saved "\r\n" or a cut emoji came back as stand-ins)
-    if (typeof q.text !== "string" || !(q.text = tidy(q.text, { lines: 3, max: 60 })).trim()) return null;
+    if (typeof q.text !== "string" || !(q.text = tidy(q.text, { lines: 3, max: MAX_WORDS })).trim()) return null;
     q.font = font(FONTS, "NW Great Vibes"); q.size = num(q.size, MIN, BIG, 18); style();
     q.shape = pick(q.shape, Object.keys(TEXT_SHAPES), "straight"); q.radius = num(q.radius, MIN, 400, 30);
     for (const [k, lo, hi] of [["ry", MIN, 400], ["amp", 0, 100], ["waves", 0.5, 6], ["bulge", 0, 100], ["spacing", -10, 40], ["leading", 80, 200]])
@@ -1554,10 +1557,10 @@ export function cleanPiece(p) {
       if (k.length) q.kern = Object.fromEntries(k.map(([i, v]) => [i, Math.min(50, Math.max(-30, Math.round(v)))])); else delete q.kern;
     }
   } else if (p.kind === "monogram") {
-    if (typeof q.letters !== "string" || !(q.letters = tidy(q.letters, { max: 12 })).trim()) return null;
+    if (typeof q.letters !== "string" || !(q.letters = tidy(q.letters, { max: MAX_INITIALS })).trim()) return null;
     q.font = font(FONTS, "NW Great Vibes"); q.size = num(q.size, MIN, BIG, 30); style();
   } else if (p.kind === "letters") {
-    if (typeof q.text !== "string" || !(q.text = tidy(q.text, { max: 12 })).trim()) return null;
+    if (typeof q.text !== "string" || !(q.text = tidy(q.text, { max: MAX_INITIALS })).trim()) return null;
     q.font = font(APPLIQUE_FONTS, APPLIQUE_FONTS[0].family); q.size = num(q.size, MIN, BIG, 60);
   } else if (p.kind === "motif") {
     q.motif = own(MOTIFS, q.motif) ? q.motif : "heart"; q.size = num(q.size, MIN, BIG, 40);
@@ -1968,7 +1971,7 @@ function carve(p, stages, above, fab) {
     if (carved.size > 12) carved.delete(carved.keys().next().value);
   }
   const fill = carved.get(key); if (!fill) return stages;
-  const place = placer(p), placed = fill.map((st) => ({ ...st, label: label(p), paths: st.paths.map((q) => moved(q, place)) }));
+  const place = placer(p), placed = fill.map((st) => ({ ...st, label: label(p, true), paths: st.paths.map((q) => moved(q, place)) }));
   return [...placed, ...stages.filter((s) => !s.patchFill)];
 }
 
@@ -2129,7 +2132,7 @@ function build(pieces, hoop, opts) {
   pieces = pieces.map((p) => (fit.has(p.id) ? { ...p, size: fit.get(p.id) } : p));
   const box = (paths) => { const [x0, y0, x1, y1] = bounds(paths.flat()); return [x0 - 1, y0 - 1, x1 + 1, y1 + 1]; };
   const hits = (a, b) => a[0] < b[2] && b[0] < a[2] && a[1] < b[3] && b[1] < a[3];
-  const order = [], last = [], edges = [], staged = pieces.map((p) => pieceStages(p, fab).map((st) => ({ label: label(p), ...st })));
+  const order = [], last = [], edges = [], staged = pieces.map((p) => pieceStages(p, fab).map((st) => ({ label: label(p, true), ...st })));
   pieces.forEach((p, i) => { if (QUILTED(p)) staged[i] = withQuilt(p, staged[i], staged.filter((_, j) => j !== i).flat(), opts.dragging, opts.later); });
   // patches: no fill under what's sewn on them (fine-line lettering excepted)
   pieces.forEach((p, i) => {
