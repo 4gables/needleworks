@@ -1289,7 +1289,7 @@ function paletteUI() {
   // (said as what happened, not as a fault: "3 colours were too close" beside a slider at 6 read like an error)
   const asked = state.pic.colors;
   $("pic-merged").textContent = state.pic.merged ? `${asked} asked for, ${cols.length} used: this picture has only ${cols.length} ${cols.length === 1 ? "colour" : "colours"} different enough to need ${cols.length === 1 ? "a thread of its own" : "threads of their own"} (the rest are shades of ${cols.length === 1 ? "it" : "these"} or of the fabric).` : "";
-  if (state.pic.framed) $("pic-merged").textContent += `${state.pic.merged ? " " : ""}${FRAMED}`;
+  if (state.pic.framed) $("pic-merged").insertAdjacentHTML("beforeend", `${state.pic.merged ? " " : ""}<span data-problem="framed">${FRAMED}</span>`);
   ownedNote();
   const open = state.pic.swapOpen;
   $("pic-palette").innerHTML = cols.map((c) => `<button type="button" data-id="${c.id}" aria-pressed="${!state.pic.skip.includes(c.id)}" aria-expanded="${c.id === open}" aria-controls="pic-swap">

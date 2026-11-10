@@ -199,7 +199,7 @@ const READ = String.raw`(async () => {
     out.finish = $$("#st-steps li.after").filter((l) => /When it's done/.test(l.querySelector("b")?.textContent || "")).map((l) => l.textContent).join(" ");
     grab($("#st-steps"));
   } else if (out.mode === "picture") {
-    out.editor = ids("#pic-fine [data-problem], #pic-owned [data-problem]");
+    out.editor = ids("#pic-fine [data-problem], #pic-owned [data-problem], #pic-merged [data-problem]");
     out.untagged = [...$$("#pic-fine, #pic-owned")].filter((e) => !e.hidden && e.textContent.trim() && !e.querySelector("[data-problem]")).map((e) => e.textContent);
     out.steps = ids("#pic-steps [data-problem]"); out.stepsCount = $("#pic-steps-count").innerText;
     out.stepThreads = []; grab($("#pic-steps"));
