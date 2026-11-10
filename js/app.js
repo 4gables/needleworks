@@ -47,7 +47,7 @@ const state = {
   // their spools from brands not charted here (Madeira), matched by colour: [{ brand, num, hex }]. Ticking the nearest
   // Brother spool stood for it, and every surface then said "Your Brother 079 Salmon Pink", a spool they didn't own
   mine: (store.get("myspools", []) || []).filter((o) => o && typeof o.brand === "string" && /^#[0-9a-f]{6}$/i.test(o.hex)),
-  pic: { mine: store.get("pic.mine", false), style: "fill", cross: 2.5, file: null, bitmap: null, key: 0, skip: [], swap: {}, colors: 6, size: 100, angle: 45, bg: true, density: store.get("pic.density", "standard"), req: 0, colorsInfo: [], line: "", models: new Map() },
+  pic: { mine: store.get("pic.mine", false), style: "fill", cross: 2.5, file: null, bitmap: null, key: 0, skip: [], swap: {}, colors: 6, size: 100, angle: 45, bg: true, density: store.get("pic.density", "standard"), req: 0, colorsInfo: [], line: "", edge: false, models: new Map() },
 };
 if (!MACHINES[state.machine]) state.machine = DEFAULT_MACHINE;
 const hoop = () => getHoop(state.machine, state.hoopId);
@@ -153,8 +153,8 @@ function setView(v) {
     // the stop the Open tab called "1 thread change"; two hoopings count the stops in both files)
     stops ? stopsFact(...counts) : "",
     `<span>${v.fact.time}</span>`,
-    // (the Design tab never said it fits, as the Open tab's file card does)
-    v.split ? `<span>${v.split.length} hoopings</span>` : fits ? (state.mode === "design" ? `<span>Fits ${escapeHtml(h.name.replace(/ hoop$/, ""))}</span>` : "") : `<span class="bad">Too big for the ${h.name}</span>`,
+    // (the Design and Picture tabs never said it fits, as the Open tab's file card does)
+    v.split ? `<span>${v.split.length} hoopings</span>` : fits ? (state.mode !== "open" ? `<span>Fits ${escapeHtml(h.name.replace(/ hoop$/, ""))}</span>` : "") : `<span class="bad">Too big for the ${h.name}</span>`,
     offCentre(v, fits) ? `<span class="note">Off centre here: the machine centres it <button type="button" class="link" id="recentre">Centre it</button></span>` : "",
     snips ? `<span${tip("Short threads the machine leaves between two parts instead of cutting them. They're locked at both ends, so snip them after stitching. (The machine only cuts moves longer than its “jump stitch not to trim” setting, 5 mm at the lowest.)")}>${v.fact.snips}</span>` : "",
   ].join("");
@@ -563,8 +563,9 @@ function downloaded(v, zipped, files = [], saved = true) {
   $("done-checked").className = bad.length || part ? "warn" : "good";
   $("done-zip").hidden = !zipped;
   // (several designs saved this session: a newcomer asked which order to sew them in) Counted per tab: saves on
-  // another tab said "each file you've saved is a design of its own" after one save of one opened file.
-  const mine = ((downloaded.names ||= {})[state.mode] ||= new Set());
+  // another tab said "each file you've saved is a design of its own" after one save of one opened file. Pictures and
+  // Design your own count together (each makes a design of its own: a picture saved after two names didn't say it)
+  const mine = ((downloaded.names ||= {})[state.mode === "open" ? "open" : "made"] ||= new Set());
   if (saved) mine.add(v.filename);
   $("done-own").hidden = !saved || mine.size < 2;
   $("done-phone").hidden = !matchMedia("(pointer: coarse)").matches;
@@ -1273,7 +1274,7 @@ const picJobs = picWorker(), picChecks = picWorker();
 function picSettings(over = {}) {
   const p = state.pic, h = hoop(), turn = !!state.turn.picture && !square();
   return { size: p.size, style: p.style, cross: p.cross, skip: p.skip, swap: p.swap, colors: p.colors, bg: p.bg, angle: p.angle, density: p.density,
-    line: p.line, turn, hoop: turn ? { ...h, w: h.h, h: h.w } : h, palette: ownedPalette(), ...over };
+    line: p.line, edge: p.edge, turn, hoop: turn ? { ...h, w: h.h, h: h.w } : h, palette: ownedPalette(), ...over };
 }
 // the fit each exact setting was sewn at (sewing it again gives the same file, at once)
 const picFits = new Map();
@@ -1282,11 +1283,13 @@ const picFits = new Map();
 // settings came (isStale).
 async function sewPicture(s, wk, isStale = () => false) {
   const p = state.pic, bitmap = p.bitmap;
-  const box = s.bg ? (p.box ||= contentBox(bitmap)) : { sx: 0, sy: 0, sw: bitmap.width, sh: bitmap.height };
-  const key = `${p.key}:${s.colors}:${s.bg}:${box.sx},${box.sy},${box.sw},${box.sh}`, k = LEARN / Math.max(box.sw, box.sh);
+  // (the whole picture when its edge band is sewn: the content box is what differs from the edge, so it cut the band
+  // down to its inner 2 px)
+  const box = s.bg && !s.edge ? (p.box ||= contentBox(bitmap)) : { sx: 0, sy: 0, sw: bitmap.width, sh: bitmap.height };
+  const key = `${p.key}:${s.colors}:${s.bg}:${s.edge ? 1 : 0}:${box.sx},${box.sy},${box.sw},${box.sh}`, k = LEARN / Math.max(box.sw, box.sh);
   if (p.learn?.key !== key) p.learn = { key, img: pictureImage(bitmap, box, Math.max(1, Math.round(box.sw * k)), Math.max(1, Math.round(box.sh * k))) };
   const learn = p.learn.img;
-  const opts = { colors: s.colors, removeBackground: s.bg, fillAngle: s.angle, density: DENSITY[s.density] || DENSITY.standard, skip: s.skip, ...(s.swap && Object.keys(s.swap).length ? { swap: s.swap } : {}), hoop: s.hoop, turn: s.turn, palette: s.palette, style: s.style, cross: s.cross, line: s.line || undefined };
+  const opts = { colors: s.colors, removeBackground: s.bg, fillAngle: s.angle, density: DENSITY[s.density] || DENSITY.standard, skip: s.skip, ...(s.swap && Object.keys(s.swap).length ? { swap: s.swap } : {}), hoop: s.hoop, turn: s.turn, palette: s.palette, style: s.style, cross: s.cross, line: s.line || undefined, edge: s.edge || undefined };
   // (kept per colour count: the checks try other counts)
   if (!p.models.has(key)) {
     const m = await wk.run({ key, learn, opts });
@@ -1297,7 +1300,7 @@ async function sewPicture(s, wk, isStale = () => false) {
   const fk = JSON.stringify([key, s.size, opts]);
   const r = await sewSized(async (pl) => {
     if (isStale()) return { ok: false, stale: true };
-    const q = await wk.run({ key, ref: `${p.key}:${s.bg}`, learn, img: pictureImage(bitmap, pl.crop, pl.w, pl.h), crop: pl.frac, opts });
+    const q = await wk.run({ key, ref: `${p.key}:${s.bg}:${s.edge ? 1 : 0}`, learn, img: pictureImage(bitmap, pl.crop, pl.w, pl.h), crop: pl.frac, opts });
     return isStale() ? { ok: false, stale: true } : q;
   }, (fit) => picturePlan(box, sewn, s.size, s.hoop, undefined, fit), { style: s.style, cross: s.cross, fit: picFits.get(fk) });
   if (r.stale || isStale()) return { stale: true };
@@ -1314,7 +1317,7 @@ async function makePicture() {
   if (r.stale || req !== p.req) return;
   busy(false);
   if (r.plan) sizeRange(r.plan.max);
-  if (!r.ok) { state.views.picture = null; $("pic-use").hidden = true; if (state.mode === "picture") { setView(null); pictureError(r); } return; }
+  if (!r.ok) { state.views.picture = null; $("pic-use").hidden = $("pic-size-note").hidden = true; if (state.mode === "picture") { setView(null); pictureError(r); } return; }
   showError("");
   // (in the order they're sewn, then any left out)
   const byId = new Map(r.colors.map((c) => [c.id, c]));
@@ -1324,11 +1327,20 @@ async function makePicture() {
   // (asked for 4, got 3: say why, instead of a slider that looks ignored)
   state.pic.merged = r.merged || 0;
   // (a band of one colour round the edge is taken as a frame and left out (`findFrame`): said, it went with no word)
-  state.pic.framed = !!r.framed;
+  state.pic.framed = !!r.framed; if (r.framed) p.edgeSeen = true;
   state.pic.owned = r.owned || null;
   const mt = machineThreads(r.pattern.threads);
   state.pic.machineName = new Map(r.pattern.threads.map((t, i) => [t.color, mt[i].name]));
   paletteUI();
+  // (sewn longer or shorter than the Size asked, past what the style can do: said why. etsy_7 in cross-stitch at 60 mm
+  // sewed 52 x 10 with nothing said)
+  {
+    // (measured on the file, as the size chip is)
+    const st = designStats(readEmbroidery(r.bytes)), got = +Math.max(st.widthMm, st.heightMm).toFixed(0), want = Math.min(s.size, p.max || s.size), tol = s.style === "cross" ? s.cross / 2 : 0.4;
+    const off = Number.isFinite(got) && Math.abs(got - want) > Math.max(tol, 1);
+    $("pic-size-note").hidden = !off;
+    $("pic-size-note").textContent = off ? `It sews ${got} mm long, not ${want}: ${s.style === "cross" ? `cross-stitch grows ${s.cross} mm at a time, and parts too small for a cross drop out` : "parts too small to sew at this Size drop out"}, so the nearest it can be is ${got} mm.` : "";
+  }
   p.fine = { ...r.fine, tries: r.tries }; p.checking = false;
   fineUI(r.fine);
   const base = safeName((state.pic.file?.name || "picture").replace(/\.[^.]+$/, ""), "picture");
@@ -1354,14 +1366,21 @@ function pictureError(r) {
 }
 function setSize(mm) { state.pic.size = mm; $("pic-size").value = mm; $("pic-size-out").textContent = sizeLabel(mm); makePicture(); }
 
+$("pic-merged").onclick = (e) => {
+  const b = e.target.closest("[data-edge]"); if (!b) return;
+  state.pic.edge = b.dataset.edge === "1"; state.pic.skip = []; state.pic.swap = {}; makePicture();
+};
 const FRAMED = "The band of one colour round the picture's edge looks like a frame round it, so it isn't sewn.";
 function paletteUI() {
   const cols = state.pic.colorsInfo.filter((c) => !c.background && c.area > 0);
-  $("pic-merged").hidden = !state.pic.merged && !state.pic.framed;
+  const edge = state.pic.edge && state.pic.edgeSeen;
+  $("pic-merged").hidden = !state.pic.merged && !state.pic.framed && !edge;
   // (said as what happened, not as a fault: "3 colours were too close" beside a slider at 6 read like an error)
   const asked = state.pic.colors;
   $("pic-merged").textContent = state.pic.merged ? `${asked} asked for, ${cols.length} used: this picture has only ${cols.length} ${cols.length === 1 ? "colour" : "colours"} different enough to need ${cols.length === 1 ? "a thread of its own" : "threads of their own"} (the rest are shades of ${cols.length === 1 ? "it" : "these"} or of the fabric).` : "";
-  if (state.pic.framed) $("pic-merged").insertAdjacentHTML("beforeend", `${state.pic.merged ? " " : ""}<span data-problem="framed">${FRAMED}</span>`);
+  // (a guess: the band may be the drawing's own, so it can be sewn, and left out again)
+  if (state.pic.framed) $("pic-merged").insertAdjacentHTML("beforeend", `${state.pic.merged ? " " : ""}<span data-problem="framed">${FRAMED} <button type="button" class="link" data-edge="1">Sew the edge band too</button></span>`);
+  else if (edge) $("pic-merged").insertAdjacentHTML("beforeend", `${state.pic.merged ? " " : ""}<span>The band round the picture's edge is sewn too. <button type="button" class="link" data-edge="0">Leave it out</button></span>`);
   ownedNote();
   const open = state.pic.swapOpen;
   $("pic-palette").innerHTML = cols.map((c) => `<button type="button" data-id="${c.id}" aria-pressed="${!state.pic.skip.includes(c.id)}" aria-expanded="${c.id === open}" aria-controls="pic-swap">
@@ -1461,6 +1480,8 @@ function fineUI(fine) {
   }
   // (a thin line left out is one of those parts: said once)
   if (lost) hair = false;
+  markThumb(lost ? k.spots : null);
+  const ringed = lost && k.spots?.length ? (k.lost > k.spots.length ? " (the biggest are ringed in your picture above)" : " (ringed in your picture above)") : "";
   p.fineProblems = [gaps && { id: "gaps", level: LOOK, text: gap }, hair && { id: "hairline", level: LOOK, text: line }, lost && { id: "lost", level: LOOK, text: gone }].filter(Boolean);
   $("pic-fine").hidden = !gaps && !hair && !lost;
   // (each fix was sewn first and keeps them: checkLost)
@@ -1468,7 +1489,7 @@ function fineUI(fine) {
   $("pic-fine").innerHTML = [
     gaps ? `<span data-problem="gaps">${gap} ${p.size < (p.max || 0) ? "A bigger Size keeps more of them open." : "This is as big as the hoop allows."}</span>` : "",
     hair ? `<span data-problem="hairline">${line} Draw it thicker in the picture to have it sewn.</span>` : "",
-    lost ? `<span data-problem="lost">${escapeHtml(gone)} ${fixes || (p.checking ? "" : k.lost === 1 ? "Draw it bigger or bolder in the picture to have it sewn." : "Draw them bigger or bolder in the picture to have them sewn.")}</span>` : "",
+    lost ? `<span data-problem="lost">${escapeHtml(gone.replace(/\.$/, ringed + "."))} ${fixes || (p.checking ? "" : k.lost === 1 ? "Draw it bigger or bolder in the picture to have it sewn." : "Draw them bigger or bolder in the picture to have them sewn.")}</span>` : "",
   ].filter(Boolean).join(" ");
   if (state.view && state.view === state.views.picture) warnUI(state.view);
 }
@@ -1494,8 +1515,8 @@ async function checkLost(s, req) {
   const keeps = async (over) => {
     const r = await sewPicture({ ...s, ...over }, picChecks, stale);
     if (r.stale || stale()) return null;
-    const kept = !!r.ok && r.fine.kept.ids.filter((i) => now.has(i)).length <= 0.25 * now.size;
-    return { kept, quiet: kept && !lostMuch(r.fine.kept) };
+    const still = r.ok ? r.fine.kept.ids.filter((i) => now.has(i)).length : now.size, kept = still <= 0.25 * now.size;
+    return { kept, quiet: kept && !lostMuch(r.fine.kept), saved: now.size - still };
   };
   const offer = (label, over) => { p.fixes.push({ label, over }); fineUI(p.fine); };
   p.checking = true;
@@ -1511,6 +1532,10 @@ async function checkLost(s, req) {
         if (good(q)) hi = mid; else lo = mid;
       }
       offer(`Make it ${hi} mm${hi === p.max ? " (as big as fits)" : ""}`, { size: hi });
+    } else if (top.saved >= Math.max(2, 0.4 * now.size)) {
+      // (no Size keeps three in four, but the biggest keeps many: said with how many. etsy_7 Filled at 30-70 mm had
+      // no fix offered, though a bigger Size kept most of its doodles)
+      offer(`Make it ${p.max} mm (as big as fits: ${top.saved} of the ${now.size} are sewn)`, { size: p.max });
     }
   }
   // the fewest more thread colours that keep them (a pale colour sewn as fabric when threads ran short)
@@ -1579,7 +1604,7 @@ async function loadPicture(file, sample = false) {
   if (!file || !file.type.startsWith("image/")) { showError("That doesn't look like a picture. Try a PNG or JPG."); return; }
   try {
     const bitmap = await createImageBitmap(file);
-    Object.assign(state.pic, { file, bitmap, box: null, key: state.pic.key + 1, skip: [], swap: {}, models: new Map(), autoLine: "" });
+    Object.assign(state.pic, { file, bitmap, box: null, key: state.pic.key + 1, skip: [], swap: {}, edge: false, edgeSeen: false, models: new Map(), autoLine: "" });
     setThumb(file); $("pic-rotate").hidden = false;
     $("pic-drop").querySelector(".drop-text").innerHTML = sample ? "<b>Choose your own picture</b> or drop it here." : `<b>${escapeHtml(file.name)}</b> · choose another`;
     $("pic-sample-note").hidden = !sample;
@@ -1604,16 +1629,36 @@ function sizeRange(max) {
 $("pic-file").onchange = (e) => loadPicture(e.target.files[0]);
 
 function setThumb(blob) {
-  const thumb = $("pic-thumb");
-  if (thumb.src) URL.revokeObjectURL(thumb.src);
-  thumb.src = URL.createObjectURL(blob); thumb.hidden = false;
+  const thumb = $("pic-thumb"), p = state.pic;
+  if (p.thumbUrl) URL.revokeObjectURL(p.thumbUrl);
+  p.thumbUrl = thumb.src = URL.createObjectURL(blob); p.marked = ""; thumb.hidden = false;
+}
+// The parts of the picture left out, ringed on its thumbnail (`spots`: fractions of the copy the colours were learned
+// from, keptParts); none: the plain picture again. ("A very thin line is left out" didn't say which: a child's
+// dinosaur had lost its eye and nobody could see where.)
+function markThumb(spots) {
+  const p = state.pic, b = p.bitmap, thumb = $("pic-thumb"), key = spots?.length ? JSON.stringify([p.key, p.bg, p.edge, spots]) : "";
+  if (!b || key === (p.marked || "")) return;
+  p.marked = key;
+  if (!key) { thumb.src = p.thumbUrl; thumb.alt = ""; return; }
+  const k = Math.min(1, 480 / Math.max(b.width, b.height)), c = document.createElement("canvas"), g = c.getContext("2d");
+  c.width = Math.round(b.width * k); c.height = Math.round(b.height * k);
+  g.drawImage(b, 0, 0, c.width, c.height);
+  const box = p.bg && !p.edge && p.box ? p.box : { sx: 0, sy: 0, sw: b.width, sh: b.height }, u = Math.max(c.width, c.height) / 90;
+  for (const [x0, y0, x1, y1] of spots) {
+    const X = (box.sx + ((x0 + x1) / 2) * box.sw) * k, Y = (box.sy + ((y0 + y1) / 2) * box.sh) * k;
+    const r = Math.max(((x1 - x0) * box.sw * k) / 2, ((y1 - y0) * box.sh * k) / 2, u) + 1.5 * u;
+    g.beginPath(); g.arc(X, Y, r, 0, 2 * Math.PI);
+    g.lineWidth = 2.2 * u; g.strokeStyle = "#fff"; g.stroke(); g.lineWidth = 1.2 * u; g.strokeStyle = "#d1005a"; g.stroke();
+  }
+  thumb.src = c.toDataURL(); thumb.alt = "Your picture, with the parts that are left out ringed";
 }
 // a quarter turn clockwise; the turned picture is what gets stitched (and shown in the thumbnail)
 $("pic-rotate").onclick = async () => {
   const p = state.pic, b = p.bitmap; if (!b) return;
   const c = makeCanvas(b.height, b.width), ctx = c.getContext("2d");
   ctx.translate(b.height, 0); ctx.rotate(Math.PI / 2); ctx.drawImage(b, 0, 0);
-  Object.assign(p, { bitmap: await createImageBitmap(c), box: null, key: p.key + 1, skip: [], swap: {}, models: new Map() });
+  Object.assign(p, { bitmap: await createImageBitmap(c), box: null, key: p.key + 1, skip: [], swap: {}, edge: false, edgeSeen: false, models: new Map() });
   setThumb(c.convertToBlob ? await c.convertToBlob() : await new Promise((r) => c.toBlob(r)));
   makePicture();
 };
