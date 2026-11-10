@@ -6,7 +6,7 @@ import { DEFAULT_MACHINE, MACHINES, MARGIN, hoop as getHoop } from "./core/machi
 import { DENSITY, LEARN, contentBox, picturePlan, pictureImage } from "./core/digitize.js";
 import { hexToRgb, nearestBrotherThread, pecThread } from "./core/threads.js";
 import { CLOTHS, colorBlocks, draw } from "./render.js";
-import { FINISH, FIRST_STEP, TURN_PIC, cutDXF, cutSize, cutSVG, nextThread, sewSheet, youHtml } from "./sheet.js";
+import { FINISH, FIRST_STEP, TURNED, TURN_PIC, cutDXF, cutSize, cutSVG, nextThread, sewMinutes, sewSheet, youHtml } from "./sheet.js";
 import { handOut, judge } from "./gate.js";
 import { DST_COLOURS, checkup, fewerBlocks, fix, heat, openedFile, pauses, shortJumps, sortedChanges } from "./doctor.js";
 import { HARD, MAX_BLOCKS, denseWords, moves, verdictOf } from "./quality.js";
@@ -112,6 +112,8 @@ function setView(v) {
     catch (err) { v.file = null; showError("This file didn't read back: " + err.message); $("download").disabled = true; $("share").disabled = true; return; }
   }
   v.shown = turned() ? turnPattern(v.file, false) : v.file; v.heat = null;
+  // (the turned hoop's note as the view says it: an in-the-hoop design hoops bare stabilizer, so its fabric goes round)
+  $("done-turn-text").textContent = v.turnNote || TURNED;
   v.cache = colorBlocks(v.shown);
   const st = designStats(v.file), h = hoop(), shown = designStats(v.shown);
   // (a split design is checked part by part when it's downloaded)
@@ -122,7 +124,8 @@ function setView(v) {
   // design's colour changes said "1 pause" beside steps with none)
   const stops = v.split ? v.split.reduce((a, p) => a + designStats(p.pattern).colorChanges, 0) : st.colorChanges;
   const counts = (v.split ? v.split.map((q) => stopCounts(q.pattern)) : [stopCounts(v.file, st.colorChanges)]).reduce((a, b) => [a[0] + b[0], a[1] + b[1]]);
-  const minutes = Math.max(1, Math.round(st.stitches / 550 + stops * 0.5)), snips = shortJumps(v.file);
+  // (the threads the machine cuts take time too: a jump of 5 mm or less isn't cut, `snips`)
+  const snips = shortJumps(v.file), minutes = sewMinutes(st.stitches, Math.max(0, st.trims - snips), stops);
   $("fact-tip")?.remove();
   const orient = turned() ? "turned" : state.mode === "open" && !square() ? "machine" : "";
   $("facts").innerHTML = [
@@ -525,14 +528,24 @@ function downloaded(v, zipped, files = [], saved = true) {
   // (and a design with no pauses has none to follow)
   // (two hoopings: which file first, and the rehooping between them; it said "Pick the design and press Start")
   // (stops named as they are: "at each pause, thread the next colour" on a picture with thread changes only)
-  const at = stopsAt(ch, same);
-  $("done-sew").textContent = parts ? `Sew ${v.split[0].filename} first${ch + same ? `, following “How to stitch it” ${at}` : ""}. Then hoop the fabric again as “How to stitch it” says (it lines up on the two crosses) and sew ${v.split[1].filename}.`
+  // (“How to stitch it” is a link to the steps: at 1413 x 717 they were ~850 px down, under the whole editor)
+  const at = stopsAt(ch, same), how = `<button type="button" class="link" data-steps-link>How to stitch it</button>`;
+  $("done-sew").innerHTML = parts ? `Sew ${escapeHtml(v.split[0].filename)} first${ch + same ? `, following ${how} ${at}` : ""}. Then hoop the fabric again as ${how} says (it lines up on the two crosses) and sew ${escapeHtml(v.split[1].filename)}.`
     : !(ch + same) ? "Pick the design and press Start."
-    : state.mode === "design" ? `Pick the design, then follow “How to stitch it” (or Sew along) ${at}.`
-    : `Pick the design and press Start. ${ch ? `At each thread change, put on the next thread listed with the preview${same ? "; at a pause, keep the same thread on" : ""}` : "At each pause, keep the same thread on"} (Sew along shows each step).`;
+    : state.mode === "design" ? `Pick the design, then follow ${how} (or Sew along) ${at}.`
+    : escapeHtml(`Pick the design and press Start. ${ch ? `At each thread change, put on the next thread listed with the preview${same ? "; at a pause, keep the same thread on" : ""}` : "At each pause, keep the same thread on"} (Sew along shows each step).`);
+  // (fabric shapes to cut: the Cutter file is said here too, not only under Download)
+  $("done-cut").hidden = !saved || !v.sheet?.cut?.length;
   $("done").showModal();
 }
 $("done-turn").insertAdjacentHTML("afterbegin", TURN_PIC);   // (the note's text stays its textContent)
+// the dialog's “How to stitch it”: closed, the steps opened and shown, focus on their heading
+$("done").addEventListener("click", (e) => {
+  if (!e.target.closest("[data-steps-link]")) return;
+  $("done").close();
+  const d = $("st-steps").closest("details"); d.open = true;
+  const s = d.querySelector("summary"); s.scrollIntoView({ block: "start", behavior: "smooth" }); s.focus({ preventScroll: true });
+});
 $("done-close").onclick = () => { if ($("done-never").checked) store.set("doneSeen", true); $("done").close(); };
 
 // sew sheet: the design at 1:1 on the hoop field, the steps, appliqué shapes; printed from a hidden block
@@ -618,7 +631,8 @@ function alongSteps(v) {
   if (turnedFile() && steps.length) steps[0] = { ...steps[0], turn: $("done-turn").textContent };
   return steps.map((s, i) => {
     const b = blocks.find((x) => x.index === i), n = b ? b.segs.reduce((a, sg) => a + sg.length, 0) : 0;
-    return { ...s, block: b, minutes: Math.max(1, Math.round(n / 550)) };
+    // (each move between parts in the block counted as a cut thread, as the facts' estimate counts trims)
+    return { ...s, block: b, minutes: sewMinutes(n, b ? Math.max(0, b.segs.length - 1) : 0) };
   });
 }
 function alongShow() {
@@ -736,11 +750,13 @@ $("names-make").onclick = async () => {
   if (!box.isConnected) $("names-note").after(box);
   const poor = files.length ? badReport(box, files, zipName) : (box.hidden = true, []);
   // (a turned file needs the fabric hooped a quarter turn round: said per file, since only the long names are)
+  // (an in-the-hoop design hoops bare stabilizer: it's the fabric laid on it that goes round)
+  const lay = state.views.design?.bare ? "lay the fabric pieces" : "hoop the fabric";
   const side = made.filter((m) => m.sideways), runs = made.filter((m) => m.runs), thin = made.filter((m) => m.thin);
   $("names-note").classList.toggle("warn", bad.length > 0 || runs.length > 0 || poor.length > 0 || left.length > 0 || thin.length > 0);
   $("names-note").textContent = `${files.length ? `Made ${files.length} ${files.length === 1 ? "file" : "files"}, saved as one .zip (open it and copy the .pes files to the USB stick). ` : ""}`
-    + (side.length === made.length && side.length > 1 ? `Every file is turned like the design: hoop the fabric a quarter turn round for each, with the top of the name toward the right of the hoop (the machine shows them on their side). `
-      : side.length ? `Hoop the fabric a quarter turn round for ${side.map((m) => m.file).join(", ")}: the machine shows ${side.length === 1 ? "it" : "them"} on ${side.length === 1 ? "its" : "their"} side, with the top of the name toward the right of the hoop. ` : "")
+    + (side.length === made.length && side.length > 1 ? `Every file is turned like the design: ${lay} a quarter turn round for each, with the top of the name toward the right of the hoop (the machine shows them on their side). `
+      : side.length ? `${lay[0].toUpperCase() + lay.slice(1)} a quarter turn round for ${side.map((m) => m.file).join(", ")}: the machine shows ${side.length === 1 ? "it" : "them"} on ${side.length === 1 ? "its" : "their"} side, with the top of the name toward the right of the hoop. ` : "")
     + (runs.length ? `Runs into another piece: ${runs.map((m) => m.name).join(", ")} (${$("names-shrink").checked ? "even at half size: shorten" : `tick "Make long names smaller", or shorten`} ${runs.length === 1 ? "it" : "them"}). ` : "")
     + (thin.length ? `Sewn as a thin line, not bold like the design (too small for bold once shrunk to fit): ${thin.map((m) => m.name).join(", ")}. ` : "")
     + (bad.length ? `Couldn't make: ${bad.join(", ")}. ` : "")

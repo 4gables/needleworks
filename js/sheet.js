@@ -9,6 +9,19 @@ import { problemsItems } from "./words.js";
 export const FIRST_STEP = "Hoop the fabric with stabilizer under it. Put on the first thread. Press Start.";
 export const FINISH = "Take the hoop off and snip any loose threads. Tear-away stabilizer: tear it off gently, holding the stitches down with your thumb. Cut-away: trim it about ¼ in from the stitching (don't tear it).";
 
+// The hooping note for a turned hoop, on every surface (steps, download dialog, sew sheet, share text, Sew along).
+// `bare`: step 1 hoops stabilizer on its own (in-the-hoop projects), so what goes a quarter turn round is the fabric
+// laid on later ("Hoop the fabric a quarter turn round" beside "Hoop tear-away stabilizer on its own" read as a
+// contradiction)
+export const TURNED = "The hoop is turned, so the machine sews this design on its side. Hoop the fabric a quarter turn round: the top of the design goes to the right-hand side of the hoop as you face the machine (the sew sheet shows it that way).";
+export const turnedNote = (bare) => bare
+  ? "The hoop is turned, so the machine sews this design on its side. Hoop the stabilizer as step 1 says (it has no top or bottom). Lay each fabric piece a quarter turn round: the top of the design goes to the right-hand side of the hoop as you face the machine (the sew sheet shows it that way)."
+  : TURNED;
+
+// Sewing time in minutes: 550 stitches a minute, about 6 s for each thread the machine cuts (`trims`: it slows, cuts
+// and starts again; a picture with 275 trims said 27 min for ~55) and half a minute for each thread change or pause
+export const sewMinutes = (stitches, trims = 0, stops = 0) => Math.max(1, Math.round(stitches / 550 + trims / 10 + stops / 2));
+
 // the turned hoop as you face the machine: a house lying with its roof (the top) to the right, an arrow that way (no
 // text in it: the note it sits in is read by its textContent for the share text and Sew along)
 export const TURN_PIC = `<svg class="turn-pic" viewBox="0 0 58 52" width="70" height="63" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="38" height="48" rx="9"/><path d="M8 12 H22 L35 26 L22 40 H8 Z M8 21 H15 V31 H8"/><path d="M44 26 H55 M51 22 L55 26 L51 30"/></svg>`;

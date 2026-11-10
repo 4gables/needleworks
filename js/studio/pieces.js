@@ -818,6 +818,12 @@ export function frontPanel(f) {
 export const BORDERS = { line: "Thin line", bold: "Bold line", satin: "Satin border", patch: "Filled patch", applique: "Appliqué", ith: "In the hoop (two-sided)", zip: "Zipper pouch (in the hoop)" };
 // fabric to cut for a w x h mm in-the-hoop piece, with 2.5 cm (1 in) spare all round to trim off
 const cut = (w, h, extra = 25) => `${Math.ceil((w + extra) / 10)} × ${Math.ceil((h + extra) / 10)} cm (${((w + extra) / 25.4).toFixed(1)} × ${((h + extra) / 25.4).toFixed(1)} in)`;
+// How far fabric laid over an outline reaches ("covering it by ½ in" read as unclear), the piece the Cutter file cuts
+// as the other way (it had no word in the steps, so testers trimmed a cut piece), and the trim it saves. Only for
+// stages with a cut file (`cut`): a design file's placement line has none.
+const past = (many) => `reaching ½ in (1 cm) past the outline${many ? "s" : ""} all round`;
+const cutPiece = (many) => `, or lay ${many ? "pieces" : "a piece"} cut with the Cutter file (Cricut or Silhouette) exactly on the line${many ? "s" : ""}`;
+const trimIt = (what, where = "") => `Unless you laid a cut piece, take the hoop off the machine (leave the fabric in the hoop), trim ${what} close to the stitching${where}, and put the hoop back.`;
 
 // ---------- pieces ----------
 // every piece: x, y (mm from the hoop centre), rot (degrees), flip (mirrored), color, id
@@ -1026,7 +1032,7 @@ function localStages(p, fab = "cotton") {
       stages = [
         { color: p.color, paths: [loop(run(edge, 2.5, true))], sews: `Sews the ${name} outline on the base fabric.`, fabric: true, solid: [edge] },
         { color: p.color, pause: true, ...seamStage(1 / 3, (f) => tack(seamAt(edge, f))),
-          you: `Lay the appliqué fabric over the ${name} outline, right side up, covering it by ½ in. Press Start: the machine tacks it down. Then take the hoop off the machine (leave the fabric in the hoop), trim the appliqué fabric close to the stitching, and put the hoop back.`,
+          you: `Lay the appliqué fabric over the ${name} outline, right side up, ${past()}${cutPiece()}. Press Start: the machine tacks it down. ${trimIt("the appliqué fabric")}`,
           sews: "", under: true },
         { color: p.color, pause: true, ...seamStage(2 / 3, (f) => satinBorder(seamAt(edge, f))), you: "Press Start.", sews: "Covers the raw edge with a satin border.", border: true },
       ];
@@ -1049,7 +1055,7 @@ function localStages(p, fab = "cotton") {
           sews: `Tacks the front pieces down round the ${name}.` },
         { color: p.color, paths: [line(yz - 7), line(yz + 7).reverse()], sews: "Topstitches beside the zipper." },
         { color: p.color, pause: true, last: true, ...seamStage(1 / 2, (f) => [...tack(seamAt(edge, f)), loop(run(seamAt(edge, f), 2.0, true))]),
-          you: `Open the zipper halfway (you'll turn the pouch through it). Lay the back piece right side down over everything, covering the outline by ½ in, and tape it. Press Start.`,
+          you: `Open the zipper halfway (you'll turn the pouch through it). Lay the back piece right side down over everything, ${past()}, and tape it. Press Start.`,
           sews: `Sews round the ${name} through every layer, three times.`,
           after: "Take it out of the hoop and tear the stabilizer away. Trim ¼ in outside the seam (pinking shears stop fraying), trim the zipper ends, clip the corners, then turn it right side out through the zipper and press." },
       ];
@@ -1062,18 +1068,25 @@ function localStages(p, fab = "cotton") {
       // (the ribbon hole is outlined with it, on the bare stabilizer: where the hole goes shows from the start. Started
       // half way round from its satin ring's start, so their locks don't share holes. The cut file is the outline
       // alone: the hole is cut after its satin ring)
+      // (what the front and back are, as the starters' tips say: the bookmark's said felt for the back, its supplies didn't)
+      const pieces1 = p.quilt ? "front and back pieces and thin batting" : "front and back pieces";
+      const kinds = p.quilt ? " (the front can be cut to shape with the Cutter file)" : ": cotton for the front (or a piece cut to shape with the Cutter file), felt for the back (it doesn't fray)";
+      const extras = (n) => `Tear-away stabilizer, tape and Fray Check${hang ? `, and ${n > 1 ? `${n} ribbons` : "a ribbon"} 6 in (15 cm) long for the loop${n > 1 ? "s" : ""}` : ""}${eye ? `, and ${n > 1 ? `${n} ribbons` : "a ribbon"} for the hole${n > 1 ? "s" : ""}` : ""}.`;
       stages = [
         { color: p.color, paths: [loop(run(edge, 2.5, true)), ...(eye ? [loop(run(seamAt(circle(eye, EYE.r, 64), 1 / 2), 1.5, true))] : [])], cut: [edge],
           sews: `Sews the ${name} outline${eye ? " and its ribbon hole" : ""} on the stabilizer.`, fabric: true, bare: true, solid: [edge],
-          before: `Fabric: front and back pieces, each ${cut(p.w, p.h)}${p.quilt ? `, thin batting the same size` : ""}, tear-away stabilizer, tape and Fray Check${hang ? ", and a 6 in (15 cm) ribbon for the loop" : ""}${eye ? ", and a ribbon for the hole" : ""}.` },
+          before: `Fabric: ${pieces1}, each ${cut(p.w, p.h)}${kinds}. ${extras(1)}`,
+          // (several in the hoop, `gang`: fabric for each, or one piece over them all; the rest once. "2 of everything"
+          // doubled the stabilizer, tape and Fray Check)
+          kit: (n, all, W, H) => `Fabric: ${pieces1} for each ${name}, each ${cut(p.w, p.h)}, or one of each ${cut(W, H)} to cover ${all}${kinds}. ${extras(n)} One piece of stabilizer does for ${all}.` },
         { color: p.color, pause: true, ...seamStage(1 / 3, (f) => tack(seamAt(edge, f))),
-          you: `Lay ${p.quilt ? "the batting, then " : ""}the front fabric over the ${name} outline, right side up, covering it by ½ in. Press Start. Then take the hoop off the machine (leave the fabric in the hoop), trim the fabric${p.quilt ? " and batting" : ""} close to the stitching, and put the hoop back.`,
+          you: `Lay ${p.quilt ? "the batting, then " : ""}the front fabric over the ${name} outline, right side up, ${past()}${cutPiece()}. Press Start. ${trimIt(`the fabric${p.quilt ? " and batting" : ""}`)}`,
           sews: "Tacks the front fabric down.", under: true },
         { color: p.color, pause: true, last: true,
           ...seamStage(2 / 3, (f) => [loop(run(seamAt(edge, f), 2.0, true)), ...(eye ? eyeRing(eye) : []), ...satinBorder(seamAt(edge, f))]),
           // (one sentence per action: the steps show them numbered. "On the front" was read while the hoop was upside
           // down, so the ribbon goes on once it's back on the machine, the embroidered side up)
-          you: `Take the hoop off the machine (leave the fabric in the hoop) and turn it upside down. Tape the backing fabric over the stabilizer, right side facing you, covering the ${name} by ½ in. Turn the hoop back over and put it back on the machine.${hang ? ` For the loop, fold the ribbon in half and tape it on the embroidered side at the top of the ${name}, loop pointing in toward the middle, ends ½ in past the outline.` : ""} Press Start.`,
+          you: `Take the hoop off the machine (leave the fabric in the hoop) and turn it upside down. Tape the backing fabric over the stabilizer, right side facing you, reaching ½ in (1 cm) past the ${name} outline all round. Turn the hoop back over and put it back on the machine.${hang ? ` For the loop, fold the ribbon in half and tape it on the embroidered side at the top of the ${name}, loop pointing in toward the middle, ends ½ in past the outline.` : ""} Press Start.`,
           sews: `Tacks the backing on and covers the edge${eye ? " and a ribbon ring" : ""} with satin stitch through every layer.`,
           after: `Take it out of the hoop, tear the stabilizer away and cut round the ${name} as close to the satin stitches as you can without nicking them${hang ? " (keep the ribbon loop clear of the scissors). Flip the ribbon loop up." : "."} Run Fray Check along the cut edge and let it dry, then snip off any fibres still poking out.${eye ? " Dab Fray Check inside the ribbon ring and let it dry, then snip out the hole inside it and loop a ribbon through." : ""}` },
       ];
@@ -1111,7 +1124,7 @@ function localStages(p, fab = "cotton") {
         solid: b.paths.filter((q) => q.length > 3 && Math.hypot(q[0][0] - q[q.length - 1][0], q[0][1] - q[q.length - 1][1]) < 1) });
       if (kind(b) === "cut") s.sews = `Sews the cutting line (${b.name}).`;
       if (kind(b) === "tack") s.sews = `Tacks the appliqué fabric down (${b.name}).`;
-      if (was === "place") s.you = "Lay the appliqué fabric over the placement line, right side up, covering it by ½ in. Press Start.";
+      if (was === "place") s.you = "Lay the appliqué fabric over the placement line, right side up, reaching ½ in (1 cm) past it all round. Press Start.";
       else if (was === "tack") s.you = "Take the hoop off the machine (leave the fabric in the hoop), trim the appliqué fabric close to the tack-down stitching, put the hoop back and press Start.";
       else if (was === "cut") s.you = "If the design's own instructions say to cut here, cut along that line (leave the fabric in the hoop). Then press Start.";
       if (s.you) s.pause = true;
@@ -1175,7 +1188,7 @@ function appliqued(loops, color, what, cover, trim, them = "it") {
   return [
     { color, paths: R.placement, cut: loops, solid: loops, sews: `Sews the outline of ${what} on the base fabric.`, fabric: true },
     { color, pause: true, paths: R.tack,
-      you: `Lay the appliqué fabric over ${cover}, right side up, covering ${them} by ½ in. Press Start: the machine tacks it down. Then take the hoop off the machine (leave the fabric in the hoop), trim the fabric close to the stitching ${trim}, and put the hoop back.`,
+      you: `Lay the appliqué fabric over ${cover}, right side up, ${past(them === "them")}${cutPiece(them === "them")}. Press Start: the machine tacks it down. ${trimIt("the fabric", " " + trim)}`,
       sews: "", under: true },
     { color, pause: true, paths: R.satin, you: "Press Start.", sews: "Covers the raw edges with satin stitch." },
   ];
@@ -2047,6 +2060,7 @@ const crosses = (marks) => marks.map(([x, y]) => [[x, y], [x + 5, y], [x - 5, y]
 // emptied into the first's (`staged` changed in place); what's on each frame is untouched.
 const GANG = ["ith", "zip"];
 function gang(pieces, staged) {
+  const gangs = [];
   const box = (p) => { const [x0, y0, x1, y1] = bounds(shapeOf(p).path(p.w, p.h).map(placer(p))); return [x0, y0, x1, y1]; };
   const apart = (a, b) => a[2] < b[0] || b[2] < a[0] || a[3] < b[1] || b[3] < a[1];
   const twin = (a, b) => a.border === b.border && a.shape === b.shape && a.color === b.color && !!a.quilt === !!b.quilt && !!a.eyelet === !!b.eyelet;
@@ -2060,19 +2074,49 @@ function gang(pieces, staged) {
     });
     if (group.length < 2) return;
     const n = group.length, all = n === 2 ? "both" : `all ${n}`, name = shapeOf(p).name.toLowerCase();
+    const bs = group.map((k) => box(pieces[k])), W = Math.max(...bs.map((b) => b[2])) - Math.min(...bs.map((b) => b[0])), H = Math.max(...bs.map((b) => b[3])) - Math.min(...bs.map((b) => b[1]));
+    gangs.push({ n, name });
     staged[i] = staged[i].map((st, k) => {
       const mates = group.slice(1).map((j) => staged[j][k]);
       const out = { ...st, paths: [...st.paths, ...mates.flatMap((m) => m.paths)], sews: st.sews ? `${st.sews.replace(/\.$/, "")}, on ${all}.` : st.sews };
+      if (st.after) out.after = st.after.replace(`cut round the ${name}`, `cut round each ${name}`);
       for (const key of ["cut", "solid"]) if (st[key]) out[key] = [...st[key], ...mates.flatMap((m) => m[key] || [])];
       // (the needle comes to the first frame's outline first: only its start moves)
       if (st.reseam) out.reseam = (f) => [...st.reseam(f), ...mates.flatMap((m) => m.paths)];
-      if (st.before) out.before = `${st.before} That's for each ${name}: ${n} of everything, or pieces big enough to cover ${all}.`;
-      if (st.pause && st.you) out.you = st.you.replace(/\b(the|each) (front|backing) fabric\b/, (m) => `${m} (one piece over ${all} ${name}s, or one each)`);
+      if (st.before) out.before = st.kit ? st.kit(n, all, W, H) : `${st.before} That's for one ${name}: the fabric pieces ${n} times over, one set for each. One piece of stabilizer does for ${all}.`;
+      // (the outlines, plural: "over the bookmark outline" with two in the hoop)
+      if (st.pause && st.you) out.you = st.you.replace(/\b(the|each) (front|backing) fabric\b/, (m) => `${m} (one piece over ${all} ${name}s, or one each)`)
+        .replace(`the ${name} outline`, `the ${name} outlines`).replace("past the outline all round", "past the outlines all round").replace("a piece cut with", "pieces cut with").replace("exactly on the line", "exactly on the lines");
       return out;
     });
     for (const j of group.slice(1)) { staged[j] = []; done.add(j); }
     done.add(i);
   });
+  return gangs;
+}
+// The steps' words, read as a whole:
+//  - the same sentence twice in a step is said once with how many ("Sews the monogram J. Sews the monogram J." with two
+//    key fobs in the hoop): "on both key fobs" when that many were made in the hoop together, else "(2 of them)";
+//  - "…and put the hoop back." then, next step, "Take the hoop off the machine…" (an in-the-hoop front trimmed, then
+//    lettering in the same thread before the backing): the hoop stays off, and the next step says "if it's still on"
+//    (a cut piece needs no trimming, so the hoop may never have come off).
+function tidySteps(steps, gangs) {
+  for (const st of steps) {
+    const n = new Map();
+    for (const t of st.sews) n.set(t, (n.get(t) || 0) + 1);
+    st.sews = [...n].map(([t, k]) => {
+      if (k < 2) return t;
+      const g = gangs.find((x) => x.n === k);
+      return `${t.replace(/\.$/, "")}${g ? ` on ${k === 2 ? "both" : `all ${k}`} ${g.name}s` : ` (${k} of them)`}.`;
+    });
+  }
+  const OFF = "Take the hoop off the machine (leave the fabric in the hoop)";
+  for (let i = 0; i + 1 < steps.length; i++) {
+    const a = steps[i], b = steps[i + 1];
+    if (!a.you || !b.you || !/,? and put the hoop back\.$/.test(a.you) || !b.you.replace(/^Change to the next thread\. /, "").startsWith(OFF)) continue;
+    a.you = a.you.replace(/,? and put the hoop back\.$/, ".").replace(/\), (trim [^.]*\.)$/, ") and $1");
+    b.you = b.you.replace(OFF, "Take the hoop off the machine if it's still on (leave the fabric in the hoop)");
+  }
 }
 export function compose(pieces, hoop, opts = {}) {
   const was = wt;
@@ -2093,7 +2137,7 @@ function build(pieces, hoop, opts) {
     const above = pieces.slice(i + 1).map((q, k) => (q.kind === "frame" || q.style === "line" ? [] : staged[i + 1 + k].filter((s) => !s.under && !s.fabric)));
     staged[i] = carve(p, staged[i], above, fab);
   });
-  gang(pieces, staged);
+  const gangs = gang(pieces, staged);
   for (const st of staged.flat()) {
     if (!st.paths.length) continue;
     const s = { ...st, box: box(st.paths) };
@@ -2178,10 +2222,12 @@ function build(pieces, hoop, opts) {
     }
   }
   if (!steps.length) throw Object.assign(new Error("Nothing to stitch yet: type some words, or pick a starting idea."), { empty: true });
+  tidySteps(steps, gangs);
   if (opts.baste) after.push("Unpick the basting box (snip every few stitches on the back, then pull it out from the front).");
   d.finish({ untiny: true });
   // step 1 starts with hooping: the bare stabilizer for in-the-hoop projects, the patch fabric for a patch
   const first = order[0], hoopIt = first?.bare ? "Hoop tear-away stabilizer on its own (no fabric yet)" : first?.patch ? "Hoop the felt or twill with the stabilizer under it"
     : order.some((s) => s.sandwich) ? "Hoop the quilt sandwich (or float it on hooped tear-away stabilizer)" : FABRICS[fab].hoop;
-  return { design: d, steps, after, before, hoop: hoopIt, tip: FABRICS[fab].tip };
+  // (`bare`: nothing but stabilizer is hooped, so a turned hoop's note says where the fabric's top goes, not "Hoop the fabric")
+  return { design: d, steps, after, before, hoop: hoopIt, bare: !!first?.bare, tip: FABRICS[fab].tip };
 }

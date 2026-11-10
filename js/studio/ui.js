@@ -7,7 +7,7 @@ import { designStats, machineThreads, readEmbroidery } from "../core/formats.js"
 import { BLOCK, LOOK, TIP, problemsItems, shownOn, stopWords } from "../words.js";
 import { FILL_PATTERNS } from "../core/digitize.js";
 import { draw } from "../render.js";
-import { TURN_PIC, youHtml } from "../sheet.js";
+import { TURN_PIC, turnedNote, youHtml } from "../sheet.js";
 import { QUILTS, quiltOf } from "./quilt.js";
 import { MOTIFS } from "./motifs.js";
 import { quiltDone, scaledFit, BORDERS, FABRICS, THREADS, SHAPES, TEXT_SHAPES, splitPieces, archFit, archStart, frontPanel, inkHeight, monoSize, archRoom, archShrink, archTight, cleanPiece, clearSize, collision, collisions, inFrame, letterMetrics, underPatch, crossName, crossStep, layoutSize, touching, touchingAll, towelMin, fineLine, loopsFill, compose, fileBlocks, blocksPattern, scaleBlocks, FILE_SCALE, fittedSizes, followFrame, label, minSize, pieceBounds, previewLook, smallText, bulkReady } from "./pieces.js";
@@ -16,7 +16,6 @@ const SCRIPT = "NW Great Vibes", PRINT = "NW Josefin Sans", ROUND = "NW Quicksan
 // exact Brother PEC thread colours, so the name on screen is the one the machine shows
 const RED = "#ed171f", NAVY = "#0e1f7c", BLACK = "#000000";
 const PINK = "#f993bc", WHITE = "#f0f0f0";
-export const TURNED = "The hoop is turned, so the machine sews this design on its side. Hoop the fabric a quarter turn round: the top of the design goes to the right-hand side of the hoop as you face the machine (the sew sheet shows it that way).";
 // thread weight in plain words, on the chips (the number is printed on the spool; a bigger number is a finer thread)
 const WT_TITLE = { auto: "Standard 40 weight thread, the usual machine embroidery thread", 30: "30 weight: a thicker thread, for bold letters",
   40: "40 weight: the usual machine embroidery thread", 60: "60 weight: a finer thread, for small letters and fine detail" };
@@ -42,7 +41,7 @@ export const STARTERS = [
   { id: "bookmark", name: "Bookmark", note: "in the hoop, with a ribbon hole", turn: true, make: () => [
     frame({ shape: "bookmark", w: 165, h: 50, border: "ith", hang: false, eyelet: true, color: RED }),
     text({ text: "~Ashley~", font: SACRAMENTO, size: 26, x: 8, color: RED })],
-    tip: "Made in the hoop on tear-away stabilizer: cotton for the front and felt for the back, each about 3 × 8 in, plus tape, Fray Check and a ribbon. Full size needs the 5 × 7 hoop. Type ~ at either end of a name for a swash." },
+    tip: "Made in the hoop on tear-away stabilizer, cotton on the front and felt on the back. Full size needs the 5 × 7 hoop. Type ~ at either end of a name for a swash." },
   { id: "monogram", name: "Monogram", note: "3 initials in a frame", make: () => [frame({ shape: "circle", w: 90, h: 90, border: "satin" }), mono({ size: 23 })] },
   { id: "ring", name: "Name in a circle", note: "lettering around a ring", make: () => [
     frame({ shape: "circle", w: 92, h: 92, border: "bold" }),
@@ -73,11 +72,11 @@ export const STARTERS = [
     frame({ shape: "circle", w: 80, h: 80, border: "ith", hang: true, color: RED }),
     text({ text: "Ashley", size: 20, y: -4 }),
     text({ text: "2026", font: PRINT, size: 8, y: 14 })],
-    tip: "Made in the hoop, front and back. Have ready: tear-away stabilizer, front and back fabric cut 1 in bigger than the circle, tape, and a 6 in ribbon for hanging. Smaller (Fit to hoop or the size slider) makes a keychain." },
+    tip: "Made in the hoop, front and back, with a ribbon loop for hanging. Smaller (Fit to hoop or the size slider) makes a keychain." },
   { id: "mugrug", name: "Mug rug", note: "quilted, sewn in the hoop", make: () => [
     frame({ shape: "square", w: 120, h: 90, border: "ith", quilt: "stipple", hang: false, color: NAVY }),
     text({ text: "Tea time", size: 18, color: RED })],
-    tip: "Made in the hoop: front fabric with thin batting under it, then backing. Have ready: tear-away stabilizer, front and back fabric and batting 1 in bigger than the rug, and tape." },
+    tip: "Made in the hoop: front fabric with thin batting under it, then backing." },
   { id: "coaster", name: "Coaster", note: "echo-quilted round a letter", make: () => [
     frame({ shape: "circle", w: 96, h: 96, border: "ith", quilt: "echo", hang: false, color: RED }),
     mono({ letters: "A", size: 34, color: NAVY })],
@@ -93,7 +92,7 @@ export const STARTERS = [
   { id: "keyfob", name: "Key fob", note: "two-sided, with a ribbon loop", make: () => [
     frame({ shape: "square", w: 44, h: 80, border: "ith", hang: true, color: RED }),
     mono({ letters: "J", size: 30, y: 6, color: NAVY })],
-    tip: "Like the ornament: tape a 5 in piece of ribbon or webbing, folded in half, at the top before the back goes on. Felt or vinyl doesn't fray, so it can be cut right up to the satin stitches." },
+    tip: "Like the ornament, with a loop of ribbon or webbing taped on before the back goes on. Felt or vinyl doesn't fray, so it can be cut right up to the satin stitches." },
   { id: "applique", name: "Appliqué", note: "a fabric shape with a name", make: () => [
     frame({ shape: "heart", w: 84, h: 76, border: "applique", y: -4 }), text({ size: 16, y: -4, color: NAVY })] },   // (18 at -6 ran into the lobes)
   { id: "initials", name: "Appliqué letters", note: "fabric letters with satin-stitched edges", make: () => [appl({ text: "AB", size: 60 })] },
@@ -377,7 +376,9 @@ export function initStudio(api) {
       h += `<details class="more" ${moreOpen ? "open" : ""}><summary>More</summary>${more}</details>`;
     } else if (p.kind === "monogram") {
       h += `<label class="field"><span>Initials</span><input type="text" data-k="letters" value="${api.escapeHtml(p.letters)}" maxlength="12" autocomplete="off" spellcheck="false"></label>`;
-      h += `<p class="hint">Traditional order: first, LAST, middle. The middle letter is stitched biggest.</p>`;
+      // (what it does, measured: the middle letter comes out 1.24-1.49 x as tall as the others in every font. "Stitched
+      // biggest" read as more than a tall, thin script J gave)
+      h += `<p class="hint">${initials(p.letters).length === 3 ? "Traditional order: first, LAST, middle. The middle letter is sewn about 1½ times as tall as the other two." : "Three initials go first, LAST, middle, with the middle one sewn about 1½ times as tall. One or two are sewn the same height."}</p>`;
       h += `<label class="field"><span>Font</span>${fontSelect(p)}</label>`;
       h += range("size", "Height", 15, 90, p.size);
       h += stitchSeg(p);
@@ -859,12 +860,12 @@ export function initStudio(api) {
       const { design, steps, done, ready, small, later } = stepsOf(composed, true);
       stepsUI(steps, done, small, ready);
       const look = previewLook(steps);
-      const notes = [api.turned() ? TURNED : "", $("st-tip").hidden ? "" : $("st-tip").textContent, fabricTip(), threadTip(small)];
+      const notes = [turnText(), $("st-tip").hidden ? "" : $("st-tip").textContent, fabricTip(), threadTip(small)];
       api.setView(design.pattern(), `${api.safeName(firstWords(), "design")}.pes`, {
         ...look, problems, fixHint: fixHint(),
         block: resizing ? `Re-stitching ${resizing.name} at ${Math.round(resizing.scale * 100)} %…` : quilting ? "Working out the quilting…" : "",
         blockLabel: resizing ? "Re-stitching…" : quilting ? "Quilting…" : "",
-        fabric: look.fabric, steps: steps.length,   // (an in-the-hoop front: the background; appliqué: pink gingham)
+        fabric: look.fabric, steps: steps.length, turnNote: turnText(), bare: bareNow,   // (an in-the-hoop front: the background; appliqué: pink gingham)
         sheet: { steps: steps.map((st) => ({ you: st.you, sews: st.sews.join(" ") })), after: done, ready, cut: steps.filter((st) => st.cut).map((st) => st.cut),
           notes } });
       // (whether the letters are small, when the lettering wasn't worked out yet: said a moment later, after the preview)
@@ -959,6 +960,8 @@ export function initStudio(api) {
     remember();
     const f = piece({ kind: "file", name, blocks, color: blocks[0].color }), t = text({ text: "Your words", font: SCRIPT });
     pieces = [f]; fitted = false; two = false; from = name;
+    // (a new design starts on cotton, as a starter does: the last starter's felt stayed on, "Hoop the felt", unsaid)
+    fabric = "cotton"; baste = false; thread = "auto"; $("st-tip").hidden = true; $("st-tip").textContent = "";
     freeSpot(t, "down"); pieces.push(t); sel = t.id; recentre();
     api.setMode("design"); save(); ui(); make();
     if (had) toast(`Started a new design with ${name}.`, { label: "Undo", run: undo });
@@ -981,9 +984,12 @@ export function initStudio(api) {
   // the steps as shown and printed: what to have ready, what's done after, and whether the letters are small
   // (`lazy`: lettering not worked out yet (a long text drawn again as one line, 0.3-0.7 s) is taken as small as it last
   // was, and `later` says to check: typing waited for it before the preview changed)
-  let lastSmall = false;
+  let lastSmall = false, bareNow = false;
+  // the turned hoop's note, as step 1 hoops: bare stabilizer (in the hoop) or the fabric (sheet.js `turnedNote`)
+  const turnText = () => (api.turned() ? turnedNote(bareNow) : "");
   const smallNow = () => { const fit = fittedSizes(pieces); return (lastSmall = thread !== "60" && pieces.some((p) => smallText(fit.has(p.id) ? { ...p, size: fit.get(p.id) } : p))); };
-  function stepsOf({ design, steps, after, before, hoop }, lazy = false) {
+  function stepsOf({ design, steps, after, before, hoop, bare }, lazy = false) {
+    bareNow = !!bare;
     const later = lazy && thread !== "60" && !pieces.every(bulkReady), small = later ? lastSmall : smallNow();
     // (what the fabric needs goes first: a towel's topper was only in the folded "Sewing on"; the threads by the
     // spools they own when they've listed them, not the Brother names)
@@ -994,7 +1000,7 @@ export function initStudio(api) {
     // (Have ready names each thread as the steps do: the file's palette, `threadNames`)
     const named = threadNames(sameSpool(steps));
     const ready = [own(before) ? "" : FABRICS[fabric].ready, ...before,
-      appliqued() ? "A piece of fabric for each appliqué shape, 1 in bigger than its outline, and small curved scissors (iron-on fusible web on the back stops cotton fraying)." : "",
+      appliqued() ? `A piece of fabric for each appliqué shape, 1 in bigger than its outline${steps.some((st) => st.cut) ? " (or cut to shape with the Cutter file, then there's nothing to trim)" : ""}, and small curved scissors (iron-on fusible web on the back stops cotton fraying).` : "",
       api.threadList(named.map((st) => st.color), (hex) => named.find((st) => st.color === hex)?.machine || nearestBrotherThread(hex).name)].filter(Boolean),
       done = [own(after) ? "" : FABRICS[fabric].after, ...after].filter(Boolean);
     return { design, steps: firstStep(named, hoop), done, ready, small, later };
@@ -1132,7 +1138,7 @@ export function initStudio(api) {
     for (const b of $("st-steps").querySelectorAll("[data-step]")) b.disabled = true;   // (the step view follows one file)
     // each hooping's field, where the machine centres that half (mm, as the preview shows it)
     const fw = hoop.w - 4, fh = hoop.h - 4, hoopings = built.map((b) => { const [x0, y0, x1, y1] = b.design.bounds(), cx = (x0 + x1) / 2, cy = (y0 + y1) / 2; return [cx - fw / 2, cy - fh / 2, cx + fw / 2, cy + fh / 2]; });
-    api.setView(all.design.pattern(), `${base}_2_hoopings.zip`, { fabric: "linen", steps: 0, hoopings, problems, fixHint: fixHint(),
+    api.setView(all.design.pattern(), `${base}_2_hoopings.zip`, { fabric: "linen", steps: 0, hoopings, problems, fixHint: fixHint(), turnNote: turnText(),
       split: built.map((b) => ({ pattern: b.design.pattern(), filename: b.filename })) });
   }
   // What Fit to hoop would leave: { ok } when nothing would then be too small to stitch or run into something it doesn't
@@ -1203,7 +1209,9 @@ export function initStudio(api) {
   // appliqué tips: shown the first time a design has fabric to lay on, then on request
   // real appliqué (shapes cut from fabric and satined), not the front of an in-the-hoop project: its fabric is in its
   // own supply list (the mug rug listed curved scissors and appliqué shapes)
-  const appliqued = () => pieces.some((p) => p.kind === "letters" || (p.kind === "motif" && p.style === "applique") || (p.kind === "frame" && p.border === "applique"));
+  // (a design file with a placement line too: its Have ready listed no appliqué fabric)
+  const appliqued = () => pieces.some((p) => p.kind === "letters" || (p.kind === "motif" && p.style === "applique") || (p.kind === "frame" && p.border === "applique")
+    || (p.kind === "file" && p.blocks.some((b) => /placement|position/i.test(b.name || ""))));
   function applGuide(steps) {
     const has = steps.length > 0 && appliqued();
     $("st-appl-open").hidden = !has;
@@ -1227,7 +1235,7 @@ export function initStudio(api) {
     // (what's still wrong, and worth knowing, first: the steps said nothing of a name that closes up on fleece)
     $("st-steps").innerHTML = (steps.length ? problemsItems(shownOn(problems, "steps")) : "")
       + (waiting ? `<li class="after"><b>Waiting for a fit</b><span>${api.escapeHtml(waiting)}</span></li>` : "")
-      + (api.turned() ? `<li class="after"><b>Hooping</b><span class="turned">${TURN_PIC}${TURNED}</span></li>` : "") + (before.length ? `<li class="after"><b>Have ready</b><ul class="ready">${before.map((r) => `<li>${api.escapeHtml(r)}</li>`).join("")}</ul></li>` : "")
+      + (api.turned() ? `<li class="after"><b>Hooping</b><span class="turned">${TURN_PIC}${api.escapeHtml(turnText())}</span></li>` : "") + (before.length ? `<li class="after"><b>Have ready</b><ul class="ready">${before.map((r) => `<li>${api.escapeHtml(r)}</li>`).join("")}</ul></li>` : "")
       + (first ? `<li class="after"><b>First hooping: ${api.escapeHtml(first)}</b></li>` : "")
       + steps.map((st, i) => st.rehoop ? `<li class="after"><b>${api.escapeHtml(st.title)}</b>${youHtml(st.you, api.escapeHtml)}</li>` : `<li><button type="button" data-step="${i}" aria-pressed="${api.step() === i}">
       <b><span class="n">${++n}</span><i style="background:${st.color}"></i>Brother ${api.escapeHtml(st.machine || nearestBrotherThread(st.color).name)}${api.spool(st.color, st.machine) ? ` <small>${api.escapeHtml(api.spool(st.color, st.machine))}</small>` : ""}</b>
