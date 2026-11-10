@@ -257,9 +257,10 @@ function machineThreadList(v) {
   return p.pec ? p.pec.map(pecThread) : machineThreads(p.threads);
 }
 // an error in plain words, with a one-tap fix when there is one ({ label, run })
+// (`fix`: one { label, run } or a list of them, joined by "or")
 function showError(msg, fix) {
   const e = $("error"), was = e.hidden; e.textContent = msg; e.hidden = !msg;
-  if (msg && fix) { const b = document.createElement("button"); b.type = "button"; b.className = "link"; b.textContent = fix.label; b.onclick = fix.run; e.append(" ", b); }
+  if (msg) [].concat(fix || []).forEach((f, i) => { const b = document.createElement("button"); b.type = "button"; b.className = "link"; b.textContent = f.label; b.onclick = f.run; e.append(i ? ", or " : " ", b); });
   if (msg || !was) paintSoon();   // (the preview keeps clear of the message)
 }
 // A moment's note at the bottom ("Removed Monogram aMs. Undo", "Couldn't open the share sheet"), on every tab. One

@@ -260,7 +260,7 @@ export function archStart(p) {
   const l = letters(p.text, p.font, p.size, p.style);
   if (!l.parts.length) return { radius: p.radius };
   const xs = l.parts.flatMap(([q]) => q.map((v) => v[0])), span = maxOf(xs) - minOf(xs);
-  const q = { ...p, radius: Math.max(15, Math.min(80, Math.round(span / (2 * Math.PI * 0.3)))) };
+  const q = { ...p, radius: Math.max(15, Math.min(80, Math.round(span / (2 * Math.PI * 0.3)))) };   // (under `ARCH`)
   delete q.ry;
   return { radius: archFit(q)?.radius ?? q.radius };
 }
@@ -296,18 +296,25 @@ export function archShrink(p) {
   }
   return 0;
 }
-// Arched lettering that wraps more than ~55% of the way round its curve (a long name on the bib's small arch) reads
-// as a ring and runs into what's under it: the curve size that brings it to 45%, or null when it's fine.
-export function archRoom(p) {
-  if (p.kind !== "text" || (p.shape !== "up" && p.shape !== "down")) return null;
+// How far round its curve an arched word goes, as a share of the whole way round (0.5: half), or 0
+export function archWrap(p) {
+  if (p.kind !== "text" || (p.shape !== "up" && p.shape !== "down")) return 0;
   const l = letters(p.text, p.font, p.size, p.style);
-  if (!l.parts.length) return null;
+  if (!l.parts.length) return 0;
   const xs = l.parts.flatMap(([q]) => q.map((v) => v[0])), span = maxOf(xs) - minOf(xs);
-  const a = Math.max(p.radius, 8), b = Math.max(p.ry ?? p.radius, 8), per = Math.PI * (3 * (a + b) - Math.sqrt((3 * a + b) * (a + 3 * b)));
-  if (span <= per * 0.55) return null;
-  const k = span / (per * 0.45);
+  const a = Math.max(p.radius, 8), b = Math.max(p.ry ?? p.radius, 8);
+  return span / (Math.PI * (3 * (a + b) - Math.sqrt((3 * a + b) * (a + 3 * b))));
+}
+// Arched lettering that wraps more than ~40% of the way round its curve (a long name on the bib's small arch) reads
+// as a ring and runs into what's under it: the curve size that brings it to a third, or null when it's fine. (55 %
+// let "Anne-Marie" go 150° round the wedding scallop's curve with nothing said; a new arch aims for a third, `ARCH`)
+export const ARCH = 1 / 3;
+export function archRoom(p) {
+  const wrap = archWrap(p);
+  if (wrap <= 0.4) return null;
+  const k = wrap / ARCH, a = Math.max(p.radius, 8), b = Math.max(p.ry ?? p.radius, 8);
   // (`full`: more than the whole way round, so the ends overlap; not a curve setting)
-  return Object.defineProperty({ radius: Math.round(a * k), ry: Math.round(b * k) }, "full", { value: span > per * 0.95 });
+  return Object.defineProperty({ radius: Math.round(a * k), ry: Math.round(b * k) }, "full", { value: wrap > 0.95 });
 }
 // The first other piece whose stitches come within CLEAR of p's (lettering run into a heart, say), or null. Patches
 // are left out: lettering on a filled patch is meant to sit on it.
