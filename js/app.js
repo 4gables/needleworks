@@ -4,7 +4,7 @@ import { FONTS } from "./core/fonts.js";
 import { COLOR_CHANGE, STITCH, designStats, machineThreads, readEmbroidery, validatePES, writePES } from "./core/formats.js";
 import { DEFAULT_MACHINE, MACHINES, MARGIN, hoop as getHoop } from "./core/machines.js";
 import { DENSITY, LEARN, MOST, contentBox, lostMuch, picturePlan, pictureImage, sewSized } from "./core/digitize.js";
-import { hexToRgb, nearestBrotherThread, pecThread } from "./core/threads.js";
+import { PEC_MATCH, hexToRgb, nearestBrotherThread, pecThread } from "./core/threads.js";
 import { CLOTHS, colorBlocks, draw } from "./render.js";
 import { TURNED, TURN_PIC, cutDXF, cutName, cutSVG, firstStep, sewMinutes, sewSheet, told, youHtml } from "./sheet.js";
 import { handOut, judge } from "./gate.js";
@@ -12,7 +12,7 @@ import { DST_COLOURS, checkup, fewerBlocks, fix, heat, openedFile, pauses, short
 import { HARD, MAX_BLOCKS, denseWords, moves, verdictOf } from "./quality.js";
 import { BLOCK, LOOK, LOOK_HEAD, TIP, TIP_HEAD, problemsHtml, problemsInline, problemsItems, problemsOf, shownOn, stopWords, stopsAt } from "./words.js";
 import { brief, safeName, tidy, uniqueName, withSwash } from "./core/typed.js";
-import { BRANDS, brotherNum, chartSpools, exampleSpools, lab, nearestSpool, spools } from "./core/brands.js";
+import { BRANDS, brotherNum, chartSpools, exampleSpools, lab, nearestSpool, nearestSpools, spools } from "./core/brands.js";
 import { COLORS as LINE_THREADS, initStudio } from "./studio/ui.js";
 
 const $ = (id) => document.getElementById(id);
@@ -44,7 +44,7 @@ const state = {
   turn: { picture: false, design: false, open: false, ...store.get("turn", {}) },
   brand: BRANDS[store.get("brand", "")] ? store.get("brand", "") : "",   // thread brand for spool numbers ("" = Brother only)
   spools: store.get("spools", {}),   // { brand: [spool numbers owned] }
-  pic: { mine: store.get("pic.mine", false), style: "fill", cross: 2.5, file: null, bitmap: null, key: 0, skip: [], colors: 6, size: 100, angle: 45, bg: true, density: store.get("pic.density", "standard"), req: 0, colorsInfo: [], line: "", models: new Map() },
+  pic: { mine: store.get("pic.mine", false), style: "fill", cross: 2.5, file: null, bitmap: null, key: 0, skip: [], swap: {}, colors: 6, size: 100, angle: 45, bg: true, density: store.get("pic.density", "standard"), req: 0, colorsInfo: [], line: "", models: new Map() },
 };
 if (!MACHINES[state.machine]) state.machine = DEFAULT_MACHINE;
 const hoop = () => getHoop(state.machine, state.hoopId);
@@ -108,7 +108,7 @@ function setView(v) {
   if (state.step != null && !(v?.steps > state.step)) showStep(null);   // the design changed under a step view
   $("turn").setAttribute("aria-pressed", turned());
   $("turn").disabled = square(); $("turn").title = square() ? "A square hoop is the same either way round." : "Turn the hoop sideways, so a long design can use the hoop's long side.";
-  if (!v) { $("dl-warn").hidden = true; $("facts").innerHTML = ""; $("threads").innerHTML = ""; $("download").disabled = true; $("download").textContent = "Download PES"; $("share").disabled = true; $("sheet-print").disabled = $("along-open").disabled = true; $("cut-files").hidden = true; $("names-open").hidden = true; paint(); return; }
+  if (!v) { $("rename-open").hidden = true; $("dl-warn").hidden = true; $("facts").innerHTML = ""; $("threads").innerHTML = ""; $("download").disabled = true; $("download").textContent = "Download PES"; $("share").disabled = true; $("sheet-print").disabled = $("along-open").disabled = true; $("cut-files").hidden = true; $("names-open").hidden = true; paint(); return; }
   // the preview is the file: decode the PES bytes and draw those, not the design they were made from
   if (!v.file) {
     try { v.file = v.source ? v.pattern : unwrap(readEmbroidery(v.bytes, v.filename), state.mode === "design" && v.pattern); }
@@ -171,7 +171,7 @@ function setView(v) {
   const blocked = blocking(v);
   $("download").disabled = !fits || !!blocked; $("share").disabled = !fits || !!v.split || !!blocked;
   // (nor a sew sheet or Sew along for a file that can't be made)
-  $("sheet-print").disabled = $("along-open").disabled = !fits || !!v.split || !!blocked; $("cut-files").hidden = !v.sheet?.cut?.length; $("names-open").hidden = !!v.split || !namesFor();
+  $("sheet-print").disabled = $("along-open").disabled = !fits || !!v.split || !!blocked; $("cut-files").hidden = !v.sheet?.cut?.length; $("names-open").hidden = !!v.split || !namesFor(); $("rename-open").hidden = state.mode !== "design";
   // (one per name from a design that doesn't fit yet made a zip of names that didn't fit either)
   $("names-open").disabled = !fits; $("names-open").title = fits ? "" : "Make the design fit the hoop first.";
   if (state.mode === "picture") picSteps(v, st);
@@ -542,9 +542,11 @@ function downloaded(v, zipped, files = [], saved = true) {
     : part ? `It opens ${what}, but only part of the design is in it: the file it came from ends early. Download that file again if you can.` : `Checked: it opens ${what}.`;
   $("done-checked").className = bad.length || part ? "warn" : "good";
   $("done-zip").hidden = !zipped;
-  // (several designs saved this session: a newcomer asked which order to sew them in)
-  if (saved) (downloaded.names ||= new Set()).add(v.filename);
-  $("done-own").hidden = !saved || (downloaded.names?.size || 0) < 2;
+  // (several designs saved this session: a newcomer asked which order to sew them in) Counted per tab: saves on
+  // another tab said "each file you've saved is a design of its own" after one save of one opened file.
+  const mine = ((downloaded.names ||= {})[state.mode] ||= new Set());
+  if (saved) mine.add(v.filename);
+  $("done-own").hidden = !saved || mine.size < 2;
   $("done-phone").hidden = !matchMedia("(pointer: coarse)").matches;
   // (an Android phone has no Lightning port, nor an iPhone a "Files by Google")
   $("done-phone").textContent = /Android/i.test(navigator.userAgent)
@@ -732,6 +734,23 @@ function namesFor() {
   }
   return null;
 }
+// Rename (Design your own): a file name of their own, kept with the design and used by every file it makes. Four
+// coasters with different motifs all downloaded as Coaster.pes, with no way to tell them apart on the USB stick.
+$("rename-open").onclick = () => {
+  const auto = studio.autoName();
+  $("rename-name").value = studio.title(); $("rename-name").placeholder = auto;
+  renameNote(); $("rename").showModal(); $("rename-name").select();
+};
+function renameNote() {
+  const t = tidy($("rename-name").value).trim(), as = safeName(t, "");
+  $("rename-auto").hidden = !studio.title();
+  $("rename-note").textContent = !t ? `Empty, it's named from the design: ${studio.autoName()}.pes.`
+    : !as ? "Use some letters or numbers: the machine shows only those." : `The file will be ${as}.pes${as !== t.replace(/\s+/g, "_") ? " (the machine's screen shows plain letters, numbers, - and _)" : ""}. Saved designs, ZIPs and cutter files take this name too.`;
+}
+$("rename-name").addEventListener("input", renameNote);
+$("rename-name").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); $("rename-save").click(); } });
+$("rename-save").onclick = () => { studio.rename($("rename-name").value); $("rename").close(); };
+$("rename-auto").onclick = () => { studio.rename(""); $("rename").close(); };
 $("names-open").onclick = () => {
   const n = namesFor(); if (!n) return;
   // (a monogram takes initials: "JKM", one set a line)
@@ -757,27 +776,30 @@ let smallerOk = false;   // (the turn was offered and they chose to make them sm
 $("names-make").onclick = async () => {
   const n = namesFor(); if (!n) return;
   // (past 40, the rest are said as left out: the 41st was dropped without a word)
-  const all = [...new Set($("names-list").value.split("\n").map((s) => tidy(s).trim()).filter(Boolean))], list = all.slice(0, 40), left = all.slice(40);
+  // (a name typed twice is made once, and said: "Ola" twice left one file with nothing said)
+  const typed = $("names-list").value.split("\n").map((s) => tidy(s).trim()).filter(Boolean), all = [...new Set(typed)], list = all.slice(0, 40), left = all.slice(40);
+  const twice = all.filter((n) => typed.indexOf(n) !== typed.lastIndexOf(n));
   store.set(n.monogram ? "names.initials" : "names", all.join("\n"));
   if (!list.length) { $("names-note").textContent = "Type at least one name."; return; }
   $("names-make").disabled = true; $("names-note").textContent = "Making the files…";
   // (file names compared ignoring case: emma.pes and Emma.pes are one file on a Mac, Windows or the USB stick)
-  const files = [], bad = [], used = new Set(), made = [];
+  const files = [], bad = [], used = new Set(), made = [], small = [];
   for (const name of list) {
     await new Promise((r) => setTimeout(r, 0));
     try {
-      const { pattern, shown, smaller, thin, turned: sideways, runs } = n.build(name, $("names-shrink").checked);
+      const { pattern, shown, smaller, pct, lines, thin, turned: sideways, runs, xh, least, own } = n.build(name, $("names-shrink").checked);
       const f = uniqueName(safeName(name, "name"), used);
       // (judged as the zip will be: a name the gate would refuse is left out and said so, not the whole zip)
       const j = judge({ name: f + ".pes", bytes: writePES(pattern), against: pattern }, hoop());
       if (!j.ok) { used.delete(f.toLowerCase()); throw new Error(j.error); }
-      files.push(j); made.push({ name, file: f + ".pes", pattern, shown, smaller, thin, sideways, runs });
-    } catch (err) { bad.push(`${brief(name)} (${/hoop fits|too big/i.test(err.message) ? "too long for the hoop" : err.message})`); }
+      files.push(j); made.push({ name, file: f + ".pes", pattern, shown, smaller, pct, lines, thin, sideways, runs, size: [xh, least, own] });
+    } catch (err) { bad.push(`${brief(name)} (${/hoop fits|too big/i.test(err.message) ? "too long for the hoop" : err.message})`); if (/too long to sew clearly/.test(err.message)) small.push(name); }
   }
   $("names-make").disabled = false;
   // Names made smaller (or too long) that would sew full size with the hoop turned: the turn is offered before any
   // file is made (Benjamin and Ella-Rose came out smaller on an upright 5x7 that had room for them across)
-  const cut = [...made.filter((m) => m.smaller).map((m) => m.name), ...bad.filter((b) => / \(too long for the hoop\)$/.test(b)).map((b) => b.replace(/ \(too long for the hoop\)$/, ""))];
+  // (and names too small to sew clearly, refused: turned, a long name may have the room)
+  const cut = [...made.filter((m) => m.smaller).map((m) => m.name), ...bad.filter((b) => / \(too long for the hoop\)$/.test(b)).map((b) => b.replace(/ \(too long for the hoop\)$/, "")), ...small];
   if (!smallerOk && n.canTurn && cut.length && cut.every((name) => { try { const t = hoop(), m = n.build(name, false, { ...t, w: t.h, h: t.w }); return !m.smaller && !m.runs; } catch { return false; } })) {
     const names = cut.length === 1 ? cut[0] : `${cut.slice(0, -1).join(", ")} and ${cut.at(-1)}`;
     $("names-note").classList.add("warn");
@@ -791,8 +813,9 @@ $("names-make").onclick = async () => {
   smallerOk = false;
   // every name as it'll sew, to look over (is one crowded?), with what's different about it
   // (a name sewn as a thin line where the design is bold stands out: it was one more word in the brackets)
-  const notes = (m) => [m.smaller ? "smaller" : "", m.sideways ? "hoop turned" : "", m.runs ? `runs into ${m.runs}` : ""].filter(Boolean).join(", ");
-  $("names-thumbs").innerHTML = made.map((m, i) => `<figure><canvas data-i="${i}"></canvas><figcaption>${escapeHtml(m.name)}${notes(m) ? ` (${escapeHtml(notes(m))})` : ""}${m.thin ? `<br><strong class="names-thin">Thin line, not bold</strong>` : ""}</figcaption></figure>`).join("");
+  // (how much smaller, said: "(smaller)" was all a name made at 28 % said)
+  const notes = (m) => [m.smaller ? `smaller, ${m.pct} %` : "", m.lines ? "on two lines" : "", m.sideways ? "hoop turned" : "", m.runs ? `runs into ${m.runs}` : ""].filter(Boolean).join(", ");
+  $("names-thumbs").innerHTML = made.map((m, i) => `<figure data-size="${m.size.map((v) => +(v || 0).toFixed(2)).join(" ")}"><canvas data-i="${i}"></canvas><figcaption>${escapeHtml(m.name)}${notes(m) ? ` (${escapeHtml(notes(m))})` : ""}${m.thin ? `<br><strong class="names-thin">Thin line, not bold</strong>` : ""}</figcaption></figure>`).join("");
   for (const c of $("names-thumbs").querySelectorAll("canvas")) {
     const m = made[+c.dataset.i]; draw(c, m.shown || m.pattern, { pad: 6, fabric: "white" });   // (3 px: an arched name's top sat on the edge)
   }
@@ -809,13 +832,14 @@ $("names-make").onclick = async () => {
   // (an in-the-hoop design hoops bare stabilizer: it's the fabric laid on it that goes round)
   const lay = state.views.design?.bare ? "lay the fabric pieces" : "hoop the fabric";
   const side = made.filter((m) => m.sideways), runs = made.filter((m) => m.runs), thin = made.filter((m) => m.thin);
-  $("names-note").classList.toggle("warn", bad.length > 0 || runs.length > 0 || poor.length > 0 || left.length > 0 || thin.length > 0);
+  $("names-note").classList.toggle("warn", bad.length > 0 || runs.length > 0 || poor.length > 0 || left.length > 0 || thin.length > 0 || twice.length > 0);
   $("names-note").textContent = `${files.length ? `Made ${files.length} ${files.length === 1 ? "file" : "files"}, saved as one .zip (open it and copy the .pes files to the USB stick). ` : ""}`
     + (side.length === made.length && side.length > 1 ? `Every file is turned like the design: ${lay} a quarter turn round for each, with the top of the name toward the right of the hoop (the machine shows them on their side). `
       : side.length ? `${lay[0].toUpperCase() + lay.slice(1)} a quarter turn round for ${side.map((m) => m.file).join(", ")}: the machine shows ${side.length === 1 ? "it" : "them"} on ${side.length === 1 ? "its" : "their"} side, with the top of the name toward the right of the hoop. ` : "")
     + (runs.length ? `Runs into another piece: ${runs.map((m) => m.name).join(", ")} (${$("names-shrink").checked ? "even at half size: shorten" : `tick "Make long names smaller", or shorten`} ${runs.length === 1 ? "it" : "them"}). ` : "")
     + (thin.length ? `Sewn as a thin line, not bold like the design (too small for bold once shrunk to fit): ${thin.map((m) => m.name).join(", ")}. ` : "")
     + (bad.length ? `Couldn't make: ${bad.join(", ")}. ` : "")
+    + (twice.length ? `${twice.length === 1 ? "1 name was" : `${twice.length} names were`} typed twice, made once: ${twice.map(brief).join(", ")}. ` : "")
     + (left.length ? `Left out (40 at a time): ${left.join(", ")}. Make them in a second batch.` : "")
     + (poor.length ? ` ${poor.length === 1 ? "One file" : `${poor.length} files`} may not sew well:` : "");
 
@@ -904,7 +928,7 @@ function openSpools() {
   $("spools-brand").innerHTML = Object.entries(BRANDS).map(([k, n]) => `<option value="${k}">${n}</option>`).join("");
   $("spools-brand").value = state.brand || "brother";   // (a Brother machine's owner mostly has Brother spools)
   $("spools-list").value = (state.spools[$("spools-brand").value] || []).join(" ");
-  $("spools-find").value = "";
+  $("spools-find").value = ""; spoolNear = null;
   spoolsGrid(); $("spools").showModal();
 }
 // (examples in the brand's own numbers: Brother's showed Isacord-like "0020 1902 3541")
@@ -917,17 +941,29 @@ function spoolsGrid() {
   $("spools-grid").innerHTML = all.map((s) => `<button type="button" data-spool="${s.num}" aria-pressed="false" tabindex="-1" title="${escapeHtml(s.label)}" aria-label="${escapeHtml(s.label)}"><i style="background:${s.hex}"></i><span>${s.num}</span></button>`).join("");
   spoolsFind(); spoolsPreview();
 }
+// Brands not charted here, by name, so a search for one says so (it said "No spool with that number or name")
+const UNLISTED = ["Madeira", "Gunold", "Floriani", "Marathon", "Polyneon", "Mettler", "Coats", "Gütermann", "Gutermann", "Janome", "Simthread", "Exquisite", "Superior", "Aurifil", "Fil-Tec", "Glide", "Embrilliance", "Pfaff", "Husqvarna", "Bernina", "Singer", "Babylock", "Baby Lock", "Amann", "Ackermann", "Royal", "Medeira"];
+// A spool from a brand that isn't charted (Madeira) is matched by its colour: the colour picked shows the nearest
+// spools of the brand chosen here (`near`), to tick the closest; any search is set aside meanwhile.
+let spoolNear = null;
 function spoolsFind() {
   const q = $("spools-find").value.trim().toLowerCase(), b = $("spools-brand").value, nz = q.replace(/^0+(?=\d)/, "");
   const names = Object.fromEntries(chartSpools(b).map((s) => [s.num, s.name.toLowerCase()]));
+  const near = spoolNear && new Set(nearestSpools(b, spoolNear));
   let first = null;
   for (const el of $("spools-grid").children) {
-    const n = el.dataset.spool, show = !q || n.replace(/^0+(?=\d)/, "").startsWith(nz) || n.startsWith(q) || names[n].includes(q);
+    const n = el.dataset.spool, show = near ? near.has(n) : !q || n.replace(/^0+(?=\d)/, "").startsWith(nz) || n.startsWith(q) || names[n].includes(q);
     el.hidden = !show; if (show && !first) first = el;
   }
   roveSpool($("spools-grid").querySelector("button:not([hidden])[tabindex='0']") || first);
-  $("spools-none").hidden = !!first || !q;
+  $("spools-all").hidden = !near;
+  const other = UNLISTED.find((u) => q.includes(u.toLowerCase()));
+  $("spools-none").hidden = !!first || !q || !!near;
+  $("spools-none").textContent = other ? `${other} isn't one of the brands here: pick your spool's colour below, then tick the nearest ${BRANDS[b]} spool to stand for it.`
+    : `No ${BRANDS[b]} spool with that number or name. A spool from another brand: pick its colour below.`;
 }
+$("spools-colour").oninput = (e) => { spoolNear = e.target.value; spoolsFind(); };
+$("spools-all").onclick = () => { spoolNear = null; spoolsFind(); $("spools-colour").focus(); };
 function roveSpool(el) { for (const x of $("spools-grid").querySelectorAll("[tabindex='0']")) x.tabIndex = -1; if (el) el.tabIndex = 0; }
 function spoolsPreview() {
   const b = $("spools-brand").value, typed = $("spools-list").value.split(/[\s,;]+/).filter(Boolean), got = spools(b, $("spools-list").value);
@@ -935,7 +971,7 @@ function spoolsPreview() {
   const missing = typed.filter((t) => !spools(b, t).length), have = new Set(got);
   for (const el of $("spools-grid").children) el.setAttribute("aria-pressed", have.has(el.dataset.spool));
   $("spools-note").textContent = (got.length ? `${got.length} ${BRANDS[b]} ${got.length === 1 ? "spool" : "spools"} ticked.` : "None ticked yet.")
-    + (missing.length ? ` Not in our ${BRANDS[b]} chart: ${missing.join(", ")}.` : "");
+    + (missing.length ? ` Not in our ${BRANDS[b]} chart: ${missing.join(", ")} (another brand's numbers? Pick that brand above, or match each spool by its colour).` : "");
   $("spools-chips").innerHTML = got.map((n) => { const s = nearestSpool(b, "#000000", [n]); return `<span><i style="background:${s.hex}"></i>${n}${s.name ? ` ${escapeHtml(s.name)}` : ""}</span>`; }).join("");
 }
 $("spools-grid").onclick = (e) => {
@@ -956,7 +992,8 @@ $("spools-grid").onkeydown = (e) => {
   if (to == null || !shown[to]) return;
   e.preventDefault(); roveSpool(shown[to]); shown[to].focus();
 };
-$("spools-find").oninput = spoolsFind;
+// (typing a search goes back from colour matching to the whole chart)
+$("spools-find").oninput = () => { spoolNear = null; spoolsFind(); };
 // (Enter in the search box ticks the only spool left, rather than closing the dialog)
 $("spools-find").onkeydown = (e) => {
   if (e.key !== "Enter") return; e.preventDefault();
@@ -971,7 +1008,7 @@ $("spools-save").onclick = () => {
   state.brand = b; store.set("brand", b); $("spools").close(); brandUI(); relabel();
   if (state.mode === "picture" && state.pic.mine) makePicture();
 };
-$("pic-mine").onchange = (e) => { state.pic.mine = e.target.checked; store.set("pic.mine", state.pic.mine); state.pic.skip = []; makePicture(); };
+$("pic-mine").onchange = (e) => { state.pic.mine = e.target.checked; store.set("pic.mine", state.pic.mine); state.pic.skip = []; state.pic.swap = {}; makePicture(); };
 // the spools they own in the brand shown, in colour-card order, for the Design tab's thread swatches
 function ownedSpools() {
   const own = state.brand && state.spools[state.brand];
@@ -1155,7 +1192,7 @@ const picJobs = picWorker(), picChecks = picWorker();
 // Everything a picture's stitches depend on (the stitches are a function of these and the picture, nothing else)
 function picSettings(over = {}) {
   const p = state.pic, h = hoop(), turn = !!state.turn.picture && !square();
-  return { size: p.size, style: p.style, cross: p.cross, skip: p.skip, colors: p.colors, bg: p.bg, angle: p.angle, density: p.density,
+  return { size: p.size, style: p.style, cross: p.cross, skip: p.skip, swap: p.swap, colors: p.colors, bg: p.bg, angle: p.angle, density: p.density,
     line: p.line, turn, hoop: turn ? { ...h, w: h.h, h: h.w } : h, palette: ownedPalette(), ...over };
 }
 // the fit each exact setting was sewn at (sewing it again gives the same file, at once)
@@ -1169,7 +1206,7 @@ async function sewPicture(s, wk, isStale = () => false) {
   const key = `${p.key}:${s.colors}:${s.bg}:${box.sx},${box.sy},${box.sw},${box.sh}`, k = LEARN / Math.max(box.sw, box.sh);
   if (p.learn?.key !== key) p.learn = { key, img: pictureImage(bitmap, box, Math.max(1, Math.round(box.sw * k)), Math.max(1, Math.round(box.sh * k))) };
   const learn = p.learn.img;
-  const opts = { colors: s.colors, removeBackground: s.bg, fillAngle: s.angle, density: DENSITY[s.density] || DENSITY.standard, skip: s.skip, hoop: s.hoop, turn: s.turn, palette: s.palette, style: s.style, cross: s.cross, line: s.line || undefined };
+  const opts = { colors: s.colors, removeBackground: s.bg, fillAngle: s.angle, density: DENSITY[s.density] || DENSITY.standard, skip: s.skip, ...(s.swap && Object.keys(s.swap).length ? { swap: s.swap } : {}), hoop: s.hoop, turn: s.turn, palette: s.palette, style: s.style, cross: s.cross, line: s.line || undefined };
   // (kept per colour count: the checks try other counts)
   if (!p.models.has(key)) {
     const m = await wk.run({ key, learn, opts });
@@ -1197,7 +1234,7 @@ async function makePicture() {
   if (r.stale || req !== p.req) return;
   busy(false);
   if (r.plan) sizeRange(r.plan.max);
-  if (!r.ok) { state.views.picture = null; if (state.mode === "picture") { setView(null); pictureError(r); } return; }
+  if (!r.ok) { state.views.picture = null; $("pic-use").hidden = true; if (state.mode === "picture") { setView(null); pictureError(r); } return; }
   showError("");
   // (in the order they're sewn, then any left out)
   const byId = new Map(r.colors.map((c) => [c.id, c]));
@@ -1219,6 +1256,8 @@ async function makePicture() {
     get problems() { return [...(state.pic.fineProblems || []), ...(state.pic.ownedProblem ? [state.pic.ownedProblem] : [])]; },
   };
   state.views.picture = v;
+  // (adding needs a design there to add to)
+  $("pic-use").hidden = false; $("pic-add").hidden = $("pic-or").hidden = (() => { try { return studio.empty(); } catch { return true; } })();
   if (state.mode === "picture") setView(v);
   if (lostMuch(r.fine.kept)) checkLost(s, req);
 }
@@ -1240,8 +1279,30 @@ function paletteUI() {
   const asked = state.pic.colors;
   $("pic-merged").textContent = state.pic.merged ? `${asked} asked for, ${cols.length} used: this picture has only ${cols.length} ${cols.length === 1 ? "colour" : "colours"} different enough to need ${cols.length === 1 ? "a thread of its own" : "threads of their own"} (the rest are shades of ${cols.length === 1 ? "it" : "these"} or of the fabric).` : "";
   ownedNote();
-  $("pic-palette").innerHTML = cols.map((c) => `<button type="button" data-id="${c.id}" aria-pressed="${!state.pic.skip.includes(c.id)}">
+  const open = state.pic.swapOpen;
+  $("pic-palette").innerHTML = cols.map((c) => `<button type="button" data-id="${c.id}" aria-pressed="${!state.pic.skip.includes(c.id)}" aria-expanded="${c.id === open}" aria-controls="pic-swap">
     <i style="background:${c.hex}"></i><span>${threadHtml(c.hex, state.pic.machineName?.get(c.hex) || c.thread.name, "")}</span></button>`).join("");
+  swapUI(cols);
+}
+// A colour's chip, tapped: leave it out (or sew it again), or swap its thread for one of the nearest Brother threads to
+// the picture's own colour that no other colour sews (a violet logo matched Brother Magenta, the nearest by eye and
+// the matcher's choice, and there was no way to sew it in Violet or Purple instead)
+const swapLab = (hex) => lab(hexToRgb(hex));
+function swapUI(cols = state.pic.colorsInfo.filter((c) => !c.background && c.area > 0)) {
+  const p = state.pic, c = cols.find((x) => x.id === p.swapOpen), box = $("pic-swap");
+  box.hidden = !c;
+  if (!c) { box.innerHTML = ""; return; }
+  const name = (x) => p.machineName?.get(x.hex) || x.thread.name, out = p.skip.includes(c.id);
+  // (the thread it sews in now among them, pressed: picking one keeps focus on it)
+  const others = new Set(cols.filter((x) => x.id !== c.id).map((x) => x.hex)), want = swapLab(c.picture || c.hex), seen = new Set();
+  const near = PEC_MATCH.map((t, i) => t && pecThread(i)).filter((t) => t && !others.has(t.hex) && !seen.has(t.hex) && seen.add(t.hex))
+    .map((t) => ({ t, d: Math.hypot(...swapLab(t.hex).map((v, k) => v - want[k])) })).sort((a, b) => a.d - b.d).slice(0, 6).map((x) => x.t);
+  if (!near.some((t) => t.hex === c.hex)) near.splice(5, 1, { hex: c.hex, name: name(c) });
+  const was = p.swap[c.id]?.was, line = p.style === "line";
+  box.innerHTML = `<p class="hint"><b>${threadHtml(c.hex, name(c), " ")}</b>${out ? " is left out." : ` sews the picture's <i class="pic-own" style="background:${c.picture || c.hex}" title="The picture's colour"></i> colour.`}</p>`
+    + (!out && !line ? `<div class="pic-near" role="group" aria-label="Sew it in another thread instead">${near.map((t) => `<button type="button" data-hex="${t.hex}" aria-pressed="${t.hex === c.hex}"><i style="background:${t.hex}"></i><span>${threadHtml(t.hex, t.name, "")}</span></button>`).join("")}</div>` : "")
+    + `<p class="pic-swap-do"><button type="button" class="link" data-do="skip">${out ? "Sew it again" : "Leave it out"}</button>`
+    + `${was && !out ? ` · <button type="button" class="link" data-do="back">Back to ${escapeHtml(was.name)}</button>` : ""}</p>`;
 }
 // "Use only threads I own": say which of the picture's colours share one spool, and which have none close (the
 // Design tab says "quite different"; here yellow and pink sewed in one spool without a word)
@@ -1266,8 +1327,20 @@ function ownedNote() {
 }
 $("pic-palette").onclick = (e) => {
   const b = e.target.closest("button"); if (!b) return;
-  const id = +b.dataset.id, s = state.pic.skip;
-  state.pic.skip = s.includes(id) ? s.filter((x) => x !== id) : [...s, id];
+  const id = +b.dataset.id;
+  state.pic.swapOpen = state.pic.swapOpen === id ? null : id; paletteUI();
+};
+$("pic-swap").onclick = (e) => {
+  const b = e.target.closest("button"), p = state.pic, id = p.swapOpen; if (!b || id == null) return;
+  const c = p.colorsInfo.find((x) => x.id === id);
+  if (b.dataset.hex === c?.hex) return;
+  if (b.dataset.hex) {
+    // (with the thread it had first, to go back to)
+    const was = p.swap[id]?.was || (c && { hex: c.hex, name: p.machineName?.get(c.hex) || c.thread.name });
+    p.swap = { ...p.swap, [id]: { hex: b.dataset.hex, was } };
+    if (was?.hex === b.dataset.hex) delete p.swap[id];
+  } else if (b.dataset.do === "back") { p.swap = { ...p.swap }; delete p.swap[id]; }
+  else if (b.dataset.do === "skip") p.skip = p.skip.includes(id) ? p.skip.filter((x) => x !== id) : [...p.skip, id];
   paletteUI(); makePicture();
 };
 const bindRange = (id, key, fmt) => {
@@ -1275,7 +1348,7 @@ const bindRange = (id, key, fmt) => {
   let t = 0;
   $(id).addEventListener("input", (e) => {
     state.pic[key] = +e.target.value; $(id + "-out").textContent = fmt(state.pic[key]);
-    if (key === "colors") state.pic.skip = [];
+    if (key === "colors") { state.pic.skip = []; state.pic.swap = {}; }
     clearTimeout(t); t = setTimeout(makePicture, 250);
   });
 };
@@ -1319,7 +1392,7 @@ $("pic-fine").onclick = (e) => {
   const p = state.pic, o = f.over;
   if (o.style) { p.style = o.style; styleUI(); }
   if (o.cross) { p.cross = o.cross; $("pic-cross").value = o.cross; $("pic-cross-out").textContent = `${o.cross} mm`; }
-  if (o.colors) { p.colors = o.colors; p.skip = []; $("pic-colors").value = o.colors; $("pic-colors-out").textContent = String(o.colors); }
+  if (o.colors) { p.colors = o.colors; p.skip = []; p.swap = {}; $("pic-colors").value = o.colors; $("pic-colors-out").textContent = String(o.colors); }
   if (o.size) { p.size = o.size; $("pic-size").value = o.size; $("pic-size-out").textContent = sizeLabel(o.size); }
   makePicture();
 };
@@ -1405,7 +1478,7 @@ $("pic-line").onclick = (e) => {
 $("pic-line-any").onchange = (e) => { state.pic.line = nearestBrotherThread(e.target.value).hex; lineUI(); makePicture(); };
 $("pic-style").onclick = (e) => { const b = e.target.closest("button"); if (!b || b.dataset.s === state.pic.style) return; state.pic.style = b.dataset.s; styleUI(); makePicture(); };
 styleUI();
-$("pic-bg").onchange = (e) => { state.pic.bg = e.target.checked; state.pic.skip = []; makePicture(); };
+$("pic-bg").onchange = (e) => { state.pic.bg = e.target.checked; state.pic.skip = []; state.pic.swap = {}; makePicture(); };
 
 // first visit: show a sample so the page opens on real stitches, not an empty box
 async function loadSample() {
@@ -1421,7 +1494,7 @@ async function loadPicture(file, sample = false) {
   if (!file || !file.type.startsWith("image/")) { showError("That doesn't look like a picture. Try a PNG or JPG."); return; }
   try {
     const bitmap = await createImageBitmap(file);
-    Object.assign(state.pic, { file, bitmap, box: null, key: state.pic.key + 1, skip: [], models: new Map(), autoLine: "" });
+    Object.assign(state.pic, { file, bitmap, box: null, key: state.pic.key + 1, skip: [], swap: {}, models: new Map(), autoLine: "" });
     setThumb(file); $("pic-rotate").hidden = false;
     $("pic-drop").querySelector(".drop-text").innerHTML = sample ? "<b>Choose your own picture</b> or drop it here." : `<b>${escapeHtml(file.name)}</b> · choose another`;
     $("pic-sample-note").hidden = !sample;
@@ -1455,7 +1528,7 @@ $("pic-rotate").onclick = async () => {
   const p = state.pic, b = p.bitmap; if (!b) return;
   const c = makeCanvas(b.height, b.width), ctx = c.getContext("2d");
   ctx.translate(b.height, 0); ctx.rotate(Math.PI / 2); ctx.drawImage(b, 0, 0);
-  Object.assign(p, { bitmap: await createImageBitmap(c), box: null, key: p.key + 1, skip: [], models: new Map() });
+  Object.assign(p, { bitmap: await createImageBitmap(c), box: null, key: p.key + 1, skip: [], swap: {}, models: new Map() });
   setThumb(c.convertToBlob ? await c.convertToBlob() : await new Promise((r) => c.toBlob(r)));
   makePicture();
 };
@@ -1485,7 +1558,9 @@ async function openDesign(file) {
     const was = state.opened;
     if (!was) { state.views.open = null; setMode("open"); setView(null); $("open-info").hidden = true; $("doctor").hidden = true; }
     else setMode("open");
-    showError(was ? `${said} ${was.name} is still open.` : said);
+    // (a picture renamed .pes, or opened here by mistake: one tap takes it to Picture to stitches)
+    const pic = err.picture && { label: "Turn it into stitches", run: async () => loadPicture(new File([await file.arrayBuffer()], file.name.replace(/\.[^.]+$/, "") + "." + err.picture.split(/[/+]/)[1], { type: err.picture })) };
+    showError(was ? `${said} ${was.name} is still open.` : said, pic);
   }
 }
 // The fixes run in a worker (re-stitching star_badge.pes at 250 % froze the page for 10 s): one job at a time, only
@@ -1782,6 +1857,16 @@ $("open-words").onclick = () => {
   const o = state.opened, v = state.views.open; if (!o || !v) return;
   studio.addWords(v.bytes && v.verifyAgainst ? readEmbroidery(v.bytes, "x.pes") : o.d, o.base);
 };
+// the picture's stitches, as the file has them (upright when the hoop is turned), into Design your own: added to the
+// design there, or a new design of it alone. A newcomer downloaded her logo, went to Design your own, picked the Tote
+// starter and added the file back with + Design file.
+function usePicture(fresh) {
+  const v = state.views.picture; if (!v?.bytes) return;
+  const d = readEmbroidery(v.bytes, "x.pes"), name = v.filename.replace(/\.pes$/i, "");
+  studio.usePicture(turned() ? turnPattern(d, false) : d, name, fresh);
+}
+$("pic-add").onclick = () => usePicture(false);
+$("pic-new").onclick = () => usePicture(true);
 // colours for files that carry none (DST): distinct exact Brother threads, then round again
 const DST_SWATCHES = [...DST_COLOURS, "#f0f0f0", "#2584bb", "#b27624", "#66ba49"];
 const brother = (hex) => { const t = nearestBrotherThread(hex); return { color: hex, name: t.name, brand: "Brother" }; };

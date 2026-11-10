@@ -3,6 +3,7 @@
 import { MOST, digitize, keptParts, labelWith, learnColours, pictureInk, toPalette } from "./core/digitize.js";
 import { writePES } from "./core/formats.js";
 import { turnForMachine } from "./core/design.js";
+import { nearestBrotherThread } from "./core/threads.js";
 
 // The colours learned from the picture's fixed-size copy, kept per picture and colour count (Size, Turn hoop and the
 // fill settings reuse them), and the last labelled working copy (moving sliders that don't change it is fast); `ref`:
@@ -22,7 +23,10 @@ self.onmessage = (e) => {
     const lk = `${key}:${img.width}x${img.height}:${crop.join(",")}`;
     if (labelled?.key !== lk) labelled = { key: lk, analysis: labelWith(img, m, crop) };
     const analysis = labelled.analysis;
-    const a = opts.palette?.length ? toPalette(analysis, opts.palette) : analysis;
+    const p = opts.palette?.length ? toPalette(analysis, opts.palette) : analysis;
+    // a thread picked on a colour's chip (`swap`: id -> { hex: a Brother thread's }) sews that colour instead of the one it
+    // was matched to; where it comes in the sewing order stays (its lightness is the picture's)
+    const a = opts.swap ? { ...p, colors: p.colors.map((c) => (opts.swap[c.id] ? { ...c, hex: opts.swap[c.id].hex, thread: nearestBrotherThread(opts.swap[c.id].hex) } : c)) } : p;
     const { design, summary, fine, res, origin } = digitize(img, a, opts);
     // (what of the picture was left out, measured on the learned copy: the same parts at every Size and colour count)
     model.full ||= labelWith(learn, m);

@@ -139,6 +139,18 @@ for (const src of seeds) {
   }
 }
 console.log(`damage said: ${damage} damaged seeds checked`);
+// Files that aren't designs are said as what they are (round 11: a PNG renamed .pes and an empty file both read "has no
+// stitches in it... may be damaged"): a picture offers Picture to stitches (`picture`), the rest say what to do.
+const png = readFileSync("assets/sample-flower.png"), asText = (s) => new TextEncoder().encode(s);
+for (const [bytes, says, picture] of [[new Uint8Array(0), /empty \(0 bytes\)/], [png, /is a picture \(PNG\)/, "image/png"],
+  [new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0, 16, 74, 70, 73, 70]), /picture \(JPEG\)/, "image/jpeg"], [asText("GIF89a\x01\x00"), /picture \(GIF\)/, "image/gif"],
+  [asText("RIFF\x00\x00\x00\x00WEBPVP8 "), /picture \(WebP\)/, "image/webp"], [asText("%PDF-1.7\n"), /a PDF/], [new Uint8Array([0x50, 0x4b, 3, 4, 20, 0]), /\.zip folder.*pick the \.pes/],
+  [asText('<?xml version="1.0"?>\n<svg xmlns="http://www.w3.org/2000/svg"/>'), /drawing \(SVG\)/]])
+  for (const name of ["x.pes", "x.dst", "x.pec"]) {
+    const f = { name, from: name, kind: "not a design", bytes: new Uint8Array(bytes) };
+    try { openedFile(f.bytes, name); fail("opened a file that isn't a design", f); }
+    catch (err) { if (!err.plain || !says.test(err.message) || (err.picture || undefined) !== picture) fail(`said "${err.message}" (picture: ${err.picture})`, f); }
+  }
 console.log(`open fuzz: ${COUNT} files from ${seeds.length} seeds (seed ${SEED}): ${opened} opened (${tooBig} too big for the 5x7, ${shrunk} of them shrunk to fit, ${overshoot} still over after shrinking), ${refusedRead} refused as unreadable, ${fixed} fixed (${soft} still with quality notes), ${bad} problems, ${((Date.now() - t0) / 1000).toFixed(1)} s`);
 if (process.env.VERBOSE) console.log(reasons);
 process.exit(bad ? 1 : 0);

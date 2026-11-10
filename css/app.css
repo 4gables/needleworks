@@ -384,6 +384,9 @@ ul.problems { margin: 0; padding-left: 18px; list-style: disc; display: grid; ga
   .actions { display: grid; grid-auto-flow: column; justify-content: end; row-gap: 6px; min-width: 0; }
   .actions > * { grid-row: 1; }
   .actions > .extras { grid-row: 2; grid-column: 1 / span 2; margin: 0; }
+  /* (the links wrap under Send and Download rather than widening the row out under the centred toast: with Rename and
+     the cutter files they reached left past the middle of the page) */
+  .actions > .extras { width: 0; min-width: 100%; }
 }
 /* narrow two-column screens (tablets upright): Send and Download one above the other (side by side, "Download
    Ashley_bookmark.pes" ran off the screen at 768 x 1024) */
@@ -516,7 +519,7 @@ label:has(> .sr-file:focus-visible), label:has(+ .sr-file:focus-visible) { outli
 }
 /* Windows high contrast: keep thread colours (they're the content) and mark what's chosen with a real outline */
 @media (forced-colors: active) {
-  .swatches button, .doc-blk i, .chips i, .palette i, .threads i, .pieces .pick i, .st-steps i, #view, .cards canvas, .along canvas { forced-color-adjust: none; }
+  .swatches button, .doc-blk i, .chips i, .palette i, .pic-near i, .pic-own, .threads i, .pieces .pick i, .st-steps i, #view, .cards canvas, .along canvas { forced-color-adjust: none; }
   .swatches .custom { forced-color-adjust: none; outline: 1px solid CanvasText; outline-offset: 1px; }   /* ("Any colour": its rainbow vanished) */
   [aria-pressed="true"], [aria-selected="true"], [aria-current="true"], .primary { outline: 2px solid Highlight; outline-offset: 1px; }
 }
@@ -820,3 +823,16 @@ body { overflow-wrap: break-word; }
   .facts span { flex: none; }
 }
 #done-sew .link { font-size: inherit; text-decoration: underline; min-height: 0; padding: 0; }   /* (a link in a sentence: no 44 px line) */
+.names .row { flex-wrap: wrap; }
+.names .row button { white-space: nowrap; }
+.pic-swap { margin-top: 10px; padding: 10px 12px; border: 1.5px solid var(--line); border-radius: 12px; background: var(--panel); }
+.pic-swap p { margin: 0; }
+.pic-near { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0; }
+.pic-near button { display: flex; align-items: center; gap: 6px; border: 1.5px solid var(--line); background: var(--bg); color: var(--ink); border-radius: 10px; padding: 4px 10px 4px 4px; font: inherit; font-size: 14px; cursor: pointer; min-height: 36px; }
+.pic-near i, .pic-own { width: 22px; height: 22px; border-radius: 6px; border: 1px solid rgba(0,0,0,.12); flex: none; display: inline-block; vertical-align: middle; }
+.pic-own { width: 16px; height: 16px; }
+.pic-near small { display: block; color: var(--muted); font-size: 12px; }
+.palette button[aria-expanded="true"], .pic-near button[aria-pressed="true"] { border-color: var(--accent); }
+@media (pointer: coarse) { .pic-near button { min-height: 44px; } }
+.spools-other { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; }
+.spools-other input[type="color"] { width: 44px; height: 32px; padding: 0; border: 1.5px solid var(--field-line); border-radius: 8px; background: none; }

@@ -83,7 +83,7 @@
         <button type="button" id="share" class="ghost share" hidden>Send by text or email</button>
         <button type="button" id="bar-undo" class="ghost bar-undo" disabled title="Undo the last change"><span aria-hidden="true">↶</span> Undo</button>
         <button type="button" id="download" class="primary" disabled>Download PES</button>
-        <p class="extras"><button type="button" id="along-open" class="link" disabled>Sew along</button><button type="button" id="sheet-print" class="link" disabled>Print a sew sheet</button><button type="button" id="names-open" class="link" hidden>One for each name</button><span id="cut-files" class="cut-files" hidden>Cutter file: <button type="button" id="cut-file" class="link" title="The fabric shapes at actual size, to cut them out before you sew: an SVG for Cricut Design Space, Brother CanvasWorkspace or Silhouette Studio Designer Edition">Cricut</button> · <button type="button" id="cut-dxf" class="link" title="The fabric shapes at actual size, to cut them out before you sew: a DXF for Silhouette Studio (the free edition opens DXF, not SVG). Its size is in the file name: set it if Silhouette opens it scaled.">Silhouette</button></span></p>
+        <p class="extras"><button type="button" id="along-open" class="link" disabled>Sew along</button><button type="button" id="sheet-print" class="link" disabled>Print a sew sheet</button><button type="button" id="names-open" class="link" hidden>One for each name</button><span id="cut-files" class="cut-files" hidden>Cutter file: <button type="button" id="cut-file" class="link" title="The fabric shapes at actual size, to cut them out before you sew: an SVG for Cricut Design Space, Brother CanvasWorkspace or Silhouette Studio Designer Edition">Cricut</button> · <button type="button" id="cut-dxf" class="link" title="The fabric shapes at actual size, to cut them out before you sew: a DXF for Silhouette Studio (the free edition opens DXF, not SVG). Its size is in the file name: set it if Silhouette opens it scaled.">Silhouette</button></span><button type="button" id="rename-open" class="link" hidden title="Give the file a name of your own">Rename</button></p>
       </div>
     </div>
   </section>
@@ -142,11 +142,13 @@
         </details>
         <p class="fine-warn" id="pic-fine" role="status" hidden></p>
         <fieldset class="field">
-          <legend>Threads <span class="hint inline">(tap one to leave it out)</span></legend>
+          <legend>Threads <span class="hint inline">(tap one to swap it or leave it out)</span></legend>
           <div id="pic-palette" class="palette"></div>
+          <div id="pic-swap" class="pic-swap" role="region" aria-label="This thread" hidden></div>
           <p class="hint" id="pic-merged" hidden></p>
           <label class="check small" id="pic-mine-row" hidden><input type="checkbox" id="pic-mine"> Use only threads I own</label>
         </fieldset>
+        <p class="open-words" id="pic-use" hidden>Use it in Design your own (with a starter, words or a frame): <button type="button" class="link" id="pic-add">add it to my design</button><span id="pic-or"> or </span><button type="button" class="link" id="pic-new">start a new design with it</button>.</p>
         <details class="steps" id="pic-steps-box">
           <summary>How to stitch it <span class="hint inline" id="pic-steps-count"></span></summary>
           <ol class="st-steps" id="pic-steps"></ol>
@@ -280,13 +282,22 @@
     <div class="row"><button type="submit" class="ghost" value="cancel" id="names-cancel">Cancel</button><button type="button" class="primary" id="names-make">Make the files</button></div>
   </form>
 </dialog>
+<dialog id="rename" class="names" aria-labelledby="rename-title">
+  <form method="dialog">
+    <h2 id="rename-title">Name the file</h2>
+    <input type="text" id="rename-name" maxlength="60" aria-describedby="rename-note" autocomplete="off" spellcheck="false">
+    <p class="hint"><span id="rename-note"></span> <button type="button" class="link" id="rename-auto">Name it from the design</button></p>
+    <div class="row"><button type="submit" class="ghost" value="cancel">Cancel</button><button type="button" class="primary" id="rename-save">Save name</button></div>
+  </form>
+</dialog>
 <dialog id="spools" class="names" aria-labelledby="spools-title">
   <form method="dialog">
     <h2 id="spools-title">Threads I own</h2>
     <label class="field"><span>Brand</span><select id="spools-brand"></select></label>
     <p class="hint">Tap the spools you have.</p>
     <input type="search" id="spools-find" placeholder="Find a spool number or colour name" aria-label="Find a spool" autocomplete="off" spellcheck="false">
-    <p class="hint" id="spools-none" hidden>No spool with that number or name.</p>
+    <p class="hint" id="spools-none" hidden></p>
+    <p class="hint spools-other" id="spools-other"><span>Another brand (Madeira, Gunold…)? Hold a spool by the screen and pick its colour:</span> <input type="color" id="spools-colour" value="#7f3fbf" aria-label="Your spool's colour"> <button type="button" class="link" id="spools-all" hidden>Show every spool</button></p>
     <div id="spools-grid" class="spool-grid" role="group" aria-label="Spools" aria-describedby="spools-grid-keys"></div>
     <span class="sr" id="spools-grid-keys">Arrow keys go between the spools; Space or Enter ticks one.</span>
     <p class="hint" id="spools-note"></p>

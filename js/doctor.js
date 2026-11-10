@@ -728,7 +728,31 @@ function firstMove(d) {
   const skipped = d.stitches.slice(0, k).filter((s) => s[2] === COLOR_CHANGE).length;
   return { ...d, stitches: d.stitches.slice(k), threads: d.threads.slice(Math.min(skipped, Math.max(0, d.threads.length - 1))), pec: d.pec?.slice(skipped) };
 }
+// What a file that isn't an embroidery design is, from its first bytes, said plainly (with `picture`: the image type,
+// for Picture to stitches to take it), or null. A PNG renamed .pes said "has no stitches in it... may be damaged", an
+// empty file the same; a zipped download is the usual way designs come.
+const SNIFF = [
+  [[0x89, 0x50, 0x4e, 0x47], "a picture (PNG)", "image/png"], [[0xff, 0xd8, 0xff], "a picture (JPEG)", "image/jpeg"],
+  [[0x47, 0x49, 0x46, 0x38], "a picture (GIF)", "image/gif"], [[0x25, 0x50, 0x44, 0x46], "a PDF (a pattern or instructions sheet?)"],
+  [[0x50, 0x4b, 0x03, 0x04], "a .zip folder"],
+];
+export function notEmbroidery(bytes, name) {
+  const b = bytes, at = (sig, i = 0) => sig.every((v, k) => b[i + k] === v), text = (i, s) => [...s].every((c, k) => b[i + k] === c.charCodeAt(0));
+  if (!b.length) return { message: `${name} is empty (0 bytes): nothing was saved in it. Download it again from where it came from.` };
+  let what = null, type = null;
+  for (const [sig, w, t] of SNIFF) if (at(sig)) { what = w; type = t || null; }
+  if (text(0, "RIFF") && text(8, "WEBP")) { what = "a picture (WebP)"; type = "image/webp"; }
+  if (text(4, "ftyp") && /^(heic|heix|mif1|avif)$/.test(String.fromCharCode(...b.subarray(8, 12)))) what = "a photo (HEIC or AVIF)";
+  if (/^\s*(<\?xml[^]*)?<svg/i.test(String.fromCharCode(...b.subarray(0, 300)))) what = "a drawing (SVG)";
+  if (!what) return null;
+  const how = what === "a .zip folder" ? " Open it (double-click it) and pick the .pes file inside."
+    : type ? " Picture to stitches can turn it into stitches." : /^a (photo|drawing)/.test(what) ? " Save it as a JPG or PNG, then Picture to stitches can turn it into stitches." : " Look for the .pes file that came with it.";
+  return { message: `${name} is ${what}, not an embroidery design.${how}`, picture: type };
+}
 export function openedFile(bytes, name) {
+  // (a picture, a PDF, a zip or an empty file, said as what it is)
+  const not = notEmbroidery(bytes, name);
+  if (not) throw Object.assign(new Error(not.message), { plain: true, picture: not.picture });
   // (jumps landed on their first stitch: a DST converted here, or a fixed copy, would gain a hole where each ended)
   let d = centred(firstMove(landJumps(readEmbroidery(bytes, name))));
   // (a needle move: a stitch that goes somewhere. A file cut down to one stitch on the origin opened, then Download
