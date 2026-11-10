@@ -6,9 +6,9 @@ import { DEFAULT_MACHINE, MACHINES, MARGIN, hoop as getHoop } from "./core/machi
 import { DENSITY, LEARN, MOST, contentBox, lostMuch, picturePlan, pictureImage, sewSized } from "./core/digitize.js";
 import { PEC_MATCH, hexToRgb, nearestBrotherThread, pecThread } from "./core/threads.js";
 import { CLOTHS, colorBlocks, draw } from "./render.js";
-import { TURNED, TURN_PIC, cutDXF, cutName, cutSVG, firstStep, sewMinutes, sewSheet, told, youHtml } from "./sheet.js";
+import { TURNED, TURN_PIC, cutDXF, cutName, cutSVG, firstStep, sewSheet, sewTime, stepTime, told, youHtml } from "./sheet.js";
 import { handOut, judge } from "./gate.js";
-import { DST_COLOURS, checkup, fewerBlocks, fix, heat, openedFile, pauses, shortJumps, sortedChanges } from "./doctor.js";
+import { DST_COLOURS, blockLoads, checkup, fewerBlocks, fix, heat, openedFile, pauses, shortJumps, sortedChanges } from "./doctor.js";
 import { HARD, MAX_BLOCKS, denseWords, moves, verdictOf } from "./quality.js";
 import { BLOCK, LOOK, LOOK_HEAD, TIP, TIP_HEAD, problemsHtml, problemsInline, problemsItems, problemsOf, shownOn, stopWords, stopsAt, mmText } from "./words.js";
 import { brief, safeName, tidy, uniqueName, withSwash } from "./core/typed.js";
@@ -129,25 +129,31 @@ function setView(v) {
   const stops = v.split ? v.split.reduce((a, p) => a + designStats(p.pattern).colorChanges, 0) : st.colorChanges;
   const counts = (v.split ? v.split.map((q) => stopCounts(q.pattern)) : [stopCounts(v.file, st.colorChanges)]).reduce((a, b) => [a[0] + b[0], a[1] + b[1]]);
   // (the threads the machine cuts take time too: a jump of 5 mm or less isn't cut, `snips`)
-  const snips = shortJumps(v.file), minutes = sewMinutes(st.stitches, Math.max(0, st.trims - snips), stops);
+  const snips = shortJumps(v.file), time = sewTime(blockLoads(v.file), stops), minutes = time.total;
   $("fact-tip")?.remove();
   const orient = turned() ? "turned" : state.mode === "open" && !square() ? "machine" : "";
+  // What every surface says of the design (the chips here, the sew sheet, the download dialog, Sew along, the Open
+  // tab's file card), worked out once: the sew sheet said 54 × 169 mm for the turned bookmark the chips and the dialog
+  // called 169 × 54, and Sew along's steps added up to another time.
+  // (a size just over the field isn't rounded down to read as if it fits: 126.4 showed as 126 beside "fits 126")
+  // (which way round, where it can differ: a bookmark is 169 × 54 in the Design tab, hoop turned, and its file
+  // 54 × 169 in the Open tab, as the machine's screen shows it)
+  v.fact = { size: mmText([shown.widthMm, shown.heightMm], [shownHoop().w - 2 * MARGIN, shownHoop().h - 2 * MARGIN]), machineSize: `${st.widthMm.toFixed(0)} × ${st.heightMm.toFixed(0)} mm`,
+    turned: orient === "turned", stitches: `${st.stitches.toLocaleString()} stitches`, stops: counts[0] + counts[1] ? stopWords(...counts) : "no thread changes",
+    minutes, steps: time.steps, time: `≈ ${minutes} min`, hoop: `${h.machineName} ${h.name}`, snips: snips ? `${snips} loose ${snips === 1 ? "thread" : "threads"} to snip after` : "" };
   $("facts").innerHTML = [
-    // (a size just over the field isn't rounded down to read as if it fits: 126.4 showed as 126 beside "fits 126")
-    // (which way round, where it can differ: a bookmark is 169 × 54 in the Design tab, hoop turned, and its file
-    // 54 × 169 in the Open tab, as the machine's screen shows it)
-    `<span>${mmText([shown.widthMm, shown.heightMm], [shownHoop().w - 2 * MARGIN, shownHoop().h - 2 * MARGIN])}</span>`,
-    orient === "turned" ? `<span${tip(`The size across × down with the hoop turned sideways, as shown here. The machine's screen shows it on its side: ${st.widthMm.toFixed(0)} × ${st.heightMm.toFixed(0)} mm.`)}>Hoop turned</span>`
+    `<span>${v.fact.size}</span>`,
+    orient === "turned" ? `<span${tip(`The size across × down with the hoop turned sideways, as shown here. The machine's screen shows it on its side: ${v.fact.machineSize}.`)}>Hoop turned</span>`
       : orient ? `<span${tip("The size across × down with the hoop upright, as the machine's screen shows it. A design made with the hoop turned reads the other way round here.")}>As the machine shows it</span>` : "",
-    `<span>${st.stitches.toLocaleString()} stitches</span>`,
+    `<span>${v.fact.stitches}</span>`,
     // (thread changes and pauses in the same thread, in the same words on every tab: the Design tab said "1 pause" for
     // the stop the Open tab called "1 thread change"; two hoopings count the stops in both files)
     stops ? stopsFact(...counts) : "",
-    `<span>≈ ${minutes} min</span>`,
+    `<span>${v.fact.time}</span>`,
     // (the Design tab never said it fits, as the Open tab's file card does)
     v.split ? `<span>${v.split.length} hoopings</span>` : fits ? (state.mode === "design" ? `<span>Fits ${escapeHtml(h.name.replace(/ hoop$/, ""))}</span>` : "") : `<span class="bad">Too big for the ${h.name}</span>`,
     offCentre(v, fits) ? `<span class="note">Off centre here: the machine centres it <button type="button" class="link" id="recentre">Centre it</button></span>` : "",
-    snips ? `<span${tip("Short threads the machine leaves between two parts instead of cutting them. They're locked at both ends, so snip them after stitching. (The machine only cuts moves longer than its “jump stitch not to trim” setting, 5 mm at the lowest.)")}>${snips} loose ${snips === 1 ? "thread" : "threads"} to snip after</span>` : "",
+    snips ? `<span${tip("Short threads the machine leaves between two parts instead of cutting them. They're locked at both ends, so snip them after stitching. (The machine only cuts moves longer than its “jump stitch not to trim” setting, 5 mm at the lowest.)")}>${v.fact.snips}</span>` : "",
   ].join("");
   // One chip per thread, in the order each is first put on, with how many times it's put on: a chip per colour block
   // (Black, Red, Black) named one thread twice, each with its own note, and the row grew over the preview. Blocks in a
@@ -166,8 +172,9 @@ function setView(v) {
     const small = [file, l.short, times > 1 ? `used ${times === 2 ? "twice" : `${times} times`}` : ""].filter(Boolean).join(" · ");
     return `<li${l.note ? ` title="${escapeHtml(`${name} · ${l.note}`)}"` : ""}><i style="background:${color}"></i><span>${escapeHtml(name)}${small ? `<br><small>${escapeHtml(small)}</small>` : ""}</span></li>`;
   }).join("");
-  v.facts = [mmText([st.widthMm, st.heightMm], [h.w - 2 * MARGIN, h.h - 2 * MARGIN]), `${st.stitches.toLocaleString()} stitches`,
-    counts[0] + counts[1] ? stopWords(...counts) : "no thread changes", `≈ ${minutes} min`, `${h.machineName} ${h.name}`];
+  // (the sew sheet's line: the chips' words; its 1:1 drawing is the file, on its side when the hoop is turned)
+  v.fact.threads = chips.size;
+  v.facts = [v.fact.size, v.fact.turned ? `hoop turned: drawn below on its side, as the machine's screen shows it (${v.fact.machineSize})` : "", v.fact.stitches, v.fact.stops, v.fact.time, v.fact.hoop, v.fact.snips].filter(Boolean);
   // (`block`: a design that can't be sewn as it is, such as words wrapped round into themselves: no file until it's fixed)
   const blocked = blocking(v);
   $("download").disabled = !fits || !!blocked; $("share").disabled = !fits || !!v.split || !!blocked;
@@ -218,7 +225,9 @@ function picSteps(v, st) {
   const steps = blocks.map((b, i) => ({ you: i ? `Change to ${thread(b)} and press Start.` : firstStep(v.filename, thread(b), "Hoop the fabric with the stabilizer under it"), sews: "" }));
   const after = "Take the hoop off and snip any loose threads between parts. Tear-away stabilizer: tear it off gently, holding the stitches down with your thumb. Cut-away: trim it about ¼ in from the stitching (don't tear it: it keeps the design in shape).";
   const said = v.sheet = told({ ...v.sheet, ready, steps, after: [after] });
-  $("pic-steps-count").textContent = `· ${blocks.length} ${blocks.length === 1 ? "thread" : "threads"}`;
+  // (counted as the Design tab counts its steps, the stops in the chips' words: "· 4 threads" counted colour blocks,
+  // so a thread put on twice was two threads beside one chip)
+  $("pic-steps-count").textContent = `· ${blocks.length} ${blocks.length === 1 ? "step" : "steps"}${blocks.length > 1 ? `, ${v.fact.stops}` : ""}`;
   $("pic-steps").innerHTML = problemsItems(shownOn(problemsOf(v), "steps")) + (turned() ? `<li class="after"><b>Hooping</b><span class="turned">${TURN_PIC}${escapeHtml($("done-turn").textContent)}</span></li>` : "")
     + `<li class="after"><b>Have ready</b><ul class="ready">${said.ready.map((r) => `<li>${escapeHtml(r)}</li>`).join("")}</ul></li>`
     + blocks.map((b, i) => { const t = mt[b.index] || nearestBrotherThread(b.color);
@@ -529,7 +538,9 @@ function downloaded(v, zipped, files = [], saved = true) {
   const h = hoop(), s = v.shown && designStats(v.shown);
   // (a design in two hoopings: each hooping's size, not the whole design's 136 × 170 that the hoop can't take)
   const parts = v.split?.map((p) => designStats(turned() ? turnPattern(p.pattern, false) : p.pattern));
-  const size = parts ? `in ${parts.length} hoopings, ${parts.map((q) => mmText([q.widthMm, q.heightMm])).join(" and ")}, each fitting the hoop` : s ? mmText([s.widthMm, s.heightMm]) : "";
+  // (the chips' words for it: the dialog said sizes to the tenth, "169.3 × 54 mm", beside the chips' whole "169 × 54")
+  const lim = [shownHoop().w - 2 * MARGIN, shownHoop().h - 2 * MARGIN];
+  const size = parts ? `in ${parts.length} hoopings, ${parts.map((q) => mmText([q.widthMm, q.heightMm], lim)).join(" and ")}, each fitting the hoop` : s ? v.fact?.size || mmText([s.widthMm, s.heightMm], lim) : "";
   const [ch, same] = (v.split ? v.split.map((q) => stopCounts(q.pattern)) : [stopCounts(v.file)]).reduce((a, b) => [a[0] + b[0], a[1] + b[1]]);
   const what = `on a ${h.machineName} in the ${h.name}${s ? `, ${size}, ${ch + same ? `${stopWords(ch, same)}${parts ? " in all" : ""}` : parts ? "no thread changes in either" : "no thread changes"}` : ""}`;
   // ("Checked" only when the stitches pass too: it said so for files tests/pe900_check.py fails; and not for a file cut
@@ -676,9 +687,8 @@ function alongSteps(v) {
   if (sheet.ready.length && steps.length) steps[0] = { ...steps[0], ready: sheet.ready };
   if (turnedFile() && steps.length) steps[0] = { ...steps[0], turn: $("done-turn").textContent };
   return steps.map((s, i) => {
-    const b = blocks.find((x) => x.index === i), n = b ? b.segs.reduce((a, sg) => a + sg.length, 0) : 0;
-    // (each move between parts in the block counted as a cut thread, as the facts' estimate counts trims)
-    return { ...s, block: b, minutes: sewMinutes(n, b ? Math.max(0, b.segs.length - 1) : 0) };
+    // (each step's share of the chips' time, its pause included: the steps add up to it)
+    return { ...s, block: blocks.find((x) => x.index === i), minutes: v.fact?.steps[i] ?? 0 };
   });
 }
 function alongShow() {
@@ -704,7 +714,7 @@ function alongShow() {
     $("along-look").hidden = !probs; $("along-look").innerHTML = probs;
     $("along-you").innerHTML = s.you || !i ? youHtml(s.you || firstStep(v.filename), escapeHtml, "p") : "";
     $("along-sews").textContent = s.sews || "";
-    $("along-time").textContent = `About ${s.minutes} min of sewing.`;
+    $("along-time").textContent = stepTime(s.minutes);
     // (what to do when the wrong thread went on: nothing said, a tester stopped and started over)
     // (closed again on a new step only: a resize redraws the screen)
     $("along-wrong").hidden = false; if (along.at !== i) $("along-wrong").open = false;
@@ -814,11 +824,12 @@ $("names-make").onclick = async () => {
     return;
   }
   smallerOk = false;
-  // every name as it'll sew, to look over (is one crowded?), with what's different about it
+  // every name as it'll sew, to look over (is one crowded?), with what's different about it, and its file's name where
+  // that isn't the name as typed (Zoë is Zoe.pes, a second Emma Emma_2.pes: the note names files, the machine shows them)
   // (a name sewn as a thin line where the design is bold stands out: it was one more word in the brackets)
   // (how much smaller, said: "(smaller)" was all a name made at 28 % said)
   const notes = (m) => [m.smaller ? `smaller, ${m.pct} %` : "", m.lines ? "on two lines" : "", m.sideways ? "hoop turned" : "", m.runs ? `runs into ${m.runs}` : ""].filter(Boolean).join(", ");
-  $("names-thumbs").innerHTML = made.map((m, i) => `<figure data-size="${m.size.map((v) => +(v || 0).toFixed(2)).join(" ")}"><canvas data-i="${i}"></canvas><figcaption>${escapeHtml(m.name)}${notes(m) ? ` (${escapeHtml(notes(m))})` : ""}${m.thin ? `<br><strong class="names-thin">Thin line, not bold</strong>` : ""}</figcaption></figure>`).join("");
+  $("names-thumbs").innerHTML = made.map((m, i) => `<figure data-size="${m.size.map((v) => +(v || 0).toFixed(2)).join(" ")}"><canvas data-i="${i}"></canvas><figcaption>${escapeHtml(m.name)}${m.file !== `${m.name}.pes` ? ` · ${escapeHtml(m.file)}` : ""}${notes(m) ? ` (${escapeHtml(notes(m))})` : ""}${m.thin ? `<br><strong class="names-thin">Thin line, not bold</strong>` : ""}</figcaption></figure>`).join("");
   for (const c of $("names-thumbs").querySelectorAll("canvas")) {
     const m = made[+c.dataset.i]; draw(c, m.shown || m.pattern, { pad: 6, fabric: "white" });   // (3 px: an arched name's top sat on the edge)
   }
@@ -1650,12 +1661,14 @@ function fileCalls(name, machine, hex) {
 // in green beside "Too big", and gave the stitch count of the file as it came)
 function openInfo(v, st, fits) {
   const o = state.opened, h = hoop(), d = o.d, big = largest();
-  const threads = new Set(d.threads.map((t) => (t.color || "").toLowerCase())).size;
+  // (threads as the chips count them, one per thread the machine shows: the file's own list can name a thread twice or
+  // one it never uses)
+  const threads = o.colourless ? new Set(d.threads.map((t) => (t.color || "").toLowerCase())).size : v.fact.threads;
   $("open-info").hidden = false;
   $("open-info").innerHTML = `<b>${escapeHtml(o.name)}</b>
-    <span title="${d.format.toUpperCase()}${pesVersion(d.version)}">${st.stitches.toLocaleString()} stitches · ${o.colourless ? `no thread colours in the file (${threads === 1 ? "shown in one colour" : `shown in ${threads} colours to tell the parts apart`})` : `${threads} thread ${threads === 1 ? "colour" : "colours"}`}</span>
+    <span title="${d.format.toUpperCase()}${pesVersion(d.version)}">${v.fact.stitches} · ${o.colourless ? `no thread colours in the file (${threads === 1 ? "shown in one colour" : `shown in ${threads} colours to tell the parts apart`})` : `${threads} thread ${threads === 1 ? "colour" : "colours"}`}</span>
     ${fits ? `<span class="good">Fits the ${h.machineName} ${h.name}.</span>`
-      : `<span class="warn">Too big for the ${h.name}: it's ${mmText([st.widthMm, st.heightMm], [h.w - 2 * MARGIN, h.h - 2 * MARGIN])}. ${big.scale >= 0.5 ? `<button type="button" class="link" id="doc-largest">Make it the largest that fits (${big.pct} %)</button>` : "Even at half size it won't fit this hoop."}</span>`}
+      : `<span class="warn">Too big for the ${h.name}: it's ${v.fact.size}. ${big.scale >= 0.5 ? `<button type="button" class="link" id="doc-largest">Make it the largest that fits (${big.pct} %)</button>` : "Even at half size it won't fit this hoop."}</span>`}
     ${o.damaged ? `<span class="warn" data-problem="damaged">This file looks damaged: its parts don't agree with each other, as happens when a download or copy goes wrong. What's shown is what your machine would sew from it, which may not be the design at all. Download it again from where it came from if you can.</span>`
       : o.disagree ? `<span class="warn" data-problem="disagree">This file holds two different designs: PE-DESIGN would open one, and your machine would sew the other. The copy saved here is the one the machine sews (shown here), so both will show the same.</span>` : ""}
     ${o.short ? `<span class="warn" data-problem="short">This file ends early: it may be damaged (cut short or changed when it was downloaded or copied), so only part of the design is here. Download it again from where it came from if you can. A copy saved here is complete for the part that's left.</span>` : ""}

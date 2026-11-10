@@ -14,6 +14,8 @@
 //   design" (one piece more), both with the picture's threads.
 // - A picture colour's chip swaps its thread: the file then carries the thread picked, and Back undoes it.
 // - Threads I own: a search for an unlisted brand says it isn't listed; a colour picked shows the nearest spools.
+// - (round 12) One for each name: a name saved under another file name (Zoë as Zoe.pes, a second Emma as Emma_2.pes)
+//   says so under its thumbnail.
 // usage: node tests/cdp.mjs PORT start DIR; serve the site (tests/batch_server.py out/batch HTTP); then
 //        node tests/files_flow.mjs PORT http://127.0.0.1:HTTP      (~1 min; prints DONE <checks> <problems>)
 const [port, base] = process.argv.slice(2);
@@ -97,6 +99,12 @@ for (const [bytes, says, pic] of [[png, /is a picture \(PNG\)/, true], ["new Uin
   check("Rename names the Download", /Download Mom_s_coaster_2\.pes/.test(n[0]), n[0]);
   for (const [what, re] of [["PES", /^Mom_s_coaster_2\.pes$/], ["saved design", /^Mom_s_coaster_2\.needleworks\.json$/], ["Cricut file", /^Mom_s_coaster_2_cut_\d+x\d+mm\.svg$/], ["Silhouette file", /^Mom_s_coaster_2_cut_\d+x\d+mm\.dxf$/], ["names ZIP", /^Mom_s_coaster_2_\d+_(names|monograms)\.zip$/]])
     check(`Rename names the ${what}`, n[1].some((f) => re.test(f)), n[1].join(" "));
+  // (round 12) each name's thumbnail says the file it went to where that isn't the name as typed: the note names files
+  // (Hoop the fabric a quarter turn round for Zoe.pes) and the machine's screen shows them
+  const caps = await run(`document.getElementById("names-open").click(); document.getElementById("names-list").value = "Zoë\\nemma\\nEmma"; document.getElementById("names-make").click();
+    await __ff.wait(() => document.querySelectorAll("#names-thumbs figcaption").length === 3 && !document.getElementById("names-make").disabled, 30000);
+    const c = [...document.querySelectorAll("#names-thumbs figcaption")].map((f) => f.textContent); __ff.close(); return c;`);
+  check("a name's thumbnail says its file where it isn't the name", caps.some((t) => /^Zoë · Zoe\.pes/.test(t)) && caps.some((t) => /^Emma · Emma_2\.pes/.test(t)) && caps.some((t) => /^emma(?! ·)/.test(t)), caps.join(" | "));
   const k = await run(`location.reload(); return 1;`).catch(() => 1);
   await open("#design");
   const kept = await run(`return document.getElementById("download").textContent;`);
