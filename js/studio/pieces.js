@@ -307,14 +307,14 @@ export function touching(p, pieces) {
 // skipped without measuring (the same answer, faster: a design of 15 pieces measured every pair).
 export function touchingAll(p, pieces, first = false) {
   if (p.kind === "frame") return [];
-  const fit = fittedSizes(pieces), sewn = (o) => (fit.has(o.id) ? { ...o, size: fit.get(o.id) } : o);
+  const fit = fittedSizes(pieces), sewnOf = (o) => sewn(o, pieces, fit);
   const paths = pieceStitches(p), pts = paths.flat(), out = [];
   if (!pts.length) return out;
   const b = bounds(pts);
   let mine = null;
   for (const o of pieces) {
     if (o === p || o.id === p.id || (o.kind === "frame" && o.border === "patch")) continue;
-    const theirs = pieceStitches(sewn(o)), tp = theirs.flat();
+    const theirs = pieceStitches(sewnOf(o)), tp = theirs.flat();
     if (!tp.length) continue;
     const c = bounds(tp);
     if (c[0] > b[2] + CLEAR || c[2] < b[0] - CLEAR || c[1] > b[3] + CLEAR || c[3] < b[1] - CLEAR) continue;
@@ -326,13 +326,13 @@ export function touchingAll(p, pieces, first = false) {
 // the first piece that runs into another, and what it runs into ([p, q]), or null
 export function collision(pieces) {
   const fit = fittedSizes(pieces);
-  for (const p of pieces) { const q = touching(fit.has(p.id) ? { ...p, size: fit.get(p.id) } : p, pieces); if (q) return [p, q]; }
+  for (const p of pieces) { const q = touching(sewn(p, pieces, fit), pieces); if (q) return [p, q]; }
   return null;
 }
 // every pair of pieces that run into each other, each pair once ([p, q] in list order)
 export function collisions(pieces) {
   const fit = fittedSizes(pieces), out = [], seen = new Set();
-  for (const p of pieces) for (const q of touchingAll(fit.has(p.id) ? { ...p, size: fit.get(p.id) } : p, pieces)) {
+  for (const p of pieces) for (const q of touchingAll(sewn(p, pieces, fit), pieces)) {
     const [a, b] = pieces.indexOf(p) < pieces.indexOf(q) ? [p, q] : [q, p], k = a.id + ":" + b.id;
     if (!seen.has(k)) { seen.add(k); out.push([a, b]); }
   }
@@ -343,10 +343,10 @@ export function collisions(pieces) {
 // held the page up 4.6 s): { tiny: lettering that would be too small to stitch and isn't now, hit: [a, b] a pair that
 // would run into each other and doesn't now }
 export function scaledFit(pieces, k) {
-  const fit = fittedSizes(pieces), sewn = (o) => (fit.has(o.id) ? { ...o, size: fit.get(o.id) } : o);
-  const tiny = pieces.find((p) => { const q = sewn(p), l = bulk(q), least = q.kind === "text" ? fontOf(q.font).min || 4 : 4; return l && l.parts.length && l.xh >= least && l.xh * k < least; }) || null;
+  const fit = fittedSizes(pieces), sewnOf = (o) => sewn(o, pieces, fit);
+  const tiny = pieces.find((p) => { const q = sewnOf(p), l = bulk(q), least = q.kind === "text" ? fontOf(q.font).min || 4 : 4; return l && l.parts.length && l.xh >= least && l.xh * k < least; }) || null;
   const was = new Set(collisions(pieces).map(([a, b]) => `${a.id}:${b.id}`));
-  const st = new Map(pieces.map((o) => [o.id, pieceStitches(sewn(o)).map((q) => q.map(([x, y]) => [x * k, y * k]))]));
+  const st = new Map(pieces.map((o) => [o.id, pieceStitches(sewnOf(o)).map((q) => q.map(([x, y]) => [x * k, y * k]))]));
   for (const p of pieces) {
     if (p.kind === "frame") continue;
     const mine = st.get(p.id), b = bounds(mine.flat());
@@ -368,7 +368,7 @@ export function scaledFit(pieces, k) {
 // the biggest size (0.5 mm steps, down to 60 %, never too small to stitch) at which p clears `other`, or 0
 // (halving the range, not 0.5 mm at a time: a 113 mm filled heart over a monogram stitched ~90 sizes, 4.7 s per change)
 export function clearSize(p, pieces, other) {
-  const from = fittedSizes(pieces).get(p.id) ?? p.size, theirs = pieceStitches(other), sizes = [];
+  const from = fittedSizes(pieces).get(p.id) ?? p.size, theirs = pieceStitches(sewn(other, pieces)), sizes = [];
   for (let s = Math.ceil(from * 2) / 2 - 0.5; s >= Math.max(5, from * 0.6); s -= 0.5) sizes.push(s);
   // the sizes before the first one too small to stitch (smaller is never better there)
   let x = -1, n = sizes.length;
@@ -414,8 +414,19 @@ export function layoutSize(pieces) {
 // quilt label whose two-line words were asked wider than their frame "fitted" the 5x7 smaller (92 -> 91 mm wide).
 export function sewnBoxes(pieces) {
   const fit = fittedSizes(pieces);
-  return pieces.map((p) => pieceBounds(fit.has(p.id) ? { ...p, size: fit.get(p.id) } : p)).filter(Boolean);
+  return pieces.map((p) => pieceBounds(sewn(p, pieces, fit))).filter(Boolean);
 }
+// p as it's sewn among `pieces` (it may be a new piece not in the list yet): lettering a frame shrinks at its fitted
+// size (`fittedSizes`), anything else as it is. The one way to measure a piece where it shows: decide or say
+// nothing from p.size / pieceBounds(p) as asked (tests/sewn_lint.mjs). Measured as asked, a key fob's 25 mm monogram
+// sewn 9 mm wasn't "on" the fob, Fit to hoop shrank a quilt label, the selection box ran past the letters.
+// (`fit`: fittedSizes of the same list, when the caller has it)
+export function sewn(p, pieces, fit = null) {
+  fit ||= fittedSizes(pieces.some((o) => o.id === p.id) ? pieces : [...pieces, p]);
+  const f = fit.get(p.id);
+  return f != null && f !== p.size ? { ...p, size: f } : p;
+}
+export function sewnBox(p, pieces, fit = null) { return pieceBounds(sewn(p, pieces, fit)); }
 export function layoutBox(pieces) {
   const bs = sewnBoxes(pieces);
   return bs.length ? [Math.min(...bs.map((b) => b[0])), Math.min(...bs.map((b) => b[1])), Math.max(...bs.map((b) => b[2])), Math.max(...bs.map((b) => b[3]))] : null;
@@ -2016,7 +2027,8 @@ function carve(p, stages, above, fab) {
 // (one piece is bigger than the hoop by itself, or no cut leaves both halves small enough).
 export function splitPieces(pieces, hoop) {
   const lw = hoop.w - 2 * MARGIN - 2, lh = hoop.h - 2 * MARGIN - 2;
-  const items = pieces.map((p) => ({ p, b: pieceBounds(p) })).filter((it) => it.b);
+  // (each at the size it's sewn: lettering asked bigger than its frame counted as bigger than half the hoop)
+  const fit = fittedSizes(pieces), items = pieces.map((p) => { const q = sewn(p, pieces, fit); return { p, q, b: pieceBounds(q) }; }).filter((it) => it.b);
   if (items.length < 2) return null;
   const all = [Math.min(...items.map((i) => i.b[0])), Math.min(...items.map((i) => i.b[1])), Math.max(...items.map((i) => i.b[2])), Math.max(...items.map((i) => i.b[3]))];
   for (const ax of all[2] - all[0] - lw > all[3] - all[1] - lh ? [0, 1] : [1, 0]) {
@@ -2047,7 +2059,7 @@ export function splitPieces(pieces, hoop) {
 // pulled out), near a quarter and three quarters of the way across, at least 20 mm apart when the hooping allows
 // (the further apart, the truer the second hooping lines up). null when no line has two clear spots.
 function crossSpots(items, best, at, { lo, hi, L, C, c0, c1 }) {
-  const ink = cloud(items.flatMap((i) => pieceStitches(i.p)));
+  const ink = cloud(items.flatMap((i) => pieceStitches(i.q)));
   const ext = (g) => [Math.min(...g.map((i) => i.b[lo])), Math.max(...g.map((i) => i.b[hi]))];
   const [aLo, aHi] = ext(best.A), [bLo, bHi] = ext(best.B);
   const vLo = c1 - C + 5, vHi = c0 + C - 5, mid = (c0 + c1) / 2, half = Math.max((c1 - c0) / 4, Math.min(20, (vHi - vLo) / 2));
@@ -2164,7 +2176,7 @@ export function compose(pieces, hoop, opts = {}) {
 function build(pieces, hoop, opts) {
   const fab = FABRICS[opts.fabric] ? opts.fabric : "cotton";
   const fit = fittedSizes(pieces);
-  pieces = pieces.map((p) => (fit.has(p.id) ? { ...p, size: fit.get(p.id) } : p));
+  pieces = pieces.map((p) => sewn(p, pieces, fit));
   const box = (paths) => { const [x0, y0, x1, y1] = bounds(paths.flat()); return [x0 - 1, y0 - 1, x1 + 1, y1 + 1]; };
   const hits = (a, b) => a[0] < b[2] && b[0] < a[2] && a[1] < b[3] && b[1] < a[3];
   const order = [], last = [], edges = [], staged = pieces.map((p) => pieceStages(p, fab).map((st) => ({ label: label(p, true), ...st })));
