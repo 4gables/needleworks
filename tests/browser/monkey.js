@@ -244,6 +244,14 @@ function checks(f, sc, act, before) {
     const fit = P.fittedSizes(s.pieces), want = fit.get(sel.id) ?? sel.size, m = /^([\d.]+) mm/.exec(szOut.textContent.trim());
     if (m && Math.abs(+m[1] - want) > 0.5) add("stale", `the height reads “${szOut.textContent}” but ${P.label(sel)} is sewn at ${want} mm`);
   }
+  // (round 14) every slider stands at the piece's value and its label says that value: a fix's 18.5 mm on a 1 mm
+  // slider stood at 19 and read "19 mm"; a 31.5 mm curve sat at 32 beside "31.5 mm"
+  if (sel) for (const r of all('#st-edit input[type="range"][data-k]')) {
+    const k = r.dataset.k, v = sel[k]; if (typeof v !== "number") continue;
+    const o = r.nextElementSibling?.textContent.trim() || "", m = /^(-?[\d.]+)/.exec(o), sewnAt = / sewn$/.test(o);
+    if (Math.abs(+r.value - v) > 1e-6 && !(k === "size" && sewnAt)) add("stale", `the ${k} slider stands at ${r.value} but ${P.label(sel)}'s ${k} is ${v}`);
+    else if (m && !sewnAt && Math.abs(+m[1] - +r.value) > 1e-6) add("stale", `the ${k} slider stands at ${r.value} but reads “${o}”`);
+  }
   // a change that doesn't set a size keeps the size asked for while a frame still fits the lettering (shorter words
   // after longer ones the heart had shrunk kept the shrunk 9 mm)
   if (before?.d && ASKED.has(act.t === "menu" ? `menu-${String(act.what).split("=")[0]}` : act.t) && before.d.pieces.length === s.pieces.length)

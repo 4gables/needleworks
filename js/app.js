@@ -11,7 +11,7 @@ import { handOut, judge } from "./gate.js";
 import { DST_COLOURS, blockLoads, checkup, fewerBlocks, fix, heat, openedFile, pauses, shortJumps, sortedChanges } from "./doctor.js";
 import { HARD, MAX_BLOCKS, denseWords, moves, verdictOf } from "./quality.js";
 import { BLOCK, LOOK, LOOK_HEAD, TIP, TIP_HEAD, isolate, problemsHtml, problemsInline, problemsItems, problemsOf, shownOn, stopWords, stopsAt, mmText } from "./words.js";
-import { brief, safeName, tidy, uniqueName, withSwash } from "./core/typed.js";
+import { brief, monogramHelp, safeName, tidy, uniqueName, withSwash } from "./core/typed.js";
 import { BRANDS, apart, brotherNum, chartSpools, exampleSpools, lab, nearestSpool, nearestSpools, ownSpoolOf, spools } from "./core/brands.js";
 import { COLORS as LINE_THREADS, initStudio, savedDesign } from "./studio/ui.js";
 
@@ -203,12 +203,15 @@ function setView(v) {
   paint();
 }
 let qTimer = 0;
+$("dl-warn").addEventListener("click", (e) => { const b = e.target.closest("[data-show-fix]"); if (b) studio.showFix(+b.dataset.showFix); });
 // what stops a file being made: a wait (a design file re-stitching) or a problem that blocks it (words.js)
 const blocking = (v) => v.block || problemsOf(v).find((q) => q.level === BLOCK)?.text || "";
 // beside Download: the view's problems (words.js), then what's wrong with the file itself
 function warnUI(v) {
   const all = shownOn(problemsOf(v), "download"), own = all.filter((q) => !q.file), file = all.filter((q) => q.file);
-  const html = [v.block ? escapeHtml(v.block) : "", problemsInline(own), own.length && v.fixHint ? escapeHtml(v.fixHint) : "",
+  // (where the fix is, as a button that shows it: "Select the piece in the list" was said with it selected, round 13)
+  const fixAt = own.length && v.fixHint && state.mode === "design" ? `${v.fixHint.many ? "Each piece's fix is with its settings" : "The fix is with the piece's settings"}: <button type="button" class="link" data-show-fix="${v.fixHint.piece}">${v.fixHint.many ? "show the first" : "show it"}</button>.` : "";
+  const html = [v.block ? escapeHtml(v.block) : "", problemsInline(own), fixAt,
     // (a rule the machine needs: nothing is saved as it is, so not "Download it": the dialog offers a fixed copy instead)
     file.length ? `This file may not sew well: ${problemsInline(file)}${file.some((q) => HARD.has(q.id.slice(5))) ? " It can't be saved as it is: Download offers a fixed copy if one can be made." : state.mode === "open" ? "" : " Download it and the next screen offers a fixed copy."}` : ""].filter(Boolean).join(" ");
   $("dl-warn").innerHTML = html; $("dl-warn").hidden = !html;
@@ -596,7 +599,8 @@ function downloaded(v, zipped, files = [], saved = true) {
   const box = $("done-bad") || Object.assign(document.createElement("div"), { id: "done-bad", className: "done-bad" });
   if (!box.isConnected) $("done-checked").after(box);
   const bad = badReport(box, files, zipped ? v.filename : null);
-  if (store.get("doneSeen", false) && !bad.length) return;
+  // (the dialog put away with "Don't show this again": still said what was saved, as every way out does)
+  if (store.get("doneSeen", false) && !bad.length) { if (saved) toast(`Saved ${zipped ? v.filename : files[0]?.name || v.filename} to your downloads.`); return; }
   // (the size as the preview shows it: a turned bookmark is 169 × 54, not 54 × 169)
   const h = hoop(), s = v.shown && designStats(v.shown);
   // (a design in two hoopings: each hooping's size, not the whole design's 136 × 170 that the hoop can't take)
@@ -619,13 +623,16 @@ function downloaded(v, zipped, files = [], saved = true) {
     : part ? `It opens ${what}, but only part of the design is in it: the file it came from ends early. Download that file again if you can.` : `Checked: it opens ${what}.`;
   $("done-checked").className = bad.length || part ? "warn" : "good";
   $("done-zip").hidden = !zipped;
+  // (as many files as were handed out: "Copy the file to a USB stick" for a ZIP of two hoopings)
+  const pes = files.filter((f) => /\.pes$/i.test(f.name)).length, many = pes > 1;
+  $("done-copy").textContent = many ? `Copy the ${pes} .pes files to a USB stick.` : "Copy the file to a USB stick.";
   if (saved) savedNames().add(v.filename);
   ownNote(saved && v.filename);
   $("done-phone").hidden = !matchMedia("(pointer: coarse)").matches;
   // (an Android phone has no Lightning port, nor an iPhone a "Files by Google")
   $("done-phone").textContent = /Android/i.test(navigator.userAgent)
-    ? " On a phone: plug a USB-C stick (or an adapter for a USB stick) into it, then in the Files app move the file from Downloads to the stick. Or email the file to yourself and copy it on a computer."
-    : " On a phone: plug a USB-C (or Lightning) stick into it, then in the Files app move the file from Downloads to the stick. Or email the file to yourself and copy it on a computer.";
+    ? ` On a phone: plug a USB-C stick (or an adapter for a USB stick) into it, then in the Files app move the ${many ? "files" : "file"} from Downloads to the stick. Or email the ${many ? ".zip" : "file"} to yourself and copy ${many ? "them" : "it"} on a computer.`
+    : ` On a phone: plug a USB-C (or Lightning) stick into it, then in the Files app move the ${many ? "files" : "file"} from Downloads to the stick. Or email the ${many ? ".zip" : "file"} to yourself and copy ${many ? "them" : "it"} on a computer.`;
   $("done-turn").hidden = !turnedFile();
   // (Design-tab warnings still showing: "Checked" shouldn't read as "all good")
   // (what's said beside Download covers every piece, the editor's note only the one selected: a fleece name that closes
@@ -681,7 +688,11 @@ const cutFiles = (v, ext) => {
 const cutFile = (ext) => () => {
   const files = cutFiles(state.view, ext); if (!files.length) return;
   const r = handOut(files);
-  if (!r.ok) showError("Cut file stopped: " + r.error);
+  if (!r.ok) { showError("Cut file stopped: " + r.error); return; }
+  // (said, as Download says what it saved: the cutter files saved with nothing said, round 13)
+  const f = r.files[0].name, mm = f.match(/_(\d+)x(\d+)mm\.\w+$/);
+  toast(ext === "dxf" ? `Saved ${f} to your downloads, for Silhouette Studio (File > Open). The shapes are ${mm ? `${mm[1]} × ${mm[2]} mm` : "the size in its name"}: check they open at that size.`
+    : `Saved ${f} to your downloads, for Cricut Design Space (Upload). It opens at actual size.`);
 };
 $("cut-file").onclick = cutFile("svg");
 $("cut-dxf").onclick = cutFile("dxf");
@@ -830,22 +841,44 @@ $("rename-auto").onclick = () => { studio.rename(""); $("rename").close(); };
 $("names-open").onclick = () => {
   const n = namesFor(); if (!n) return;
   // (a monogram takes initials: "JKM", one set a line)
-  $("names-what").textContent = n.monogram ? `Each line's initials take the place of the monogram “${n.what}” (up to 3, in the order first, LAST, middle). Everything else stays the same.`
+  $("names-what").textContent = n.monogram ? `Each line's initials take the place of the monogram “${n.what}”. Everything else stays the same. ${monogramHelp("")}`
     : `Each name takes the place of “${n.what}”. Everything else stays the same.`;
   $("names-list").value = store.get(n.monogram ? "names.initials" : "names", ""); $("names-note").classList.remove("warn"); if ($("names-bad")) $("names-bad").hidden = true;
   $("names-list").placeholder = n.monogram ? "JKM\nALB\nR" : "Ashley\nLiam\nOlivia"; $("names-list").setAttribute("aria-label", n.monogram ? "Initials, one set per line" : "Names, one per line");
-  $("names-note").textContent = n.monogram ? "One set of initials per line, up to 40. You get one file for each, in a single .zip." : "One name per line, up to 40. You get one file for each, in a single .zip.";
+  { const said = namesSaid(n); $("names-note").textContent = said.text; $("names-note").classList.toggle("warn", said.warn); }
   $("names-shrink-row").hidden = false;
   $("names-thumbs").innerHTML = ""; $("names-cancel").textContent = "Cancel";
   modal($("names"));
   // (last time's list, all selected: typing replaces it. The caret at its end glued "Ava" onto "Name35")
   $("names-list").focus(); $("names-list").select();
 };
+// The list as Make reads it: each line tidied; a name typed twice made once; 40 at a time.
+function namesTyped(text) {
+  const typed = text.split("\n").map((s) => tidy(s).trim()).filter(Boolean), all = [...new Set(typed)];
+  return { all, list: all.slice(0, 40), left: all.slice(40), twice: all.filter((n) => typed.indexOf(n) !== typed.lastIndexOf(n)) };
+}
+// What Make will do with the list, said as it's typed (round 13: names typed twice, letters the font lacks and past 40
+// were said only after Make): the same checks Make makes (`refused`: the font's letters, the longest a name takes).
+function namesSaid(n) {
+  const one = n?.monogram ? "One set of initials per line, up to 40. You get one file for each, in a single .zip." : "One name per line, up to 40. You get one file for each, in a single .zip.";
+  if (!n) return { text: one, warn: false };
+  const { list, left, twice } = namesTyped($("names-list").value), no = list.map((t) => [t, n.refused(t)]).filter(([, why]) => why);
+  // (names one file name apart, ignoring case: emma.pes and Emma.pes are one file on a Mac, Windows or the USB stick,
+  // so the second is saved as Emma_2.pes, as Make names it)
+  const used = new Set(), moved = list.filter((t) => !n.refused(t)).map((t) => [t, uniqueName(safeName(t, "name"), used)]).filter(([t, f]) => f !== safeName(t, "name"));
+  const said = [twice.length ? `Typed twice, made once: ${twice.map(brief).join(", ")}.` : "",
+    moved.length ? `The USB stick can't tell names apart by capitals alone, so ${moved.map(([t, f]) => `${brief(t)} is saved as ${f}.pes`).join(", ")}.` : "",
+    no.length ? `Can't be made: ${no.map(([t, why]) => `${brief(t)} (${why})`).join(", ")}.` : "",
+    left.length ? `Past 40, left out: ${left.map(brief).join(", ")}. Make them in a second batch.` : ""].filter(Boolean);
+  if (!said.length) return { text: one, warn: false };
+  const made = list.length - no.length;
+  return { text: `${made} ${made === 1 ? "file" : "files"} to make. ${said.join(" ")}`, warn: true };
+}
 // (the last run's result goes once the list is changed: it described names no longer there)
 $("names-list").addEventListener("input", () => {
-  if (!$("names-thumbs").innerHTML && !$("names-note").classList.contains("warn")) return;
-  const n = namesFor(); $("names-thumbs").innerHTML = ""; $("names-note").classList.remove("warn"); if ($("names-bad")) $("names-bad").hidden = true;
-  $("names-note").textContent = n?.monogram ? "One set of initials per line, up to 40. You get one file for each, in a single .zip." : "One name per line, up to 40. You get one file for each, in a single .zip.";
+  const n = namesFor(); $("names-thumbs").innerHTML = ""; if ($("names-bad")) $("names-bad").hidden = true;
+  const said = namesSaid(n);
+  $("names-note").textContent = said.text; $("names-note").classList.toggle("warn", said.warn);
   $("names-cancel").textContent = "Cancel";
 });
 let smallerOk = false;   // (the turn was offered and they chose to make them smaller anyway)
@@ -853,8 +886,7 @@ $("names-make").onclick = async () => {
   const n = namesFor(); if (!n) return;
   // (past 40, the rest are said as left out: the 41st was dropped without a word)
   // (a name typed twice is made once, and said: "Ola" twice left one file with nothing said)
-  const typed = $("names-list").value.split("\n").map((s) => tidy(s).trim()).filter(Boolean), all = [...new Set(typed)], list = all.slice(0, 40), left = all.slice(40);
-  const twice = all.filter((n) => typed.indexOf(n) !== typed.lastIndexOf(n));
+  const { all, list, left, twice } = namesTyped($("names-list").value);
   store.set(n.monogram ? "names.initials" : "names", all.join("\n"));
   if (!list.length) { $("names-note").textContent = "Type at least one name."; return; }
   $("names-make").disabled = true; $("names-note").textContent = "Making the files…";

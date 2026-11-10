@@ -143,6 +143,33 @@ for (const [bytes, says, pic] of [[png, /is a picture \(PNG\)/, true], ["new Uin
   check("a starter clears the name", !/Mom_s/.test(s), s);
 }
 
+// ---- (round 14) every way out says what it saved: the cutter files and Save design said nothing (Download opens its
+// dialog, or with "Don't show this again" a note); the download dialog counts the files (a ZIP of two hoopings said
+// "Copy the file to a USB stick"); One for each name says what Make will do as the names are typed (names typed twice,
+// letters the font lacks, a second Emma saved as Emma_2.pes and past 40 were said only after Make)
+{
+  await open("#design");
+  const said = await run(`document.querySelector("[data-start=bookmark]").click(); await __ff.wait(() => !document.getElementById("download").disabled && !document.getElementById("cut-files").hidden);
+    const t = () => document.getElementById("st-toast").hidden ? "" : document.getElementById("st-toast").textContent, out = {};
+    for (const id of ["st-save", "cut-file", "cut-dxf"]) { __ff.got.length = 0; document.getElementById(id).click(); await __ff.wait(() => __ff.got.length, 3000); out[id] = [__ff.got[0], t()]; }
+    localStorage.setItem("nw:doneSeen", "true"); __ff.got.length = 0; document.getElementById("download").click(); await __ff.wait(() => __ff.got.length, 3000); out.download = [__ff.got[0], t()];
+    localStorage.removeItem("nw:doneSeen"); return out;`);
+  for (const [id, [file, toast]] of Object.entries(said)) check(`${id} says the file it saved`, file && toast.includes(`Saved ${file}`), `${file}: “${toast}”`);
+  const typed = await run(`document.getElementById("names-open").click(); const l = document.getElementById("names-list"); l.value = "Ann\\nAnn\\nZoe 🎉\\nemma\\nEmma\\n" + Array.from({ length: 40 }, (_, i) => "Kid" + i).join("\\n");
+    l.dispatchEvent(new Event("input", { bubbles: true })); const before = document.getElementById("names-note").textContent; __ff.close(); return before;`);
+  check("the names dialog says names typed twice as they're typed", /Typed twice, made once: Ann/.test(typed), typed);
+  check("the names dialog says a letter the font lacks as it's typed", /Zoe 🎉 \(the font has no “🎉”\)/.test(typed), typed);
+  check("the names dialog says a second Emma's file name as it's typed", /Emma is saved as Emma_2\.pes/.test(typed), typed);
+  check("the names dialog says past 40 as it's typed", /Past 40, left out: Kid/.test(typed), typed);
+  const two = await run(`localStorage.setItem("nw:studio", JSON.stringify({ pieces: [{ id: 1, kind: "text", text: "Welcome to our Home", size: 19, font: "NW Yellowtail", x: 0, y: 0, color: "#0e1f7c" }], sel: 1, fabric: "cotton", thread: "auto", two: true }));
+    localStorage.setItem("nw:hoop", '"5x7"'); localStorage.setItem("nw:turn", '{"design":false}'); location.reload(); return 1;`).catch(() => 1);
+  await open("#design");
+  const dlg = await run(`await __ff.wait(() => !document.getElementById("download").disabled); [...document.querySelectorAll("button")].find((b) => /Sew it in two hoopings/i.test(b.textContent))?.click();
+    await __ff.wait(() => nwTest.view()?.split); document.getElementById("download").click(); await __ff.wait(() => document.getElementById("done").open, 3000);
+    const c = document.getElementById("done-copy").textContent; __ff.close(); return c;`);
+  check("the download dialog counts the files handed out", /Copy the 2 \.pes files/.test(dlg), dlg);
+}
+
 // ---- Picture -> Design your own, and a thread swapped on a colour's chip
 {
   await open("#picture");

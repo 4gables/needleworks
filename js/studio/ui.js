@@ -1,7 +1,7 @@
 /*! Needleworks (c) 2026 4Gables. All rights reserved. Proprietary, see LICENSE. https://4gables.com/needleworks/ */
 // Design tab UI: start from a card, edit pieces in a short list, drag them on the preview.
 import { APPLIQUE_FONTS, FONTS, fontOf, loadFont } from "../core/fonts.js";
-import { MAX_INITIALS, MAX_WORDS, initials, lackList, lacks, reswashed, swashes, swashless, tidy, tidyField, unswashed, withSwash } from "../core/typed.js";
+import { MAX_INITIALS, MAX_WORDS, initials, monogramHelp, lackList, lacks, reswashed, swashes, swashless, tidy, tidyField, unswashed, withSwash } from "../core/typed.js";
 import { nearestBrotherThread } from "../core/threads.js";
 import { designStats, machineThreads, readEmbroidery } from "../core/formats.js";
 import { BLOCK, LOOK, TIP, explained, inchFirst, isolate, mmText, problemsItems, shownOn, stopWords } from "../words.js";
@@ -209,7 +209,13 @@ export function initStudio(api) {
   let two = !!saved?.two;
   // the design's problems as last worked out (words.js), shown with the steps and handed to the view
   let problems = [];
-  const fixHint = () => (problems.some((x) => x.piece != null && x.level !== TIP) ? "Select the piece in the list for its fix before you stitch." : "");
+  // where a piece's problem is fixed, for beside Download: { piece (the first one's id), many (more than one piece) }.
+  // It said "Select the piece in the list for its fix" with that piece selected and its fix right below (round 13):
+  // app.js offers a button that shows the fix, wherever the reader is
+  const fixHint = () => {
+    const ids = [...new Set(problems.filter((x) => x.piece != null && x.level !== TIP).map((x) => x.piece))];
+    return ids.length ? { piece: ids[0], many: ids.length > 1 } : null;
+  };
   // what the design is called (the starter it began as, or the saved file it came from), for the names ZIP
   let from = typeof saved?.from === "string" ? saved.from : "";
   // the file name they gave the design (Rename, beside Download), kept with it: every file it makes takes it (the PES,
@@ -367,7 +373,17 @@ export function initStudio(api) {
   }
   document.fonts.addEventListener("loadingdone", () => { const row = $("st-edit").querySelector(".font-row"); if (row) showPicked(row); });
   // (a size set past the slider's end, by Fit to hoop, stretches it: Fit set 67 mm on a slider that stopped at 60)
-  const range = (k, lab, min, max, v, unit = "mm", step = 1) => `<label class="range"><span>${lab}</span><input type="range" data-k="${k}" data-unit="${unit}" min="${Number.isFinite(v) ? Math.min(min, Math.floor(v)) : min}" max="${Number.isFinite(v) ? Math.max(max, Math.ceil(v)) : max}" step="${step}" value="${v}"><output>${shown(v, unit)}</output></label>`;
+  // (and a value a fix or a fit set off the slider's steps gets finer steps: "Make it 18.5 mm" on a 1 mm slider stood at
+  // 19 and its label, read back from the slider, said 19 mm; a 31.5 mm curve sat at 32 beside "31.5 mm")
+  const on = (v, step) => Math.abs(v / step - Math.round(v / step)) < 1e-6;
+  const stepFor = (v, step) => (!Number.isFinite(+v) || on(+v, step) ? step : [0.5, 0.1].find((s) => s < step && on(+v, s)) || "any");
+  const range = (k, lab, min, max, v, unit = "mm", step = 1) => `<label class="range"><span>${lab}</span><input type="range" data-k="${k}" data-unit="${unit}" data-step="${step}" min="${Number.isFinite(v) ? Math.min(min, Math.floor(v)) : min}" max="${Number.isFinite(v) ? Math.max(max, Math.ceil(v)) : max}" step="${stepFor(v, step)}" value="${v}"><output>${shown(v, unit)}</output></label>`;
+  // a slider set from code (a fit, a fix, initials that grow): stretched and stepped to take the value, labelled with it
+  const setRange = (r, v) => {
+    if (!r) return;
+    r.min = Math.min(+r.min, Math.floor(v)); r.max = Math.max(+r.max, Math.ceil(v)); r.step = stepFor(v, +r.dataset.step || 1); r.value = v;
+    r.nextElementSibling.textContent = shown(v, r.dataset.unit || "mm");
+  };
   // one letter pair closer or further apart (print fonts): `kern` = { index of the pair's first letter in the words: % of
   // the height }, on top of the font's own kerning
   let pairAt = -1, pairOf = null;
@@ -463,9 +479,8 @@ export function initStudio(api) {
       if (more) h += `<details class="more" ${moreOpen ? "open" : ""}><summary>More</summary>${more}</details>`;
     } else if (p.kind === "monogram") {
       h += `<label class="field"><span>Initials</span><input type="text" data-k="letters" value="${api.escapeHtml(p.letters)}" data-max="${MAX_INITIALS}" autocomplete="off" spellcheck="false"></label>` + cutHint;
-      // (what it does, measured: the middle letter comes out 1.24-1.49 x as tall as the others in every font. "Stitched
-      // biggest" read as more than a tall, thin script J gave)
-      h += `<p class="hint">${initials(p.letters).length === 3 ? "Traditional order: first, LAST, middle. The middle letter is sewn about 1½ times as tall as the other two." : "Three initials go first, LAST, middle, with the middle one sewn about 1½ times as tall. One or two are sewn the same height."}</p>`;
+      // (what it does, measured: typed.js monogramHelp; kept up as the initials are typed)
+      h += `<p class="hint" data-mono-help>${api.escapeHtml(monogramHelp(p.letters))}</p>`;
       h += `<label class="field"><span>Font</span>${fontSelect(p)}</label>${fontRow(p)}`;
       h += range("size", "Height", 15, 90, p.size);
       h += stitchSeg(p);
@@ -1074,7 +1089,7 @@ export function initStudio(api) {
     if (fs != null && p.size === was && !fitFrame(p, pieces)) {
       p.size = fs;
       const r = $("st-edit").querySelector('input[data-k="size"]');
-      if (r) { r.max = Math.max(+r.max, Math.ceil(fs)); r.value = fs; r.nextElementSibling.textContent = shown(fs, "mm"); r.nextElementSibling.title = ""; }
+      if (r) { setRange(r, fs); r.nextElementSibling.title = ""; }
     }
     if (!keep) fitted = false; save(); list();
     clearTimeout(warnTimer); warnTimer = setTimeout(warn, 300);
@@ -1894,7 +1909,8 @@ export function initStudio(api) {
       if (k === "letters" && p.kind === "monogram") {
         const was = p.size; p.size = monoSize(p, t.value, pieces);
         const r = edit.querySelector('input[data-k="size"]');
-        if (r && p.size !== was) { r.max = Math.max(+r.max, Math.ceil(p.size)); r.value = p.size; r.nextElementSibling.textContent = shown(p.size, "mm"); }
+        if (r && p.size !== was) setRange(r, p.size);
+        const help = edit.querySelector("[data-mono-help]"); if (help) help.textContent = monogramHelp(t.value);
       }
       const longer = k === "text" && p.kind === "text" && unswashed(words).trim().length > unswashed(p.text || "").trim().length && unswashed(words).trim().length >= 3;
       // (a frame's size: what's in it keeps its place in proportion, from where it was when the slider was taken up,
@@ -1930,7 +1946,7 @@ export function initStudio(api) {
     const d = p.shape === "up" ? 1 : -1;
     p.y = Math.round((p.y + d * (radius - p.radius)) * 2) / 2; p.radius = radius;
     const r = edit.querySelector('input[data-k="radius"]'), r2 = edit.querySelector('input[data-k="ry"]');
-    for (const el of [r, r2]) if (el) { el.max = Math.max(+el.max, radius); el.value = radius; el.nextElementSibling.textContent = shown(radius, "mm"); }
+    for (const el of [r, r2]) setRange(el, radius);
   }
   let warnTimer = 0;
   edit.addEventListener("change", (e) => {
@@ -2201,7 +2217,9 @@ export function initStudio(api) {
     // (with the hoop it was laid out in and its turn: a turned design reopened said Too big)
     const r = api.handOut([{ name: `${api.safeName(firstWords(), "design")}.needleworks.json`,
       bytes: JSON.stringify({ needleworks: 1, pieces, fabric, baste, thread, fitted, ...(two ? { two } : {}), ...(title ? { title } : {}), hoop: api.hoopId(), turned: api.turned() }, null, 1) }]);
+    // (said, as every way out says what it saved: Save design said nothing, round 13)
     if (!r.ok) toast(r.error === "The saved design is empty." ? "Add a piece first: there's nothing to save yet." : r.error);
+    else toast(`Saved ${r.files[0].name} to your downloads. Open saved brings it back to change.`);
   };
   const bad0 = "it isn't a design saved from this page, or it's damaged (saved designs end in .needleworks.json)";
   $("st-load").onchange = (e) => { const f = e.target.files[0]; e.target.value = ""; if (f) openSaved(f); };
@@ -2624,7 +2642,7 @@ export function initStudio(api) {
     let clean = null;
     const isClean = () => (clean ??= !collision(pieces)), opts = { fabric, baste, thread };
     return {
-      canTurn: !api.turned() && api.hoop().w !== api.hoop().h,
+      canTurn: !api.turned() && api.hoop().w !== api.hoop().h, refused,
       what: mono ? p.letters : unswashed(p.text).replace(/\s*\n\s*/g, " / "), monogram: mono,
       // the ZIP is named after the design (the starter or the saved file it came from), not "names_4.zip"
       zip: api.safeName(title || from || label(pieces.find((q) => q.kind === "frame") || p), "names"),
@@ -2656,14 +2674,20 @@ export function initStudio(api) {
         throw new Error(`too long to sew clearly in this design: its letters would be ${m.small.toFixed(1)} mm tall`);
       },
     };
+    // why a name can't be made, from its letters alone (said as it's typed, and by Make: the same checks), else ""
+    function refused(name) {
+      if (!/[\p{L}\p{N}]/u.test(name)) return "no letters to stitch";
+      // (as long as the editor takes, `MAX_WORDS`: a 200-letter name drew nothing and its file held the heart alone)
+      const most = mono ? MAX_INITIALS : MAX_WORDS;
+      if (name.length > most) return `too long: ${most} letters and spaces at most`;
+      const gone = missing(name, p.font);
+      if (gone.length) return `the font has no ${lackList(gone)}`;
+      if (mono && initials(name).length > 3) return "a monogram takes 3 initials at most";
+      return "";
+    }
     function once(name, shrink, hp) {
-        if (!/[\p{L}\p{N}]/u.test(name)) throw new Error("no letters to stitch");
-        // (as long as the editor takes, `MAX_WORDS`: a 200-letter name drew nothing and its file held the heart alone)
-        const most = mono ? MAX_INITIALS : MAX_WORDS;
-        if (name.length > most) throw new Error(`too long: ${most} letters and spaces at most`);
-        const gone = missing(name, p.font);
-        if (gone.length) throw new Error(`the font has no ${lackList(gone)}`);
-        if (mono && initials(name).length > 3) throw new Error("a monogram takes 3 initials at most");
+        const no = refused(name);
+        if (no) throw new Error(no);
         // (each name keeps the design's swashes: "~Emma~" -> "~Lily~")
         const ls = (p.text || "").split("\n").filter((l) => l.trim()), ends = (t) => withSwash(withSwash(t, "lead", swashes(ls[0] || "").lead), "tail", swashes(ls[ls.length - 1] || "").tail);
         const h0 = mono ? 0 : inkHeight(p.text.split("\n").find((l) => l.trim()) || p.text, p.font), h1 = mono ? 0 : inkHeight(name, p.font);
@@ -2715,5 +2739,20 @@ export function initStudio(api) {
   const rename = (t) => { t = tidy(t || "").trim().slice(0, 60); if (t === title) return; remember(); title = api.safeName(t, "") ? t : ""; save(); make(); };
   // the Picture tab's stitches into this design (`fresh`: a new design of it alone), in Design your own
   const usePicture = (d, name, fresh) => { if (fresh || !pieces.length) { addWords(d, name, false); return; } api.setMode("design"); if (addFile(d, name)) toast(`Added ${name} to your design.`, { label: "Undo", run: undo }); };
-  return { make, addWords, usePicture, openSaved, empty: () => !pieces.length, starter, rename, title: () => title, autoName: () => api.safeName(autoWords(), "design"), selBox: () => { const p = current(); return p ? pieceBounds(sewnAt(p)) : null; }, relabel: () => { ui(); make(); }, start, move, end, nudge, deselect, forNames, remember, recentre: () => { remember(); recentre(); save(); ui(); make(); } };
+  // the editor's fixes for piece `id` (beside Download's "Show the fix"): the piece picked, its problems in sight and
+  // focused once they're drawn
+  async function showFix(id) {
+    if (!pieces.some((p) => p.id === id)) return;
+    if (sel !== id) { sel = id; save(); ui(); }
+    for (let k = 0; k < 40; k++) {
+      const w = $("st-edit").querySelector("[data-warn]");
+      if (w && !w.hidden && w.textContent.trim()) {
+        w.tabIndex = -1; w.scrollIntoView({ block: "center", behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" }); w.focus({ preventScroll: true });
+        return;
+      }
+      await new Promise((r) => setTimeout(r, 100));
+    }
+    showEditor(true);
+  }
+  return { make, addWords, showFix, usePicture, openSaved, empty: () => !pieces.length, starter, rename, title: () => title, autoName: () => api.safeName(autoWords(), "design"), selBox: () => { const p = current(); return p ? pieceBounds(sewnAt(p)) : null; }, relabel: () => { ui(); make(); }, start, move, end, nudge, deselect, forNames, remember, recentre: () => { remember(); recentre(); save(); ui(); make(); } };
 }

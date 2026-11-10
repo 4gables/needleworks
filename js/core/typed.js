@@ -37,6 +37,18 @@ export function brief(s) {
 
 // a monogram's initials: its letters without the spaces ("J K M" is JKM, "É" typed as E + ◌\u0301 is one)
 export const initials = (s) => graphemes(String(s ?? "").replace(/\s+/g, ""));
+// What a monogram does with the initials typed, in their own letters, said the same in the editor and One for each
+// name (the editor said "the middle letter sewn 1½ times as tall" for two letters until a font change redrew it, and
+// "in the order first, LAST, middle" read as a riddle, round 13). The middle one comes out 1.24-1.49 x as tall as the
+// others in every font; one or two are the same height.
+export function monogramHelp(s) {
+  const g = initials(s);
+  const how = "For a person, type the first name's initial, then the last name's, then the middle name's: Emma Rose Taylor is E T R, with the T in the middle.";
+  if (g.length === 3) return `Sews ${g.join(" ")} as typed, with the middle one, ${g[1]}, about 1½ times as tall. ${how}`;
+  if (g.length === 2) return `Sews ${g.join(" ")} side by side, the same height. With three initials the middle one is sewn about 1½ times as tall.`;
+  if (g.length === 1) return `Sews ${g[0]} on its own. With three initials the middle one is sewn about 1½ times as tall.`;
+  return `Up to three initials, sewn as typed, the middle one about 1½ times as tall. ${how}`;
+}
 
 // The text as stitched: composed accents (an "é" typed or pasted as e + \u25cc\u0301, as macOS file names and some keyboards
 // send it, was two letters: the font's accent wasn't placed and the script join after it was lost), plain spaces and
@@ -49,6 +61,10 @@ export function tidy(s, { lines = 1, max = Infinity } = {}) {
     .replace(/\ufffd/g, "").replace(BREAK, "\n").replace(SPACE, " ").replace(INVISIBLE, (c) => (c === "\n" ? c : "")).normalize("NFC")
     // (a variation selector with nothing before it to vary: "︎ " alone was words with nothing to stitch)
     .replace(/(^|\s)[\ufe00-\ufe0f]+/g, "$1");
+  // (the joiners, kept only inside an emoji or a flag: a zero-width joiner on its own, or after a letter, was kept while
+  // a zero-width space was dropped, so "‍" alone came out as "no stitches at all" and blocked Download where an empty
+  // piece only said it was empty, round 13)
+  if (/[\u200c\u200d\u{e0020}-\u{e007f}]/u.test(t)) t = graphemes(t).map((g) => (/\p{Extended_Pictographic}|\p{Regional_Indicator}/u.test(g) ? g : g.replace(/[\u200c\u200d\u{e0020}-\u{e007f}]/gu, ""))).join("");
   const ls = t.split("\n");
   if (ls.length > lines) t = [...ls.slice(0, lines - 1), ls.slice(lines - 1).join(" ")].join("\n");
   if (t.length > max) {

@@ -29,6 +29,8 @@
 //  - (round 11) sizes via tests/sizes_lint.mjs (one cm or mm value, one inch value); what's done with the hoop in hand
 //    (tape, turn it over) comes before "put the hoop back"; asides (threading, a word explained) never numbered; the
 //    loose threads the file leaves are said in When it's done (a patch with print lettering, "loose");
+//  - (round 14) one sentence for things sewn one after another, motifs named as motifs, several in the hoop said in
+//    the plural (no bare "on both.", "the ribbon ring" or "fold the ribbon in half" for two);
 //  - Sew along's preview keeps one size from step to step (it zoomed with the length of each step's words);
 // then the download dialog (turned bookmark: its note, the Cutter file line, the How to stitch it link opening the
 // steps), Open > Add words after a felt starter (the fabric goes back to cotton), and the file names of lettering split
@@ -45,6 +47,10 @@ import { GLOSSARY as WORDS } from "../js/words.js";
 // (what isn't something to do: sheet.js ASIDES)
 const ASIDES = [THREADING, ...WORDS.map(([, say]) => say)];
 import { sizes } from "./sizes_lint.mjs";
+import { MOTIFS } from "../js/studio/motifs.js";
+const MOTIF_NAMES = Object.values(MOTIFS).map((m) => m.name.toLowerCase());
+// a sentence that names one thing sewn (pieces.js tidySteps joins neighbours into one)
+const THING = /^Sews (“[^”]*”|the (?:(?! and | on | with | through | then |, ).)+?)\.$/;
 
 const [port, base, only] = process.argv.slice(2);
 if (!port || !base) { console.log("usage: node tests/steps_lint.mjs CDP_PORT BASE_URL [starters]"); process.exit(2); }
@@ -102,6 +108,13 @@ function lint(name, d, gang) {
       const seen = new Set();
       for (const s of sentences(t)) { if (seen.has(s)) bad.push(`step ${i + 1} ${what} says twice: "${s}"`); seen.add(s); }
     }
+    // (round 14) the sentence names things as the design has them: things sewn one after another are one sentence
+    // ("Sews “Noel”. Sews “2026”."), a motif is named as a motif ("Sews the baby."), and several in the hoop are said
+    // in the plural ("…on the stabilizer, on both.")
+    const ss = sentences(st.sews);
+    ss.forEach((x, k) => { if (k && THING.test(x) && THING.test(ss[k - 1])) bad.push(`step ${i + 1} says one thing a sentence: "${ss[k - 1]} ${x}"`); });
+    for (const x of ss) { const m = /^Sews the (\w+)(?: outline)?\.$/.exec(x); if (m && MOTIF_NAMES.includes(m[1])) bad.push(`step ${i + 1}: "${x}" (a motif, not named as one)`); }
+    if (/, on (both|all \d+)\./.test(st.sews || "")) bad.push(`step ${i + 1}: "${(st.sews.match(/[^.]*, on (both|all \d+)\./) || [""])[0].trim()}" (on both what?)`);
     const next = d.steps[i + 1];
     if (next && /put the hoop back\.$/.test(st.you || "") && /^(Change to [^.]*\. )?Take the hoop off/.test(next.you || ""))
       bad.push(`step ${i + 1} puts the hoop back, step ${i + 2} takes it off`);
@@ -126,6 +139,8 @@ function lint(name, d, gang) {
   }
   if (gang) {
     if (/of everything/.test(ready)) bad.push(`several in the hoop: "of everything"`);
+    // (one of each said for two: "Dab Fray Check inside the ribbon ring", "fold the ribbon in half")
+    for (const t of [...d.steps.map((st) => st.you || ""), ...d.after]) for (const one of [/the ribbon ring\b/, /fold the ribbon in half/, /the ribbon loop\b/, /the cut edge\b/]) if (one.test(t)) bad.push(`several in the hoop: "${one.source}"`);
     if (!/for each/.test(ready) || !/to cover/.test(ready)) bad.push("several in the hoop: Have ready doesn't say fabric for each or one piece to cover them");
   }
   if (d.cut) {
