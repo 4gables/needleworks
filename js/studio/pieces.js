@@ -1179,9 +1179,24 @@ function localStages(p, fab = "cotton") {
       const pieces1 = p.quilt ? "front and back pieces and thin batting" : "front and back pieces";
       const kinds = p.quilt ? " (the front can be cut to shape with the Cutter file)" : ": cotton for the front (or a piece cut to shape with the Cutter file), felt for the back (it doesn't fray)";
       const extras = (n) => `Tear-away stabilizer, tape and Fray Check${hang ? `, and ${n > 1 ? `${n} ribbons` : "a ribbon"} ${inchFirst(152.4)} long for the loop${n > 1 ? "s" : ""}` : ""}${eye ? `, and ${n > 1 ? `${n} ribbons` : "a ribbon"} for the hole${n > 1 ? "s" : ""}` : ""}.`;
+      // the last stage's words for n of them in the hoop (`gang`): "fold the ribbon in half" and "Dab Fray Check inside
+      // the ribbon ring" were said once for two key fobs and two bookmarks
+      const backWords = (n, all) => {
+        const one = n < 2, each = one ? `the ${name}` : `each ${name}`, outline = one ? `the ${name} outline` : `the ${name} outlines`;
+        return {
+          // (one sentence per action: the steps show them numbered. "On the front" was read while the hoop was upside
+          // down, so the ribbon goes on once it's turned back over, the embroidered side up; and before the hoop goes
+          // back on the machine, while it's in hand: round 11 put the hoop back, then taped the loop)
+          you: `Take the hoop off the machine (leave the fabric in the hoop) and turn it upside down. Tape the backing fabric${one ? "" : ` (one piece over ${all} ${name}s, or one each)`} over the stabilizer, right side facing you, reaching ${PAST} ${outline} all round. Turn the hoop back over.${hang ? ` For the ${one ? "loop" : "loops"}, fold ${one ? "the ribbon" : "each ribbon"} in half and tape it on the embroidered side at the top of ${each}, loop pointing in toward the middle, ends ½ in past the outline.` : ""} Put the hoop back on the machine and press Start.`,
+          sews: one ? `Tacks the backing on and covers the edge${eye ? " and a ribbon ring" : ""} with satin stitch through every layer.`
+            : `Tacks the backing on and covers the edges${eye ? " and ribbon rings" : ""} of ${all} ${name}s with satin stitch through every layer.`,
+          after: `Take it out of the hoop, tear the stabilizer away and cut round ${each} as close to the satin stitches as you can without nicking them${hang ? ` (keep the ribbon ${one ? "loop" : "loops"} clear of the scissors). Flip the ribbon ${one ? "loop" : "loops"} up.` : "."} Run Fray Check along the cut ${one ? "edge" : "edges"} and let it dry, then snip off any fibres still poking out.${eye ? ` Dab Fray Check inside ${one ? "the ribbon ring" : "each ribbon ring"} and let it dry, then snip out the hole inside it and loop a ribbon through.` : ""}`,
+        };
+      };
       stages = [
         { color: p.color, paths: [loop(run(edge, 2.5, true)), ...(eye ? [loop(run(seamAt(circle(eye, EYE.r, 64), 1 / 2), 1.5, true))] : [])], cut: [edge],
           sews: `Sews the ${name} outline${eye ? " and its ribbon hole" : ""} on the stabilizer.`, fabric: true, bare: true, solid: [edge],
+          many: (n, all) => ({ sews: `Sews ${all} ${name} outlines${eye ? " and their ribbon holes" : ""} on the stabilizer.` }),
           before: `Fabric: ${pieces1}, each ${cut(p.w, p.h)}${kinds}. ${extras(1)}`,
           // (several in the hoop, `gang`: fabric for each, or one piece over them all; the rest once. "2 of everything"
           // doubled the stabilizer, tape and Fray Check)
@@ -1191,12 +1206,8 @@ function localStages(p, fab = "cotton") {
           sews: "Tacks the front fabric down.", under: true },
         { color: p.color, pause: true, last: true,
           ...seamStage(2 / 3, (f) => [loop(run(seamAt(edge, f), 2.0, true)), ...(eye ? eyeRing(eye) : []), ...satinBorder(seamAt(edge, f))]),
-          // (one sentence per action: the steps show them numbered. "On the front" was read while the hoop was upside
-          // down, so the ribbon goes on once it's turned back over, the embroidered side up; and before the hoop goes
-          // back on the machine, while it's in hand: round 11 put the hoop back, then taped the loop)
-          you: `Take the hoop off the machine (leave the fabric in the hoop) and turn it upside down. Tape the backing fabric over the stabilizer, right side facing you, reaching ${PAST} the ${name} outline all round. Turn the hoop back over.${hang ? ` For the loop, fold the ribbon in half and tape it on the embroidered side at the top of the ${name}, loop pointing in toward the middle, ends ½ in past the outline.` : ""} Put the hoop back on the machine and press Start.`,
-          sews: `Tacks the backing on and covers the edge${eye ? " and a ribbon ring" : ""} with satin stitch through every layer.`,
-          after: `Take it out of the hoop, tear the stabilizer away and cut round the ${name} as close to the satin stitches as you can without nicking them${hang ? " (keep the ribbon loop clear of the scissors). Flip the ribbon loop up." : "."} Run Fray Check along the cut edge and let it dry, then snip off any fibres still poking out.${eye ? " Dab Fray Check inside the ribbon ring and let it dry, then snip out the hole inside it and loop a ribbon through." : ""}` },
+          ...backWords(1),
+          many: (n, all) => backWords(n, all) },
       ];
     } else if (p.border === "patch") {
       // solid tatami fill (inset so the satin edge covers its ragged ends), then the satin edge over it; `compose`
@@ -1215,9 +1226,10 @@ function localStages(p, fab = "cotton") {
     // appliqué letters: one piece of fabric for the whole word, outlined letter by letter (holes too)
     stages = appliqued(letterOutlines(p.text, p.font, p.size), p.color, p.text.trim(), "the letters", "around each letter (and inside the holes)", "them");
   } else if (p.kind === "motif") {
+    // (named as a motif: "Sews the baby." for the onesie drawing)
     const m = MOTIFS[p.motif] || MOTIFS.heart, loops = motifOutlines(m.d, p.size), name = m.name.toLowerCase();
-    if (p.style === "applique") stages = appliqued(loops, p.color, `the ${name}`, `the ${name}`, "around it (and inside any holes)");
-    else if (loops.length) stages = [{ color: p.color, paths: motifStitches(loops, p.style), sews: `Sews the ${name}${p.style === "outline" ? " outline" : ""}.`, ...(p.style === "outline" ? {} : { solid: loops }) }];
+    if (p.style === "applique") stages = appliqued(loops, p.color, `the ${name} motif`, `the ${name} motif`, "around it (and inside any holes)");
+    else if (loops.length) stages = [{ color: p.color, paths: motifStitches(loops, p.style), sews: `Sews the ${name} motif${p.style === "outline" ? " as an outline" : ""}.`, ...(p.style === "outline" ? {} : { solid: loops }) }];
   } else if (p.kind === "file") {
     // (each block keeps the thread name the file gives it: all named after the piece, a combined gnome.pes listed
     // "gnome" for every thread)
@@ -1650,9 +1662,11 @@ function inside([x, y], poly) {
 }
 
 // A piece as the page names it, long words `brief` (`whole`: all of them, for the thread name in the file, which a
-// design's saved bytes carry)
+// design's saved bytes carry). One with no words yet is named for what it is: the list showed an empty “” (round 13).
+const blank = (s) => !/\S/.test(s || "");
 export const label = (p, whole = false) => p.kind === "motif" ? `${(MOTIFS[p.motif] || MOTIFS.heart).name}`
-  : p.kind === "text" ? `“${((t) => (whole ? t : brief(t)))(unswashed(p.text).replace(/\s*\n\s*/g, " / "))}”` : p.kind === "letters" ? `Appliqué ${p.text}` : p.kind === "monogram" ? `Monogram ${p.letters}`
+  : p.kind === "text" ? (blank(unswashed(p.text)) ? "Lettering (empty)" : `“${((t) => (whole ? t : brief(t)))(unswashed(p.text).replace(/\s*\n\s*/g, " / "))}”`)
+  : p.kind === "letters" ? (blank(p.text) ? "Appliqué letters (empty)" : `Appliqué ${p.text}`) : p.kind === "monogram" ? (blank(p.letters) ? "Monogram (empty)" : `Monogram ${p.letters}`)
   : p.kind === "file" ? p.name : `${shapeOf(p).name}${p.border === "applique" ? " appliqué" : ""}`;
 
 // A piece read from a saved design, the clipboard or the page's own storage, made safe to build: every field checked
@@ -2273,14 +2287,18 @@ function gang(pieces, staged) {
     gangs.push({ n, name });
     staged[i] = staged[i].map((st, k) => {
       const mates = group.slice(1).map((j) => staged[j][k]);
-      const out = { ...st, paths: [...st.paths, ...mates.flatMap((m) => m.paths)], sews: st.sews ? `${st.sews.replace(/\.$/, "")}, on ${all}.` : st.sews };
-      if (st.after) out.after = st.after.replace(`cut round the ${name}`, `cut round each ${name}`);
+      // (the stage's own words for n of them, `many`, where it has them: "…on the stabilizer, on both." and "Dab Fray
+      // Check inside the ribbon ring" for two bookmarks, "fold the ribbon in half" for two key fobs)
+      const own = st.many?.(n, all) || {};
+      const out = { ...st, paths: [...st.paths, ...mates.flatMap((m) => m.paths)], sews: own.sews || (st.sews ? `${st.sews.replace(/\.$/, "")} on ${all} ${name}s.` : st.sews) };
+      if (st.after) out.after = own.after || st.after.replace(`cut round the ${name}`, `cut round each ${name}`);
+      if (own.you) out.you = own.you;
       for (const key of ["cut", "solid"]) if (st[key]) out[key] = [...st[key], ...mates.flatMap((m) => m[key] || [])];
       // (the needle comes to the first frame's outline first: only its start moves)
       if (st.reseam) out.reseam = (f) => [...st.reseam(f), ...mates.flatMap((m) => m.paths)];
       if (st.before) out.before = st.kit ? st.kit(n, all, W, H) : `${st.before} That's for one ${name}: the fabric pieces ${n} times over, one set for each. One piece of stabilizer does for ${all}.`;
       // (the outlines, plural: "over the bookmark outline" with two in the hoop)
-      if (st.pause && st.you) out.you = st.you.replace(/\b(the|each) (front|backing) fabric\b/, (m) => `${m} (one piece over ${all} ${name}s, or one each)`)
+      if (st.pause && st.you && !own.you) out.you = st.you.replace(/\b(the|each) (front|backing) fabric\b/, (m) => `${m} (one piece over ${all} ${name}s, or one each)`)
         .replace(`the ${name} outline`, `the ${name} outlines`).replace("past the outline all round", "past the outlines all round").replace("a piece cut with", "pieces cut with").replace("exactly on the line", "exactly on the lines");
       return out;
     });
@@ -2291,16 +2309,22 @@ function gang(pieces, staged) {
 }
 // The steps' words, read as a whole: the same sentence twice in a step is said once with how many ("Sews the monogram
 // J. Sews the monogram J." with two key fobs in the hoop): "on both key fobs" when that many were made in the hoop
-// together, else "(2 of them)".
+// together, else "(2 of them)". Things sewn one after another are one sentence ("Sews “Noel”. Sews “2026”." read as
+// two jobs): "Sews the circle frame, “HANDMADE” and “WITH LOVE”."
+const THING = /^Sews (“[^”]*”|the (?:(?! and | on | with | through | then |, ).)+?)\.$/;
+const listed = (xs) => (xs.length < 2 ? xs.join("") : `${xs.slice(0, -1).join(", ")} and ${xs.at(-1)}`);
 function tidySteps(steps, gangs) {
   for (const st of steps) {
     const n = new Map();
     for (const t of st.sews) n.set(t, (n.get(t) || 0) + 1);
-    st.sews = [...n].map(([t, k]) => {
-      if (k < 2) return t;
-      const g = gangs.find((x) => x.n === k);
-      return `${t.replace(/\.$/, "")}${g ? ` on ${k === 2 ? "both" : `all ${k}`} ${g.name}s` : ` (${k} of them)`}.`;
-    });
+    const on = (k) => { const g = gangs.find((x) => x.n === k); return g ? ` on ${k === 2 ? "both" : `all ${k}`} ${g.name}s` : ` (${k} of them)`; };
+    const out = [];
+    for (const [t, k] of n) {
+      const m = THING.exec(t), prev = out.at(-1);
+      if (m && prev?.things && prev.k === k) prev.things.push(m[1]);
+      else out.push(m ? { things: [m[1]], k } : { t, k });
+    }
+    st.sews = out.map(({ t, things, k }) => (things ? `Sews ${listed(things)}${k > 1 ? on(k) : ""}.` : k < 2 ? t : `${t.replace(/\.$/, "")}${on(k)}.`));
   }
 }
 // The trims owed from the stop before (`then` on a tack-down stage), then the step's own words: "Unless you laid a cut

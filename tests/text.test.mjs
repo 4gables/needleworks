@@ -53,6 +53,14 @@ assert.equal(tidy("Em\u200bma\u00a0Lee\r\n", { lines: 3 }), "Emma Lee\n");
 assert.equal(tidy("A\nB\nC\nD", { lines: 3 }), "A\nB\nC D");
 assert.equal(tidy("a".repeat(59) + "👍🏽", { max: 60 }), "a".repeat(59));
 assert.equal(tidy("👨\u200d👩\u200d👧"), "👨\u200d👩\u200d👧");   // (an emoji family keeps its joiners)
+// (round 14) one rule for every invisible character: a joiner is kept only inside an emoji or a flag (a zero-width
+// joiner alone was kept while a zero-width space was dropped, and came out as "no stitches at all", blocking Download
+// where blank lettering only said it was empty)
+for (const s of ALL) { const t = tidy(s, { lines: 3 }); for (const g of graphemes(t)) if (/[\u200c\u200d\u{e0020}-\u{e007f}]/u.test(g)) check("tidy keeps joiners only in emoji", /\p{Extended_Pictographic}|\p{Regional_Indicator}/u.test(g), show(s) + " -> " + show(t)); }
+assert.equal(tidy("\u200d"), ""); assert.equal(tidy("Em\u200dma"), "Emma"); assert.equal(tidy("Em\u200cma"), "Emma");
+assert.equal(tidy("🏴\u{e0067}\u{e0062}\u{e0073}\u{e0063}\u{e0074}\u{e007f}"), "🏴\u{e0067}\u{e0062}\u{e0073}\u{e0063}\u{e0074}\u{e007f}");
+// an empty piece is listed as what it is, not as “”
+assert.equal(label({ kind: "text", text: "  " }), "Lettering (empty)"); assert.equal(label({ kind: "monogram", letters: "" }), "Monogram (empty)");
 
 // ---- lacks: the font's own character map, the same for NFC and NFD
 for (const fam of FAMILIES) {
@@ -116,7 +124,8 @@ for (const s of ALL) {
     check("load round trip", JSON.stringify(cleanPiece(JSON.parse(JSON.stringify(q)))) === JSON.stringify(q), `${p.kind} ${show(s)}`);
     check("thread name ASCII", /^[\x20-\x7e]*$/.test(latin(label(q, true))), `${p.kind} ${show(s)}`);
     // (the page names long words briefly, the file's thread name keeps them: a design's saved bytes carry it)
-    if (p.kind === "text") check("label brief, whole in the file", graphemes(label(q)).length <= 34 && label(q, true).includes(unswashed(q.text).replace(/\s*\n\s*/g, " / ")), `${show(s)}`);
+    // (no words: "Lettering (empty)", round 14)
+    if (p.kind === "text") check("label brief, whole in the file", /\S/.test(unswashed(q.text)) ? graphemes(label(q)).length <= 34 && label(q, true).includes(unswashed(q.text).replace(/\s*\n\s*/g, " / ")) : label(q) === "Lettering (empty)", `${show(s)}`);
     if (p.kind === "monogram") check("initials are letters", initials(q.letters).every((g) => !/^\p{M}/u.test(g) || g === initials(q.letters)[0]), show(s));
   }
 }
