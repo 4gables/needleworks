@@ -741,8 +741,11 @@ export function initStudio(api) {
       const fillsAt = ids("loops") && fills <= 3 * q.size ? landing(p, sizeChange(p, fills)) : null;
       // (shrunk back by its frame: a frame big enough, else the motifs either side left out, where that lands)
       const plain = fillsAt?.capped && p.deco && !fillsAt.host?.deco ? landing(p, { deco: "", ...sizeChange(p, fills) }) : null;
-      const fillsGrow = !fillsAt?.capped ? "" : grown(p, fillsAt.host, fills)
-        || (plain?.fits ? btn(`data-size="${fills}" data-no-deco`, `Make it ${fills} mm without the ${api.escapeHtml((MOTIFS[p.deco]?.name || "motif").toLowerCase())}s`, plain) : "");
+      // (the motifs left out first where that holds: Motif either side shrank a 17 mm name to 15 and offered only "make
+      // the frame 135 mm and turn the hoop", Kitchen sign)
+      const growBtn = fillsAt?.capped ? grown(p, fillsAt.host, fills) : "";
+      const fillsGrow = !fillsAt?.capped ? "" : [plain?.fits ? btn(`data-size="${fills}" data-no-deco`, `Make it ${fills} mm without the ${api.escapeHtml((MOTIFS[p.deco]?.name || "motif").toLowerCase())}s`, plain) : "",
+        growBtn ? `${growBtn} for ${fills} mm letters` : ""].filter(Boolean).map((b, i) => (i ? b.replace(">Make", ">make") : b)).join(", or ");
       // a name typed as initials ("Max" sewed as a first/LAST/middle monogram, "MaX" with a big a): as lettering instead
       let named = "";
       if (ids("named")) {
@@ -779,7 +782,7 @@ export function initStudio(api) {
         empty: p.kind === "monogram" ? "No initials yet: type them above, or remove this piece." : "No words yet: type some above, or remove this piece.",
         undrawn: "These words come out as no stitches at all: use fewer or other letters.",
         thin: bold && `At this size it sews as a thin line.${bold.fits ? ` ${btn(`data-seg-set="style:satin"`, "Make it bold", bold)} (small loops may fill in).` : ` Bold, it would ${no(bold)}.`}`,
-        loops: line && `At this size the small loops (the holes in letters like b and e) fill in.${line.fits ? ` ${btn(`data-seg-set="style:line"`, "Thin line", line)} keeps them open` : ""}${fillsAt?.fits ? `${line.fits ? ", or" : ""} ${btn(`data-size="${fills}"`, `${line.fits ? "make" : "Make"} it ${fills} mm`, fillsAt)}` : ""}${fillsGrow ? `${line.fits ? ", or" : ""} ${line.fits ? fillsGrow.replace(">Make", ">make") : fillsGrow}${/data-frame-grow/.test(fillsGrow) ? ` for ${fills} mm letters` : ""}` : ""}${line.fits || fillsAt?.fits || fillsGrow ? "." : ""}` };
+        loops: line && `At this size the small loops (the holes in letters like b and e) fill in.${line.fits ? ` ${btn(`data-seg-set="style:line"`, "Thin line", line)} keeps them open` : ""}${fillsAt?.fits ? `${line.fits ? ", or" : ""} ${btn(`data-size="${fills}"`, `${line.fits ? "make" : "Make"} it ${fills} mm`, fillsAt)}` : ""}${fillsGrow ? `${line.fits ? ", or" : ""} ${line.fits ? fillsGrow.replace(">Make", ">make") : fillsGrow}` : ""}${line.fits || fillsAt?.fits || fillsGrow ? "." : ""}` };
       if (pacer.hit) return;   // (a run stopped on the way: said by the next)
       w.innerHTML = [...new Set(list.map((x) => x.kind))].map((k) => tag(k, said[k] + (k === withLines ? lines : ""))).filter(Boolean).join(" <br>");   // (a space too: read aloud or copied, "lines.On two lines")
       w.hidden = !w.innerHTML;
@@ -1826,6 +1829,8 @@ export function initStudio(api) {
       setTimeout(() => { const hint = edit.querySelector("[data-cut-hint]"); if (hint && (cut || !hint.hidden)) { hint.textContent = `${max} letters and spaces is the most: the rest was left out.`; hint.hidden = !cut; } });
     }
     if (t.type === "range") t.nextElementSibling.textContent = shown(t.value, t.dataset.unit);
+    // (motifs either side that make a frame shrink the words, said: a 17 mm name chosen for its loops came out 15 mm)
+    const deco0 = k === "deco" && current() ? sewnAt(current()).size : null;
     change((p) => {
       if (k === "text") { if (p.kern) p.kern = rekern(p.kern, p.text, t.value); pairAt = +Object.keys(rekern({ [pairAt]: 1 }, p.text, t.value) || { [-1]: 1 })[0]; }
       // (fewer initials in a frame grow to its width: one letter of "aMs" stayed 23 mm tall in a 90 mm circle)
@@ -1845,6 +1850,7 @@ export function initStudio(api) {
       p[k] = t.type === "range" ? +t.value : t.value;
       if (longer) reArch(p);
     }, false, k === "font" || k === "deco");
+    if (deco0 != null && current()?.deco) { const p = current(), s1 = sewnAt(p).size; if (s1 < deco0 - 0.25) toast(`With ${(MOTIFS[p.deco]?.name || "motif").toLowerCase()}s either side, the frame has room for ${label(p)} at ${mmText(s1)} instead of ${mmText(deco0)}.`, { label: "Undo", run: undo }); }
     if (k === "text") { const box = edit.querySelector("[data-pairs]"); if (box) box.innerHTML = pairUI(current()); }   // (the pairs follow the words)
     // (and the swash buttons: a ~ typed away left "Swash before" pressed until the piece was picked again)
     if (k === "text") { const on = swashOn(t.value); for (const b of edit.querySelectorAll("[data-swash]")) b.setAttribute("aria-pressed", String(on[b.dataset.swash])); }
