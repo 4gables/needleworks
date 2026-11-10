@@ -163,7 +163,8 @@ export const STARTERS = [
 ];
 
 // api: { hoop(), setView(pattern, filename, look) (null pattern: nothing to show), showError(msg), busy(on, text),
-//        safeName(s, fb), escapeHtml(s), handOut(files, opts) (gate.js: the only way a file leaves), store, showStep(i), step(), setMode(mode), spool(hex, machine name) }
+//        safeName(s, fb), escapeHtml(s), handOut(files, opts) (gate.js: the only way a file leaves), store, showStep(i), step(), setMode(mode),
+//        threadLine(hex, machine name), threadHtml(hex, machine name) (app.js `threadLabel`: one thread label everywhere) }
 export function initStudio(api) {
   const $ = (id) => document.getElementById(id);
   const saved = api.store.get("studio", null);
@@ -199,7 +200,7 @@ export function initStudio(api) {
   const snap = () => JSON.stringify({ pieces, sel, fabric, baste, thread, fitted, two, turn: api.turned() });
   const sameDesign = (a, b) => { const x = JSON.parse(a), y = JSON.parse(b); delete x.sel; delete y.sel; return JSON.stringify(x) === JSON.stringify(y); };
   function remember(burst = false) {
-    if (Date.now() - toastAt > 400) hideToast();   // (a "Removed … Undo" note goes with the next change)
+    api.hideToast();   // (a "Removed … Undo" note goes with the next change)
     if (burst && Date.now() - quiet < 800) { quiet = Date.now(); return; }
     quiet = burst ? Date.now() : 0;
     const now = snap();
@@ -1047,7 +1048,7 @@ export function initStudio(api) {
     if (!was || was.key === key || hp.w * hp.h <= was.area || document.body.dataset.mode !== "design") return;
     const [w, h] = layoutSize(pieces);
     if (!w || !h || Math.min((hp.w - 10) / w, (hp.h - 10) / h) < 1.1) return;
-    toast(`The ${hp.name} has room to make this design bigger.`, { label: `Make it as big as the ${hp.name.replace(/ hoop$/, "")} allows`, run: () => { remember(); fitHoop(); } }, 12000);
+    toast(`The ${hp.name} has room to make this design bigger.`, { label: `Make it as big as the ${hp.name.replace(/ hoop$/, "")} allows`, run: () => { remember(); fitHoop(); } });
   }
   // the steps as shown and printed: what to have ready, what's done after, and whether the letters are small
   // (`lazy`: lettering not worked out yet (a long text drawn again as one line, 0.3-0.7 s) is taken as small as it last
@@ -1088,8 +1089,8 @@ export function initStudio(api) {
     const cols = seg.includes(was) ? seg.map((c) => (c === was ? hex : c)) : [...seg, hex];
     return machineThreads(cols.map((color) => ({ color })))[cols.indexOf(hex)].name;
   }
-  // a piece's thread as every surface labels it: the machine's name, then their spool (or its number in their brand)
-  function threadOf(p, k = "color") { const m = machineName(p[k]), s = api.spool(p[k], m); return `Brother ${m}${s ? ` · ${s}` : ""}`; }
+  // a piece's thread as every surface labels it (their spool first when they own one, else the machine's name)
+  function threadOf(p, k = "color") { return api.threadLine(p[k], machineName(p[k])); }
   function swatchTip(hex, was, own) { const m = machineName(hex, was); return own ? `Your ${own} (the machine calls it ${m})` : `Brother ${m}`; }
   // after the design is made: the editor's thread labels and swatch tooltips as the file now names them
   function relabelThreads() {
@@ -1306,7 +1307,7 @@ export function initStudio(api) {
       + (api.turned() ? `<li class="after"><b>Hooping</b><span class="turned">${TURN_PIC}${api.escapeHtml(turnText())}</span></li>` : "") + (before.length ? `<li class="after"><b>Have ready</b><ul class="ready">${before.map((r) => `<li>${api.escapeHtml(r)}</li>`).join("")}</ul></li>` : "")
       + (first ? `<li class="after"><b>First hooping: ${api.escapeHtml(first)}</b></li>` : "")
       + steps.map((st, i) => st.rehoop ? `<li class="after"><b>${api.escapeHtml(st.title)}</b>${youHtml(st.you, api.escapeHtml)}</li>` : `<li><button type="button" data-step="${i}" aria-pressed="${api.step() === i}">
-      <b><span class="n">${++n}</span><i style="background:${st.color}"></i>Brother ${api.escapeHtml(st.machine || nearestBrotherThread(st.color).name)}${api.spool(st.color, st.machine) ? ` <small>${api.escapeHtml(api.spool(st.color, st.machine))}</small>` : ""}</b>
+      <b><span class="n">${++n}</span><i style="background:${st.color}"></i>${api.threadHtml(st.color, st.machine || nearestBrotherThread(st.color).name)}</b>
       ${st.you ? youHtml(st.you, api.escapeHtml) : ""}<span>${api.escapeHtml(st.sews.join(" "))}</span>
       ${st.early ? `<small>Sewn early, with the other ${api.escapeHtml(st.machine || nearestBrotherThread(st.color).name)} parts, to save a thread change.</small>` : ""}</button></li>`).join("")
       + (threadTip(small) ? `<li class="after"><b>Thread and needle</b><span>${api.escapeHtml(threadTip(small))}</span></li>` : "")
@@ -1449,23 +1450,8 @@ export function initStudio(api) {
   }
   // p where it is runs into nothing and keeps the design in one hooping
   const clear = (p) => !touching(p, pieces) && fitsWith(p);
-  let deleted = 0, toastTimer = 0, toastAt = 0;
-  const note = Object.assign(document.createElement("div"), { id: "st-toast", className: "toast", hidden: true });
-  function hideToast() { if (note.querySelector("button")) gone(); }
-  note.setAttribute("role", "status"); document.body.append(note);
-  // Going, it fades and keeps catching taps for a moment before it's hidden: a late tap on Undo just after it went
-  // landed on "+ Appliqué letters" under it, and so did a second tap on Undo
-  function gone() {
-    if (note.hidden || note.classList.contains("gone")) return;
-    note.classList.add("gone"); clearTimeout(toastTimer); toastTimer = setTimeout(() => { note.hidden = true; note.classList.remove("gone"); }, 700);
-  }
-  // a moment's note with a one-tap way back ("Removed Monogram aMs. Undo")
-  // (10 s, or until the next change: 6 s went before a newcomer found Undo)
-  function toast(msg, action, ms = action ? 10000 : 3000) {
-    note.innerHTML = `<span>${api.escapeHtml(msg)}</span>${action ? `<button type="button" class="link">${action.label}</button>` : ""}`;
-    if (action) note.querySelector("button").onclick = () => { if (note.classList.contains("gone")) return; gone(); action.run(); };
-    note.classList.remove("gone"); note.hidden = false; toastAt = Date.now(); clearTimeout(toastTimer); toastTimer = setTimeout(gone, ms);
-  }
+  let deleted = 0;
+  const toast = (msg, action) => api.toast(msg, action);   // (app.js: one note and one timing rule for every tab)
   $("st-pieces").onclick = (e) => {
     const b = e.target.closest("button"); if (!b) return;
     const id = +b.dataset.id, i = pieces.findIndex((p) => p.id === id);
@@ -1743,7 +1729,7 @@ export function initStudio(api) {
     // (with the hoop it was laid out in and its turn: a turned design reopened said Too big)
     const r = api.handOut([{ name: `${api.safeName(firstWords(), "design")}.needleworks.json`,
       bytes: JSON.stringify({ needleworks: 1, pieces, fabric, baste, thread, fitted, ...(two ? { two } : {}), hoop: api.hoopId(), turned: api.turned() }, null, 1) }]);
-    if (!r.ok) api.showError(r.error === "The saved design is empty." ? "Add a piece first: there's nothing to save yet." : r.error);
+    if (!r.ok) toast(r.error === "The saved design is empty." ? "Add a piece first: there's nothing to save yet." : r.error);
   };
   const bad0 = "it isn't a design saved from this page, or it's damaged (saved designs end in .needleworks.json)";
   $("st-load").onchange = async (e) => {
@@ -1777,7 +1763,7 @@ export function initStudio(api) {
       if (left || changed || cut) toast([left ? `${left} ${left === 1 ? "piece" : "pieces"} in that file couldn't be read and ${left === 1 ? "was" : "were"} left out.` : "",
         cut ? "Words longer than this page takes (60 letters, 12 initials) were cut short." : "",
         changed ? `${changed === 1 ? "One piece had settings" : `${changed} pieces had settings`} this page doesn't have: ${changed === 1 ? "it was" : "they were"} set to the nearest that works.` : ""].filter(Boolean).join(" "), null, 12000);
-    } catch (err) { console.error(err); api.showError("That design couldn't be opened: " + (err instanceof RangeError || err instanceof TypeError ? bad0 : err.message)); }
+    } catch (err) { console.error(err); toast("That design couldn't be opened: " + (err instanceof RangeError || err instanceof TypeError ? bad0 : err.message)); }
   };
   document.addEventListener("keydown", (e) => {
     if (document.body.dataset.mode !== "design" || e.defaultPrevented || e.target.matches?.("input[type=text], textarea, [role=tab]")) return;
@@ -1935,7 +1921,7 @@ export function initStudio(api) {
   // hoopings or a bigger hoop; not on an in-the-hoop project, where it would sew on the bare stabilizer)
   function noRoom(p, ith, insert = (q) => pieces.push(q)) {
     const what = { text: "more lettering", monogram: "a monogram", letters: "appliqué letters", frame: "another frame" }[p.kind] || `a ${label(p).toLowerCase()}`;
-    if (ith) { toast(`There's no free room ${ith.border === "zip" ? "on the pouch's front" : `inside the ${label(ith).toLowerCase()}`} for ${what}. Make what's there smaller, or take something out first.`, null, 8000); return; }
+    if (ith) { toast(`There's no free room ${ith.border === "zip" ? "on the pouch's front" : `inside the ${label(ith).toLowerCase()}`} for ${what}. Make what's there smaller, or take something out first.`); return; }
     toast(`There's no free room in the hoop for ${what}. Make something smaller, or take something out first.`, { label: "Add it anyway", run: () => {
       remember(); fitted = false; freeSpot(p, "down"); insert(p); sel = p.id; recentre(); save(); ui(); make();
     } });
@@ -2001,7 +1987,7 @@ export function initStudio(api) {
       freeSpot(p, "up");
       if (!place(p, (q) => { const at = pieces.findIndex((o) => o.kind !== "frame"); pieces.splice(at < 0 ? pieces.length : at, 0, q); })) return;
       recentre(); save(); ui(); make();
-    } catch (err) { api.showError("That file couldn't be added: " + err.message); }
+    } catch (err) { toast("That file couldn't be added: " + err.message); }
   };
 
   $("st-guide").hidden = !!api.store.get("studio.guideSeen", false);

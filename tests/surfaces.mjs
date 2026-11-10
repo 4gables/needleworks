@@ -87,6 +87,9 @@ const CASES = [
   design("threads: my Isacord", THREADS_CASE(), { brand: "isacord", spools: OWNED }),
   design("threads: Isacord numbers", THREADS_CASE(), { brand: "isacord" }),
   design("threads: Brother numbers", THREADS_CASE(), { brand: "brother" }),
+  // a spool of theirs that the file sews as another Brother name (Sulky 1076 Royal Blue: Wisteria Violet), and a thread
+  // put on again after another (round 10: two chips for one thread)
+  design("threads: my Sulky, back again", [T("Ann", 16, { color: "#5a5a8b", y: -14 }), T("Bo", 16, { color: "#ed171f", y: 0 }), T("Cy", 16, { color: "#5a5a8b", y: 12 })], { brand: "sulky", spools: { sulky: ["1076", "1005"] } }),
   // (words typed away to nothing: a saved design drops such a piece, so they're cleared in the editor, `act`)
   { ...design("empty lettering", [F("heart", 84, 76, "applique"), T("Emma", 16)]), act: `const t = document.querySelector('#st-edit textarea[data-k="text"]'); t.value = "  "; t.dispatchEvent(new Event("input", { bubbles: true }));` },
   design("quilted frame + name", [F("square", 100, 100, "satin", { quilt: "stipple" }), T("Ava", 7, { font: ROUND })]),
@@ -157,7 +160,7 @@ const READ = String.raw`(async () => {
   const v = nwTest.view(); if (!v) return { ...out, none: true };
   out.expected = nwTest.problems().map(({ id, level, text, file }) => ({ id, level, text, file: !!file }));
   out.download = ids("#dl-warn [data-problem]");
-  out.facts = $("#facts").innerText; out.chips = $$("#threads li span").map((s) => textOf(s));
+  out.facts = $("#facts").innerText; out.chips = $$("#threads li span").map((s) => textOf(s)); out.chipNotes = $$("#threads li span").map((s) => s.querySelector("small")?.textContent || "");
   grab(document.body);
   if (out.mode === "design") {
     const all = new Set(), untagged = [];
@@ -176,7 +179,7 @@ const READ = String.raw`(async () => {
     out.stepThreads = $$("#st-steps [data-step] b").map((b) => textOf(b));
     const colorOf = (el) => (el?.getAttribute("style") || "").match(/#[0-9a-f]{6}/i)?.[0].toLowerCase();
     out.labels = { steps: $$("#st-steps [data-step] b").map((b) => [colorOf(b.querySelector("i")), textOf(b), b.querySelector("small")?.textContent || ""]),
-      chips: $$("#threads li").map((li) => [colorOf(li.querySelector("i")), textOf(li.querySelector("span")), li.querySelector("small")?.textContent || ""]) };
+      chips: $$("#threads li").map((li) => [colorOf(li.querySelector("i")), textOf(li.querySelector("span")), li.title]) };
     out.ready = $$("#st-steps .ready li").map((l) => l.textContent);
     grab($("#st-steps"));
   } else if (out.mode === "picture") {
@@ -221,7 +224,7 @@ const READ = String.raw`(async () => {
       const b = $$("#st-edit .own-swatches button")[k], said = b.title.match(/calls it (.*)\)$/)?.[1], hex = b.dataset.color.toLowerCase();
       b.click();
       let got = "";
-      for (let i = 0; i < 60; i++) { await sleep(150); const st = $$("#st-steps [data-step] b").find((x) => (x.querySelector("i")?.getAttribute("style") || "").toLowerCase().includes(hex)); if (st) { got = textOf(st); break; } }
+      for (let i = 0; i < 60; i++) { await sleep(150); const st = $$("#st-steps [data-step] b").find((x) => (x.querySelector("i")?.getAttribute("style") || "").toLowerCase().includes(hex)); if (st) { got = [textOf(st), st.querySelector("small")?.textContent].filter(Boolean).join(" · "); break; } }
       await sleep(300);
       out.predicted.push({ hex, said, step: got, hint: $("#st-edit [data-thread-of=color]")?.textContent || "" });
     }
@@ -316,34 +319,47 @@ for (const c of CASES) {
       if (!pa && /\bpause/i.test(r.doneSew)) fail(c.name, `the download dialog speaks of pauses with none: "${r.doneSew}"`);
       if (!ch && /thread change/i.test(r.doneSew)) fail(c.name, `the download dialog speaks of thread changes with none: "${r.doneSew}"`);
     }
-    // threads named the same, in sewing order, on the chips, the steps, the sew sheet and Sew along
-    // (past 12 thread changes the chips list each thread once)
-    if (!r.split && collapse(r.chips).length <= 13) {
-      const chips = collapse(r.chips.map((x) => x.replace(/ · .*$/, "")));
+    // threads named the same, in sewing order, on the chips, the steps, the sew sheet and Sew along: one chip per
+    // thread in the order each is first put on, saying how many times it's put on (round 10: Black, Red, Black was a
+    // chip each, a long note under every one, and the row grew over the preview)
+    if (!r.split) {
+      const chips = r.chips;
+      if (new Set(chips).size !== chips.length) fail(c.name, `a thread has two chips: ${chips.join(", ")}`);
       for (const [n, l] of [["How to stitch it", r.stepThreads], ["the sew sheet", r.sheetThreads], ["Sew along", r.alongThreads]]) {
         if (!l?.length) continue;
-        const got = collapse(l.map((x) => x.replace(/^.* · /, "").trim()));
-        if (!same([got.join("|")], [chips.join("|")])) fail(c.name, `${n} names the threads ${got.join(", ")}; the chips ${chips.join(", ")}`);
+        const got = collapse(l.map((x) => x.replace(/^.* · /, "").trim())), first = [...new Set(got)];
+        if (!same([first.join("|")], [chips.join("|")])) fail(c.name, `${n} names the threads ${first.join(", ")}; the chips ${chips.join(", ")}`);
+        chips.forEach((x, k) => {
+          const times = got.filter((y) => y === x).length, said = (r.chipNotes[k].match(/used (twice|\d+ times)/) || [])[1];
+          if ((said === "twice" ? 2 : said ? parseInt(said) : 1) !== times) fail(c.name, `the ${x} chip says "${r.chipNotes[k]}"; ${n} puts it on ${times} times`);
+        });
       }
-      for (const x of r.chips) if (!/^(Brother |your )/.test(x)) fail(c.name, `a thread chip not named as the machine names it: "${x}"`);
+      for (const x of r.chips) if (!/^(Brother |Your )/.test(x)) fail(c.name, `a thread chip not named as the machine names it: "${x}"`);
     }
     // one label per colour on every surface (a thread brand, their own spools)
     if (r.labels && c.brand) {
       const want = new Map(), shown = (l) => l.replace(/\|(.+)$/, " · $1").replace(/\|$/, "");
       for (const [col, name, sp] of r.labels.steps) if (col) { const l = `${name}|${sp}`; if (want.has(col) && want.get(col) !== l) fail(c.name, `the steps label ${col} two ways: ${shown(want.get(col))} / ${shown(l)}`); want.set(col, l); }
-      for (const [n, list] of [["the chips", r.labels.chips], ["the sew sheet", r.labels.sheet || []]])
+      for (const [n, list] of [["the sew sheet", r.labels.sheet || []]])
         for (const [col, name, sp] of list) if (col && want.has(col) && want.get(col) !== `${name}|${sp}`) fail(c.name, `${n} label ${col} "${shown(`${name}|${sp}`)}", the steps "${shown(want.get(col))}"`);
+      // (a chip's whole label is its tooltip, the note under it the short one)
+      for (const [col, name, tip] of r.labels.chips) if (col && want.has(col) && (tip || name) !== shown(want.get(col))) fail(c.name, `the chip for ${col} says "${tip || name}", the steps "${shown(want.get(col))}"`);
       for (const h of r.hints) if (want.has(h.color) && h.text !== shown(want.get(h.color))) fail(c.name, `the editor labels ${h.color} "${h.text}", the steps "${shown(want.get(h.color))}"`);
-      for (const h of r.hints) { const m = h.tip.match(/calls it (.*)\)$|^Brother (.*)$/); if (m && !h.text.startsWith(`Brother ${m[1] || m[2]}`)) fail(c.name, `the picked swatch's tooltip "${h.tip}" disagrees with the editor "${h.text}"`); }
-      for (const p of r.predicted || []) if (p.said && !p.step.startsWith(`Brother ${p.said}`)) fail(c.name, `the swatch for ${p.hex} said the machine calls it ${p.said}; picked, the steps say "${p.step}"`);
-      for (const p of r.predicted || []) if (p.step && !p.hint.startsWith(p.step)) fail(c.name, `picked ${p.hex}: the editor says "${p.hint}", the steps "${p.step}"`);
-      if (c.spools.isacord && !(r.predicted || []).length) fail(c.name, "no spool swatches to check");
+      // (a spool they own leads its label: "Your Sulky Rayon 1076 Royal Blue · the machine calls it Wisteria Violet";
+      // round 10: "Brother Wisteria Violet · your Sulky 1076" read as the wrong thread)
+      const agrees = (said, text) => text.startsWith(`Brother ${said}`) || (text.startsWith("Your ") && text.endsWith(`the machine calls it ${said}`));
+      for (const h of r.hints) { const m = h.tip.match(/calls it (.*)\)$|^Brother (.*)$/); if (m && !agrees(m[1] || m[2], h.text)) fail(c.name, `the picked swatch's tooltip "${h.tip}" disagrees with the editor "${h.text}"`); }
+      for (const p of r.predicted || []) if (p.said && !agrees(p.said, p.step)) fail(c.name, `the swatch for ${p.hex} said the machine calls it ${p.said}; picked, the steps say "${p.step}"`);
+      for (const p of r.predicted || []) if (p.said && !p.step.startsWith("Your ")) fail(c.name, `their own spool ${p.hex} picked, the steps lead with the machine's name: "${p.step}"`);
+      for (const p of r.predicted || []) if (p.step && p.hint !== p.step) fail(c.name, `picked ${p.hex}: the editor says "${p.hint}", the steps "${p.step}"`);
+      if ((c.spools.isacord || c.spools.sulky) && !(r.predicted || []).length) fail(c.name, "no spool swatches to check");
+      if (c.spools.sulky && !r.labels.steps.some(([col, name]) => col === "#5a5a8b" && name.startsWith("Your Sulky Rayon 1076"))) fail(c.name, "their Sulky 1076 isn't named first for its colour");
       // Have ready: each spool once, every thread named as the steps name it, the brand's numbers there too
       const list = (r.ready || []).find((x) => /^(Thread|Your threads|To buy):/.test(x)) || "";
-      const nums = [...list.matchAll(/(?:Isacord|Brother) (\d{3,4})\b/g)].map((m) => m[1]);
+      const nums = [...list.matchAll(/(?:Isacord|Brother|Sulky Rayon) (\d{3,4})\b/g)].map((m) => m[1]);
       if (new Set(nums).size !== nums.length) fail(c.name, `Have ready names a spool twice: "${list}"`);
       if (!nums.length) fail(c.name, `Have ready gives no spool numbers: "${list}"`);
-      for (const [, name, sp] of r.labels.steps) if (name && !sp.startsWith("your ") && !list.includes(name.replace(/^Brother /, ""))) fail(c.name, `Have ready doesn't name ${name}: "${list}"`);
+      for (const [, name, sp] of r.labels.steps) if (name && !name.startsWith("Your ") && !list.includes(name.replace(/^Brother /, ""))) fail(c.name, `Have ready doesn't name ${name}: "${list}"`);
       if (c.brand === "brother") for (const [, name, sp] of r.labels.steps) { const n = brotherNum(name.replace(/^Brother /, "")); if (n && sp !== `spool ${n}`) fail(c.name, `${name} labelled "${sp}", its spool is ${n}`); }
       if (c.spools.isacord && !r.labels.steps.some(([col, , sp]) => col === "#fadade" && /quite different/.test(sp))) fail(c.name, "the pale pink sewn in their bluish white spool isn't called quite different");
     }
