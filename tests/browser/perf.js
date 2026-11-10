@@ -6,6 +6,7 @@
 //   thread   60 wt, 30 wt, Automatic
 //   letters  + Appliqué letters (then Undo)
 //   names    One for each name, 6 names (blocking time only: the batch may take longer as long as the page answers)
+//   long     the longest lettering made one long line, "Happy Birthday Grandma", then typed onto
 // Query: ?start=fifteen,fifteen-letters,<starter id>...&budget=500&only=type,fabric. Title "DONE <actions> <over budget>";
 // window.perf holds [{ start, act, what, long, ms }]. Run with node tests/perf.mjs CDP_PORT HTTP_PORT.
 const Q = new URLSearchParams(location.search);
@@ -107,6 +108,23 @@ const ACTS = {
     const what = $("names-note").textContent.slice(0, 60); $("names").close(); return what;
   }]],
 };
+// (last: it changes the design) a long one-line name, then typed onto a letter at a time: every keystroke draws the
+// whole line again (a 22-letter line in Great Vibes held the page 1.8 s)
+ACTS.long = [["long line", async () => {
+  const el = await longest(); if (!el) return null;
+  el.focus(); el.value = "Happy Birthday Grandma"; fire(el, "input"); el.blur(); return "set";
+}], ["long line typed", async () => {
+  const el = await longest(); if (!el) return null;
+  el.focus(); const v0 = el.value;
+  for (const [k] of [..." Jo"].entries()) { el.value = v0 + " Jo".slice(0, k + 1); fire(el, "input"); await sleep(140); }
+  el.blur(); return JSON.stringify(el.value);
+}]];
+async function longest() {
+  const ps = (studio()?.pieces || []).filter((p) => p.kind === "text");
+  if (!ps.length) return null;
+  pick(ps.reduce((a, b) => (b.text.length > a.text.length ? b : a)).id); await idle();
+  return D.querySelector("#st-edit textarea[data-k=text], #st-edit input[data-k=text]");
+}
 const res = [];
 for (const start of STARTS) {
   await boot(start);

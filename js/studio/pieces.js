@@ -40,7 +40,10 @@ function letterStrokes(text, family, spacing = 0, kern = null, lead = false, tai
   const print = !!fontOf(family).print;
   const curls = lead || tail ? { leadIn: lead ? (print ? SWASH.dash : SWASH.lead) : 0, tail: tail ? (print ? SWASH.dash : SWASH.tail) : 0 } : {};
   // (knots: junctions joined by a stroke shorter than 0.75 of its width become one; `skeletonEdges`)
-  const { edges, info } = strokes(text, family, { knots: 0.75, ...(print ? { deco: "dash", join: false } : { tongues: true }), ...(spacing ? { spacing } : {}), ...(kern ? { kern } : {}), ...curls });
+  const { edges, info } = inks.get(key) || strokes(text, family, { knots: 0.75, ...(print ? { deco: "dash", join: false } : { tongues: true }), ...(spacing ? { spacing } : {}), ...(kern ? { kern } : {}), ...curls });
+  // (`drawAhead`'s first step: the drawing only, the rest a task later)
+  if (inking) { if (!inks.has(key) && fontReady(family)) { inks.set(key, { edges, info }); drawn++; if (inks.size > 8) inks.delete(inks.keys().next().value); } throw INKED; }
+  inks.delete(key);
   // (each counter with the strokes round its widest spot: the ones within a pixel and a half of that circle)
   const lines = edges.map((e) => e[2]), near = (p, [x, y]) => Math.min(...p.map((q) => Math.hypot(q[0] - x, q[1] - y)));
   const counters = counterPockets(info.mask, lines, info.stroke).map((c) => ({ ...c, edges: lines.flatMap((p, i) => (near(p, c.at) <= c.peak + 1.5 ? [i] : [])) }));
@@ -50,9 +53,11 @@ function letterStrokes(text, family, spacing = 0, kern = null, lead = false, tai
   const ends = edges.map((e) => (e[5] ? { start: e[2][0], ...e[5] } : null));
   const sides = edges.map((e) => (e[6] ? { start: e[2][0], w: e[6], path: e[2] } : null));
   const out = { edges, comps: order(edges), info, counters, notches: notches(edges, info.stroke), tapers, ends, sides };
+  drawn++;
   if (fontReady(family)) {
     lettering.set(key, out);
     if (lettering.size > 60) lettering.delete(lettering.keys().next().value);
+    paced();
   }
   return out;
 }
@@ -371,7 +376,7 @@ export function scaledFit(pieces, k) {
 // the biggest size (0.5 mm steps, down to 60 %, never too small to stitch) at which p clears `other`, or 0
 // (halving the range, not 0.5 mm at a time: a 113 mm filled heart over a monogram stitched ~90 sizes, 4.7 s per change)
 export function clearSize(p, pieces, other) {
-  const from = fittedSizes(pieces).get(p.id) ?? p.size, theirs = pieceStitches(other), sizes = [];
+  const from = fittedSizes(pieces).get(p.id) ?? p.size, theirs = cloud(pieceStitches(other)), sizes = [];
   for (let s = Math.ceil(from * 2) / 2 - 0.5; s >= Math.max(5, from * 0.6); s -= 0.5) sizes.push(s);
   // the sizes before the first one too small to stitch (smaller is never better there)
   let x = -1, n = sizes.length;
@@ -383,22 +388,25 @@ export function clearSize(p, pieces, other) {
   while (hi - lo > 1) { const m = (lo + hi) >> 1; if (clears(m)) hi = m; else lo = m; }
   return sizes[hi];
 }
-// points every 0.5 mm along stitch paths, in 1 mm cells
+// points every 0.5 mm along stitch paths, in 1 mm cells (`n`: how many)
 function cloud(paths) {
   const m = new Map();
+  m.n = 0;
   for (const q of paths) for (let i = 0; i < q.length; i++) {
     const [ax, ay] = q[i], [bx, by] = q[i + 1] || q[i], n = i + 1 < q.length ? Math.max(1, Math.ceil(Math.hypot(bx - ax, by - ay) / 0.5)) : 1;
     for (let k = 0; k < n; k++) {
       const x = ax + ((bx - ax) * k) / n, y = ay + ((by - ay) * k) / n, key = Math.floor(x) * 8192 + Math.floor(y);
-      let c = m.get(key); if (!c) m.set(key, (c = [])); c.push(x, y);
+      let c = m.get(key); if (!c) m.set(key, (c = [])); c.push(x, y); m.n++;
     }
   }
   return m;
 }
-// do any of `paths` come within d mm of the points in cloud `c`?
+// do any of `paths` (or their cloud) come within d mm of the points in cloud `c`? (either way round, the same answer:
+// the fewer points are the ones looked round; a patch's fill beside a word was every point of the fill, for each size)
 function near(c, paths, d) {
-  const r = Math.ceil(d);
-  for (const pts of cloud(paths).values()) for (let i = 0; i < pts.length; i += 2) {
+  const r = Math.ceil(d), o0 = paths instanceof Map ? paths : cloud(paths), [a, b] = o0.n <= c.n ? [o0, c] : [c, o0];
+  c = b;
+  for (const pts of a.values()) for (let i = 0; i < pts.length; i += 2) {
     const x = pts[i], y = pts[i + 1], X = Math.floor(x), Y = Math.floor(y);
     for (let dx = -r; dx <= r; dx++) for (let dy = -r; dy <= r; dy++) {
       const o = c.get((X + dx) * 8192 + Y + dy); if (!o) continue;
@@ -663,6 +671,25 @@ function bulk(p) {
   return p.kind === "text" ? letters(p.text, p.font, p.size, p.style, 0, null, false) : letters(chars[1] || p.letters, p.font, chars.length === 3 ? p.size * 0.68 : p.size, p.style, 0, null, false);
 }
 
+// Lettering drawn ahead of the stitches, one step at a time (its lines, then its words as one line for `bulk`), each
+// step true when it drew something new: the Design tab draws new words a task apart from stitching them (a 22-letter
+// line drew and stitched in one 0.5-0.8 s task on every key). Nothing here decides anything: it only fills the cache.
+// (a long line's drawing and thinning, then its counters and sewing order, are two steps: `inking`)
+let drawn = 0, inking = false;
+const inks = new Map(), INKED = new Error("inked");
+// `pacer`: while `on`, new lettering or stitches, once cached, throw PACED when the task has run 150 ms (from `since`),
+// and `hit` says so: the editor's warnings (which try many sizes, lines, fonts and frames) catch it, let the page answer,
+// and start again with all that cached (a long line's fixes held the page 1.5 s; on a patch, growing the frame refilled
+// it 25 times, 3.5 s). Never on outside them, so nothing else is cut short.
+export const pacer = { on: false, hit: false, since: 0 };
+export const PACED = new Error("paced");
+function paced() { if (pacer.on && performance.now() - pacer.since > 150) { pacer.hit = true; throw PACED; } }
+export function drawAhead(p) {
+  if (p.kind !== "text") return [];
+  const step = (fn, ink = false) => () => { const n = drawn, on = pacer.on; inking = ink; pacer.on = false; try { fn(); } catch {} finally { inking = false; pacer.on = on; } return drawn > n; };
+  return [step(() => textRows(p), true), step(() => textRows(p)), step(() => bulk(p), true), step(() => bulk(p))];
+}
+
 // whether bulk(p) is worked out already: a long text drawn again as one line takes a while (0.3-0.7 s for three
 // lines), so what only needs it for a tip or a label can say so a moment later instead of holding up the preview
 export function bulkReady(p) {
@@ -873,6 +900,7 @@ export function pieceStages(p, fab = "cotton") {
     if (!fontReady(p.font)) return st.map((s) => placed(s, placer(p)));
     built.set(key, st);
     if (built.size > 120) built.delete(built.keys().next().value);
+    paced();
   }
   const place = placer(p);
   return recent(built, key).map((st) => placed(st, place));
@@ -1740,7 +1768,7 @@ const cleared = new Map();
 function clearOf(p, frame, size) {
   const { x, y, id, ...shape } = p, key = JSON.stringify([shape, x - frame.x, y - frame.y, { ...frame, x: 0, y: 0, id: 0 }, size, wt]);
   if (!cleared.has(key)) {
-    const edge = pieceStitches(frame);
+    const edge = cloud(pieceStitches(frame));
     let s = size;
     for (let t = size; t >= Math.max(5, size * 0.6); t -= 0.5) if (!near(cloud(pieceStitches({ ...p, size: t })), edge, CLEAR)) { s = t; break; }
     cleared.set(key, s);

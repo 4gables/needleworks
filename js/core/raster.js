@@ -182,31 +182,72 @@ export function skeletonGraph(sk) {
 }
 
 // drop short spurs, merge pass-through nodes (`keep(edge)`: a short spur to keep after all)
-export function prune(edges, minLen, keep = null) {
-  edges = edges.slice();
+// One at a time, as a list scanned from the top would: the first spur in the list goes, and with none left the first
+// node (in the order the list first names them) with two edges through it is merged. Kept as queues of what a change
+// touched rather than scanning the whole list for each (a long word has hundreds of edges: 0.25 s).
+export function prune(input, minLen, keep = null) {
+  const E = new Map(), deg = new Map(), inc = new Map();   // edge number -> edge, in list order; node -> ends; node -> edge numbers
+  let next = 0;
+  const spurs = heap(), nodes = heap();   // (spurs: edge numbers that may be a spur; nodes: [first mention, node] that may merge)
+  const first = (k) => { let f = Infinity; for (const s of inc.get(k)) f = Math.min(f, s * 2 + (E.get(s)[0] === k ? 0 : 1)); return f; };
+  const touched = (k) => { if (!inc.get(k)?.size) return; for (const s of inc.get(k)) spurs.push(s); nodes.push(first(k), k); };
+  const add = (e) => {
+    const s = next++; E.set(s, e);
+    for (const k of [e[0], e[1]]) deg.set(k, (deg.get(k) || 0) + 1);
+    for (const k of new Set([e[0], e[1]])) { if (!inc.has(k)) inc.set(k, new Set()); inc.get(k).add(s); }
+    return s;
+  };
+  const drop = (s) => {
+    const e = E.get(s); E.delete(s);
+    for (const k of [e[0], e[1]]) deg.set(k, deg.get(k) - 1);
+    for (const k of new Set([e[0], e[1]])) inc.get(k).delete(s);
+  };
+  const spur = (e) => { const [a, b, p] = e; return a !== b && p.length < minLen &&
+    ((deg.get(a) === 1 && deg.get(b) >= 3) || (deg.get(b) === 1 && deg.get(a) >= 3)) && !(keep && keep(e, deg.get(a) === 1)); };
+  for (const e of input) add(e);
+  for (const s of E.keys()) spurs.push(s);
+  for (const k of inc.keys()) nodes.push(first(k), k);
   for (;;) {
-    const deg = new Map(), inc = new Map();
-    edges.forEach((e, i) => {
-      for (const k of [e[0], e[1]]) { deg.set(k, (deg.get(k) || 0) + 1); }
-      for (const k of new Set([e[0], e[1]])) { if (!inc.has(k)) inc.set(k, []); inc.get(k).push(i); }
-    });
-    const spur = edges.findIndex((e) => { const [a, b, p] = e; return a !== b && p.length < minLen &&
-      ((deg.get(a) === 1 && deg.get(b) >= 3) || (deg.get(b) === 1 && deg.get(a) >= 3)) && !(keep && keep(e, deg.get(a) === 1)); });
-    if (spur >= 0) { edges.splice(spur, 1); continue; }
-    let merged = false;
-    for (const [k, d] of deg) {
-      const ek = inc.get(k);
-      if (d === 2 && ek.length === 2) {
-        const e1 = edges[ek[0]], e2 = edges[ek[1]];
-        const p1 = e1[1] === k ? e1[2] : e1[2].slice().reverse(), o1 = e1[1] === k ? e1[0] : e1[1];
-        const p2 = e2[0] === k ? e2[2] : e2[2].slice().reverse(), o2 = e2[0] === k ? e2[1] : e2[0];
-        edges = edges.filter((_, i) => i !== ek[0] && i !== ek[1]);
-        edges.push([o1, o2, p1.concat(p2.slice(1))]);
-        merged = true; break;
-      }
+    // (every edge that is a spur is in `spurs`: a spur stops or starts being one only when its ends' edges change)
+    let cut = false;
+    while (spurs.size()) {
+      const [s] = spurs.pop();
+      if (!E.has(s) || !spur(E.get(s))) continue;
+      const [a, b] = E.get(s); drop(s); touched(a); touched(b); cut = true; break;
     }
-    if (!merged) return edges;
+    if (cut) continue;
+    let k = null;
+    while (nodes.size()) {
+      const [f, n] = nodes.pop();
+      if (deg.get(n) === 2 && inc.get(n).size === 2 && first(n) === f) { k = n; break; }
+    }
+    if (k === null) return [...E.values()];
+    const [s1, s2] = [...inc.get(k)].sort((u, v) => u - v), e1 = E.get(s1), e2 = E.get(s2);
+    const p1 = e1[1] === k ? e1[2] : e1[2].slice().reverse(), o1 = e1[1] === k ? e1[0] : e1[1];
+    const p2 = e2[0] === k ? e2[2] : e2[2].slice().reverse(), o2 = e2[0] === k ? e2[1] : e2[0];
+    drop(s1); drop(s2);
+    const s = add([o1, o2, p1.concat(p2.slice(1))]);
+    spurs.push(s); touched(o1); touched(o2);
   }
+}
+// a min-heap of [key, value] pairs by key
+function heap() {
+  const a = [];
+  return {
+    size: () => a.length,
+    push(key, value) {
+      let i = a.push([key, value]) - 1;
+      while (i) { const j = (i - 1) >> 1; if (a[j][0] <= key) break; [a[i], a[j]] = [a[j], a[i]]; i = j; }
+    },
+    pop() {
+      const top = a[0], last = a.pop();
+      if (a.length) {
+        a[0] = last; let i = 0;
+        for (;;) { const l = 2 * i + 1, r = l + 1; let m = i; if (l < a.length && a[l][0] < a[m][0]) m = l; if (r < a.length && a[r][0] < a[m][0]) m = r; if (m === i) break; [a[i], a[m]] = [a[m], a[i]]; i = m; }
+      }
+      return top;
+    },
+  };
 }
 
 // centerline strokes of a mask, smoothed: [[a, b, [[x, y], ...]]] in pixels
@@ -640,25 +681,28 @@ export function counterPockets(mask, lines, stroke) {
   for (let k = 1; k <= L + 1; k++) cnt[k] += cnt[k - 1];
   for (let i = 0; i < N; i++) idx[cnt[L - Math.round(dt[i] * 4)]++] = i;
   const parent = new Int32Array(N).fill(-1), peak = new Float32Array(N), area = new Int32Array(N), at = new Int32Array(N), out = new Uint8Array(N);
-  const find = (i) => { while (parent[i] !== i) { parent[i] = parent[parent[i]]; i = parent[i]; } return i; };
-  const pockets = [];
-  const meet = (i, j) => {
-    if (parent[j] < 0) return;
-    let a = find(i), b = find(j);
-    if (a === b) return;
-    // a: the elder (reaches open space, or the wider), b: the pocket that ends at this pixel's level
-    if (out[a] < out[b] || (out[a] === out[b] && peak[a] < peak[b])) [a, b] = [b, a];
-    if (!out[b] && peak[b] > 0.55 * stroke && peak[b] - dt[i] > 0.1 * stroke) pockets.push({ peak: peak[b], saddle: dt[i], area: area[b], at: [(at[b] % cw) + x0, Math.floor(at[b] / cw) + y0] });
-    parent[b] = a; area[a] += area[b]; out[a] |= out[b];
-  };
-  for (const i of idx) {
-    const x = i % cw, y = (i - x) / cw;
+  const pockets = [], deep = 0.55 * stroke, gap = 0.1 * stroke;
+  // (a pixel's left, right, upper and lower neighbours in that order, joined as they come; written out in full, no
+  // function per pixel: a long word's box is millions of pixels)
+  for (let n = 0; n < N; n++) {
+    const i = idx[n], x = i % cw, y = (i - x) / cw;
     parent[i] = i; peak[i] = dt[i]; area[i] = 1; at[i] = i; out[i] = x === 0 || y === 0 || x === cw - 1 || y === ch - 1 ? 1 : 0;
-    // (left, right, up, down: no array made per pixel)
-    if (x > 0) meet(i, i - 1);
-    if (x < cw - 1) meet(i, i + 1);
-    if (y > 0) meet(i, i - cw);
-    if (y < ch - 1) meet(i, i + cw);
+    for (let s = 0; s < 4; s++) {
+      let j;
+      if (s === 0) { if (x === 0) continue; j = i - 1; }
+      else if (s === 1) { if (x === cw - 1) continue; j = i + 1; }
+      else if (s === 2) { if (y === 0) continue; j = i - cw; }
+      else { if (y === ch - 1) continue; j = i + cw; }
+      if (parent[j] < 0) continue;
+      let a = i, b = j;
+      while (parent[a] !== a) { parent[a] = parent[parent[a]]; a = parent[a]; }
+      while (parent[b] !== b) { parent[b] = parent[parent[b]]; b = parent[b]; }
+      if (a === b) continue;
+      // a: the elder (reaches open space, or the wider), b: the pocket that ends at this pixel's level
+      if (out[a] < out[b] || (out[a] === out[b] && peak[a] < peak[b])) { const t = a; a = b; b = t; }
+      if (!out[b] && peak[b] > deep && peak[b] - dt[i] > gap) pockets.push({ peak: peak[b], saddle: dt[i], area: area[b], at: [(at[b] % cw) + x0, Math.floor(at[b] / cw) + y0] });
+      parent[b] = a; area[a] += area[b]; out[a] |= out[b];
+    }
   }
   return pockets;
 }
