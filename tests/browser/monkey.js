@@ -18,7 +18,7 @@
 //   undo      undo then redo, and Save design then Open saved, give back the same design
 //   slow      no action blocks the page longer than the budget (?budget, 1000 ms); every action settles in 15 s
 //   error     no uncaught exception or console error
-// Query: ?seed=1&steps=200&start=default|fifteen|random&budget=1000&shrink=1, or &replay=<base64 JSON of steps>.
+// Query: ?seed=1&steps=200&start=default|fifteen|random|<starter id>&budget=1000&shrink=1, or &replay=<base64 JSON of steps>.
 // Title "DONE <steps> <problems>"; window.monkey holds the result (problems with a shrunk, replayable step list).
 // Run many seeds with: node tests/monkey.mjs CDP_PORT HTTP_PORT [--seeds 1-20] [--steps 200] [--start default,fifteen]
 const Q = new URLSearchParams(location.search);
@@ -64,6 +64,8 @@ async function boot(start = START, seed = SEED, keep = false) {
     await idle(30000);
     // (the page saves the design on the first change: the starter it opens with is picked, so there's one to read)
     if (start === "default" && !keep && !studio()) { D.querySelector('#st-cards [data-start="monogram"]').click(); await idle(); }
+    // (a starter by its id: its layout as the user opens it, the Kitchen sign or Wedding keepsake)
+    if (!keep && UI.STARTERS.some((x) => x.id === start)) { D.querySelector(`#st-cards [data-start="${start}"]`).click(); await idle(); }
     if (start === "random" && !keep) { const cards = all("#st-cards [data-start]"); cards[Math.floor(rng(seed * 7919)() * cards.length)].click(); await idle(); }
     W.__mk.errors.length = 0; W.__mk.long.length = 0;
     return;
@@ -126,7 +128,10 @@ function fresh() {
   // stitches past the field with the hoop's centre fixed (the preview's "Off centre here")
   const lx = (dh.w / 2 - MC.MARGIN) * 10, ly = (dh.h / 2 - MC.MARGIN) * 10;
   const off = fits && view.stitches.some(([x, y, cmd]) => cmd === 0 && (Math.abs(x) > lx || Math.abs(y) > ly));
-  return { fits, over: fits ? 0 : 1, st, vs, steps: c.steps.length, off, s, h, t, dh, hits: P.collisions(s.pieces) };
+  // (what's sewn, as one number: a fix that changes the pieces but not the stitches did nothing, "Make it 17 mm" that
+  // the frame shrank straight back to 15)
+  let sig = 0; for (const [x, y, cmd] of file.stitches) sig = (Math.imul(sig, 31) + x * 7 + y * 13 + cmd) | 0;
+  return { fits, over: fits ? 0 : 1, st, vs, steps: c.steps.length, off, s, h, t, dh, hits: P.collisions(s.pieces), sig };
 }
 // what the page shows
 function screen() {
@@ -137,8 +142,10 @@ function screen() {
     edit: all("#st-edit [data-warn] > span").map((s) => s.textContent), stepsCount: $("st-steps-count").textContent };
 }
 // a warning's kind, from its words (numbers and names left out)
-const KINDS = [["small", /too small to stitch cleanly/], ["towel", /closes? (the |these )?letters up|leave the letters open|keeps them open\.$/], ["arch", /wrap most of the way round|too tight for letters/],
-  ["hit", /^This runs into/], ["thin", /sews as a thin line/], ["loops", /small loops .*fill in/], ["lines", /^On (two|three) lines/], ["motif", /this small, the/],
+// (thin before loops: "Make it bold (small loops may fill in)"; loops before towel: "Thin line keeps them open." ends
+// like the towel's "… mm or more keeps them open.")
+const KINDS = [["small", /too small to stitch cleanly/], ["thin", /sews as a thin line/], ["loops", /small loops .*fill in/], ["towel", /closes? (the |these )?letters up|leave the letters open|keeps them open\.$/], ["arch", /wrap most of the way round|too tight for letters/],
+  ["hit", /^This runs into/], ["lines", /^On (two|three) lines/], ["motif", /this small, the/],
   ["named", /looks like a name|has 3 initials at most/], ["oneline", /sews the words on one line/], ["under", /patch sews after this|sews before the patch/],
   ["same", /nearly the same thread/], ["kern", /pushed into each other/], ["missing", /has no /], ["framefit", /^Shrunk to fit inside the frame/]];
 // (beside Download each problem names its pieces: "“Emma” runs into Heart; …")
@@ -426,6 +433,7 @@ async function tryFix(b, undo) {
   const f1 = fresh(), d1 = design(), sc = screen(), sel1 = studio()?.sel;
   const add = (kind, msg) => bad.push({ kind, msg: `“${label}”: ${msg}${where ? ` (from ${where})` : ""}` });
   if (same(d0, d1) && !/two hoopings/.test(label)) add("fix", "changed nothing");
+  else if (f0.sig != null && f0.sig === f1.sig && f0.fits === f1.fits && !/two hoopings|turn the hoop|Turn the hoop/.test(label)) add("fix", "changed nothing that's sewn");
   if (sel1 === sel0) {
     const k1 = kinds(sc.edit);
     if (k && k1.has(k)) add("fix", `its warning is still there: “${sc.edit.find((t) => kindOf(t) === k)}”`);

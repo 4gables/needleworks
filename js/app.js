@@ -718,6 +718,7 @@ $("names-list").addEventListener("input", () => {
   $("names-note").textContent = n?.monogram ? "One set of initials per line, up to 40. You get one file for each, in a single .zip." : "One name per line, up to 40. You get one file for each, in a single .zip.";
   $("names-cancel").textContent = "Cancel";
 });
+let smallerOk = false;   // (the turn was offered and they chose to make them smaller anyway)
 $("names-make").onclick = async () => {
   const n = namesFor(); if (!n) return;
   // (past 40, the rest are said as left out: the 41st was dropped without a word)
@@ -739,6 +740,20 @@ $("names-make").onclick = async () => {
     } catch (err) { bad.push(`${brief(name)} (${/hoop fits|too big/i.test(err.message) ? "too long for the hoop" : err.message})`); }
   }
   $("names-make").disabled = false;
+  // Names made smaller (or too long) that would sew full size with the hoop turned: the turn is offered before any
+  // file is made (Benjamin and Ella-Rose came out smaller on an upright 5x7 that had room for them across)
+  const cut = [...made.filter((m) => m.smaller).map((m) => m.name), ...bad.filter((b) => / \(too long for the hoop\)$/.test(b)).map((b) => b.replace(/ \(too long for the hoop\)$/, ""))];
+  if (!smallerOk && n.canTurn && cut.length && cut.every((name) => { try { const t = hoop(), m = n.build(name, false, { ...t, w: t.h, h: t.w }); return !m.smaller && !m.runs; } catch { return false; } })) {
+    const names = cut.length === 1 ? cut[0] : `${cut.slice(0, -1).join(", ")} and ${cut.at(-1)}`;
+    $("names-note").classList.add("warn");
+    $("names-note").textContent = `${names} ${cut.length === 1 ? "is" : "are"} too long for the hoop as it is${$("names-shrink").checked ? ` and would be made smaller` : ""}. With the hoop turned ${cut.length === 1 ? "it fits" : "they fit"} full size. `;
+    const go = (text, run) => Object.assign(document.createElement("button"), { type: "button", className: "link", textContent: text, onclick: run });
+    $("names-note").append(go("Turn the hoop and make them", () => { $("turn").click(); $("names-make").click(); }), " or ",
+      go($("names-shrink").checked ? "make them smaller" : "make them anyway", () => { smallerOk = true; $("names-make").click(); }), ".");
+    $("names-note").querySelector("button").focus();
+    return;
+  }
+  smallerOk = false;
   // every name as it'll sew, to look over (is one crowded?), with what's different about it
   // (a name sewn as a thin line where the design is bold stands out: it was one more word in the brackets)
   const notes = (m) => [m.smaller ? "smaller" : "", m.sideways ? "hoop turned" : "", m.runs ? `runs into ${m.runs}` : ""].filter(Boolean).join(", ");
@@ -768,6 +783,7 @@ $("names-make").onclick = async () => {
     + (bad.length ? `Couldn't make: ${bad.join(", ")}. ` : "")
     + (left.length ? `Left out (40 at a time): ${left.join(", ")}. Make them in a second batch.` : "")
     + (poor.length ? ` ${poor.length === 1 ? "One file" : `${poor.length} files`} may not sew well:` : "");
+
   // (Make the files is disabled while they're made, which sent focus to the page: on to the result's first action,
   // or back to the list when nothing was made)
   if (!$("names").contains(document.activeElement) || document.activeElement === $("names-make"))

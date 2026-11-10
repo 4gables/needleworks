@@ -30,7 +30,8 @@ async function save(name, pieces, hoopId = "5x7", expectTooBig = false, opts = {
 }
 const P = (o) => ({ id: id++, x: 0, y: 0, rot: 0, color: "#0e1f7c", ...o });
 
-for (const s of STARTERS.filter((x) => x.make)) for (const h of ["5x7", "4x4"]) await save(`st_${s.id}_${h}`, s.make(), h, h === "4x4", { fabric: s.fabric, baste: s.baste, turn: s.turn && h !== "4x4" });
+// (on the 4x4, a starter's own small layout where it has one, as the page opens it)
+for (const s of STARTERS.filter((x) => x.make)) for (const h of ["5x7", "4x4"]) await save(`st_${s.id}_${h}`, (h === "4x4" && s.small || s.make)(), h, h === "4x4", { fabric: s.fabric, baste: s.baste, turn: s.turn && h !== "4x4" });
 // two of one in-the-hoop project in one hoop ("Make another in the hoop"): the fabric steps sewn together (`gang`)
 const twice = (id, dx, dy) => { const a = STARTERS.find((x) => x.id === id).make(), b = a.map((p) => ({ ...p, id: id + p.id, x: p.x + dx, y: p.y + dy })); return [...a, ...b].map((p, i) => ({ ...p, id: 9000 + i, y: p.y - dy / 2, x: p.x - dx / 2 })); };
 await save("two_bookmarks_5x7", twice("bookmark", 0, 58), "5x7", false, { turn: true });
