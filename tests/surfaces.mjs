@@ -99,6 +99,8 @@ const CASES = [
   { name: "picture: fine logo", tab: "picture", image: "logo" },
   { name: "picture: blobs", tab: "picture", image: "blobs" },
   { name: "picture: owned threads", tab: "picture", image: "blobs", owned: true },
+  // (round 10: what a picture leaves out, said on every surface: the doodles at 60 mm)
+  { name: "picture: doodles left out", tab: "picture", image: "doodles", act: `(() => { const s = document.getElementById("pic-size"); s.value = 60; s.dispatchEvent(new Event("input", { bubbles: true })); })()` },
   { name: "open: clean", tab: "open", file: "clean" },
   { name: "open: dense", tab: "open", file: "dense" },
   { name: "open: tiny", tab: "open", file: "tiny" },
@@ -266,6 +268,8 @@ for (const c of CASES) {
         const cv = document.createElement("canvas"); cv.width = 600; cv.height = 400; const g = cv.getContext("2d");
         g.fillStyle = "#fff"; g.fillRect(0, 0, 600, 400);
         if (${JSON.stringify(c.image)} === "logo") { g.fillStyle = "#111"; g.font = "bold 40px sans-serif"; g.fillText("KENJI'S BAKERY", 40, 120); g.font = "13px serif"; g.fillText("fresh bread and cakes every morning since 1987, made by hand", 30, 200); g.fillStyle = "#777"; g.fillRect(10, 260, 580, 1); }
+        else if (${JSON.stringify(c.image)} === "doodles") { g.fillStyle = "#e0218a"; g.font = "bold 90px sans-serif"; g.fillText("DOODLES", 150, 110); g.lineWidth = 1.6;
+          for (let i = 0; i < 48; i++) { const x = 90 + (i % 8) * 60, y = 170 + Math.floor(i / 8) * 40; g.strokeStyle = ["#d9609f", "#5f9fd6", "#8f7bc8", "#5fae5f"][i % 4]; g.beginPath(); g.arc(x, y, 12, 0, 7); g.stroke(); } }
         else { g.fillStyle = "#c0182a"; g.beginPath(); g.arc(200, 200, 120, 0, 7); g.fill(); g.fillStyle = "#e8b400"; g.fillRect(330, 90, 200, 220); g.fillStyle = "#1a7a2e"; g.beginPath(); g.arc(430, 200, 60, 0, 7); g.fill(); }
         const blob = await new Promise((r) => cv.toBlob(r, "image/png")), dt = new DataTransfer(); dt.items.add(new File([blob], "drawing.png", { type: "image/png" }));
         const inp = document.getElementById("pic-file"); inp.files = dt.files; inp.dispatchEvent(new Event("change", { bubbles: true })); return 1; })()`);
@@ -282,7 +286,9 @@ for (const c of CASES) {
         await sleep(3000);
       }
     }
-    if (c.act) { await sleep(1500); await ev(`(() => { ${c.act}; return 1; })()`); await sleep(1500); }
+    if (c.act) { await sleep(1500); await ev(`(() => { ${c.act}; return 1; })()`); await sleep(1500);
+      // (a picture sews again: wait for it)
+      for (let i = 0; i < 100 && c.tab === "picture" && !(await ev("document.getElementById('busy').hidden ? 1 : 0")); i++) await sleep(300); }
     const r = await ev(READ);
     if (r.none) { console.log("  (nothing to show)"); continue; }
     const exp = r.expected, idsOf = (l) => l.map((p) => p.id);

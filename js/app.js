@@ -3,7 +3,7 @@ import { turnForMachine, turnPattern } from "./core/design.js";
 import { FONTS } from "./core/fonts.js";
 import { COLOR_CHANGE, STITCH, designStats, machineThreads, readEmbroidery, validatePES, writePES } from "./core/formats.js";
 import { DEFAULT_MACHINE, MACHINES, MARGIN, hoop as getHoop } from "./core/machines.js";
-import { DENSITY, LEARN, contentBox, picturePlan, pictureImage } from "./core/digitize.js";
+import { DENSITY, LEARN, MOST, contentBox, lostMuch, picturePlan, pictureImage, sewSized } from "./core/digitize.js";
 import { hexToRgb, nearestBrotherThread, pecThread } from "./core/threads.js";
 import { CLOTHS, colorBlocks, draw } from "./render.js";
 import { FINISH, FIRST_STEP, TURNED, TURN_PIC, cutDXF, cutSize, cutSVG, nextThread, sewMinutes, sewSheet, youHtml } from "./sheet.js";
@@ -44,7 +44,7 @@ const state = {
   turn: { picture: false, design: false, open: false, ...store.get("turn", {}) },
   brand: BRANDS[store.get("brand", "")] ? store.get("brand", "") : "",   // thread brand for spool numbers ("" = Brother only)
   spools: store.get("spools", {}),   // { brand: [spool numbers owned] }
-  pic: { mine: store.get("pic.mine", false), style: "fill", cross: 2.5, file: null, bitmap: null, key: 0, skip: [], colors: 6, size: 100, angle: 45, bg: true, density: store.get("pic.density", "standard"), req: 0, colorsInfo: [], line: "" },
+  pic: { mine: store.get("pic.mine", false), style: "fill", cross: 2.5, file: null, bitmap: null, key: 0, skip: [], colors: 6, size: 100, angle: 45, bg: true, density: store.get("pic.density", "standard"), req: 0, colorsInfo: [], line: "", models: new Map() },
 };
 if (!MACHINES[state.machine]) state.machine = DEFAULT_MACHINE;
 const hoop = () => getHoop(state.machine, state.hoopId);
@@ -1078,40 +1078,78 @@ function oldBookmark() {
 }
 
 // ---------- picture ----------
-let worker = null;
-// one job at a time, and only the newest waiting: three quick slider moves on a slow picture computed all three.
-// A job that runs past a minute is stopped (a photo once routed for over 5 minutes and every later change queued
-// behind it): the worker is replaced and the picture tab says what to try.
-let picRunning = false, picNext = null, picWatch = 0;
-function startWorker() {
-  worker = new Worker(new URL("./worker.js", import.meta.url), { type: "module" });
-  worker.onmessage = onPicture;
-  worker.onerror = (e) => { jobDone(); busy(false); if (state.mode === "picture") showError("Something went wrong while stitching this picture. " + (e.message || "")); };
+// A picture worker: one job at a time, and only the newest waiting (three quick slider moves on a slow picture
+// computed all three). A job that runs past a minute is stopped (a photo once routed for over 5 minutes and every later
+// change queued behind it): the worker is replaced and the picture tab says what to try. `stop()` drops what's
+// waiting and running (the checks of settings that just changed).
+function picWorker() {
+  let w = null, running = null, waiting = null, watch = 0;
+  const start = () => {
+    w = new Worker(new URL("./worker.js", import.meta.url), { type: "module" });
+    w.onmessage = (e) => finish(e.data);
+    w.onerror = (e) => finish({ ok: false, error: "Something went wrong while stitching this picture. " + (e.message || "") });
+  };
+  const finish = (r) => { clearTimeout(watch); const j = running; running = null; j?.ok(r); next(); };
+  const kill = () => { clearTimeout(watch); w.terminate(); start(); };
+  const next = () => {
+    if (running || !waiting) return;
+    running = waiting; waiting = null; w.postMessage(running.msg);
+    watch = setTimeout(() => { kill(); finish({ ok: false, code: "slow", error: "This picture is taking too long to stitch. Try fewer colours, a smaller size, or Line drawing." }); }, 60000);
+  };
+  start();
+  return {
+    run: (msg) => new Promise((ok) => { waiting?.ok({ ok: false, stale: true }); waiting = { msg, ok }; next(); }),
+    stop() { waiting?.ok({ ok: false, stale: true }); waiting = null; if (running) { kill(); const j = running; running = null; j.ok({ ok: false, stale: true }); } },
+  };
 }
-function digitizeJob(msg) {
-  if (picRunning) { picNext = msg; return; }
-  picRunning = true; worker.postMessage(msg);
-  clearTimeout(picWatch);
-  picWatch = setTimeout(() => {
-    worker.terminate(); startWorker(); picRunning = false; picNext = null; busy(false);
-    state.views.picture = null;
-    if (state.mode === "picture") { setView(null); showError("This picture is taking too long to stitch. Try fewer colours, a smaller size, or Line drawing."); }
-  }, 60000);
+// the picture's own, and one that tries the one-tap fixes for what a picture leaves out, so they're offered only if
+// they work (and the picture never waits for them)
+const picJobs = picWorker(), picChecks = picWorker();
+// Everything a picture's stitches depend on (the stitches are a function of these and the picture, nothing else)
+function picSettings(over = {}) {
+  const p = state.pic, h = hoop(), turn = !!state.turn.picture && !square();
+  return { size: p.size, style: p.style, cross: p.cross, skip: p.skip, colors: p.colors, bg: p.bg, angle: p.angle, density: p.density,
+    line: p.line, turn, hoop: turn ? { ...h, w: h.h, h: h.w } : h, palette: ownedPalette(), ...over };
 }
-function jobDone() { clearTimeout(picWatch); picRunning = false; if (picNext) { const m = picNext; picNext = null; digitizeJob(m); } }
-function onPicture(e) {
-  const r = e.data, p = state.pic;
-  jobDone();
-  if (r.id !== p.req) return;
-  // (the picture's colours and where each lies: now it can be cut and sized by what will be sewn)
-  if (r.ok && r.measure) { p.model = { key: r.key, boxes: r.boxes, colors: r.colors }; makePicture(); return; }
-  // Size is the longer side of what's sewn: off by more than 0.4 mm (what's sewn is a little smaller than the colours'
-  // extent: blended edges and specks aren't sewn), it's drawn again that much bigger, at most twice
-  if (r.ok && p.asked) {
-    const st = designStats(r.pattern), got = Math.max(st.widthMm, st.heightMm), a = p.asked;
-    if (got > 0 && Math.abs(got - a.mm) > 0.4 && p.refits++ < 2) { p.fit = { key: a.key, f: (a.fit * a.mm) / got }; makePicture(true); return; }
+// the fit each exact setting was sewn at (sewing it again gives the same file, at once)
+const picFits = new Map();
+// Sews the picture with settings s on worker wk: the colours and where each lies first (once per picture and colour
+// count), then sized so the sewn design's longer side is s.size (sewSized). The reply, or { stale } once newer
+// settings came (isStale).
+async function sewPicture(s, wk, isStale = () => false) {
+  const p = state.pic, bitmap = p.bitmap;
+  const box = s.bg ? (p.box ||= contentBox(bitmap)) : { sx: 0, sy: 0, sw: bitmap.width, sh: bitmap.height };
+  const key = `${p.key}:${s.colors}:${s.bg}:${box.sx},${box.sy},${box.sw},${box.sh}`, k = LEARN / Math.max(box.sw, box.sh);
+  if (p.learn?.key !== key) p.learn = { key, img: pictureImage(bitmap, box, Math.max(1, Math.round(box.sw * k)), Math.max(1, Math.round(box.sh * k))) };
+  const learn = p.learn.img;
+  const opts = { colors: s.colors, removeBackground: s.bg, fillAngle: s.angle, density: DENSITY[s.density] || DENSITY.standard, skip: s.skip, hoop: s.hoop, turn: s.turn, palette: s.palette, style: s.style, cross: s.cross, line: s.line || undefined };
+  // (kept per colour count: the checks try other counts)
+  if (!p.models.has(key)) {
+    const m = await wk.run({ key, learn, opts });
+    if (!m.ok || isStale()) return isStale() ? { stale: true } : m;
+    p.models.set(key, { boxes: m.boxes, colors: m.colors });
   }
+  const { boxes, colors } = p.models.get(key), sewn = boxes.filter((_, i) => !colors[i].background && !s.skip.includes(i));
+  const fk = JSON.stringify([key, s.size, opts]);
+  const r = await sewSized(async (pl) => {
+    if (isStale()) return { ok: false, stale: true };
+    const q = await wk.run({ key, ref: `${p.key}:${s.bg}`, learn, img: pictureImage(bitmap, pl.crop, pl.w, pl.h), crop: pl.frac, opts });
+    return isStale() ? { ok: false, stale: true } : q;
+  }, (fit) => picturePlan(box, sewn, s.size, s.hoop, undefined, fit), { style: s.style, cross: s.cross, fit: picFits.get(fk) });
+  if (r.stale || isStale()) return { stale: true };
+  if (r.ok) picFits.set(fk, r.fit);
+  return r;
+}
+async function makePicture() {
+  const p = state.pic; if (!p.bitmap) return;
+  // (nothing from another tab stays on screen, with its Download, while this picture stitches)
+  if (state.mode === "picture" && state.view && state.view !== state.views.picture) setView(null);
+  const req = ++p.req; busy(true, "Stitching your picture…");
+  picChecks.stop(); p.fixes = [];
+  const s = picSettings(), r = await sewPicture(s, picJobs, () => req !== p.req);
+  if (r.stale || req !== p.req) return;
   busy(false);
+  if (r.plan) sizeRange(r.plan.max);
   if (!r.ok) { state.views.picture = null; if (state.mode === "picture") { setView(null); pictureError(r); } return; }
   showError("");
   // (in the order they're sewn, then any left out)
@@ -1125,6 +1163,7 @@ function onPicture(e) {
   const mt = machineThreads(r.pattern.threads);
   state.pic.machineName = new Map(r.pattern.threads.map((t, i) => [t.color, mt[i].name]));
   paletteUI();
+  p.fine = { ...r.fine, tries: r.tries }; p.checking = false;
   fineUI(r.fine);
   const base = safeName((state.pic.file?.name || "picture").replace(/\.[^.]+$/, ""), "picture");
   const v = { pattern: r.pattern, verifyAgainst: r.pattern, bytes: r.bytes, filename: `${base}${state.pic.style === "line" ? "_line" : state.pic.style === "cross" ? "_cross" : ""}.pes`, fabric: "linen",
@@ -1134,8 +1173,8 @@ function onPicture(e) {
   };
   state.views.picture = v;
   if (state.mode === "picture") setView(v);
+  if (lostMuch(r.fine.kept)) checkLost(s, req);
 }
-startWorker();
 // Nothing to stitch: say why, and offer only what can still be done (it said "make it bigger" at the largest size and
 // "turn off background removal" with it already off)
 function pictureError(r) {
@@ -1201,16 +1240,86 @@ bindRange("pic-cross", "cross", (v) => `${v} mm`);
 // (lines under 1 mm aren't flagged: they're sewn as lines on purpose, and the warning fired on the sample flower;
 // gaps only past 1.5% of what's sewn: some always close in a detailed picture, and at 0.8 mm² it showed on every one)
 // (and a line too thin to keep at all, a logo's 1 px rule, over 5% of the picture across: left out without a word before)
+// (and the parts of the picture no stitch reaches, in any style (keptParts, lostMuch): etsy_7's doodles at 60 mm,
+// a drawing's sun rays in cross-stitch, its 1.5 mm eye, all left out while the dialog said "Checked")
 function fineUI(fine) {
-  const p = state.pic, gaps = fine?.narrowMm2 >= Math.max(2, 0.015 * (fine.inkMm2 || 0)), lost = fine?.lost >= 0.05;
+  const p = state.pic, gaps = fine?.narrowMm2 >= Math.max(2, 0.015 * (fine.inkMm2 || 0)), k = fine?.kept, lost = lostMuch(k);
+  let hair = fine?.lost >= 0.05;
   // (the picture's problems, said beside Download and after too: words.js)
   const gap = "Some gaps (like inside or between small letters) are narrower than ½ mm and will close up.", line = "A very thin line in the picture is finer than thread and is left out.";
-  p.fineProblems = [gaps && { id: "gaps", level: LOOK, text: gap }, lost && { id: "lost", level: LOOK, text: line }].filter(Boolean);
-  $("pic-fine").hidden = !gaps && !lost;
+  let gone = "";
+  if (lost) {
+    // (no colour named: a thin line's learned colour is its blend with the fabric, and etsy_7's pink doodles read "warm gray")
+    const why = p.style === "cross" ? `for ${p.cross} mm crosses` : `to sew at ${Math.min(p.size, p.max || p.size)} mm`;
+    gone = k.lost === 1 ? `One part of the picture (${k.big.toFixed(1)} mm) is too small or too thin ${why}, so it's left out.`
+      : `${k.lost} of the picture's ${k.parts} parts are too small or too thin ${why}, so they're left out.`;
+  }
+  // (a thin line left out is one of those parts: said once)
+  if (lost) hair = false;
+  p.fineProblems = [gaps && { id: "gaps", level: LOOK, text: gap }, hair && { id: "hairline", level: LOOK, text: line }, lost && { id: "lost", level: LOOK, text: gone }].filter(Boolean);
+  $("pic-fine").hidden = !gaps && !hair && !lost;
+  // (each fix was sewn first and keeps them: checkLost)
+  const fixes = (p.fixes || []).map((f, i) => `<button type="button" class="link" data-fix="${i}">${escapeHtml(f.label)}</button>`).join(" ");
   $("pic-fine").innerHTML = [
     gaps ? `<span data-problem="gaps">${gap} ${p.size < (p.max || 0) ? "A bigger Size keeps more of them open." : "This is as big as the hoop allows."}</span>` : "",
-    lost ? `<span data-problem="lost">${line} Draw it thicker in the picture to have it sewn.</span>` : "",
+    hair ? `<span data-problem="hairline">${line} Draw it thicker in the picture to have it sewn.</span>` : "",
+    lost ? `<span data-problem="lost">${escapeHtml(gone)} ${fixes || (p.checking ? "" : k.lost === 1 ? "Draw it bigger or bolder in the picture to have it sewn." : "Draw them bigger or bolder in the picture to have them sewn.")}</span>` : "",
   ].filter(Boolean).join(" ");
+  if (state.view && state.view === state.views.picture) warnUI(state.view);
+}
+$("pic-fine").onclick = (e) => {
+  const b = e.target.closest("[data-fix]"), f = b && state.pic.fixes?.[+b.dataset.fix]; if (!f) return;
+  const p = state.pic, o = f.over;
+  if (o.style) { p.style = o.style; styleUI(); }
+  if (o.cross) { p.cross = o.cross; $("pic-cross").value = o.cross; $("pic-cross-out").textContent = `${o.cross} mm`; }
+  if (o.colors) { p.colors = o.colors; p.skip = []; $("pic-colors").value = o.colors; $("pic-colors-out").textContent = String(o.colors); }
+  if (o.size) { p.size = o.size; $("pic-size").value = o.size; $("pic-size-out").textContent = sizeLabel(o.size); }
+  makePicture();
+};
+// The one-tap fixes for what a picture leaves out: each is sewn first on the checking worker (the picture never waits
+// for it) and offered only if it keeps three in four of the parts left out now (the smallest bigger Size that does,
+// more thread colours, smaller crosses, another style).
+// Sewn again on the picture's worker it's the same file at once (picFits).
+async function checkLost(s, req) {
+  const p = state.pic, stale = () => req !== p.req;
+  // (the parts left out now, three in four of them kept: a bigger Size counts parts too small to count before, so
+  // "nothing worth saying" never came at 174 mm for etsy_7)
+  const now = new Set(p.fine.kept.ids);
+  // (null: newer settings came; else { kept: three in four of them sewn, quiet: no lost note at all })
+  const keeps = async (over) => {
+    const r = await sewPicture({ ...s, ...over }, picChecks, stale);
+    if (r.stale || stale()) return null;
+    const kept = !!r.ok && r.fine.kept.ids.filter((i) => now.has(i)).length <= 0.25 * now.size;
+    return { kept, quiet: kept && !lostMuch(r.fine.kept) };
+  };
+  const offer = (label, over) => { p.fixes.push({ label, over }); fineUI(p.fine); };
+  p.checking = true;
+  // the smallest Size, in 5 mm steps, that keeps them (with no note left, when the biggest that fits manages that)
+  if (s.size < p.max) {
+    const top = await keeps({ size: p.max }); if (!top) return;
+    if (top.kept) {
+      const good = (q) => (top.quiet ? q.quiet : q.kept);
+      let lo = s.size, hi = p.max;
+      for (let i = 0; i < 3; i++) {
+        const mid = Math.round((lo + hi) / 10) * 5; if (mid <= lo || mid >= hi) break;
+        const q = await keeps({ size: mid }); if (!q) return;
+        if (good(q)) hi = mid; else lo = mid;
+      }
+      offer(`Make it ${hi} mm${hi === p.max ? " (as big as fits)" : ""}`, { size: hi });
+    }
+  }
+  // the fewest more thread colours that keep them (a pale colour sewn as fabric when threads ran short)
+  if (s.colors < MOST && !s.skip.length) {
+    const top = await keeps({ colors: MOST }); if (!top) return;
+    for (let c = s.colors + 1; top.kept && c <= MOST; c++) {
+      const q = c === MOST ? top : await keeps({ colors: c }); if (!q) return;
+      if (q.kept) { offer(`Use ${c} thread colours`, { colors: c }); break; }
+    }
+  }
+  const others = [s.style === "cross" && s.cross > 1.5 && ["Use 1.5 mm crosses", { cross: 1.5 }], s.style !== "fill" && ["Sew it Filled", { style: "fill" }],
+    s.style !== "line" && ["Sew it as a line drawing (one thread)", { style: "line" }]].filter(Boolean);
+  for (const [label, over] of others) { const q = await keeps(over); if (!q) return; if (q.kept) offer(label, over); }
+  p.checking = false; fineUI(p.fine);
 }
 const densityUI = () => document.querySelectorAll("#pic-density button").forEach((b) => b.setAttribute("aria-pressed", b.dataset.d === state.pic.density));
 densityUI();
@@ -1265,7 +1374,7 @@ async function loadPicture(file, sample = false) {
   if (!file || !file.type.startsWith("image/")) { showError("That doesn't look like a picture. Try a PNG or JPG."); return; }
   try {
     const bitmap = await createImageBitmap(file);
-    Object.assign(state.pic, { file, bitmap, box: null, key: state.pic.key + 1, skip: [], model: null, autoLine: "" });
+    Object.assign(state.pic, { file, bitmap, box: null, key: state.pic.key + 1, skip: [], models: new Map(), autoLine: "" });
     setThumb(file); $("pic-rotate").hidden = false;
     $("pic-drop").querySelector(".drop-text").innerHTML = sample ? "<b>Choose your own picture</b> or drop it here." : `<b>${escapeHtml(file.name)}</b> · choose another`;
     $("pic-sample-note").hidden = !sample;
@@ -1287,25 +1396,6 @@ function sizeRange(max) {
   if (p.size > max) p.size = max;
   $("pic-size").value = p.size; $("pic-size-out").textContent = sizeLabel(p.size);
 }
-function makePicture(refit = false) {
-  const p = state.pic; if (!p.bitmap) return;
-  if (!refit) p.refits = 0;
-  const box = p.bg ? (p.box ||= contentBox(p.bitmap)) : { sx: 0, sy: 0, sw: p.bitmap.width, sh: p.bitmap.height };
-  const key = `${p.key}:${p.colors}:${p.bg}:${box.sx},${box.sy},${box.sw},${box.sh}`, k = LEARN / Math.max(box.sw, box.sh);
-  const learn = pictureImage(p.bitmap, box, Math.max(1, Math.round(box.sw * k)), Math.max(1, Math.round(box.sh * k)));
-  // (nothing from another tab stays on screen, with its Download, while this picture stitches)
-  if (state.mode === "picture" && state.view && state.view !== state.views.picture) setView(null);
-  p.req++; busy(true, "Stitching your picture…");
-  const h = shownHoop(), opts = { colors: p.colors, removeBackground: p.bg, fillAngle: p.angle, density: DENSITY[p.density] || DENSITY.standard, skip: p.skip, hoop: h, turn: turned(), palette: ownedPalette(), style: p.style, cross: p.cross, line: p.line || undefined };
-  // first the colours and where each lies (the reply comes back here)
-  if (p.model?.key !== key) { digitizeJob({ id: p.req, key, learn, opts }); return; }
-  // (sized again by how big it came out last time for the same picture, colours and style)
-  const fk = `${key}:${p.style}:${p.cross}:${p.skip.join()}:${turned()}`, fit = p.fit?.key === fk ? p.fit.f : 1;
-  const plan = picturePlan(box, p.model.boxes.filter((_, i) => !p.model.colors[i].background && !p.skip.includes(i)), p.size, h, undefined, fit);
-  sizeRange(plan.max);
-  p.asked = { key: fk, mm: plan.sizeMm, fit };
-  digitizeJob({ id: p.req, key, learn, img: pictureImage(p.bitmap, plan.crop, plan.w, plan.h), crop: plan.frac, opts });
-}
 $("pic-file").onchange = (e) => loadPicture(e.target.files[0]);
 
 function setThumb(blob) {
@@ -1318,7 +1408,7 @@ $("pic-rotate").onclick = async () => {
   const p = state.pic, b = p.bitmap; if (!b) return;
   const c = makeCanvas(b.height, b.width), ctx = c.getContext("2d");
   ctx.translate(b.height, 0); ctx.rotate(Math.PI / 2); ctx.drawImage(b, 0, 0);
-  Object.assign(p, { bitmap: await createImageBitmap(c), box: null, key: p.key + 1, skip: [] });
+  Object.assign(p, { bitmap: await createImageBitmap(c), box: null, key: p.key + 1, skip: [], models: new Map() });
   setThumb(c.convertToBlob ? await c.convertToBlob() : await new Promise((r) => c.toBlob(r)));
   makePicture();
 };
@@ -1721,4 +1811,4 @@ if (new URLSearchParams(location.search).has("shared")) (async () => {
 // a link to another tab on this page (#design, #open...) switches to it; #bookmark opens the Bookmark starter
 addEventListener("hashchange", () => { const m = location.hash.slice(1); if (m === "bookmark" || (m !== state.mode && MODES.includes(m))) setMode(m, false); });
 // for tests/surfaces.mjs: the view on screen, its problems and its share text (what every surface should agree on)
-globalThis.nwTest = { view: () => state.view, problems: () => problemsOf(state.view), share: () => state.view && shareText(state.view) };
+globalThis.nwTest = { view: () => state.view, problems: () => problemsOf(state.view), share: () => state.view && shareText(state.view), fine: () => state.pic.fine && { ...state.pic.fine, checking: state.pic.checking, fixes: state.pic.fixes?.map((f) => f.label) } };
