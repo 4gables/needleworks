@@ -58,8 +58,13 @@ export function nearestSpool(brand, hex, owned = null) {
   // `far`: not the same colour to the eye. Far off overall, or off in colour rather than lightness (a/b apart: white
   // came out as "your Brother 017 Light Blue", dE 21, with no warning, while a darker or lighter shade of one colour
   // still reads as that colour)
+  // Two pale tints leaning opposite ways read as different colours sooner: Flesh Pink (#fadade, a 12 chroma pink) as
+  // "your Isacord 0015 White" (a bluish white, hue 90° round from it) was ab 14.7, just under 15, with no warning
   const ab = Math.hypot(best.lab[1] - A, best.lab[2] - B), C = Math.max(Math.hypot(A, B), Math.hypot(best.lab[1], best.lab[2]));
-  return { ...best, dE: Math.sqrt(bd), far: Math.sqrt(bd) > 25 || ab > Math.max(15, 0.25 * C), brand: BRANDS[brand], label: `${BRANDS[brand]} ${best.num}${best.name ? ` ${best.name}` : ""}` };
+  const c1 = Math.hypot(A, B), c2 = Math.hypot(best.lab[1], best.lab[2]);
+  const turn = c1 >= 5 && c2 >= 5 && Math.acos(Math.max(-1, Math.min(1, (A * best.lab[1] + B * best.lab[2]) / (c1 * c2)))) > Math.PI / 3;
+  const far = Math.sqrt(bd) > 25 || ab > Math.max(15, 0.25 * C) || (turn && ab > 10);
+  return { ...best, dE: Math.sqrt(bd), far, brand: BRANDS[brand], label: `${BRANDS[brand]} ${best.num}${best.name ? ` ${best.name}` : ""}` };
 }
 
 // example spool numbers for the "Threads I own" box, in the brand's own spelling: its white, red and black
@@ -74,3 +79,7 @@ export function chartSpools(brand) {
   const key = (s) => { const [L, a, b] = s.lab, C = Math.hypot(a, b); return C < 8 ? [0, -L] : [1 + Math.floor((((Math.atan2(b, a) * 180) / Math.PI + 370) % 360) / 20), -L]; };
   return c.map((s) => ({ s, k: key(s) })).sort((x, y) => x.k[0] - y.k[0] || x.k[1] - y.k[1]).map(({ s }) => ({ hex: s.hex, num: s.num, name: s.name || "", label: `${BRANDS[brand]} ${s.num}${s.name ? ` ${s.name}` : ""}` }));
 }
+
+// a Brother thread's spool number by the name the machine shows ("Olive Green" -> "519"): the spool for a colour is
+// the thread the file gives it, which may be its second-nearest (the nearest by eye said 707 Dark Gray beside Olive Green)
+export const brotherNum = (name) => BROTHER_NUM[name] || "";

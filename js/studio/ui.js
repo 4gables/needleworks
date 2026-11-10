@@ -140,7 +140,7 @@ export const STARTERS = [
 ];
 
 // api: { hoop(), setView(pattern, filename, look) (null pattern: nothing to show), showError(msg), busy(on, text),
-//        safeName(s, fb), escapeHtml(s), handOut(files, opts) (gate.js: the only way a file leaves), store, showStep(i), step(), setMode(mode), spool(hex) }
+//        safeName(s, fb), escapeHtml(s), handOut(files, opts) (gate.js: the only way a file leaves), store, showStep(i), step(), setMode(mode), spool(hex, machine name) }
 export function initStudio(api) {
   const $ = (id) => document.getElementById(id);
   const saved = api.store.get("studio", null);
@@ -152,6 +152,9 @@ export function initStudio(api) {
   // (nothing selected stays so through a reload: `?? last` picked the last piece again)
   let sel = saved?.sel === null ? null : saved?.sel ?? pieces[pieces.length - 1]?.id, seq = 0, timer = 0;
   // what it's sewn on (changes the stitches for knit and towel) and the basting box
+  // the design's thread colours in sewing order, one list per hooping, as the file's palette is made from them (set by
+  // threadNames each time the design is made; `machineName`)
+  let hoopings = [];
   let fabric = FABRICS[saved?.fabric] ? saved.fabric : "cotton", baste = !!saved?.baste, thread = THREADS[saved?.thread] ? String(saved.thread) : "auto";
   // made to fit with Fit to hoop: a font or style change that then takes it past the hoop fits it again
   let fitted = !!saved?.fitted, refitted = false;
@@ -278,9 +281,11 @@ export function initStudio(api) {
   // the spools they own ("Threads I own") as swatches of their own, after Brother's: the piece takes the spool's colour
   // and the file the nearest Brother colour as always (only Any colour's hex reached a spool, and the machine named it
   // Dark Fuchsia)
-  const swatches = (p, k = "color") => COLORS.map((c) => `<button type="button" data-${k}="${c}" style="background:${c}" aria-pressed="${c === p[k]}" title="Brother ${nearestBrotherThread(c).name}"></button>`).join("")
+  // (each swatch's tooltip names the thread the file would give it, `machineName`: two of their spools both said "the
+  // machine calls it Dark Gray", and the file gave the second Olive Green)
+  const swatches = (p, k = "color") => COLORS.map((c) => `<button type="button" data-${k}="${c}" style="background:${c}" aria-pressed="${c === p[k]}" title="${api.escapeHtml(swatchTip(c, p[k]))}"></button>`).join("")
     + `<span class="custom"><input type="color" data-${k}-any value="${p[k]}" aria-label="Any colour"></span>`
-    + ((own) => own.length ? `<span class="own-swatches" role="group" aria-label="Your threads"><span class="hint">Yours:</span>${own.map((s) => `<button type="button" data-${k}="${s.hex}" style="background:${s.hex}" aria-pressed="${s.hex === p[k]}" title="Your ${api.escapeHtml(s.label)} (the machine calls it ${nearestBrotherThread(s.hex).name})" aria-label="Your ${api.escapeHtml(s.label)}"></button>`).join("")}</span>` : "")(api.ownedSpools?.() || []);
+    + ((own) => own.length ? `<span class="own-swatches" role="group" aria-label="Your threads"><span class="hint">Yours:</span>${own.map((s) => `<button type="button" data-${k}="${s.hex}" style="background:${s.hex}" aria-pressed="${s.hex === p[k]}" title="${api.escapeHtml(swatchTip(s.hex, p[k], s.label))}" aria-label="Your ${api.escapeHtml(s.label)}"></button>`).join("")}</span>` : "")(api.ownedSpools?.() || []);
   const fontSelect = (p) => `<select data-k="font">${FONTS.map((f) => `<option value="${f.family}" ${f.family === p.font ? "selected" : ""}>${f.name}${f.print ? " (print)" : ""}</option>`).join("")}</select>`;
   // (a size set past the slider's end, by Fit to hoop, stretches it: Fit set 67 mm on a slider that stopped at 60)
   const range = (k, lab, min, max, v, unit = "mm", step = 1) => `<label class="range"><span>${lab}</span><input type="range" data-k="${k}" data-unit="${unit}" min="${Number.isFinite(v) ? Math.min(min, Math.floor(v)) : min}" max="${Number.isFinite(v) ? Math.max(max, Math.ceil(v)) : max}" step="${step}" value="${v}"><output>${shown(v, unit)}</output></label>`;
@@ -395,13 +400,13 @@ export function initStudio(api) {
       if (p.border === "zip") h += `<p class="hint">A lined zipper pouch made in the hoop: the zipper, the front in two folded pieces, what goes on the front (the pieces below it in the list), then the back and one seam through everything. Fabric sizes are under “How to stitch it”.</p>`;
       if (p.border === "patch") {
         p.fill ||= NAVY;
-        h += `<div class="field"><span>Fill thread</span><div class="swatches">${swatches(p, "fill")}</div><p class="hint">Brother ${nearestBrotherThread(p.fill).name}. The edge uses the thread below.</p></div>`;
+        h += `<div class="field"><span>Fill thread</span><div class="swatches">${swatches(p, "fill")}</div><p class="hint"><span data-thread-of="fill">${api.escapeHtml(threadOf(p, "fill"))}</span>. The edge uses the thread below.</p></div>`;
         // (what `carve` in pieces.js does, in plain words)
         h += `<p class="hint">Under a filled motif or big bold letters the fill is left out, so they don't sit on two layers of thread. Thinner letters sew on top of the fill.</p>`;
         // the expert fills, folded away: a stitch texture, and a second colour fading in across the patch
         h += `<details class="more" ${moreOpen ? "open" : ""}><summary>More</summary>${seg("pattern", Object.fromEntries(Object.entries(FILL_PATTERNS).map(([k, f]) => [k, f.name])), p.pattern || "tatami")}
           <label class="check small"><input type="checkbox" data-blend ${p.blend ? "checked" : ""}> Blend into a second colour</label>
-          ${p.blend ? `<div class="swatches">${swatches(p, "blend")}</div><p class="hint">Fades from Brother ${nearestBrotherThread(p.fill).name} to ${nearestBrotherThread(p.blend).name} across the patch: one more thread change.</p>` : ""}</details>`;
+          ${p.blend ? `<div class="swatches">${swatches(p, "blend")}</div><p class="hint">Fades from Brother ${machineName(p.fill)} to ${machineName(p.blend)} across the patch: one more thread change.</p>` : ""}</details>`;
       }
       if (p.border !== "patch") h += `<div class="field"><span>Quilting</span>${seg("quilt", QUILTS, p.quilt || "none")}</div>`
         + (p.quilt && p.quilt !== "none" ? `<p class="hint">Fills the frame around everything on it, in the frame's thread.</p>` : "");
@@ -420,7 +425,7 @@ export function initStudio(api) {
     if (p.kind === "text" || p.kind === "monogram") h += `<p class="hint" data-fit hidden></p>`;
     if (p.kind !== "frame") h += `<p class="hint warn" data-warn aria-live="polite" hidden></p>`;
     h += range("rot", "Turn", -180, 180, p.rot || 0, "°", 5);
-    if (p.kind !== "file") h += `<div class="field"><span>Thread</span><div class="swatches">${swatches(p)}</div><p class="hint">Brother ${nearestBrotherThread(p.color).name}${api.spool(p.color) ? ` · ${api.escapeHtml(api.spool(p.color))}` : ""}</p></div>`;
+    if (p.kind !== "file") h += `<div class="field"><span>Thread</span><div class="swatches">${swatches(p)}</div><p class="hint" data-thread-of="color">${api.escapeHtml(threadOf(p))}</p></div>`;
     const old = drawnId === p.id && $("st-edit").querySelector("[data-warn]");
     $("st-edit").innerHTML = h; drawnId = p.id;
     // (lettering not worked out yet, after a font change: the warnings a moment later, after the preview, the last ones
@@ -986,10 +991,13 @@ export function initStudio(api) {
     // patch, quilt sandwich), bar a towel's topper)
     // (a towel's topper only where there's lettering to sew under it)
     const own = (list) => !(fabric === "towel" && lettered()) && list.some((b) => /stabilizer/i.test(b));
+    // (Have ready names each thread as the steps do: the file's palette, `threadNames`)
+    const named = threadNames(sameSpool(steps));
     const ready = [own(before) ? "" : FABRICS[fabric].ready, ...before,
       appliqued() ? "A piece of fabric for each appliqué shape, 1 in bigger than its outline, and small curved scissors (iron-on fusible web on the back stops cotton fraying)." : "",
-      api.threadList(steps.map((st) => st.color))].filter(Boolean), done = [own(after) ? "" : FABRICS[fabric].after, ...after].filter(Boolean);
-    return { design, steps: firstStep(threadNames(sameSpool(steps)), hoop), done, ready, small, later };
+      api.threadList(named.map((st) => st.color), (hex) => named.find((st) => st.color === hex)?.machine || nearestBrotherThread(hex).name)].filter(Boolean),
+      done = [own(after) ? "" : FABRICS[fabric].after, ...after].filter(Boolean);
+    return { design, steps: firstStep(named, hoop), done, ready, small, later };
   }
   // step 1 says what to do too: hoop it, put the thread on, Start (a one-step design said only "Sews “Leo”."), one
   // sentence each so they show as numbered sub-steps (a towel's hoop, topper, thread and Start ran together as one)
@@ -998,13 +1006,34 @@ export function initStudio(api) {
     const h = `${hoop}.`.replace(/\.\.$/, "."), t = steps[0].thread;
     return [{ ...steps[0], you: `${h} Put on ${t}. ${steps[0].you || "Press Start."}` }, ...steps.slice(1)];
   }
+  // the name the machine will show for `hex` if the piece's colour `was` became it: the file's palette gives each colour
+  // its nearest Brother thread no earlier colour took (machineThreads), so a colour may get its second-nearest. The
+  // editor said "Brother Dark Gray" (the nearest) while the chips, steps and sew sheet said Olive Green (Dark Gray taken)
+  function machineName(hex, was = hex) {
+    const seg = hoopings.find((h) => h.includes(was)) || hoopings[0] || [];
+    const cols = seg.includes(was) ? seg.map((c) => (c === was ? hex : c)) : [...seg, hex];
+    return machineThreads(cols.map((color) => ({ color })))[cols.indexOf(hex)].name;
+  }
+  // a piece's thread as every surface labels it: the machine's name, then their spool (or its number in their brand)
+  function threadOf(p, k = "color") { const m = machineName(p[k]), s = api.spool(p[k], m); return `Brother ${m}${s ? ` · ${s}` : ""}`; }
+  function swatchTip(hex, was, own) { const m = machineName(hex, was); return own ? `Your ${own} (the machine calls it ${m})` : `Brother ${m}`; }
+  // after the design is made: the editor's thread labels and swatch tooltips as the file now names them
+  function relabelThreads() {
+    const p = current(); if (!p || drawnId !== p.id) return;
+    for (const el of $("st-edit").querySelectorAll("[data-thread-of]")) el.textContent = threadOf(p, el.dataset.threadOf);
+    for (const k of ["color", "fill", "blend"]) for (const b of $("st-edit").querySelectorAll(`button[data-${k}]`)) {
+      const own = (api.ownedSpools?.() || []).find((s) => s.hex === b.dataset[k]);
+      b.title = swatchTip(b.dataset[k], p[k], own?.label);
+    }
+  }
   // each step's thread as the machine's screen names it (the file's own palette, one per hooping: a colour may get its
   // second-nearest Brother thread), or their own spool; a thread change says which ("Change to the next thread" left
   // the colour to the swatch beside it)
   function threadNames(steps) {
     const name = new Map();
     let seg = [];
-    const flush = () => { machineThreads(seg.map((st) => ({ color: st.color }))).forEach((t, k) => name.set(seg[k], t.name)); seg = []; };
+    hoopings = [];
+    const flush = () => { if (seg.length) hoopings.push(seg.map((st) => st.color)); machineThreads(seg.map((st) => ({ color: st.color }))).forEach((t, k) => name.set(seg[k], t.name)); seg = []; };
     for (const st of steps) if (st.rehoop) flush(); else seg.push(st);
     flush();
     return steps.map((st) => {
@@ -1186,7 +1215,7 @@ export function initStudio(api) {
   // (`first`: a split design's first file, named over its steps; the rehooping between the files isn't a step or a
   // pause: the steps said "2 pauses" where the download said "no pauses")
   function stepsUI(steps, after = [], small = false, before = [], waiting = "", first = "") {
-    applGuide(steps);
+    applGuide(steps); relabelThreads();
     // (stops in the words the facts beside the preview use: "2 thread changes and 1 pause", not "3 pauses"; a split
     // design's rehooping between its files is neither)
     const rehoops = steps.filter((st) => st.rehoop).length, count = steps.length - rehoops;
@@ -1201,7 +1230,7 @@ export function initStudio(api) {
       + (api.turned() ? `<li class="after"><b>Hooping</b><span class="turned">${TURN_PIC}${TURNED}</span></li>` : "") + (before.length ? `<li class="after"><b>Have ready</b><ul class="ready">${before.map((r) => `<li>${api.escapeHtml(r)}</li>`).join("")}</ul></li>` : "")
       + (first ? `<li class="after"><b>First hooping: ${api.escapeHtml(first)}</b></li>` : "")
       + steps.map((st, i) => st.rehoop ? `<li class="after"><b>${api.escapeHtml(st.title)}</b>${youHtml(st.you, api.escapeHtml)}</li>` : `<li><button type="button" data-step="${i}" aria-pressed="${api.step() === i}">
-      <b><span class="n">${++n}</span><i style="background:${st.color}"></i>Brother ${api.escapeHtml(st.machine || nearestBrotherThread(st.color).name)}${api.spool(st.color) ? ` <small>${api.escapeHtml(api.spool(st.color))}</small>` : ""}</b>
+      <b><span class="n">${++n}</span><i style="background:${st.color}"></i>Brother ${api.escapeHtml(st.machine || nearestBrotherThread(st.color).name)}${api.spool(st.color, st.machine) ? ` <small>${api.escapeHtml(api.spool(st.color, st.machine))}</small>` : ""}</b>
       ${st.you ? youHtml(st.you, api.escapeHtml) : ""}<span>${api.escapeHtml(st.sews.join(" "))}</span>
       ${st.early ? `<small>Sewn early, with the other ${api.escapeHtml(st.machine || nearestBrotherThread(st.color).name)} parts, to save a thread change.</small>` : ""}</button></li>`).join("")
       + (threadTip(small) ? `<li class="after"><b>Thread and needle</b><span>${api.escapeHtml(threadTip(small))}</span></li>` : "")

@@ -31,10 +31,11 @@ export function youHtml(text, escape = esc, tag = "span") {
 
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
 const f1 = (n) => (Math.round(n * 10) / 10).toString();
-// white and cream thread would vanish on paper
-function ink(hex) {
-  const n = parseInt(hex.slice(1), 16), l = (0.3 * (n >> 16) + 0.59 * ((n >> 8) & 255) + 0.11 * (n & 255)) / 255;
-  return l > 0.85 ? "#bdbdbd" : hex;
+// white, cream, yellow and pale pink thread would vanish on paper: they print in their own colour on a thin dark
+// edge (grey made yellow, white and Flesh Pink all one colour)
+function pale(hex) {
+  const n = parseInt(hex.slice(1), 16);
+  return (0.3 * (n >> 16) + 0.59 * ((n >> 8) & 255) + 0.11 * (n & 255)) / 255 > 0.8;
 }
 function box(pts) {
   let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
@@ -49,8 +50,10 @@ function template(pattern, hoop, hide, cut) {
   const [x0, y0, x1, y1] = box(blocks.flatMap((b) => b.segs.flat()));
   const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2, W = hoop.w, H = hoop.h;
   const fabric = (cut || []).map((g) => `<path d="${g.map((l) => "M" + l.map(([x, y]) => `${f1(x - cx / 10 + W / 2)},${f1(y - cy / 10 + H / 2)}`).join("L") + "Z").join("")}"/>`).join("");
-  const lines = blocks.filter((b) => !hide?.has(b.index)).map((b) => `<g stroke="${ink(b.color)}">${b.segs.map((s) =>
-    `<polyline points="${s.map(([x, y]) => `${f1((x - cx) / 10 + W / 2)},${f1((y - cy) / 10 + H / 2)}`).join(" ")}"/>`).join("")}</g>`).join("");
+  const lines = blocks.filter((b) => !hide?.has(b.index)).map((b) => {
+    const segs = b.segs.map((s) => `<polyline points="${s.map(([x, y]) => `${f1((x - cx) / 10 + W / 2)},${f1((y - cy) / 10 + H / 2)}`).join(" ")}"/>`).join("");
+    return (pale(b.color) ? `<g stroke="#555" stroke-width="0.6">${segs}</g>` : "") + `<g stroke="${b.color}">${segs}</g>`;
+  }).join("");
   const r = Math.min(W, H) * 0.07;
   return `<svg class="tpl" width="${W}mm" height="${H}mm" viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">
     <rect x="0.2" y="0.2" width="${W - 0.4}" height="${H - 0.4}" rx="${r}" fill="none" stroke="#999" stroke-width="0.3" stroke-dasharray="2 1.5"/>
@@ -106,7 +109,7 @@ export function sewSheet({ pattern, filename, hoop, facts, threads, hide, sheet 
   const after = sheet.after?.length ? sheet.after : [FINISH];
   const rows = steps.map((s, i) => {
     const b = blocks.find((x) => x.index === i), t = threads[i];
-    return `<li><b><span class="sw" style="background:${b?.color || t?.color || "#999"}"></span>${s.title ? esc(s.title) + " · " : ""}Brother ${esc(t?.name || "")}${b && spool(b.color) ? ` <small>(${esc(spool(b.color))})</small>` : ""}</b>
+    return `<li><b><span class="sw" style="background:${b?.color || t?.color || "#999"}"></span>${s.title ? esc(s.title) + " · " : ""}Brother ${esc(t?.name || "")}${b && spool(b.color, t?.name) ? ` <small>(${esc(spool(b.color, t?.name))})</small>` : ""}</b>
       ${s.you ? youHtml(s.you, esc, "p") : ""}${s.sews ? `<p>${esc(s.sews)}</p>` : ""}</li>`;
   }).join("");
   const cut = sheet.cut?.length ? sheet.cut : null;

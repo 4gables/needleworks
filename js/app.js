@@ -12,7 +12,7 @@ import { DST_COLOURS, checkup, fewerBlocks, fix, heat, openedFile, pauses, short
 import { HARD, MAX_BLOCKS, denseWords, moves, verdictOf } from "./quality.js";
 import { BLOCK, LOOK, LOOK_HEAD, TIP, TIP_HEAD, problemsHtml, problemsInline, problemsItems, problemsOf, shownOn, stopWords, stopsAt } from "./words.js";
 import { safeName, tidy, uniqueName, withSwash } from "./core/typed.js";
-import { BRANDS, chartSpools, exampleSpools, lab, nearestSpool, spools } from "./core/brands.js";
+import { BRANDS, brotherNum, chartSpools, exampleSpools, lab, nearestSpool, spools } from "./core/brands.js";
 import { COLORS as LINE_THREADS, initStudio } from "./studio/ui.js";
 
 const $ = (id) => document.getElementById(id);
@@ -153,7 +153,7 @@ function setView(v) {
     .map((b) => {
       const t = mt[b.index] || nearestBrotherThread(b.color), label = v.threadLabel ? v.threadLabel(b, t) : `Brother ${t.name}`;
       const k = b.color + label; if (again ? k === lastKey : seen.has(k)) return ""; seen.add(k); lastKey = k;
-      return `<li><i style="background:${b.color}"></i><span>${label}${spool(b.color) ? `<br><small>${spool(b.color)}</small>` : ""}</span></li>`;
+      return `<li><i style="background:${b.color}"></i><span>${label}${spool(b.color, t.name) ? `<br><small>${spool(b.color, t.name)}</small>` : ""}</span></li>`;
     }).join("");
   v.facts = [`${st.widthMm.toFixed(0)} × ${st.heightMm.toFixed(0)} mm (${inch(st.widthMm)} × ${inch(st.heightMm)} in)`, `${st.stitches.toLocaleString()} stitches`,
     counts[0] + counts[1] ? stopWords(...counts) : "no thread changes", `≈ ${minutes} min`, `${h.machineName} ${h.name}`];
@@ -209,7 +209,7 @@ function picSteps(v, st) {
   $("pic-steps").innerHTML = problemsItems(shownOn(problemsOf(v), "steps")) + (turned() ? `<li class="after"><b>Hooping</b><span class="turned">${TURN_PIC}${escapeHtml($("done-turn").textContent)}</span></li>` : "")
     + `<li class="after"><b>Have ready</b><ul class="ready">${ready.map((r) => `<li>${escapeHtml(r)}</li>`).join("")}</ul></li>`
     + blocks.map((b, i) => { const t = mt[b.index] || nearestBrotherThread(b.color);
-      return `<li><b><span class="n">${i + 1}</span><i style="background:${b.color}"></i>Brother ${escapeHtml(t.name)}${spool(b.color) ? ` <small>${escapeHtml(spool(b.color))}</small>` : ""}</b>${youHtml(steps[i].you, escapeHtml)}</li>`; }).join("")
+      return `<li><b><span class="n">${i + 1}</span><i style="background:${b.color}"></i>Brother ${escapeHtml(t.name)}${spool(b.color, t.name) ? ` <small>${escapeHtml(spool(b.color, t.name))}</small>` : ""}</b>${youHtml(steps[i].you, escapeHtml)}</li>`; }).join("")
     + `<li class="after"><b>When it's done</b><span>${escapeHtml(after)}</span></li>`;
 }
 // A design reaching past 204.8 mm from its centre (only a too-big or split design's whole view, never a file to sew)
@@ -635,7 +635,7 @@ function alongShow() {
     $("along-ready").hidden = $("along-turn").hidden = $("along-look").hidden = true;
     $("along-sews").textContent = ""; $("along-time").textContent = ""; $("along-wrong").hidden = true;
   } else {
-    const s = steps[i], t = mt[i], sp = s.block && spool(s.block.color);
+    const s = steps[i], t = mt[i], sp = s.block && spool(s.block.color, t?.name);
     $("along-title").innerHTML = `<i style="background:${s.block?.color || "#999"}"></i>${s.title ? escapeHtml(s.title) + " · " : ""}Brother ${escapeHtml(t?.name || "")}${sp ? ` <small>${escapeHtml(sp)}</small>` : ""}`;
     $("along-ready").hidden = !s.ready; $("along-ready").querySelector("ul").innerHTML = (s.ready || []).map((r) => `<li>${escapeHtml(r)}</li>`).join("");
     $("along-turn").hidden = !s.turn; $("along-turn").innerHTML = s.turn ? TURN_PIC + escapeHtml(s.turn) : "";
@@ -753,13 +753,14 @@ $("names-make").onclick = async () => {
 };
 
 // ---------- thread brand ----------
-// "≈ Isacord 1306", or the nearest spool they own ("your Isacord 1902"); "" when they use Brother thread
-function spool(hex) {
+// "≈ Isacord 1306", or the nearest spool they own ("your Isacord 1902"); "" when they use Brother thread. `machine`: the
+// name the file gives the colour, so Brother's spool number is that thread's
+function spool(hex, machine) {
   if (!state.brand) return "";
   const own = state.spools[state.brand], s = nearestSpool(state.brand, hex, own);
   // (an owned spool far from the colour isn't a match: white showed as "your Isacord 5513", a green; `far` in brands.js)
-  // (Brother's own spools match the machine's colours exactly: just the number)
-  return !s ? "" : !own?.length ? (state.brand === "brother" ? `spool ${s.num}` : `≈ ${s.label}`) : s.far ? `nearest of yours, ${s.label}, is quite different` : `your ${s.label}`;
+  // (Brother's own spools match the machine's colours exactly: just the number of the thread the machine names)
+  return !s ? "" : !own?.length ? (state.brand === "brother" ? `spool ${brotherNum(machine) || s.num}` : `≈ ${s.label}`) : s.far ? `nearest of yours, ${s.label}, is quite different` : `your ${s.label}`;
 }
 // the spool they own for a colour ("Isacord 0015 White"), for supply lists; "" when they haven't listed one close to it
 function ownSpool(hex) {
@@ -768,12 +769,32 @@ function ownSpool(hex) {
 }
 // the threads for a supply list: by the spools they own when they've listed some, the rest as what to buy ("To buy:
 // Brother 007 Prussian Blue"; Have ready mixed owned and missing threads)
+// `machineName(hex)`: the name the file's own palette gives the colour (a colour whose nearest Brother thread another
+// colour took gets the next one: "for Brother Dark Gray" while the steps said Olive Green)
+// (one spool per entry: "Isacord 3541 (for Brother Violet, Brother Purple)", not 3541 three times; a spool that's only
+// the nearest the brand has says so, as the thread chips do; a brand without spools listed gives its numbers here too)
 function threadList(colors, machineName = (hex) => nearestBrotherThread(hex).name) {
   const own = state.brand && state.spools[state.brand]?.length, name = (hex) => `Brother ${machineName(hex)}`;
-  if (!own) return `Thread: ${[...new Set(colors.map((h) => { const s = state.brand && nearestSpool(state.brand, h); return state.brand === "brother" && s ? s.label : name(h); }))].join(", ")}.`;
-  const mine = [...new Set(colors.map(ownSpool).filter(Boolean))];
-  const buy = [...new Set(colors.filter((h) => !ownSpool(h)).map((h) => { const s = nearestSpool(state.brand, h); return state.brand === "brother" ? s.label : `${s.label} (for ${name(h)})`; }))];
-  return [mine.length ? `Your threads: ${mine.join(", ")}.` : "", buy.length ? `To buy: ${buy.join(", ")}.` : ""].filter(Boolean).join(" ");
+  const and = (a) => a.length < 3 ? a.join(" and ") : `${a.slice(0, -1).join(", ")} and ${a.at(-1)}`;
+  const uniq = [...new Set(colors)];
+  if (state.brand && !own && state.brand !== "brother") {
+    const by = new Map();
+    for (const h of uniq) { const s = nearestSpool(state.brand, h); if (!by.has(s.label)) by.set(s.label, { s, names: [] }); const n = name(h); if (!by.get(s.label).names.includes(n)) by.get(s.label).names.push(n); }
+    return `Thread: ${[...by.values()].map(({ s, names }) => `${and(names)} ≈ ${s.label}${s.far ? " (the nearest, quite different)" : ""}`).join(", ")}.`;
+  }
+  if (!own) return `Thread: ${[...new Set(uniq.map((h) => state.brand ? `Brother ${brotherNum(machineName(h)) || nearestSpool(state.brand, h).num} ${machineName(h)}` : name(h)))].join(", ")}.`;
+  const mine = [...new Set(uniq.map(ownSpool).filter(Boolean))];
+  const buy = new Map();
+  for (const h of uniq.filter((x) => !ownSpool(x))) {
+    const s = nearestSpool(state.brand, h);
+    if (state.brand === "brother") { const n = brotherNum(machineName(h)); if (n) Object.assign(s, { label: `Brother ${n} ${machineName(h)}`, far: false }); }
+    if (!buy.has(s.label)) buy.set(s.label, { names: [], far: [] });
+    const e = buy.get(s.label), n = machineName(h);
+    if (!e.names.includes(n)) { e.names.push(n); if (s.far) e.far.push(n); }
+  }
+  const bought = [...buy].map(([label, { names, far }]) => state.brand === "brother" ? label
+    : `${label} (for ${and(names.map((n) => `Brother ${n}`))}${far.length ? `; a rough match${far.length < names.length ? ` for ${and(far)}` : ""}` : ""})`);
+  return [mine.length ? `Your threads: ${mine.join(", ")}.` : "", bought.length ? `To buy: ${bought.join(", ")}.` : ""].filter(Boolean).join(" ");
 }
 function brandUI() {
   // (one choice per meaning: "Brother thread" and "Brother spool numbers" side by side read as the same thing. The
@@ -1081,7 +1102,7 @@ function paletteUI() {
   $("pic-merged").textContent = state.pic.merged ? `${asked} asked for, ${cols.length} used: this picture has only ${cols.length} ${cols.length === 1 ? "colour" : "colours"} different enough to need ${cols.length === 1 ? "a thread of its own" : "threads of their own"} (the rest are shades of ${cols.length === 1 ? "it" : "these"} or of the fabric).` : "";
   ownedNote();
   $("pic-palette").innerHTML = cols.map((c) => `<button type="button" data-id="${c.id}" aria-pressed="${!state.pic.skip.includes(c.id)}">
-    <i style="background:${c.hex}"></i><span>Brother ${state.pic.machineName?.get(c.hex) || c.thread.name}${spool(c.hex) ? `<small>${spool(c.hex)}</small>` : ""}</span></button>`).join("");
+    <i style="background:${c.hex}"></i><span>Brother ${state.pic.machineName?.get(c.hex) || c.thread.name}${spool(c.hex, state.pic.machineName?.get(c.hex) || c.thread.name) ? `<small>${spool(c.hex, state.pic.machineName?.get(c.hex) || c.thread.name)}</small>` : ""}</span></button>`).join("");
 }
 // "Use only threads I own": say which of the picture's colours share one spool, and which have none close (the
 // Design tab says "quite different"; here yellow and pink sewed in one spool without a word)

@@ -10,10 +10,16 @@
 // stop counts and thread names must agree between the chips, the steps, the sew sheet, Sew along and the dialog, and
 // a lint over all the text a user reads fails on jargon (underlay, "the pile", PEC, jumps, stops, colour blocks, satin
 // on its own...).
+// Threads (round 9: the editor said "Brother Dark Gray · your Isacord 3554" while the chips, steps and sew sheet said
+// Olive Green; Have ready listed Isacord 3541 three times): with a thread brand or spools of their own, each colour has
+// one label (the machine's name and the spool) on the editor, the chips, the steps and the sew sheet; a swatch's
+// tooltip names the thread the file then gives it; Have ready lists a spool once and names every thread; Brother spool
+// numbers are the named thread's.
 // usage: node tests/cdp.mjs PORT start DIR; serve the site (tests/batch_server.py out/batch HTTP); then
 //        node tests/surfaces.mjs PORT http://127.0.0.1:HTTP [case-filter]
 // ~12 minutes (76 cases); prints one line per case and "DONE <cases> <problems>"; exit code 1 when anything disagrees.
 import { writePES } from "../js/core/formats.js";
+import { brotherNum } from "../js/core/brands.js";
 
 const [port, base, only] = process.argv.slice(2);
 if (!port || !base) { console.log("usage: node tests/surfaces.mjs CDP_PORT BASE_URL [filter]"); process.exit(2); }
@@ -43,7 +49,12 @@ const T = (text, size, o = {}) => ({ id: ++id, kind: "text", text, size, font: "
 const M = (motif, size, o = {}) => ({ id: ++id, kind: "motif", motif, size, x: 0, y: 0, color: "#b3133a", style: "fill", ...o });
 const F = (shape, w, h, border, o = {}) => ({ id: ++id, kind: "frame", shape, w, h, border, x: 0, y: 0, color: "#0e1f7c", ...o });
 const Mono = (letters, size, o = {}) => ({ id: ++id, kind: "monogram", letters, size, font: "NW Great Vibes", x: 0, y: 0, color: "#0e1f7c", ...o });
-const design = (name, pieces, o = {}) => ({ name, tab: "design", setup: { pieces, sel: pieces.at(-1)?.id ?? null, fabric: o.fabric || "cotton", thread: o.thread || "auto" }, hoop: o.hoop || "5x7", turn: !!o.turn });
+const design = (name, pieces, o = {}) => ({ name, tab: "design", setup: { pieces, sel: pieces.at(-1)?.id ?? null, fabric: o.fabric || "cotton", thread: o.thread || "auto" }, hoop: o.hoop || "5x7", turn: !!o.turn, brand: o.brand || "", spools: o.spools || {} });
+// two of their spools whose nearest Brother thread is one (Isacord 0020 and 3554: Dark Gray), two colours sharing a spool
+// to buy (Violet, Purple: Isacord 3541), a pale pink their white spool only roughly matches
+const THREADS_CASE = () => [T("Gnome", 20, { color: "#27282a", y: -30 }), T("Sweet", 20, { color: "#252b3e", y: 0 }), M("heart", 28, { color: "#5500aa", x: -30, y: 35 }),
+  M("star", 28, { color: "#4f298d", x: 0, y: 35 }), M("flower", 28, { color: "#fadade", x: 30, y: 35 })];
+const OWNED = { isacord: ["0020", "3554", "0015", "1902", "5513"] };
 const PRINT = "NW Josefin Sans", ROUND = "NW Quicksand";
 const CASES = [
   design("fleece Lily", [T("Lily", 24)], { fabric: "towel" }),
@@ -73,6 +84,9 @@ const CASES = [
   design("too big", [M("heart", 170)], { hoop: "4x4" }),
   design("appliqué frame + small", [F("heart", 46, 42, "applique", { color: "#f993bc" }), T("Emma", 6, { y: 0 })]),
   design("clean starter-like", [F("oval", 110, 64, "satin"), T("Emma", 22)]),
+  design("threads: my Isacord", THREADS_CASE(), { brand: "isacord", spools: OWNED }),
+  design("threads: Isacord numbers", THREADS_CASE(), { brand: "isacord" }),
+  design("threads: Brother numbers", THREADS_CASE(), { brand: "brother" }),
   design("quilted frame + name", [F("square", 100, 100, "satin", { quilt: "stipple" }), T("Ava", 7, { font: ROUND })]),
   // (an old #bookmark link: the Bookmark starter with the old panel's saved name)
   { name: "bookmark", tab: "bookmark" },
@@ -131,8 +145,11 @@ const READ = String.raw`(async () => {
   if (out.mode === "design") {
     const all = new Set(), untagged = [];
     // (the list is drawn again on every pick: each button found afresh)
+    out.hints = [];
     for (const pid of $$("#st-pieces .pick").map((b) => b.dataset.id)) {
       $('#st-pieces .pick[data-id="' + pid + '"]').click(); await sleep(1000);
+      const h = $("#st-edit [data-thread-of=color]"), col = $("#st-edit [data-color-any]")?.value;
+      if (h && col) out.hints.push({ color: col.toLowerCase(), text: h.textContent, tip: $("#st-edit button[data-color][aria-pressed=true]")?.title || "" });
       ids("#st-edit [data-warn] [data-problem]").forEach((x) => all.add(x));
       untagged.push(...$$("#st-edit [data-warn] > span:not([data-problem])").map((e) => e.textContent));
       grab($("#st-edit"));
@@ -140,6 +157,10 @@ const READ = String.raw`(async () => {
     out.editor = [...all].sort(); out.untagged = untagged;
     out.steps = ids("#st-steps [data-problem]"); out.stepsCount = $("#st-steps-count").innerText;
     out.stepThreads = $$("#st-steps [data-step] b").map((b) => textOf(b));
+    const colorOf = (el) => (el?.getAttribute("style") || "").match(/#[0-9a-f]{6}/i)?.[0].toLowerCase();
+    out.labels = { steps: $$("#st-steps [data-step] b").map((b) => [colorOf(b.querySelector("i")), textOf(b), b.querySelector("small")?.textContent || ""]),
+      chips: $$("#threads li").map((li) => [colorOf(li.querySelector("i")), textOf(li.querySelector("span")), li.querySelector("small")?.textContent || ""]) };
+    out.ready = $$("#st-steps .ready li").map((l) => l.textContent);
     grab($("#st-steps"));
   } else if (out.mode === "picture") {
     out.editor = ids("#pic-fine [data-problem], #pic-owned [data-problem]");
@@ -153,7 +174,8 @@ const READ = String.raw`(async () => {
   out.split = !!v.split;
   if (!$("#sheet-print").disabled) {
     dispatchEvent(new Event("beforeprint")); out.sheet = ids("#sheet [data-problem]");
-    out.sheetThreads = $$("#sheet .list > li > b").map((b) => textOf(b)); grab($("#sheet")); dispatchEvent(new Event("afterprint"));
+    out.sheetThreads = $$("#sheet .list > li > b").map((b) => textOf(b)); grab($("#sheet"));
+    if (out.labels) out.labels.sheet = $$("#sheet .list > li > b").map((b) => [(b.querySelector(".sw")?.getAttribute("style") || "").match(/#[0-9a-f]{6}/i)?.[0].toLowerCase(), textOf(b).replace(/^.* · /, ""), (b.querySelector("small")?.textContent || "").replace(/^\((.*)\)$/, "$1")]); dispatchEvent(new Event("afterprint"));
   }
   out.share = nwTest.share() || "";
   if (!$("#along-open").disabled) {
@@ -173,6 +195,18 @@ const READ = String.raw`(async () => {
       out.done = ids("#done-warn [data-problem]"); out.doneBad = $$("#done-bad li").length;
       out.doneChecked = $("#done-checked").innerText; out.doneSew = $("#done-sew").innerText; grab($("#done"));
       $("#done-close").click();
+    }
+  }
+  // each of their spool swatches on the last piece: its tooltip's machine name is what the editor and steps say once picked
+  if (out.mode === "design" && $$("#st-edit .own-swatches button").length) {
+    out.predicted = [];
+    for (let k = 0; k < $$("#st-edit .own-swatches button").length; k++) {
+      const b = $$("#st-edit .own-swatches button")[k], said = b.title.match(/calls it (.*)\)$/)?.[1], hex = b.dataset.color.toLowerCase();
+      b.click();
+      let got = "";
+      for (let i = 0; i < 60; i++) { await sleep(150); const st = $$("#st-steps [data-step] b").find((x) => (x.querySelector("i")?.getAttribute("style") || "").toLowerCase().includes(hex)); if (st) { got = textOf(st); break; } }
+      await sleep(300);
+      out.predicted.push({ hex, said, step: got, hint: $("#st-edit [data-thread-of=color]")?.textContent || "" });
     }
   }
   return out;
@@ -207,7 +241,7 @@ for (const c of CASES) {
     if (c.tab === "design" && c.starter) {
       await open("#design", [...common, store("hoop", c.hoop), store("turn", { design: false, bookmark: true }), store("brand", ""), store("spools", {})].join(";"));
       await ev(`(async () => { document.querySelector('[data-start="${c.starter}"]').click(); return 1; })()`); await sleep(1500);
-    } else if (c.tab === "design") await open("#design", [...common, store("studio", c.setup), store("hoop", c.hoop), store("turn", { design: c.turn, bookmark: true }), store("brand", ""), store("spools", {})].join(";"));
+    } else if (c.tab === "design") await open("#design", [...common, store("studio", c.setup), store("hoop", c.hoop), store("turn", { design: c.turn, bookmark: true }), store("brand", c.brand), store("spools", c.spools)].join(";"));
     else if (c.tab === "bookmark") await open("#bookmark", [...common, store("bm.name", "Emma"), store("hoop", "5x7")].join(";"));
     else if (c.tab === "picture") {
       await open("#picture", [...common, store("hoop", "5x7"), store("turn", { picture: false }), store("brand", c.owned ? "isacord" : ""), store("spools", c.owned ? { isacord: ["0015", "0020"] } : {}), store("pic.mine", !!c.owned)].join(";"));
@@ -274,6 +308,26 @@ for (const c of CASES) {
         if (!same([got.join("|")], [chips.join("|")])) fail(c.name, `${n} names the threads ${got.join(", ")}; the chips ${chips.join(", ")}`);
       }
       for (const x of r.chips) if (!/^(Brother |your )/.test(x)) fail(c.name, `a thread chip not named as the machine names it: "${x}"`);
+    }
+    // one label per colour on every surface (a thread brand, their own spools)
+    if (r.labels && c.brand) {
+      const want = new Map(), shown = (l) => l.replace(/\|(.+)$/, " · $1").replace(/\|$/, "");
+      for (const [col, name, sp] of r.labels.steps) if (col) { const l = `${name}|${sp}`; if (want.has(col) && want.get(col) !== l) fail(c.name, `the steps label ${col} two ways: ${shown(want.get(col))} / ${shown(l)}`); want.set(col, l); }
+      for (const [n, list] of [["the chips", r.labels.chips], ["the sew sheet", r.labels.sheet || []]])
+        for (const [col, name, sp] of list) if (col && want.has(col) && want.get(col) !== `${name}|${sp}`) fail(c.name, `${n} label ${col} "${shown(`${name}|${sp}`)}", the steps "${shown(want.get(col))}"`);
+      for (const h of r.hints) if (want.has(h.color) && h.text !== shown(want.get(h.color))) fail(c.name, `the editor labels ${h.color} "${h.text}", the steps "${shown(want.get(h.color))}"`);
+      for (const h of r.hints) { const m = h.tip.match(/calls it (.*)\)$|^Brother (.*)$/); if (m && !h.text.startsWith(`Brother ${m[1] || m[2]}`)) fail(c.name, `the picked swatch's tooltip "${h.tip}" disagrees with the editor "${h.text}"`); }
+      for (const p of r.predicted || []) if (p.said && !p.step.startsWith(`Brother ${p.said}`)) fail(c.name, `the swatch for ${p.hex} said the machine calls it ${p.said}; picked, the steps say "${p.step}"`);
+      for (const p of r.predicted || []) if (p.step && !p.hint.startsWith(p.step)) fail(c.name, `picked ${p.hex}: the editor says "${p.hint}", the steps "${p.step}"`);
+      if (c.spools.isacord && !(r.predicted || []).length) fail(c.name, "no spool swatches to check");
+      // Have ready: each spool once, every thread named as the steps name it, the brand's numbers there too
+      const list = (r.ready || []).find((x) => /^(Thread|Your threads|To buy):/.test(x)) || "";
+      const nums = [...list.matchAll(/(?:Isacord|Brother) (\d{3,4})\b/g)].map((m) => m[1]);
+      if (new Set(nums).size !== nums.length) fail(c.name, `Have ready names a spool twice: "${list}"`);
+      if (!nums.length) fail(c.name, `Have ready gives no spool numbers: "${list}"`);
+      for (const [, name, sp] of r.labels.steps) if (name && !sp.startsWith("your ") && !list.includes(name.replace(/^Brother /, ""))) fail(c.name, `Have ready doesn't name ${name}: "${list}"`);
+      if (c.brand === "brother") for (const [, name, sp] of r.labels.steps) { const n = brotherNum(name.replace(/^Brother /, "")); if (n && sp !== `spool ${n}`) fail(c.name, `${name} labelled "${sp}", its spool is ${n}`); }
+      if (c.spools.isacord && !r.labels.steps.some(([col, , sp]) => col === "#fadade" && /quite different/.test(sp))) fail(c.name, "the pale pink sewn in their bluish white spool isn't called quite different");
     }
     // jargon in anything a user reads
     const all = [...r.texts, ...r.attrs, r.share];
