@@ -315,6 +315,16 @@ measurements behind each number are in the code's comments.
   `renderWord`'s canvas draws nothing: lettering with no stitches is the BLOCK `undrawn`; empty lettering is `empty`.
 - `label(p)` shortens over 30 letters to 24 + "…" (`brief`) for messages; `label(p, true)` is the thread name written
   in the PES (golden bytes): never write the short one into a file.
+- Measure a layout by `sewnBoxes`/`layoutBox`/`layoutSize` (fitted sizes), never `pieces.map(pieceBounds)`: Fit to hoop
+  shrank a quilt label on a bigger hoop. `place()` decides "already too big" with compose (`fitsNow`). `bulk()` size and
+  loop checks skip the sewing order. Too big: `fitWays` offers Fit to hoop, "Fit and turn the hoop" (10 %+ bigger) and
+  "Make the frame fit the hoop" (frames only, `carried` moves what's in them), each only where it lands. Frame `most`
+  (mm) caps fixes and Fit (birth announcement 140: a 6 in display hoop). The size control says "N mm sewn" when a frame
+  shrinks lettering; `api.setView` returns the chip's size, which the too-big note uses.
+- `keepWord`: changing an arch's curve keeps the word where it shows (unless it follows a round frame). Script
+  lettering mostly in capitals is the `caps` problem (fix: Quicksand): every script's capitals read badly. `archTight`:
+  script descenders over an up arch past 0.15 x the radius. Lines keep min(½ x-height, ¼ size) of ink gap. Monograms
+  in every font are spaced by sewn stitches; `monoSize` gives an initial set its frame's width (down to 70 %).
 ### Two hoopings (`splitPieces`)
 - On `overBy`, whole pieces (never a cut stitch) split along the long side at the most even cut where both fit.
   Basting crosses (`crossSpots`: 1.5 mm clear, near 1/4 and 3/4, 20 mm apart if possible) end the first file and
@@ -398,6 +408,11 @@ measurements behind each number are in the code's comments.
   fabric (both erased etsy_1's pale flowers).
 - Size = the sewn design's longer side (`picturePlan`, capped to the field), rebuilt when over 0.4 mm off; over the
   field it shrinks, not errors. 8 px/mm (5 lost notches).
+- `sewSized` (app.js and picture_corpus): tries from fit 1 every time, cached per exact setting (`picFits`); carrying
+  the last fit made results depend on history. Cross-stitch may miss the Size (closest try wins, over counts 1.5x).
+- Left out: `keptParts(pictureInk(...))` on the learned copy; `lostMuch` (5 % of area, or 3+ parts and 20 %, or one
+  part of 1.4 mm2+ on a picture of 20 parts or fewer) is the `lost` problem with fixes checked on a second worker
+  (`picChecks`; kept = 3 of 4 lost parts). The thin-line note is `hairline`, not said with it.
 - Filled: shapes 1 mm or wider get tatami following the outline (skeleton satin broke corners); parts under 2 x
   `THIN_PART` and lines under 1 mm sew a triple run, never dropped. Specks: under 4 mm² and 2.5 mm across, groups
   under 6 mm of line, walks under 1.5 mm (`lostLines` reports dropped fine lines). Kept: text dots on the fabric (>= 0.8 mm across, 0.6
@@ -448,6 +463,8 @@ measurements behind each number are in the code's comments.
     minus earlier directions; the rest are runs. Over `MAXS` 6.8 mm is `split` into `PIECE` 5.5 mm with staggered
     cuts (the writer halves over 7 mm out of `relieve`'s sight); crowded edges get short stitches (`SHORT`). Worse:
     split satin 7-14 mm (39-49 hits/mm²), fixed-place cuts, filling columns over 25 mm.
+  - Fills are refilled at the source's thread per mm² (all its stitches, less 0.4 for our underlay), `ROWS` 0.15-0.5;
+    a fill in several parts is also tried the other way, fewer parts kept (the 0.35 floor halved gnome's cover).
   - `relieve` if thin; `slide()` always; `dropTiny` when tiny and after any re-stitch.
   - `sortColors`: a block joins the last earlier one of its thread if nothing sewn between touches it; off for machine
     stops, DST and same-thread pauses (`pauses`: fabric steps). `fewerBlocks` for over 99 blocks; `blockThreads`.
@@ -468,6 +485,9 @@ measurements behind each number are in the code's comments.
   `threadList`: one entry per spool ("for Brother A and Brother B; a rough match for A"); a brand with no spools gives
   its "≈" numbers. `nearestSpool` `far` also for two tints (chroma 5+) over 60° of hue apart past ΔE 10 (Flesh Pink vs
   white 0015 was 14.7).
+- One label function `threadLabel(hex, machine)` (app.js) -> { name, note, short }, wrapped by `threadLine`/`threadHtml`
+  for every surface; an owned close spool leads ("Your Sulky Rayon 1076 Royal Blue" · "the machine calls it Wisteria
+  Violet"). Chips: one per thread in first-use order, "used N times", long notes in the tooltip.
 
 ## App and UI
 - Opens on `#design`; default name Ashley.
@@ -515,16 +535,27 @@ measurements behind each number are in the code's comments.
   exactly on the line (Have ready and the dialog mention it). Ganged ITH: `kit(n, all, W, H)`, stabilizer etc. once.
   Time = `sewMinutes`: stitches/550 + 6 s per cut trim + 0.5 min per pause. Sew sheet prints threads brighter than
   0.8 in colour over a 0.6 mm #555 line (`pale`). "Add words" resets fabric to cotton.
+- A step's `you` is what you do before it sews, ending "Press Start"; work owed after the machine sews (trim after a
+  tack-down) goes on the stage as `then`, said at the next stop (`trimsFor`). Every step after the first leads with
+  "Change to the next thread" or "Keep the same thread on". Step 1 starts with `pickIt(file)` + `THREADING`. Sizes via
+  words.js `measure`/`inches` (whole cm from 10, inches in eighths, rounded up for fabric). Newcomer words (stabilizer,
+  topper, loose thread) explained once per surface (`GLOSSARY`/`explained`; sheet.js `told()`). A starter's `float`
+  (bib) overrides the fabric's hooping. Lettering split from one piece carries `of` and names the file as a whole.
+  Sew along shares height 1:1.2 between preview and words (content-sized rows zoomed the preview).
+- Toasts: one `toast()` in app.js (studio `api.toast`), one timing rule (3-8 s; with an action at least 10 s); a failure
+  from a tap is a toast, `#error` only for what's wrong with the design. View menu stays open for ticks/Background.
 - Sew sheet (`sewSheet`: `#sheet` + `window.print()`, also on `beforeprint`): field at 1:1 in mm, centred as the
   machine centres, 5 cm bar; steps with machine names (`machineThreadList`); appliqué shapes. Cut files (any design with
   fabric shapes: appliqué, in-the-hoop fronts): "Cricut cut file (SVG)" `cutSVG` (width/height in mm, viewBox in mm:
   Inkscape's form, which Design Space reads at size) and "Silhouette cut file (DXF)" `cutDXF` (R12 ASCII, closed
   POLYLINEs in mm, y up; Silhouette Studio's free edition opens DXF, not SVG). DXF keeps no size, so the file name
   carries it (`_cut_169x54mm`). Both judged in gate.js; ezdxf (in .venv) reads ours at size. Verify with headless `Page.printToPDF`, never the real print dialog via the Chrome extension (it blocks).
+- Cut files are exactly the shapes' size (no margin), named by `cutName`, upright as the design reads (`sheet.upright`,
+  never the machine's turn); gate.js refuses a size/name mismatch.
 - Sew along (`#along`): a step per screen, minutes = stitches / 550, own Have ready, Screen Wake Lock (retaken on
   visibilitychange). Share text carries the steps (`shareText`). On my item (`#item`): a measured photo under the
   design at true size (`state.backdrop`), never uploaded or saved.
-- Offline (`sw.js`, `needleworks-v7`): precaches `FILES`, network first, cache after 3 s; add every new file to
+- Offline (`sw.js`, `needleworks-v8`): precaches `FILES`, network first, cache after 3 s; add every new file to
   `FILES`. https only. Share target: POST `./?share` -> `needleworks-shared` cache -> `./?shared` -> `route()`.
 - A hoop change drops other tabs' designs. Min/max over stitches uses loops (`Math.min(...pts)` overflows past ~110k).
 
@@ -596,6 +627,12 @@ Automated checks that each guard a bug class (add a line with every new guard):
   - Pictures unlike the samples: `tests/picture_corpus.sh CDP HP OUT [query]` (~1.5 min; 26 seeded drawings x styles x
     sizes; open cases in its `KNOWN` list with a reason; `?ext=etsy_N` renders the external samples).
   - Starters open warning-free and fit (typing "Maximilian" too): `node tests/starters.mjs CDP http://127.0.0.1:HP` (~3 min).
+  - Picture output is a pure function of its settings; the lost note and its fixes: `node tests/picture_history.mjs CDP HP`.
+    picture_corpus measures left-out pieces itself and must agree with the note.
+  - Doctor keeps cover: doctor.test.mjs checks each solid block's thread per mm² within 70-160 % at 50/80/120/250 %.
+  - steps_lint also: step order (Press Start last), same-thread leads, inch/cm pairs, glossary once, Sew along zoom.
+    ui_sweep: view-menu ticks, toasts time out, `cut-row`. Monkey: no empty <details>, size = "Shrunk to", note size =
+    chip, Fit fills 90 %, `caps`.
   - Guidance words agree (no repeated sentences, hooping note vs step 1, cut file mentioned, time formula, dialog):
     `node tests/steps_lint.mjs CDP http://127.0.0.1:HP` (~1.5 min).
   - One thread label per colour on every surface: surfaces.mjs "threads:" cases; damaged/short Open and empty lettering
@@ -639,7 +676,8 @@ Automated checks that each guard a bug class (add a line with every new guard):
 - `pe900_check.py`'s max density reads lower than a full offset scan below the limit (pass/fail unaffected).
 - Design tab: Patch starter + Lettering lands below JD. Speed: a big carved patch refills on every change
   (1.5-4.7 s; wants a carve worker like quilting); thread/fabric change on 15-26 pieces 1.1-2 s.
-- Monkey replay (r9): Add appliqué letters on the 4x4 with an oval, a motif and a monogram placed past the hoop (`place()`).
+- Pictures: etsy_7 cross-stitch can't hit the asked Size exactly (doodles appear between fits; the lost note explains).
+- Small print lettering leaves 4-5 loose threads (22 on a 4x4 quilt label): moves of 1-5 mm between letters.
 - Flow: fill-internal hidden moves in `fillPolygon`, repeated tie-in holes in `Design.path`, ~47 script moves on arcs.
 - Text: CJK/Arabic names save as design.pes (the fonts lack them anyway).
 - Not built: photo stitch, free-standing lace, 3D puff.
