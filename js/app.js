@@ -1391,7 +1391,7 @@ function ownedNote() {
   const text = said.length ? `With only your threads, the picture's ${said.join(" Its ")}` : "";
   state.pic.ownedProblem = text ? { id: "owned", level: LOOK, text } : null;
   p.hidden = !said.length;
-  p.innerHTML = text ? `<span data-problem="owned">${escapeHtml(text)} Add a closer spool in Threads I own, or untick “Use only threads I own”.</span>` : "";
+  p.innerHTML = text ? isolate(`<span data-problem="owned">${escapeHtml(text)} Add a closer spool in Threads I own, or untick “Use only threads I own”.</span>`) : "";
   if (state.view && state.view === state.views.picture) warnUI(state.view);
 }
 $("pic-palette").onclick = (e) => {
@@ -1450,11 +1450,11 @@ function fineUI(fine) {
   $("pic-fine").hidden = !gaps && !hair && !lost;
   // (each fix was sewn first and keeps them: checkLost)
   const fixes = (p.fixes || []).map((f, i) => `<button type="button" class="link" data-fix="${i}">${escapeHtml(f.label)}</button>`).join(" ");
-  $("pic-fine").innerHTML = [
+  $("pic-fine").innerHTML = isolate([
     gaps ? `<span data-problem="gaps">${gap} ${p.size < (p.max || 0) ? "A bigger Size keeps more of them open." : "This is as big as the hoop allows."}</span>` : "",
     hair ? `<span data-problem="hairline">${line} Draw it thicker in the picture to have it sewn.</span>` : "",
     lost ? `<span data-problem="lost">${escapeHtml(gone)} ${fixes || (p.checking ? "" : k.lost === 1 ? "Draw it bigger or bolder in the picture to have it sewn." : "Draw them bigger or bolder in the picture to have them sewn.")}</span>` : "",
-  ].filter(Boolean).join(" ");
+  ].filter(Boolean).join(" "));
   if (state.view && state.view === state.views.picture) warnUI(state.view);
 }
 $("pic-fine").onclick = (e) => {
