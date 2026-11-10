@@ -359,9 +359,17 @@ function reachEnds(edges, mask, stroke, corners = false) {
     const m = q[i1], e = q[n - 1], u = dir(q[i0], m), ue = dir(m, e), uh = ih >= 0 ? dir(q[ih], q[i0]) : null, deg6 = (6 * Math.PI) / 180;
     if (!u || !ue || turn(u, ue) < deg6 || (uh && turn(uh, u) > deg6)) return q;
     // (a curl runs into a corner of the ink; a stroke curving on into its end, a j's or y's hook, ends in the middle)
-    if (depth(e[0], e[1], Math.ceil(stroke / 2)) > stroke * 0.3) return q;
-    // (on from m a px at a time while there's ink, as far as the end was; the reach then takes it to the ink's edge)
+    // (or into a flared end, the ink there wider than 1.3 strokes across and straight on all the way: Josefin's Z
+    // top left, its bar's line curled up into the flare and the satin fanned round it)
     const Le = Math.hypot(e[0] - m[0], e[1] - m[1]), out = q.slice(0, i1 + 1);
+    if (depth(e[0], e[1], Math.ceil(stroke / 2)) > stroke * 0.3) {
+      if (!uh) return q;   // (straight for 2 strokes before it, not the end of a curve: Quicksand's ? stem)
+      const nv = [-u[1], u[0]], side = (x, y, s) => { let t = 0; while (t < stroke && ink(x + nv[0] * s * (t + 0.5), y + nv[1] * s * (t + 0.5))) t += 0.5; return t; };
+      const f = [m[0] + u[0] * Le * 0.7, m[1] + u[1] * Le * 0.7];
+      for (let t = 1; t <= Le; t++) if (!ink(m[0] + u[0] * t, m[1] + u[1] * t)) return q;
+      if (side(f[0], f[1], 1) + side(f[0], f[1], -1) < 1.3 * stroke) return q;
+    }
+    // (on from m a px at a time while there's ink, as far as the end was; the reach then takes it to the ink's edge)
     for (let t = 1; t <= Le && ink(m[0] + u[0] * t, m[1] + u[1] * t); t++) out.push([m[0] + u[0] * t, m[1] + u[1] * t]);
     return out.length > i1 + 1 ? out : q;
   };
@@ -485,8 +493,12 @@ export function strokeWidth(mask, sk = skeletonize(mask)) {
 // anywhere on itself (a node or partway along a stroke) so it's within `near` of where the last one began and ended,
 // wherever that saves a trim (`chained`): Great Vibes' S began at its foot and the "unday" beside it at the u, a jump
 // apart, though the S's spine passes the u. Without it (pictures, print letters) every piece starts at its leftmost end.
-export function order(edges, near = 0, loose = Infinity) {
-  if (near > 0) return chained(edges, near, loose);
+// (`nodesOnly`: print letters, whose moves are all trims or loose threads: near is 0 and pieces start only at a node, as
+// a stroke's taper, ends and sides are measured from its ends; the DP then picks starts that leave a move over `loose`,
+// which the machine trims, rather than a 1-5 mm loose thread, and the longest it can where none does: the needle
+// leaves from a column's edge, so a move reckoned short by the centre lines may still be trimmed)
+export function order(edges, near = 0, loose = Infinity, nodesOnly = false) {
+  if (near > 0 || nodesOnly) return chained(edges, near, loose, nodesOnly);
   const adj = adjacency(edges);
   const used = new Array(edges.length).fill(false), comps = [];
   while (used.some((u) => !u)) {
@@ -533,7 +545,7 @@ function walk(edges, adj, used, start, id = (i) => i) {
 // (1), but within `loose` a jump the machine won't trim (1.5, a loose thread: `moveCost` in geom.js), then the leftmost
 // start where that changes nothing, a node before a point along a stroke. A stroke started partway is split there (both
 // halves report its index).
-function chained(edges, near, loose) {
+function chained(edges, near, loose, nodesOnly = false) {
   const adj = adjacency(edges), seen = new Array(edges.length).fill(false), pieces = [];
   const xOf = (e) => Math.min(e[2][0][0], e[2][e[2].length - 1][0]);
   for (let i = 0; i < edges.length; i++) {
@@ -552,7 +564,7 @@ function chained(edges, near, loose) {
     const nodes = new Map(), cands = [];
     for (const j of list) { const [u, v, q] = edges[j]; nodes.set(u, q[0]); nodes.set(v, q[q.length - 1]); }
     for (const [id, q] of nodes) cands.push([q, id, -1, -1, id === first ? 0 : 1e-3]);
-    for (const j of list) {
+    if (!nodesOnly) for (const j of list) {
       const q = edges[j][2];
       let run = 0;
       for (let t = 1; t < q.length - 1; t++) {
@@ -569,7 +581,7 @@ function chained(edges, near, loose) {
       let best = 0, from = -1;
       if (prev) {
         best = Infinity;
-        prev.cands.forEach(([r], m) => { const d = Math.hypot(q[0] - r[0], q[1] - r[1]), c = prev.dp[m][0] + (d <= near ? 0 : d <= loose ? 1.5 : 1); if (c < best) { best = c; from = m; } });
+        prev.cands.forEach(([r], m) => { const d = Math.hypot(q[0] - r[0], q[1] - r[1]), c = prev.dp[m][0] + (d <= near ? 0 : d <= loose ? (nodesOnly ? 1.5 - (0.4 * d) / loose : 1.5) : 1); if (c < best) { best = c; from = m; } });
       }
       return [best + own, from];
     });

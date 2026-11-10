@@ -56,6 +56,15 @@ for (const f of FONTS) {
   }
 }
 log("fonts: done");
+// monograms with tails (g j p q y hang below the shared baseline), small print (moves between letters over 5 mm where
+// a start allows, not loose threads), big print (columns up to WIDE)
+for (const f of ["NW Josefin Sans", "NW Quicksand", "NW Sacramento", "NW Great Vibes"]) await save(`st_mono_tail_${f.slice(3).replace(/ /g, "")}`, [P({ kind: "monogram", letters: "jKy", font: f, size: 26 })]);
+for (const f of ["NW Josefin Sans", "NW Quicksand"]) {
+  const tag = f.slice(3).replace(/ /g, "");
+  await save(`st_small_${tag}`, [P({ kind: "text", text: "Handmade with love\nby Grandma\nMarch 2026", font: f, size: 5 })], "4x4");
+  await save(`st_small2_${tag}`, [P({ kind: "text", text: "Emily Rose 14.03.2026", font: f, size: 6 })], "4x4");
+  await save(`st_big_${tag}`, [P({ kind: "text", text: "Amy", font: f, size: 45 })]);
+}
 // fabrics: towel (knockdown, satin only, wider underlay), knit (underlay, pull comp, lighter patch fill), basting box
 for (const f of FONTS) {
   const tag = f.family.slice(3).replace(/ /g, "");

@@ -54,6 +54,8 @@ function letterStrokes(text, family, spacing = 0, kern = null, lead = false, tai
   return out;
 }
 
+// the widest lettering satin, mm: wider stitches lie loose and snag, and the writer cuts any over 7 mm in two
+const WIDE = 5;
 // Letters as [pts, "run"|"satin"] in mm: `size` is the height of the lettering, baseline at y = 0, centred across.
 // `kern`: room after each letter (fractions of the size), for the text as given (one line, already trimmed)
 // `~` at the start or end of the words is a swash there (`swashes` in typed.js; kern entries for the `~`s are dropped
@@ -86,7 +88,10 @@ function letters(text, family, size, style = "auto", spacing = 0, kern = null, c
   // keeps small loops open. (Until 2026-10-30: at least 12% and satin only from 1 mm, so script names 20 mm tall in
   // Sacramento or Great Vibes sewed as a thin line.)
   const stroke = info.stroke * s, xh = info.mid * s;
-  const w = Math.min(3.5, xh * 0.2, Math.max(stroke, xh * 0.12, Math.min(xh * 0.15, 1.2)));
+  // A font whose own stroke is wider than that (bold or big lettering: Quicksand at 60 mm has a 7.5 mm stroke) is sewn
+  // up to WIDE, its stroke's width where it can: capped at 3.5 it sewed as a skinny line down the middle of each
+  // letter. (Never wider than the stroke there: thin scripts keep their 12 % floor and 3.5 mm cap.)
+  const w = Math.min(xh * 0.2, Math.max(Math.min(3.5, Math.max(stroke, xh * 0.12, Math.min(xh * 0.15, 1.2))), Math.min(stroke, WIDE)));
   const satinW = style === "line" ? 0 : style === "satin" ? Math.max(1.0, w) : w >= 0.8 ? w : 0;
   // script pieces (a capital the font leaves apart, separate words) start where the last one began, when that's close
   // enough to stitch across rather than trim: each walk ends where it began, its last satin up to half a column (and
@@ -95,6 +100,10 @@ function letters(text, family, size, style = "auto", spacing = 0, kern = null, c
   // gaps afterwards: `unbent` checks those.)
   const reach = 1.5 - (satinW ? satinW / 2 + 0.3 : 0);
   if (chain && !print && reach > 0.2) comps = order(edges, reach / s, 5 / s);
+  // Print letters each start where the move from the last one is either over 5 mm (trimmed; the move runs from the end
+  // of one column to the start of the next, half a column and pull off the centre lines, so 0.5 mm to spare) or, where
+  // no start makes it that long, the leftmost (Quicksand "Abbie dog" at 5 mm: 5 loose threads in 28 mm)
+  else if (chain && print) comps = order(edges, 0, (5.5 + (satinW ? satinW / 2 + 0.3 : 0)) / s, true);
   // Strokes round a counter are narrowed so it stays open (`counterCaps`; not when satin is asked for: "Make it bold"
   // says small loops may fill). The fourth entry is that stroke's column, or 0 for the word's.
   const caps = style === "satin" || !satinW ? new Map() : notchCaps(notches, s, satinW, counterCaps(counters, s, satinW));
@@ -439,7 +448,7 @@ function densify(p, step) {
 function stitchLetters(parts, satinW, fab = "cotton", small = false) {
   const zz = fab === "knit" ? 1.5 : 2.5, pull = fab === "knit" ? 0.3 : 0;
   const density = wt === "auto" ? (fab === "knit" ? 0.42 : small ? 0.34 : 0.38) : THREADS[wt].satin + (fab === "knit" ? 0.04 : 0);
-  let gap = false;   // (a skipped stroke hands its jump on to the next one sewn)
+  let gap = false, last = null;   // (a skipped stroke hands its jump on to the next one sewn)
   if (!satinW) parts = pointed(parts);
   return parts.map(([p0, mode, g, cap, taper, ends, sides]) => {
     // (a corner is narrowed to the ink, and stops where that's under the narrowest column: not on a towel, which
@@ -454,6 +463,11 @@ function stitchLetters(parts, satinW, fab = "cotton", small = false) {
     if (gap && r.length) { r.gap = true; gap = false; }
     // (a run satined back over: a lock at its start goes 1 mm in along the stroke, under that satin; never past halfway)
     if (mode === "run" && satinW && r.length > 2) r.lockAt = along(p, Math.min(1, length(p) / 2));
+    // (a run out from the node the last column came back to: the needle is on that column, at most half of it from
+    // the centre line, and stitches to it under the column rather than jumping: from WIDE columns' edges it was over
+    // 2 mm, a trim and locks at each junction)
+    const from = last; last = p0[p0.length - 1];
+    if (mode === "run" && satinW && r.length && !r.gap && from && Math.hypot(p0[0][0] - from[0], p0[0][1] - from[1]) < 1e-6) r.reach = (satinW + 0.3 + pull) / 2 + 0.1;
     return r;
   });
   function sewPart(p, mode, satinW, wAt = null, self = p, en = null) {
@@ -657,7 +671,10 @@ function spaced(p, min = 0.4) {
 function bulk(p) {
   if (p.kind !== "text" && p.kind !== "monogram") return null;
   const chars = initials(p.letters);
-  return p.kind === "text" ? letters(p.text, p.font, p.size, p.style, 0, null, false) : letters(chars[1] || p.letters, p.font, chars.length === 3 ? p.size * 0.68 : p.size, p.style, 0, null, false);
+  if (p.kind === "text") return letters(p.text, p.font, p.size, p.style, 0, null, false);
+  // (a letter with a tail is sewn bigger: `initialSizes`)
+  const { sizes } = initialSizes(chars.slice(0, 3), p.font, p.size), at = chars.length > 1 ? sizes[1] : sizes[0] ?? p.size;
+  return letters(chars[1] || p.letters, p.font, chars.length === 3 ? at * 0.68 : at, p.style, 0, null, false);
 }
 
 // whether bulk(p) is worked out already: a long text drawn again as one line takes a while (0.3-0.7 s for three
@@ -721,7 +738,7 @@ export function loopsFill(p) {
 // A monogram's size where every initial passes `test` (each sewn at its own size, as `monogram` sews it): the middle
 // letter alone was measured, so RMK's M said nothing while the R's bowl filled in on a towel. 0 when they all pass.
 function eachInitial(p, test) {
-  const chars = initials(p.letters).slice(0, 3), f = (i) => (chars.length === 3 && i !== 1 ? 0.68 : 1);
+  const chars = initials(p.letters).slice(0, 3), { sizes } = initialSizes(chars, p.font, 1), f = (i) => sizes[i];
   return chars.reduce((need, c, i) => {
     const n = test({ kind: "text", text: c, font: p.font, size: p.size * f(i), style: p.style, shape: "straight" });
     return n ? Math.max(need, n > 150 ? n : Math.ceil(n / f(i))) : need;
@@ -904,11 +921,11 @@ function textRows(p, fab = "cotton") {
   if (!lines.length) return [];
   const kerns = kept.map(([l, s]) => Array.from({ length: l.length }, (_, i) => (print && p.kern?.[s + i]) || 0).map((v) => v / 100));
   const joined = kerns.flatMap((k, i) => (i ? [0, ...k] : k));   // (lines joined by a space: none after it)
-  if (p.shape === "up" || p.shape === "down") return unbent((chain) => {
+  if (p.shape === "up" || p.shape === "down") return unbent(print, (chain) => {
     const l = letters(lines.join(" "), p.font, p.size, style, sp, joined, chain);
     return l.parts.length ? [{ parts: bend(l.parts, p.shape, Math.max(p.radius, 8), Math.max(p.ry ?? p.radius, 8)), satinW: l.satinW, xh: l.xh }] : [];
   });
-  if (p.shape === "wave" || p.shape === "bridge") return unbent((chain) => {
+  if (p.shape === "wave" || p.shape === "bridge") return unbent(print, (chain) => {
     const l = letters(lines.join(" "), p.font, p.size, style, sp, joined, chain);
     if (!l.parts.length) return [];
     const mid = (l.top + l.bottom) / 2;   // (letters come with the baseline at y = 0)
@@ -936,13 +953,14 @@ function textRows(p, fab = "cotton") {
 // Bent lettering with its pieces chained (`letters` chain) unless that costs more moves once bent (`moveCost`): the
 // chaining reckons gaps before the bend, and an arch or wave stretches them (a 2 mm gap in a waved "Happy Birthday"
 // came out a loose thread).
-function unbent(make) {
+// (print: every move is a trim or, up to 5 mm, a loose thread, however short)
+function unbent(print, make) {
   const cost = (rows) => rows.reduce((c, { parts, satinW }) => {
     for (let i = 1; i < parts.length; i++) {
       const a = parts[i - 1][0], b = parts[i][0];
       if (!a.length || !b.length) continue;
       const d = Math.hypot(b[0][0] - a[a.length - 1][0], b[0][1] - a[a.length - 1][1]);
-      if (d > 0.01) c += moveCost(d + 0.25 + (satinW ? satinW / 2 + 0.3 : 0));
+      if (d > 0.01) c += print ? (d + (satinW ? satinW / 2 + 0.3 : 0) <= 5 ? 1.5 : 1) : moveCost(d + 0.25 + (satinW ? satinW / 2 + 0.3 : 0));
     }
     return c;
   }, 0);
@@ -1470,12 +1488,32 @@ export function previewLook(steps) {
 
 export const pieceStitches = (p) => pieceStages(p).flatMap((st) => st.paths);
 
+// A monogram initial's tail: a lowercase letter with a descender (g j p q y, script f and z) is sized by its x-height,
+// as the others are by their height, so its tail hangs below the shared baseline and a j's dot stands above (sized
+// by its whole height and centred, the Pocket monogram's "jKm" sewed the j as a short stub floating above the m's
+// baseline). { k: sewn size over the letter's size, up: its top above the baseline, down: its tail below, both in
+// x-heights }, or null. Capitals keep their whole height (a script J's loop is the letter).
+function hangs(c, font) {
+  if (c === c.toUpperCase() || c !== c.toLowerCase()) return null;
+  const l = letters(c, font, 10);
+  return l.parts.length && l.xh && l.bottom > 0.12 * l.xh ? { k: 10 / l.xh, up: -l.top / l.xh, down: l.bottom / l.xh } : null;
+}
+// The size each initial is sewn at (three letters: small, BIG, small) and its `hangs`. Long tails (a script g's loop
+// is longer than the letter) would make the monogram far taller than asked: then every letter shrinks alike so it's
+// at most a quarter taller than its size (Sacramento "gp" at 20 mm was 45 mm tall), keeping the shared baseline.
+function initialSizes(chars, font, size) {
+  const h = chars.map((c) => hangs(c, font)), n = chars.length === 3 ? [0.68, 1, 0.68] : chars.map(() => 1);
+  // (bodies centred on the middle: each letter's top and bottom from there)
+  const top = Math.max(...n.map((v, i) => v * ((h[i] ? h[i].up : 1) - 0.5))), bottom = Math.max(...n.map((v, i) => v * (0.5 + (h[i] ? h[i].down : 0))));
+  const f = Math.min(1, 1.25 / (top + bottom));
+  return { h, base: n.map((v) => v * f * size), sizes: n.map((v, i) => v * f * (h[i] ? h[i].k : 1) * size) };
+}
+
 function monogram(p, fab = "cotton") {
   const chars = initials(p.letters).slice(0, 3);
   if (!chars.length) return [];
   // three letters sit close (the big middle one carries the shape); one or two need air between them
-  const big = p.size, small = p.size * 0.68, gap = p.size * (chars.length === 3 ? 0.04 : 0.14);
-  const sizes = chars.length === 3 ? [small, big, small] : chars.map(() => big);
+  const gap = p.size * (chars.length === 3 ? 0.04 : 0.14), { h, base, sizes } = initialSizes(chars, p.font, p.size);
   const ls = chars.map((c, i) => letters(c, p.font, sizes[i], styleOn(p, fab)));
   const widths = ls.map((l) => { const xs = l.parts.flatMap(([q]) => q.map((v) => v[0])); return xs.length ? maxOf(xs) - minOf(xs) : 0; });
   // Print letters are spaced by what's sewn: their satins reach half a column past the centre lines the widths are
@@ -1483,7 +1521,9 @@ function monogram(p, fab = "cotton") {
   // its stitches, band by band (0.5 mm tall, each checked against its neighbours too), clear the last one's by the gap
   // plus a thread's width. Script monograms too: spaced by the widths of their centre lines, a script capital's swash
   // or loop left gaps of every size (Great Vibes BTL: the L far off to the right, AGM run together).
-  const sewn = ls.map((l) => lettersOn(l.parts.map(([q, ...r]) => [q.map(([a, b]) => [a, b - (l.top + l.bottom) / 2]), ...r]), l.satinW, fab, l.xh));
+  // (each letter centred up and down on what stands above its baseline: a descender hangs below, so small letters
+  // share a baseline whatever their tails)
+  const sewn = ls.map((l, i) => lettersOn(l.parts.map(([q, ...r]) => [q.map(([a, b]) => [a, h[i] ? b + base[i] / 2 : b - (l.top + l.bottom) / 2]), ...r]), l.satinW, fab, l.xh));
   const prof = sewn.map((paths) => { const m = new Map(); for (const [a, b] of paths.flat()) { const k = Math.floor(b / 0.5), v = m.get(k); m.set(k, v ? [Math.min(v[0], a), Math.max(v[1], a)] : [a, a]); } return m; });
   const at = [0];
   for (let i = 1; i < sewn.length; i++) {
@@ -1492,7 +1532,9 @@ function monogram(p, fab = "cotton") {
     at.push(at[i - 1] + (need === -Infinity ? widths[i - 1] : need) + gap + 0.4);
   }
   const xs = sewn.flatMap((paths, i) => paths.flat().map(([a]) => a + at[i])), c = (minOf(xs) + maxOf(xs)) / 2;
-  return sewn.flatMap((paths, i) => paths.map((q) => moved(q, ([a, b]) => [a + at[i] - c, b])));
+  // (with a tail hanging, the whole monogram is centred up and down too, so it sits in its frame as measured)
+  const ys = h.some(Boolean) ? sewn.flat(2).map(([, b]) => b) : [0], m = (minOf(ys) + maxOf(ys)) / 2;
+  return sewn.flatMap((paths, i) => paths.map((q) => moved(q, ([a, b]) => [a + at[i] - c, b - m])));
 }
 
 export function pieceBounds(p) {
