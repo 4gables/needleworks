@@ -33,6 +33,10 @@ if has '^js/(core/|studio/(pieces|outline|quilt|motifs)|doctor|worker|quilt-work
   done
   $PY -I tests/pe900_check.py $OUT/batch/*.pes > $OUT/check.txt 2>&1 || fail=1
   say "pe900_check ok $(grep -c '^ok' $OUT/check.txt) of $(ls $OUT/batch/*.pes | wc -l)"; grep '^FAIL' $OUT/check.txt | head -5
+  # the scoreboard (docs/roadmap.md): each kind of design's trims, loose threads, wasted moves, exposed locks, tiny
+  # stitches and files at the density limit, with the change from the last release's (tests/fixtures/quality.json;
+  # save a new one with --save= when a release moves it)
+  say "== scoreboard (change from tests/fixtures/quality.json in brackets)"; to 300 node tests/flow_lint.mjs --score --against=tests/fixtures/quality.json $OUT/batch
   [[ -n $BASE ]] && say "compare: changed files vs $BASE" && for f in $BASE/*.pes; do cmp -s $f $OUT/batch/${f:t} || say "  changed ${f:t}"; done | tail -40
   # (picture_corpus.sh starts and stops its own browser on the port it's given: not ours)
   has '^js/core/digitize' && run picture_corpus 600 zsh tests/picture_corpus.sh $((CDP+3)) $HP $OUT/pc
