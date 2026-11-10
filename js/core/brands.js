@@ -47,24 +47,50 @@ export function spools(brand, text) {
   return [...new Set((text || "").split(/[\s,;]+/).map((t) => byNum.get(t.replace(/^0+/, ""))).filter(Boolean))];
 }
 
-// nearest spool to hex: among `owned` numbers if given (and any match), else the whole chart
-export function nearestSpool(brand, hex, owned = null) {
+// `far`: two colours that aren't the same to the eye (CIELAB `a`, `b`, ΔE between them `dE`). Far off overall, or off in
+// colour rather than lightness (a/b apart: white came out as "your Brother 017 Light Blue", dE 21, with no warning,
+// while a darker or lighter shade of one colour still reads as that colour)
+// Two pale tints leaning opposite ways read as different colours sooner: Flesh Pink (#fadade, a 12 chroma pink) as
+// "your Isacord 0015 White" (a bluish white, hue 90° round from it) was ab 14.7, just under 15, with no warning
+function far([, A, B], [, a, b], dE) {
+  const ab = Math.hypot(a - A, b - B), c1 = Math.hypot(A, B), c2 = Math.hypot(a, b), C = Math.max(c1, c2);
+  const turn = c1 >= 5 && c2 >= 5 && Math.acos(Math.max(-1, Math.min(1, (A * a + B * b) / (c1 * c2)))) > Math.PI / 3;
+  return dE > 25 || ab > Math.max(15, 0.25 * C) || (turn && ab > 10);
+}
+// two colours that read as different colours (an owned navy spool sewn where the machine says Olive Green)
+export function apart(hexA, hexB) {
+  const p = lab(hexToRgb(hexA)), q = lab(hexToRgb(hexB));
+  return far(p, q, Math.hypot(p[0] - q[0], p[1] - q[1], p[2] - q[2]));
+}
+
+// a colour in one plain word or two ("pink", "dark green"), for a spool of theirs with no number typed
+export function colourWord(hex) {
+  const [L, a, b] = lab(hexToRgb(hex)), C = Math.hypot(a, b), h = ((Math.atan2(b, a) * 180) / Math.PI + 360) % 360;
+  if (C < 10) return L > 90 ? "white" : L < 22 ? "black" : L > 65 ? "light grey" : L < 40 ? "dark grey" : "grey";
+  const word = h < 15 || h >= 340 ? (L > 60 ? "pink" : "deep pink") : h < 50 ? (L > 65 ? "pink" : "red") : h < 75 ? (L < 55 ? "brown" : "orange")
+    : h < 100 ? (L < 55 ? "brown" : L > 75 ? "cream" : "gold") : h < 115 ? (L < 50 ? "olive" : "yellow") : h < 165 ? "green" : h < 215 ? "teal"
+    : h < 308 ? "blue" : "purple";
+  return (L < 35 && !["brown", "olive", "deep pink"].includes(word) ? "dark " : L > 80 && !["pink", "cream", "yellow"].includes(word) ? "light " : "") + word;
+}
+
+// a spool of theirs from a brand not charted here (Madeira), as they described it: { brand, num, hex } -> a spool
+export function ownSpoolOf(o) {
+  const label = `${o.brand}${o.num ? ` ${o.num}` : ` (${colourWord(o.hex)})`}`;
+  return { hex: o.hex, num: o.num || "", name: "", lab: lab(hexToRgb(o.hex)), label, own: true, ownBrand: o.brand };
+}
+
+// nearest spool to hex: among `owned` numbers and `extra` spools of theirs from other brands ({ brand, num, hex }) if
+// given (and any match), else the whole chart
+export function nearestSpool(brand, hex, owned = null, extra = null) {
   let c = chart(brand); if (!c) return null;
-  if (owned?.length) { const o = new Set(owned); const mine = c.filter((s) => o.has(s.num)); if (mine.length) c = mine; }
+  const mine = [...(owned?.length ? c.filter(((o) => (s) => o.has(s.num))(new Set(owned))) : []), ...(extra || []).map(ownSpoolOf)];
+  if (mine.length) c = mine;
   const [L, A, B] = lab(hexToRgb(hex));
   let best = null, bd = Infinity;
   for (const s of c) { const d = (s.lab[0] - L) ** 2 + (s.lab[1] - A) ** 2 + (s.lab[2] - B) ** 2; if (d < bd) { bd = d; best = s; } }
   if (!best) return null;
-  // `far`: not the same colour to the eye. Far off overall, or off in colour rather than lightness (a/b apart: white
-  // came out as "your Brother 017 Light Blue", dE 21, with no warning, while a darker or lighter shade of one colour
-  // still reads as that colour)
-  // Two pale tints leaning opposite ways read as different colours sooner: Flesh Pink (#fadade, a 12 chroma pink) as
-  // "your Isacord 0015 White" (a bluish white, hue 90° round from it) was ab 14.7, just under 15, with no warning
-  const ab = Math.hypot(best.lab[1] - A, best.lab[2] - B), C = Math.max(Math.hypot(A, B), Math.hypot(best.lab[1], best.lab[2]));
-  const c1 = Math.hypot(A, B), c2 = Math.hypot(best.lab[1], best.lab[2]);
-  const turn = c1 >= 5 && c2 >= 5 && Math.acos(Math.max(-1, Math.min(1, (A * best.lab[1] + B * best.lab[2]) / (c1 * c2)))) > Math.PI / 3;
-  const far = Math.sqrt(bd) > 25 || ab > Math.max(15, 0.25 * C) || (turn && ab > 10);
-  return { ...best, dE: Math.sqrt(bd), far, brand: BRANDS[brand], label: `${BRANDS[brand]} ${best.num}${best.name ? ` ${best.name}` : ""}` };
+  return { ...best, dE: Math.sqrt(bd), far: far([L, A, B], best.lab, Math.sqrt(bd)), brand: best.ownBrand || BRANDS[brand],
+    label: best.label || `${BRANDS[brand]} ${best.num}${best.name ? ` ${best.name}` : ""}` };
 }
 
 // the n spools nearest a colour (by eye, CIELAB), nearest first: "Threads I own" matching a spool from a brand that isn't

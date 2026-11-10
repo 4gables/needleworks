@@ -298,6 +298,13 @@
     <input type="search" id="spools-find" placeholder="Find a spool number or colour name" aria-label="Find a spool" autocomplete="off" spellcheck="false">
     <p class="hint" id="spools-none" hidden></p>
     <p class="hint spools-other" id="spools-other"><span>Another brand (Madeira, Gunold…)? Hold a spool by the screen and pick its colour:</span> <input type="color" id="spools-colour" value="#7f3fbf" aria-label="Your spool's colour"> <button type="button" class="link" id="spools-all" hidden>Show every spool</button></p>
+    <div class="spools-own" id="spools-own" hidden role="group" aria-labelledby="spools-own-head">
+      <p class="hint" id="spools-own-head">Add it as your own spool (the machine sews it as the nearest of its threads):</p>
+      <input type="text" id="own-brand" placeholder="Brand, e.g. Madeira" aria-label="Your spool's brand" autocomplete="off" maxlength="30">
+      <input type="text" id="own-num" placeholder="Number, if any" aria-label="Your spool's number" autocomplete="off" maxlength="20">
+      <button type="button" class="ghost" id="own-add">Add my spool</button>
+      <p class="hint" id="own-hint"></p>
+    </div>
     <div id="spools-grid" class="spool-grid" role="group" aria-label="Spools" aria-describedby="spools-grid-keys"></div>
     <span class="sr" id="spools-grid-keys">Arrow keys go between the spools; Space or Enter ticks one.</span>
     <p class="hint" id="spools-note"></p>

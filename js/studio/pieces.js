@@ -1905,8 +1905,10 @@ const ascii = latin;
 
 // (`ready` is what "Have ready" lists and `tip` what "Sewing on" says: one place per fabric, so they agree)
 // (`hoop` starts step 1, `after` is "When it's done": knit said "tear or cut away" though cut-away must be trimmed)
+// (`item`: what to do when it's sewn on something already made, a pillowcase or a tote: said only when the design
+// doesn't say what it's sewn on, as a starter's own tip does: the quilt label's sew sheet said "On a pillowcase or bag…")
 export const FABRICS = {
-  cotton: { name: "Cotton", ready: "Tear-away stabilizer.", tip: "On woven cotton, hoop it with tear-away stabilizer underneath. On a pillowcase or bag, hoop only the front layer (turn it inside out) so it isn't sewn shut.",
+  cotton: { name: "Cotton", ready: "Tear-away stabilizer.", tip: "On woven cotton, hoop it with tear-away stabilizer underneath.", item: "On a pillowcase or bag, hoop only the front layer (turn it inside out) so it isn't sewn shut.",
     hoop: "Hoop the fabric with tear-away stabilizer under it", after: "Take the hoop off, snip any loose threads and tear the stabilizer away gently, holding the stitches down with your thumb." },
   knit: { name: "Knit / T-shirt", ready: "Cut-away stabilizer (fusible no-show mesh is easiest) and a 75/11 ballpoint needle; on piqué or other textured knits, a water-soluble topper too.", tip: "Knits stretch: hoop them with cut-away stabilizer (fusible no-show mesh is easiest) and use a 75/11 ballpoint needle. Don't stretch the fabric while hooping.",
     hoop: "Hoop the knit with the cut-away stabilizer under it, without stretching it", after: "Take the hoop off and snip any loose threads. Trim the cut-away stabilizer on the back about ¼ in from the stitching, rounding the corners. Don't tear it: it stops the design stretching out of shape in the wash." },
@@ -1917,7 +1919,7 @@ export const FABRICS = {
     hoop: "Hoop the felt with tear-away stabilizer under it", after: "Take the hoop off, snip any loose threads and tear the stabilizer away gently." },
   denim: { name: "Denim", ready: "Cut-away stabilizer (heavy tear-away will do on denim that's rarely washed) and a 75/11 sharp or 80/12 needle (90/14 for heavy denim).", tip: "On denim use a 75/11 sharp or 80/12 needle (90/14 only for heavy denim) and cut-away stabilizer (heavy tear-away will do on denim that's rarely washed).",
     hoop: "Hoop the denim with the stabilizer under it", after: "Take the hoop off and snip any loose threads. Cut-away stabilizer: trim it ¼ in from the stitching (don't tear it). Heavy tear-away: tear it off gently." },
-  canvas: { name: "Canvas / tote", ready: "Medium tear-away stabilizer (cut-away if it'll be washed a lot) and a 90/14 sharp needle.", tip: "Canvas is firm: medium tear-away stabilizer underneath (cut-away if it'll be washed a lot) and a 90/14 sharp needle. On a tote, hoop only the front layer (turn it inside out).",
+  canvas: { name: "Canvas / tote", ready: "Medium tear-away stabilizer (cut-away if it'll be washed a lot) and a 90/14 sharp needle.", tip: "Canvas is firm: medium tear-away stabilizer underneath (cut-away if it'll be washed a lot) and a 90/14 sharp needle.", item: "On a tote, hoop only the front layer (turn it inside out).",
     hoop: "Hoop the canvas (on a tote, only the front layer) with the stabilizer under it", after: "Take the hoop off, snip any loose threads and tear the stabilizer away gently (cut-away: trim it ¼ in from the stitching)." },
 };
 
@@ -2421,7 +2423,7 @@ function build(pieces, hoop, opts) {
   const first = order[0], hoopIt = first?.bare ? "Hoop tear-away stabilizer on its own (no fabric yet)" : first?.patch ? "Hoop the felt or twill with the stabilizer under it"
     : order.some((s) => s.sandwich) ? "Hoop the quilt sandwich (or float it on hooped tear-away stabilizer)" : FABRICS[fab].hoop;
   // (`bare`: nothing but stabilizer is hooped, so a turned hoop's note says where the fabric's top goes, not "Hoop the fabric")
-  const done = { design: d, steps, after, before, hoop: hoopIt, bare: !!first?.bare, tip: FABRICS[fab].tip };
+  const done = { design: d, steps, after, before, hoop: hoopIt, bare: !!first?.bare, tip: [FABRICS[fab].tip, FABRICS[fab].item].filter(Boolean).join(" ") };
   if (over) throw Object.assign(over, { composed: opts.baste ? null : done });
   return done;
 }
