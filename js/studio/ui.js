@@ -4,10 +4,10 @@ import { APPLIQUE_FONTS, FONTS, loadFont } from "../core/fonts.js";
 import { MAX_INITIALS, MAX_WORDS, initials, lackList, lacks, swashes, tidy, tidyField, unswashed, withSwash } from "../core/typed.js";
 import { nearestBrotherThread } from "../core/threads.js";
 import { designStats, machineThreads, readEmbroidery } from "../core/formats.js";
-import { BLOCK, LOOK, TIP, problemsItems, shownOn, stopWords } from "../words.js";
+import { BLOCK, LOOK, TIP, explained, inchFirst, inches, problemsItems, shownOn, stopWords } from "../words.js";
 import { FILL_PATTERNS } from "../core/digitize.js";
 import { draw } from "../render.js";
-import { TURN_PIC, turnedNote, youHtml } from "../sheet.js";
+import { THREADING, TURN_PIC, pickIt, turnedNote, youHtml } from "../sheet.js";
 import { QUILTS, quiltOf } from "./quilt.js";
 import { MOTIFS } from "./motifs.js";
 import { quiltDone, scaledFit, BORDERS, FABRICS, THREADS, SHAPES, TEXT_SHAPES, splitPieces, archFit, archStart, frontPanel, inkHeight, monoSize, archRoom, archShrink, archTight, cleanPiece, clearSize, collision, collisions, inFrame, letterMetrics, underPatch, crossName, crossStep, layoutSize, touching, touchingAll, towelMin, fineLine, loopsFill, compose, fileBlocks, blocksPattern, scaleBlocks, FILE_SCALE, fittedSizes, followFrame, label, minSize, pieceBounds, pieceStitches, previewLook, smallText, bulkReady } from "./pieces.js";
@@ -74,7 +74,13 @@ export const STARTERS = [
   { id: "bib", name: "Baby bib", note: "a name over a little heart", make: () => [
     frame({ shape: "heart", w: 46, h: 42, border: "applique", y: 14, color: PINK }),
     text({ text: "Ashley", font: BOLD, size: 15, shape: "up", radius: 32, y: 14, color: NAVY })],   // (30 ran into the heart's dip)
-    tip: "Hoop sticky (self-adhesive) tear-away stabilizer, score and peel its paper, and press the bib onto it (or float it on plain tear-away with spray adhesive). On terry, lay a water-soluble topper over it so the stitches don't sink." },
+    // (a made bib can't be hooped: `float` is how step 1, Have ready and When it's done say it's done, whatever the
+    // fabric; the tip said "press the bib onto sticky stabilizer" while step 1 said "Hoop the towel or fleece")
+    float: { hoop: "Hoop sticky (self-adhesive) tear-away stabilizer on its own, paper side up. Score the paper inside the hoop, peel it off and press the bib onto the sticky side, smooth, where the design goes",
+      ready: "Sticky (self-adhesive) tear-away stabilizer: a bib can't be hooped, so it's stuck on top of the hooped stabilizer.",
+      after: "Take the hoop off, peel the bib off the stabilizer and snip any loose threads. Tear the stabilizer left on the back away gently.",
+      fabric: "The bib is stuck onto sticky stabilizer, not hooped (see step 1)." },
+    tip: "A bib is already made, so it isn't hooped: step 1 floats it on sticky stabilizer. On a terry bib, pick Towel / fleece under Sewing on." },
   { id: "towel", name: "Towel name", note: "a big name that stands up to terry", make: () => [text({ text: "Ashley", font: BOLD, size: 32, style: "satin" })], fabric: "towel", baste: true, turn: true },
   { id: "ornament", name: "Ornament", note: "two-sided, sewn in the hoop", make: () => [
     frame({ shape: "circle", w: 80, h: 80, border: "ith", hang: true, color: RED }),
@@ -190,6 +196,8 @@ export function initStudio(api) {
   // what the design is called (the starter it began as, or the saved file it came from), for the names ZIP
   let from = typeof saved?.from === "string" ? saved.from : "";
 
+  // the starter's own way of hooping, for a project that can't be hooped (a made bib: `float`)
+  const floated = () => STARTERS.find((s) => s.name === from)?.float;
   const save = () => api.store.set("studio", { pieces, sel, fabric, baste, thread, fitted, two, from });
   // undo: a snapshot before each change (a burst of slider moves counts as one), with the hoop's turn (a turned design
   // undone to unturned said Too big)
@@ -493,7 +501,10 @@ export function initStudio(api) {
   }
   function lettered() { return pieces.some((p) => p.kind === "text" || p.kind === "monogram"); }
   function fabricTip() {
-    const base = ownBase(); if (!base) return FABRICS[fabric].tip;
+    const base = ownBase();
+    // (a floated project isn't hooped: the fabric's own "hoop it with…" said otherwise)
+    if (!base && floated()) return `${floated().fabric}${fabric === "towel" ? " On terry, the letters are sewn bold on a light base that flattens the loops, under a water-soluble topper (see Have ready)." : ""}`;
+    if (!base) return FABRICS[fabric].tip;
     const what = [(fabric === "knit" || fabric === "towel") && lettered() ? "the lettering" : "", fabric === "knit" && pieces.some((p) => p.kind === "frame" && p.border === "patch") ? "the patch's fill" : ""].filter(Boolean);
     return what.length ? `${base}, so ${FABRICS[fabric].name} only changes how ${what.join(" and ")} ${what.length > 1 ? "are" : "is"} sewn${fabric === "towel" ? " (bold, on a light base)" : " (to suit a knit)"}.`
       : `${base}, so the fabric chosen here doesn't change the stitches.`;
@@ -928,7 +939,7 @@ export function initStudio(api) {
       stepsUI(steps, done, small, ready);
       const look = previewLook(steps);
       const notes = [turnText(), $("st-tip").hidden ? "" : $("st-tip").textContent, fabricTip(), threadTip(small)];
-      api.setView(design.pattern(), `${api.safeName(firstWords(), "design")}.pes`, {
+      api.setView(design.pattern(), fileName(), {
         ...look, problems, fixHint: fixHint(),
         block: resizing ? `Re-stitching ${resizing.name} at ${Math.round(resizing.scale * 100)} %…` : quilting ? "Working out the quilting…" : "",
         blockLabel: resizing ? "Re-stitching…" : quilting ? "Quilting…" : "",
@@ -1067,18 +1078,29 @@ export function initStudio(api) {
     const own = (list) => !(fabric === "towel" && lettered()) && list.some((b) => /stabilizer/i.test(b));
     // (Have ready names each thread as the steps do: the file's palette, `threadNames`)
     const named = threadNames(sameSpool(steps));
-    const ready = [own(before) ? "" : FABRICS[fabric].ready, ...before,
-      appliqued() ? `A piece of fabric for each appliqué shape, 1 in bigger than its outline${steps.some((st) => st.cut) ? " (or cut to shape with the Cutter file, then there's nothing to trim)" : ""}, and small curved scissors (iron-on fusible web on the back stops cotton fraying).` : "",
+    const fl = floated(), towel = fabric === "towel";
+    const ready = [own(before) ? "" : fl ? fl.ready : FABRICS[fabric].ready, fl && towel ? "A water-soluble topper (like Solvy) for on top of the terry." : "", ...before,
+      appliqued() ? `A piece of fabric for each appliqué shape, ${inchFirst(25.4)} bigger than its outline${steps.some((st) => st.cut) ? " (or cut to shape with the Cutter file, then there's nothing to trim)" : ""}, and small curved scissors (iron-on fusible web on the back stops cotton fraying).` : "",
       api.threadList(named.map((st) => st.color), (hex) => named.find((st) => st.color === hex)?.machine || nearestBrotherThread(hex).name)].filter(Boolean),
-      done = [own(after) ? "" : FABRICS[fabric].after, ...after].filter(Boolean);
-    return { design, steps: firstStep(named, hoop), done, ready, small, later };
+      done = [own(after) ? "" : fl ? fl.after + (towel ? " Tear the topper away (a damp cloth melts the bits left in the letters)." : "") : FABRICS[fabric].after, ...after].filter(Boolean);
+    return { design, ...explainAll(ready, firstStep(named, hoop, fileName()), done), small, later };
   }
   // step 1 says what to do too: hoop it, put the thread on, Start (a one-step design said only "Sews “Leo”."), one
   // sentence each so they show as numbered sub-steps (a towel's hoop, topper, thread and Start ran together as one)
-  function firstStep(steps, hoop) {
+  // Have ready, the steps and When it's done with each sewing word explained where it's first used (words.js `explained`)
+  function explainAll(ready, steps, done) {
+    const all = explained([...ready, ...steps.map((st) => st.you), ...done]), n = ready.length;
+    return { ready: all.slice(0, n), steps: steps.map((st, i) => ({ ...st, you: all[n + i] })), done: all.slice(n + steps.length) };
+  }
+  // How the starter's project is hooped when it can't be (`floated`), in place of the fabric's way; never over a
+  // project's own (in-the-hoop, a patch, a quilt sandwich)
+  const hoopAs = (hoop) => { const fl = floated(); return fl && hoop === FABRICS[fabric].hoop ? (fabric === "towel" ? `${fl.hoop}. Lay the water-soluble topper on top` : fl.hoop) : hoop; };
+  // (and starts at the machine: the file picked from the USB stick, and where threading is shown, `pickIt`)
+  function firstStep(steps, hoop, file) {
+    hoop = hoopAs(hoop);
     if (!steps.length || !hoop) return steps;
     const h = `${hoop}.`.replace(/\.\.$/, "."), t = steps[0].thread;
-    return [{ ...steps[0], you: `${h} Put on ${t}. ${steps[0].you || "Press Start."}` }, ...steps.slice(1)];
+    return [{ ...steps[0], you: `${pickIt(file)} ${h} Put on ${t}. ${THREADING} ${steps[0].you || "Press Start."}` }, ...steps.slice(1)];
   }
   // the name the machine will show for `hex` if the piece's colour `was` became it: the file's palette gives each colour
   // its nearest Brother thread no earlier colour took (machineThreads), so a colour may get its second-nearest. The
@@ -1159,7 +1181,7 @@ export function initStudio(api) {
         const { steps, done, ready, small } = stepsOf(composed);
         stepsUI(steps, done, small, ready, "These are the steps for the design as it is now. It doesn't fit the hoop yet: they apply once it does.");
         for (const b of $("st-steps").querySelectorAll("[data-step]")) b.disabled = true;
-        api.setView(big.pattern(), `${api.safeName(firstWords(), "design")}.pes`, { fabric: "linen", steps: 0, problems, fixHint: fixHint() });
+        api.setView(big.pattern(), fileName(), { fabric: "linen", steps: 0, problems, fixHint: fixHint() });
       } catch { api.setView(null); }
       // (said over the preview and again under the piece's own controls: on a phone a size slider pushed past the hoop
       // showed nothing near it, the message was a screen up. Fit to hoop runs in place: clicking the Pieces box's button
@@ -1192,17 +1214,17 @@ export function initStudio(api) {
     const [c1, c2] = built.map(mid), m = parts[1].marks[0], onMachine = ([x, y]) => (api.turned() ? [-y, x] : [x, y]);
     const [sx, sy] = onMachine([c1[0] - c2[0], c1[1] - c2[1]]), [ox, oy] = onMachine([m[0] - c2[0], m[1] - c2[1]]), across = Math.abs(sx) >= Math.abs(sy);
     const side = (v) => (across ? (v < 0 ? "left" : "right") : v < 0 ? "top" : "bottom"), dist = Math.hypot(sx, sy), off = across ? ox : oy;
-    const inch = (mm) => (mm / 25.4).toFixed(1), from = across ? `${side(off)} of` : off < 0 ? "above" : "below";
+    const inch = (mm) => inches(mm), from = across ? `${side(off)} of` : off < 0 ? "above" : "below";
     const move = `Hoop the fabric again with fresh stabilizer under it, slid about ${dist.toFixed(0)} mm (${inch(dist)} in) toward the ${side(across ? sx : sy)} of the hoop from where it was, as straight as you can. The crosses from the first hooping should sit ${Math.abs(off) < 3 ? "on the hoop's centre line" : `about ${Math.abs(off).toFixed(0)} mm (${inch(Math.abs(off))} in) ${from} the hoop's centre`} (the hoop's grid sheet helps).`;
-    const b1 = built[0].steps, s2 = built[1].steps[0], change = s2.color !== b1[b1.length - 1].color ? "Change to the next thread. " : "";
+    const b1 = built[0].steps, s2 = built[1].steps[0], change = s2.color !== b1[b1.length - 1].color ? "Change to the next thread. " : "Keep the same thread on. ";
     built[1].steps[0] = { ...s2, you: change + crossStep({ pts: parts[1].marks, which: which(parts[1]), move }) };
     // the whole design for the preview (a big pretend hoop) with the crosses the files sew, and every step of both
     // hoopings in order, the rehooping between them (not a step: the machine doesn't stop for it, so it's no pause)
     const all = compose(pieces, { ...hoop, w: 2000, h: 2000 }, { ...opts, marks: { pts: parts[0].marks, end: true } });
-    const steps = firstStep(threadNames(sameSpool([...built[0].steps, { rehoop: true, title: `Second hooping: ${built[1].filename}`, you: `When ${built[0].filename} is done, take the hoop off the machine and the fabric out of the hoop. Leave the crosses in: the second file lines up on them.` }, ...built[1].steps])), built[0].hoop);
+    const steps = firstStep(threadNames(sameSpool([...built[0].steps, { rehoop: true, title: `Second hooping: ${built[1].filename}`, you: `When ${built[0].filename} is done, take the hoop off the machine and the fabric out of the hoop. Leave the crosses in: the second file lines up on them. On the machine's screen, touch the USB key and pick ${built[1].filename}.` }, ...built[1].steps])), built[0].hoop, built[0].filename);
     // (what to have ready and do after, for the whole design: it listed only the first file's, without the fabric's)
-    const whole = stepsOf(all), done = [...new Set([...whole.done, ...built[1].after])];
-    stepsUI(steps, done, whole.small, whole.ready, "", built[0].filename);
+    const whole = stepsOf(all), told = explainAll(whole.ready, steps, [...new Set([...whole.done, ...built[1].after])]);
+    stepsUI(told.steps, told.done, whole.small, told.ready, "", built[0].filename);
     for (const b of $("st-steps").querySelectorAll("[data-step]")) b.disabled = true;   // (the step view follows one file)
     // each hooping's field, where the machine centres that half (mm, as the preview shows it)
     const fw = hoop.w - 4, fh = hoop.h - 4, hoopings = built.map((b) => { const [x0, y0, x1, y1] = b.design.bounds(), cx = (x0 + x1) / 2, cy = (y0 + y1) / 2; return [cx - fw / 2, cy - fh / 2, cx + fw / 2, cy + fh / 2]; });
@@ -1245,7 +1267,7 @@ export function initStudio(api) {
       const b0 = pieceBounds({ ...long, x: 0, y: 0 }), h0 = inkHeight(t, long.font), m0 = letterMetrics(t, long.font, long.size, long.style);
       // (each word at the same letter scale, its baseline and outer end where they were)
       const part = (text, end) => {
-        const size = Math.round(((long.size * inkHeight(text, long.font)) / h0) * 2) / 2, q = { ...long, id: end ? long.id : nextId, text, size, x: 0, y: 0 };
+        const size = Math.round(((long.size * inkHeight(text, long.font)) / h0) * 2) / 2, q = { ...long, id: end ? long.id : nextId, of: long.of ?? long.id, text, size, x: 0, y: 0 };
         const b = pieceBounds(q), m = letterMetrics(text, long.font, size, long.style);
         if (!b) return null;
         q.x = Math.round((long.x + (end ? b0[2] - b[2] : b0[0] - b[0])) * 2) / 2;
@@ -1322,6 +1344,7 @@ export function initStudio(api) {
   $("st-steps").closest("details").addEventListener("toggle", (e) => { if (!e.target.open) api.showStep(null); });
   // the file's name: who it's for when a line says so ("Made for Lily": the label was by_Grandma_Jean.pes, its biggest
   // line), else the biggest lettering (the name, not the quilt label's "Made for")
+  const fileName = () => `${api.safeName(firstWords(), "design")}.pes`;
   const firstWords = () => {
     const words = pieces.filter((p) => p.kind === "text" || p.kind === "letters");
     for (const p of words) for (const line of unswashed(p.text).split("\n")) {
@@ -1339,6 +1362,9 @@ export function initStudio(api) {
     const said = (p) => (p.kind === "monogram" ? p.letters : unswashed(p.text)), named = (p) => !!api.safeName(said(p), "");
     const m = pick((p) => lettered(p) && named(p)) || pick(named);
     if (!m) return from || "design";   // (else the starter: a quilt block was design.pes)
+    // lettering split into pieces (Arch up keeps the other lines straight; two hoopings split at a word gap) is named
+    // after all of it, in sewing order: "Happy / Birthday" was Birthday.pes, "Welcome to our Home" our_Home_2_hoopings.zip
+    if (m.of != null) return [...new Set(pieces.filter((q) => q.of === m.of && named(q)).map(said))].join(" ");
     // its copies, the same kind, font and size (two bookmarks made in the hoop, Lily and Noah, were Lily.pes), named
     // together in the order they sew
     const twins = pieces.filter((q) => q.kind === m.kind && q.size === m.size && q.font === m.font && (q.shape || "straight") === (m.shape || "straight") && named(q));
@@ -1617,6 +1643,9 @@ export function initStudio(api) {
         const lines = p.kind === "text" && k === "shape" && arc(p.shape) && !arc(was) ? p.text.split("\n").filter((l) => l.trim()) : [];
         if (lines.length > 1) {
           const pitch = (p.size * (p.leading ?? 130)) / 100, y0 = p.y;
+          // (both keep what they were split from, `of`: the file is named after all of it, "Happy Birthday", not
+          // the straight line alone)
+          p.of ??= p.id;
           rest = { ...p, id: nextId++, text: lines.slice(1).join("\n"), shape: "straight", y: Math.round((y0 + pitch / 2) * 2) / 2 };
           delete rest.ry; delete rest.deco; delete rest.kern;
           p.text = lines[0]; delete p.kern; p.y = Math.round((y0 - (pitch * (lines.length - 1)) / 2) * 2) / 2;

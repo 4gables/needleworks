@@ -13,13 +13,30 @@
 //  - several in the hoop: no "of everything", fabric "for each" or one piece "to cover" them;
 //  - a design with a cut file says so in Have ready and in the step that lays the fabric;
 //  - the time is stitches / 550 + 6 s a trim + half a minute a pause;
+//  - (round 10) each step's words end with Press Start: what you do once the machine has sewn (a trim after a
+//    tack-down) is said at the next stop (the mug rug said to trim before the machine had tacked anything);
+//  - each pause in the same thread says "Keep the same thread on", each new thread "Change to" (an appliqué's fabric
+//    steps named the same thread again with nothing said);
+//  - sizes: centimetres and inches of one size agree, inches in eighths (a ruler's), no "5.7 in" ("15 × 12 cm (5.7 ×
+//    4.5 in)" was 5.9 in; "½ in (1 cm)");
+//  - a stabilizer the tip or the fabric's tip names is the one Have ready and step 1 name, and Have ready never leaves
+//    the choice open ("tear-away or cut-away"): the bib's tip floated it on sticky stabilizer while step 1 hooped the
+//    towel;
+//  - step 1, and only step 1, says to pick the file from the USB stick by its name and where threading is shown; the
+//    share text says it once;
+//  - every sewing word (words.js GLOSSARY: stabilizer, topper, loose thread) used is explained once, where it's first
+//    used, and the loose-thread tooltip leads with what one is, not the machine's setting;
+//  - Sew along's preview keeps one size from step to step (it zoomed with the length of each step's words);
 // then the download dialog (turned bookmark: its note, the Cutter file line, the How to stitch it link opening the
-// steps) and Open > Add words after a felt starter (the fabric goes back to cotton).
+// steps), Open > Add words after a felt starter (the fabric goes back to cotton), and the file names of lettering split
+// into pieces (Arch up on two lines, two hoopings at a word gap): named after all of it ("Happy / Birthday" was
+// Birthday.pes, "Welcome to our Home" our_Home_2_hoopings.zip).
 // usage: node tests/cdp.mjs PORT start DIR; serve the site (tests/batch_server.py out/batch HTTP); then
 //        node tests/steps_lint.mjs PORT http://127.0.0.1:HTTP [starter,...]
 // ~3 minutes; one line per case, "DONE <cases> <problems>"; exit code 1 on any problem.
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { GLOSSARY } from "../js/words.js";
 
 const [port, base, only] = process.argv.slice(2);
 if (!port || !base) { console.log("usage: node tests/steps_lint.mjs CDP_PORT BASE_URL [starters]"); process.exit(2); }
@@ -55,9 +72,25 @@ const READ = `(async () => {
     turnNote: document.querySelector("#st-steps .turned")?.textContent || "", bare: /no fabric yet/.test(v.sheet.steps[0]?.you || ""), tip: tip.hidden ? "" : tip.textContent,
     min: +((document.getElementById("facts").textContent.match(/≈ (\\d+) min/) || [])[1]),
     stitches: n(0), trims: n(2), stops: n(5), snips: shortJumps(v.file),
-    frames: document.querySelectorAll("#st-pieces .pick").length };
+    frames: document.querySelectorAll("#st-pieces .pick").length,
+    colors: [...document.querySelectorAll("#st-steps [data-step] b i")].map((i) => i.style.background),
+    file: v.filename, share: nwTest.share(), fabricTip: v.sheet.notes?.[2] || "",
+    looseTip: [...document.querySelectorAll("#facts [data-tip]")].map((e) => e.dataset.tip).find((t) => /loose|between two parts/i.test(t)) || "" };
 })()`;
 const sentences = (t) => String(t || "").split(/(?<=[.!?])\s+/).map((x) => x.trim()).filter(Boolean);
+// one size in two units: "15 × 12 cm (5¾ × 4⅝ in)", "½ in (1.3 cm)"; the inches in eighths
+const FR = "⅛¼⅜½⅝¾⅞", inch = (t) => { const m = /^(\d*)([⅛¼⅜½⅝¾⅞]?)$/.exec(t); return m && (m[1] || m[2]) ? (+m[1] || 0) + (m[2] ? (FR.indexOf(m[2]) + 1) / 8 : 0) : NaN; };
+const IN = `\\d*[${FR}]?`, NUM = "\\d+(?:\\.\\d+)?";
+const CM_IN = new RegExp(`(${NUM})(?: × (${NUM}))? cm \\((${IN})(?: × (${IN}))? in\\)`, "g"), IN_CM = new RegExp(`(${IN}) in \\((${NUM}) cm\\)`, "g");
+function sizes(t) {
+  const bad = [], agree = (c, i, what) => { const v = inch(i); if (!(Math.abs(+c * 10 - v * 25.4) <= (+c >= 10 ? 10 : 1.6))) bad.push(`"${what}": ${c} cm isn't ${i} in`); };
+  for (const m of t.matchAll(CM_IN)) { agree(m[1], m[3], m[0]); if (m[2] && m[4]) agree(m[2], m[4], m[0]); }
+  for (const m of t.matchAll(IN_CM)) agree(m[2], m[1], m[0]);
+  for (const m of t.matchAll(/\d\.\d+\s?in\b/g)) bad.push(`"${m[0]}": inches a ruler doesn't show (eighths: ⅛ ¼ ⅜ ½ …)`);
+  return bad;
+}
+// stabilizer kinds a tip may name
+const KINDS = [[/sticky|self-adhesive/i, "sticky"], [/cut-away/i, "cut-away"], [/tear-away/i, "tear-away"], [/topper|water-soluble/i, "topper"], [/spray adhesive/i, "spray adhesive"]];
 const SIZE = /\d+(?:\.\d+)?\s?(?:in|cm)\b/g;
 
 const problems = [];
@@ -97,6 +130,32 @@ function lint(name, d, gang) {
     if (!/Cutter file/.test(ready)) bad.push("cut file, Have ready doesn't say");
     if (!d.steps.some((st) => /Cutter file/.test(st.you || ""))) bad.push("cut file, no step says to lay a cut piece");
   }
+  // (round 10)
+  const yous = d.steps.map((st) => st.you || ""), all = [...d.ready, ...yous, ...d.after];
+  yous.forEach((y, i) => {
+    const last = sentences(y).at(-1) || "";
+    if (y && !/press Start/i.test(last)) bad.push(`step ${i + 1} ends "${last.slice(0, 60)}" after Press Start: say it at the next stop`);
+    if (i && d.colors[i]) {
+      const same = d.colors[i] === d.colors[i - 1];
+      if (same && !/^Keep the same thread on\b/.test(y)) bad.push(`step ${i + 1}: a pause in the same thread doesn't say "Keep the same thread on"`);
+      if (!same && !/^Change to /.test(y)) bad.push(`step ${i + 1}: a new thread doesn't say "Change to"`);
+    }
+  });
+  for (const t of [...all, d.tip]) for (const b of sizes(t || "")) bad.push(b);
+  const kit = (d.ready.join(" ") + " " + yous[0]);
+  for (const [t, where] of [[d.tip, "tip"], [d.fabricTip, "fabric's tip"]]) for (const [re, kind] of KINDS) if (re.test(t || "") && !re.test(kit)) bad.push(`the ${where} names ${kind} stabilizer, Have ready and step 1 don't`);
+  if (/\b(tear|cut)-away or (heavy |medium )?(tear|cut)-away\b/i.test(d.ready.join(" "))) bad.push("Have ready leaves the stabilizer to choose (tear-away or cut-away)");
+  const pick = `pick ${d.file}`;
+  if (!yous[0].includes(pick)) bad.push(`step 1 doesn't say to pick ${d.file} on the machine`);
+  if (!/New to threading/.test(yous[0])) bad.push("step 1 doesn't say where threading is shown");
+  if (yous.slice(1).some((y) => /touch the USB key|New to threading/.test(y)) || [...d.ready, ...d.after].some((y) => /touch the USB key|New to threading/.test(y))) bad.push("picking the file or threading said again after step 1");
+  if (d.share.split(pick).length !== 2) bad.push(`share text says "${pick}" ${d.share.split(pick).length - 1} times`);
+  for (const [re, say] of GLOSSARY) {
+    const first = all.findIndex((t) => re.test(t)); if (first < 0) continue;
+    const n = all.join(" ").split(say).length - 1;
+    if (n !== 1 || !all[first].includes(say)) bad.push(`"${re.source}" explained ${n} times${n ? ", not where first used" : ""}`);
+  }
+  if (d.looseTip && /^[^.]*jump stitch/i.test(d.looseTip)) bad.push("the loose-thread tooltip leads with the machine's setting");
   const want = Math.max(1, Math.round(d.stitches / 550 + Math.max(0, d.trims - d.snips) / 10 + d.stops / 2));
   if (d.min !== want) bad.push(`time ${d.min} min, want ${want} (${d.stitches} stitches, ${d.trims - d.snips} trims, ${d.stops} pauses)`);
   for (const b of bad) problems.push(`${name}: ${b}`);
@@ -160,6 +219,51 @@ if (!only) {
   const w = await ev(READ), felt = w ? /felt/i.test(w.steps[0]?.you || "") : true;
   if (felt) problems.push("Add words: kept the last starter's felt");
   console.log(`add words: ${felt ? "kept the last starter's felt" : "ok"}`);
+}
+// Sew along: the preview one size on every step (the mug rug: its step 1 has Have ready and six actions)
+for (const id of ["mugrug", "applique"]) {
+  if (only && !only.split(",").includes(id)) continue;
+  cases++;
+  await open("#design");
+  await ev(`document.querySelector('[data-start="${id}"]').click(), 1`); await settle();
+  await ev(`document.getElementById("along-open").click(), 1`); await sleep(500);
+  const seen = [];
+  for (let k = 0; k < 12; k++) {
+    const r = await ev(`(() => { const c = document.getElementById("along-view"); return { h: c.clientHeight, w: c.clientWidth, done: /All done/.test(document.getElementById("along-count").textContent) } })()`);
+    if (r.done) break;
+    seen.push(`${r.w}x${r.h}`);
+    await ev(`document.getElementById("along-next").click(), 1`); await sleep(250);
+  }
+  await ev(`document.getElementById("along").close(), 1`);
+  const bad = new Set(seen).size > 1 ? `Sew along's preview changes size between steps: ${seen.join(", ")}` : "";
+  if (bad) problems.push(`${id}: ${bad}`);
+  console.log(`${id} sew along: ${bad || "ok"}`);
+}
+
+// file names of lettering split into pieces: Arch up on two lines, two hoopings at a word gap (or alone: "names")
+if (!only || only.split(",").includes("names")) {
+  const T = (text, size) => ({ id: 1, kind: "text", text, size, font: "NW Yellowtail", x: 0, y: 0, color: "#0e1f7c" });
+  const setup = async (piece) => {
+    await call("goto", `${base}/manifest.webmanifest`);
+    await ev(`(() => { localStorage.setItem("nw:studio", ${JSON.stringify(JSON.stringify({ pieces: [piece], sel: 1, fabric: "cotton", thread: "auto" }))}); localStorage.setItem("nw:hoop", '"5x7"'); localStorage.setItem("nw:turn", '{"design":false}'); return 1 })()`);
+    await open("#design"); await settle();
+  };
+  cases++;
+  await setup(T("Happy\nBirthday", 20));
+  await ev(`(() => { document.querySelector('[data-pick="1"], #st-pieces .pick')?.click(); return 1 })()`); await sleep(400);
+  await ev(`document.querySelector('[data-seg="shape"] button[data-v="up"]').click(), 1`); await settle();
+  let name = await ev(`nwTest.view().filename`);
+  if (name !== "Happy_Birthday.pes") problems.push(`arched two lines: named ${name}`);
+  console.log(`arched two lines: ${name === "Happy_Birthday.pes" ? "ok" : name}`);
+  cases++;
+  await setup(T("Welcome to our Home", 19));
+  for (let k = 0; k < 20; k++) { await sleep(300); if (await ev(`[...document.querySelectorAll("#error button, #st-big ~ * button, button")].some((b) => /two hoopings/i.test(b.textContent)) ? 1 : 0`)) break; }
+  await ev(`(() => { const b = [...document.querySelectorAll("button")].find((b) => /Sew it in two hoopings/i.test(b.textContent)); b?.click(); return !!b })()`); await settle();
+  for (let k = 0; k < 20 && !(await ev(`nwTest.view()?.split ? 1 : 0`)); k++) await sleep(300);
+  name = await ev(`nwTest.view().filename`);
+  const want = "Welcome_to_our_Home_2_hoopings.zip";
+  if (name !== want) problems.push(`two hoopings: named ${name}`);
+  console.log(`two hoopings: ${name === want ? "ok" : name}`);
 }
 console.log(`DONE ${cases} ${problems.length}`);
 process.exit(problems.length ? 1 : 0);

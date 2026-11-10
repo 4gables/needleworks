@@ -3,10 +3,16 @@
 // Designer, DXF for Silhouette's free edition).
 // Stitch units are 0.1 mm, cut outlines mm; the machine centres the design in the hoop, so the template does too.
 import { colorBlocks } from "./render.js";
-import { problemsItems } from "./words.js";
+import { explained, problemsItems } from "./words.js";
 
-// steps for a file that says nothing of its fabric or pauses (an opened design): both stabilizers, said plainly
-export const FIRST_STEP = "Hoop the fabric with stabilizer under it. Put on the first thread. Press Start.";
+// Step 1 starts at the machine, on every tab and surface, once (the first file's first step): the design picked from
+// the USB stick as the PE900's screen has it, and where to learn threading. A newcomer's Sew along began "Hoop the
+// fabric" with nothing about getting the design onto the machine or threading it (round 10).
+export const pickIt = (file) => `Plug the USB stick into the machine, touch the USB key on its screen and pick ${file}.`;
+export const THREADING = "New to threading the machine? The threading pages of its manual show each step.";
+// (`hoop`: the project's own hooping; a file that says nothing of its fabric (an opened design): stabilizer, plainly)
+export const firstStep = (file, thread = "the first thread", hoop = "Hoop the fabric with stabilizer under it") =>
+  `${pickIt(file)} ${hoop}. Put on ${thread}. ${THREADING} Press Start.`;
 export const FINISH = "Take the hoop off and snip any loose threads. Tear-away stabilizer: tear it off gently, holding the stitches down with your thumb. Cut-away: trim it about ¼ in from the stitching (don't tear it).";
 
 // The hooping note for a turned hoop, on every surface (steps, download dialog, sew sheet, share text, Sew along).
@@ -28,9 +34,18 @@ export const TURN_PIC = `<svg class="turn-pic" viewBox="0 0 58 52" width="70" he
 
 // a file's own steps, block by block: a stop in the same thread is a pause, not a thread change (an appliqué's fabric steps)
 // (`name`: the thread as the machine shows it, "Brother Red": "Change to the next thread" didn't say which)
-export const nextThread = (blocks, i, name) => (!i ? (name ? FIRST_STEP.replace("the first thread", name) : FIRST_STEP) : blocks[i]?.color === blocks[i - 1]?.color ? "The machine pauses: keep the same thread on and press Start."
+export const nextThread = (blocks, i, name, file) => (!i ? firstStep(file, name || undefined) : blocks[i]?.color === blocks[i - 1]?.color ? "The machine pauses: keep the same thread on and press Start."
   : `Change to ${name || "the next thread"} and press Start.`);
 
+// What a surface says, { ready, steps, after }, with each sewing word explained where it's first used (words.js);
+// a file's own steps (`blocks`, its threads' `names`, an opened design with no steps of its own) when it has none
+export function told(sheet, blocks = [], names = [], file = "") {
+  sheet ||= {};
+  const steps = sheet.steps?.length ? sheet.steps : blocks.map((b, i) => ({ you: nextThread(blocks, i, names[i] && `Brother ${names[i].name}`, file), sews: "" }));
+  const ready = sheet.ready || [], after = sheet.after?.length ? sheet.after : [FINISH];
+  const all = explained([...ready, ...steps.map((st) => st.you), ...after]), n = ready.length;
+  return { ...sheet, ready: all.slice(0, n), steps: steps.map((st, i) => ({ ...st, you: all[n + i] })), after: all.slice(n + steps.length) };
+}
 // A step's "what you do" as its actions, one per sentence ("Then take the hoop off" as "Take the hoop off"): the
 // ornament's last step was one paragraph of six things to do
 export function actions(text) {
@@ -118,8 +133,8 @@ export function cutSize(groups) {
 // sheet: { steps: [{ title?, you?, sews? }], ready: [] (one "Have ready" list), after: [], notes: [], cut: [[loop...]...] }, thread names as the machine shows them
 export function sewSheet({ pattern, filename, hoop, facts, threads, hide, sheet = {}, spool = () => "", problems = [] }) {
   const { blocks } = colorBlocks(pattern);
-  const steps = sheet.steps?.length ? sheet.steps : blocks.map((b, i) => ({ you: nextThread(blocks, i, threads[i] && `Brother ${threads[i].name}`) }));
-  const after = sheet.after?.length ? sheet.after : [FINISH];
+  sheet = told(sheet, blocks, threads, filename);
+  const { steps, after } = sheet;
   const rows = steps.map((s, i) => {
     const b = blocks.find((x) => x.index === i), t = threads[i];
     return `<li><b><span class="sw" style="background:${b?.color || t?.color || "#999"}"></span>${s.title ? esc(s.title) + " · " : ""}Brother ${esc(t?.name || "")}${b && spool(b.color, t?.name) ? ` <small>(${esc(spool(b.color, t?.name))})</small>` : ""}</b>

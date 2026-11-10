@@ -435,7 +435,9 @@ ul.problems { margin: 0; padding-left: 18px; list-style: disc; display: grid; ga
 /* sew along: one step per screen, big enough to read from the machine */
 .along { border: 0; padding: 0; width: 100vw; height: 100dvh; max-width: none; max-height: none; margin: 0; background: var(--bg); color: var(--ink); }
 /* (the preview keeps some room and the words scroll: step 1's Have ready pushed Next off an iPhone SE) */
-.along[open] { display: grid; grid-template-rows: auto minmax(110px, 1fr) minmax(0, auto) auto; }
+/* (the preview and the words share the height in a fixed ratio, the words scrolling: sized to the words, the preview
+   zoomed in and out from one step to the next) */
+.along[open] { display: grid; grid-template-rows: auto minmax(110px, 1fr) minmax(0, 1.2fr) auto; }
 .along header { display: flex; justify-content: space-between; align-items: center; padding: 14px max(18px, env(safe-area-inset-left)); font-weight: 700; color: var(--muted); }
 .along canvas { width: 100%; height: 100%; min-height: 0; }
 .along-body { padding: 4px max(20px, env(safe-area-inset-left)); max-width: 760px; width: 100%; margin: 0 auto; box-sizing: border-box; overflow-y: auto; min-height: 0; }
