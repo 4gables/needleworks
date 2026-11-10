@@ -62,13 +62,18 @@ async function run(name, load) {
   // the lost note at 60 mm, and each fix it offers lands without one
   if (!fresh.problems.includes("lost")) fail(`${name}: no lost note at ${A.join(" ")}`);
   if (!fresh.fixes.length) fail(`${name}: no fix offered for what's left out`);
+  // (and where: the parts are ringed on the picture's thumbnail, round 13: "a very thin line is left out" said not which)
+  const ringed = ev(`({ src: document.getElementById('pic-thumb').src.slice(0, 5), says: /ringed/.test(document.getElementById('pic-fine').textContent) })`);
+  if (ringed.src !== "data:" || !ringed.says) fail(`${name}: the parts left out aren't ringed on the picture (${JSON.stringify(ringed)})`);
   for (let k = 0; k < fresh.fixes.length; k++) {
     await sew(A);
     const label = ev(`(()=>{const b=document.querySelectorAll('#pic-fine [data-fix]')[${k}]; b.click(); return b.textContent})()`);
     await sleep(600); await idle();
     const after = ev("nwTest.problems().map(p=>p.id)"), still = ev(`nwTest.fine().kept.ids.filter((i) => ${JSON.stringify(fresh.ids)}.includes(i)).length`);
     console.log(`  fix "${label}": ${after.join(",") || "-"}, ${still} of ${fresh.ids.length} still left out`);
-    if (still > 0.25 * fresh.ids.length) fail(`${name}: the fix "${label}" still leaves out ${still} of the ${fresh.ids.length} parts the note said`);
+    // (a Size that keeps fewer than three in four says how many it keeps: it must keep them)
+    const says = /(\d+) of the (\d+) are sewn/.exec(label);
+    if (says ? fresh.ids.length - still < +says[1] : still > 0.25 * fresh.ids.length) fail(`${name}: the fix "${label}" still leaves out ${still} of the ${fresh.ids.length} parts the note said`);
   }
 }
 

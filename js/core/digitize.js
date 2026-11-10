@@ -155,7 +155,18 @@ function findFrame(labels, w, h, C) {
     }
     if (within) { for (const i of comp) frame[i] = 1; any = true; }
   }
-  return any ? { frame, inset: k * 0.005 } : null;
+  if (!any) return null;
+  // A frame runs round the picture: along at least half of two sides that meet at a corner (a photo cropped off-centre
+  // keeps two). One side alone is part of the drawing: a child's ground line across the bottom, 8 px of green, was
+  // left out as a frame in every style, with and without white at its ends. Opposite sides alone (sky above, grass
+  // below) are the drawing too. Each frame pixel counts for the side it's nearest.
+  const along = [new Uint8Array(w), new Uint8Array(w), new Uint8Array(h), new Uint8Array(h)];   // top, bottom, left, right
+  for (let i = 0; i < w * h; i++) if (frame[i]) {
+    const x = i % w, y = (i - x) / w, d = [y, h - 1 - y, x, w - 1 - x], s = d.indexOf(Math.min(...d));
+    along[s][s < 2 ? x : y] = 1;
+  }
+  const side = along.map((a) => a.reduce((t, v) => t + v, 0) >= 0.5 * a.length);
+  return (side[0] || side[1]) && (side[2] || side[3]) ? { frame, inset: k * 0.005 } : null;
 }
 
 // The picture's colours are learned once per picture (`learnColours`) from a copy at a fixed size, so the threads
@@ -280,9 +291,13 @@ export function learnColours(img, opts = {}) {
   let { C, labels, real } = cluster(P, FINE, null, true), frame = null;
   // a frame (a band at the picture's edge) isn't part of the design, and isn't the background: learn again without it
   // (found on a coarse clustering: fine clusters chain a backdrop's shades into the frame's colour family)
+  // (`edge`: the person said the band is part of the drawing, "Sew the edge band too": it's sewn, and the fabric is
+  // still what's inside it, not the band: the white inside a sewn frame was filled)
+  let inset = null;
   if (cut && C.length) {
     const q = cluster(P, 5, null);
-    frame = findFrame(q.labels, w, h, q.C);
+    frame = findFrame(q.labels, w, h, q.C); inset = frame?.inset ?? null;
+    if (frame && o.edge) frame = null;
     if (frame) ({ C, labels, real } = cluster(P, FINE, frame.frame, true));
   }
   const K = C.length, area = new Array(K).fill(0), rgb = C.map(() => [0, 0, 0]);
@@ -293,10 +308,28 @@ export function learnColours(img, opts = {}) {
   // background = the most common colour along the border, or just inside a frame (the five clean rings: the first
   // can run along the frame's blended inner edge); only when the picture has no transparency
   let bg = -1, ring = () => 0;
+  // (a band sewn on purpose that runs to the picture's edge: the fabric is the first colour inside it, the first ring
+  // in from the edge where another colour has 60%)
+  if (cut && K && o.edge && inset === null) {
+    const dom = (f) => {
+      const x0 = Math.round(f * w), y0 = Math.round(f * h), x1 = w - 1 - x0, y1 = h - 1 - y0, c = new Map();
+      if (x1 <= x0 || y1 <= y0) return [-1, 0];
+      const add = (i) => { if (labels[i] >= 0) c.set(labels[i], (c.get(labels[i]) || 0) + 1); };
+      for (let x = x0; x <= x1; x++) { add(y0 * w + x); add(y1 * w + x); }
+      for (let y = y0 + 1; y < y1; y++) { add(y * w + x0); add(y * w + x1); }
+      const all = [...c.values()].reduce((a, b) => a + b, 0), [l, k] = [...c.entries()].sort((a, b) => b[1] - a[1])[0] || [-1, 0];
+      return [l, k / Math.max(1, all)];
+    };
+    const [E] = dom(0);
+    for (let k = 1; k <= 50 && E >= 0; k++) {
+      const [l, sh] = dom(k * 0.005);
+      if (l >= 0 && sh >= 0.6 && Math.hypot(C[l][0] - C[E][0], C[l][1] - C[E][1], C[l][2] - C[E][2]) >= 10) { inset = k * 0.005; break; }
+    }
+  }
   if (cut && K) {
     const cnt = new Map(), add = (i) => { if (labels[i] >= 0) cnt.set(labels[i], (cnt.get(labels[i]) || 0) + 1); };
-    for (let r = 0; r < (frame ? 5 : 1); r++) {
-      const f = frame ? frame.inset + r * 0.005 : 0;
+    for (let r = 0; r < (inset !== null ? 5 : 1); r++) {
+      const f = inset !== null ? inset + r * 0.005 : 0;
       const x0 = Math.round(f * w), y0 = Math.round(f * h), x1 = w - 1 - x0, y1 = h - 1 - y0;
       for (let x = x0; x <= x1; x++) { add(y0 * w + x); add(y1 * w + x); }
       for (let y = y0; y <= y1; y++) { add(y * w + x0); add(y * w + x1); }
@@ -993,7 +1026,7 @@ function build(img, analysis, opts) {
   fine.inkMm2 /= res * res;
   // ignore specks: under 1.5 mm², or under 4 mm² and under 2.5 mm across (a dot, not a stem: each speck left was a
   // trim, two locks and often a loose thread; 4 mm² for all erased the thin stems of a line-art bouquet)
-  const minPx = 1.5 * res * res, dotPx = 4 * res * res, dotW = 2.5 * res;
+  const minPx = 1.5 * res * res, EYES = 6, dotPx = 4 * res * res, dotW = 2.5 * res;
   // where each colour's fill will surely lie: over 0.6 mm inside a shape that isn't a speck. A travel run sewn there
   // by an earlier colour is covered.
   const solid = new Uint8Array(w * h), budget = routeBudget();
@@ -1049,16 +1082,23 @@ function build(img, analysis, opts) {
     const fab = colors.find((q) => q.background), lab3 = (id) => srgbToLab(...hexToRgb(colors[id].picture || colors[id].hex)), me = lab3(col.id);
     const e3 = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]), F = fab ? lab3(fab.id) : null;
     const edgy = new Map(colors.map((q) => [q.id, !stitched.has(q.id) || (F && e3(F, lab3(q.id)) + e3(lab3(q.id), me) <= 1.25 * e3(F, me))]));
-    const rim = new Int32Array(count + 1), bare = new Int32Array(count + 1);
+    const rim = new Int32Array(count + 1), bare = new Int32Array(count + 1), sewnOn = new Int32Array(count + 1);
     for (let i = 0; i < w * h; i++) {
       const c = cl[i]; if (!c || !dot(c)) continue;
       const x = i % w;
       for (const j of [x > 0 ? i - 1 : -1, x < w - 1 ? i + 1 : -1, i - w, i + w]) {
         if (j < 0 || j >= w * h || cl[j] === c) continue;
-        rim[c]++; if (labels[j] < 0 || edgy.get(labels[j])) bare[c]++;
+        rim[c]++; if (labels[j] < 0 || edgy.get(labels[j])) bare[c]++; else if (labels[j] !== col.id) sewnOn[c]++;
       }
     }
-    const solo = (c) => size[c] >= 0.6 * res * res && Math.min(bx1[c] - bx0[c] + 1, by1[c] - by0[c] + 1) >= 0.8 * res && bare[c] >= 0.8 * rim[c];
+    const fair = (c) => size[c] >= 0.6 * res * res && Math.min(bx1[c] - bx0[c] + 1, by1[c] - by0[c] + 1) >= 0.8 * res;
+    const solo = (c) => fair(c) && bare[c] >= 0.8 * rim[c];
+    // (nor is a dot of that size inside another colour that's sewn, all but a fifth of its edge against it: an eye.
+    // A child's dinosaur at 100 mm lost its 1.5 mm eye. More than EYES of them in one colour are a texture's flecks)
+    const eyes = [];
+    for (let c = 1; c <= count; c++) if (dot(c) && fair(c) && sewnOn[c] >= 0.8 * rim[c]) eyes.push(c);
+    const eye = new Uint8Array(count + 1);
+    if (eyes.length <= EYES) for (const c of eyes) eye[c] = 1;
     const cand = [], pair = new Uint8Array(count + 1);
     for (let c = 1; c <= count; c++) if (dot(c) && solo(c)) cand.push(c);
     for (const a of cand) for (const b of cand) {
@@ -1066,7 +1106,7 @@ function build(img, analysis, opts) {
       if (a !== b && Math.max(gx, gy) <= 5 * res) pair[a] = 1;
     }
     const tittle = (c) => solo(c) && (byText[c] || pair[c]);
-    const speck = (c) => dot(c) && !mark(c) && !tittle(c), line = (c) => thinC(c) && !(dot(c) && tittle(c));
+    const speck = (c) => dot(c) && !mark(c) && !tittle(c) && !eye[c], line = (c) => thinC(c) && !(dot(c) && tittle(c));
     // A thin piece lying between the fabric and another colour, in a colour between theirs, is the blend along that
     // colour's edge (a dark letter's anti-aliasing read as green), not a line of its own.
     const touch = new Map();
@@ -1513,7 +1553,7 @@ function lineArt(img, analysis, opts) {
         if (mine.has(labels[j])) tS[t]++; else tO[t]++;
       }
     }
-    const longPart = (t) => { const wd = 2 * tW[t]; return wd > 0 && tA[t] >= 4 * wd * wd && tA[t] / wd >= 5 * res && tO[t] >= 2 * tS[t]; };
+    const longPart = (t) => { const wd = 2 * tW[t]; return wd > 0 && tA[t] >= 4 * wd * wd && tA[t] / wd >= 5 * res && tO[t] >= 0.5 * tS[t]; };
     const band = (i) => thin(i) && ((dark(col) && part[cl[i]] >= 0.5 * area[cl[i]] && (x1[cl[i]] - x0[cl[i]] > small || y1[cl[i]] - y0[cl[i]] > small)) || longPart(tl[i]));
     for (let i = 0; i < w * h; i++) {
       if (!cl[i]) continue;
@@ -1583,19 +1623,43 @@ function lineArt(img, analysis, opts) {
     }
     return best;
   };
+  // (across the fabric only between parts of one colour in the picture, as a word's letters are: a sun's ray 1.25 mm
+  // from a dinosaur's head, yellow beside green, was joined to it by a stitch across the gap. Parts that touch, a stem
+  // and its flower, still join: the step lies along the drawing)
+  const inks = (q) => {
+    const X = Math.round(q[0] * res + cx), Y = Math.round(q[1] * res + cy), r = Math.ceil(0.8 * res), out = new Set();
+    for (let y = Math.max(0, Y - r); y <= Math.min(h - 1, Y + r); y++) for (let x = Math.max(0, X - r); x <= Math.min(w - 1, X + r); x++)
+      if (mine.has(labels[y * w + x])) out.add(labels[y * w + x]);
+    return out;
+  };
+  const across = (p, q) => {   // over 0.5 mm of open fabric on the way from p to q
+    const n = Math.ceil(Math.hypot(q[0] - p[0], q[1] - p[1]) * res * 2);
+    let run = 0;
+    for (let k = 0; k <= n; k++) {
+      const X = Math.round((p[0] + ((q[0] - p[0]) * k) / Math.max(1, n)) * res + cx), Y = Math.round((p[1] + ((q[1] - p[1]) * k) / Math.max(1, n)) * res + cy);
+      run = X >= 0 && Y >= 0 && X < w && Y < h && !mine.has(labels[Y * w + X]) ? run + 0.5 : 0;
+      if (run > 0.5 * res) return true;
+    }
+    return false;
+  };
+  const oneInk = (p, q) => {
+    if (!across(p, q)) return true;
+    const a = inks(p), b = inks(q);
+    return !a.size || !b.size || [...a].some((l) => [...b].some((m) => l === m || alike(labOf.get(l), labOf.get(m))));
+  };
   const joins = [];
   for (const e of ends) {
     const at = near(e, -1, 0.05);
     if (!at) continue;
     const to = near(e, at[0], 2);
-    if (to) joins.push({ a: at[0], ka: at[1], b: to[0], kb: to[1], v: to[2] });
+    if (to && oneInk(e, tours[to[0]][to[1]])) joins.push({ a: at[0], ka: at[1], b: to[0], kb: to[1], v: to[2] });
   }
   // (and so is a drawing too short to sew on its own, at its point nearest another: an i's dot or a full stop, which
   // as a closed outline has no loose end)
   tours.forEach((t, i) => {
     if (arclen(t).at(-1) >= 4) return;
     let best = null;
-    t.forEach((q, k) => { const to = near(q, i, 2); if (to && (!best || to[2] < best.v)) best = { a: i, ka: k, b: to[0], kb: to[1], v: to[2] }; });
+    t.forEach((q, k) => { const to = near(q, i, 2); if (to && (!best || to[2] < best.v) && oneInk(q, tours[to[0]][to[1]])) best = { a: i, ka: k, b: to[0], kb: to[1], v: to[2] }; });
     if (best) joins.push(best);
   });
   joins.sort((p, q) => p.v - q.v);
@@ -1636,7 +1700,8 @@ function lineArt(img, analysis, opts) {
       const v = d.cur ? Math.hypot(q[0] - d.cur[0], q[1] - d.cur[1]) : q[0], s = !d.cur || v <= 2 || v > 5 ? v : v + 1e3;
       if (s < bd) { bd = s; bi = i; bk = k; }
     }));
-    d.path(rotate(left[bi], bk));
+    // (a step under 2 mm onto a drawing of another colour is a move, not a stitch across the gap: see oneInk)
+    d.path(rotate(left[bi], bk), true, !!d.cur && !oneInk(d.cur, left[bi][bk]));
     left.splice(bi, 1);
   }
   if (!d.stitches.length) throw Object.assign(new Error("No lines in this picture are big enough to stitch."), { code: "small" });
@@ -1776,6 +1841,7 @@ function crossStitch(img, analysis, opts) {
 // Size, style and colour count of one picture) }.
 // the most thread colours a picture can be sewn in (the Picture tab's slider)
 export const MOST = 8;
+const SPOTS = 40;
 export function keptParts(ink0, full, pattern, at, crop, { style = "fill", cross = 2.5, skip = [] } = {}) {
   const { w, h } = ink0, n = w * h, out = new Set(full.colors.filter((c) => skip.includes(c.id)).map((c) => c.id));
   const ink = { w, h, data: new Uint8Array(n) };
@@ -1823,7 +1889,10 @@ export function keptParts(ink0, full, pattern, at, crop, { style = "fill", cross
     if (hit[c] >= 0.3 * edge[c]) continue;
     lost++; gone += mm2; gonePart.add(c); big = Math.max(big, (Math.max(x1[c] - x0[c], y1[c] - y0[c]) + 1) * mmPx); bulk = Math.max(bulk, mm2);
   }
-  return { parts, lost, share: all ? gone / all : 0, mm2: gone, big, bulk, ids: [...gonePart] };
+  // where the biggest of them are (fractions of the learned copy), for the page to ring on the picture: "a very thin
+  // line is left out" didn't say which, and a child's dinosaur had lost its eye
+  const spots = [...gonePart].sort((a, b) => area[b] - area[a]).slice(0, SPOTS).map((c) => [x0[c] / w, y0[c] / h, (x1[c] + 1) / w, (y1[c] + 1) / h]);
+  return { parts, lost, share: all ? gone / all : 0, mm2: gone, big, bulk, ids: [...gonePart], spots };
 }
 
 // Size is the sewn design's longer side, not the picture's: a framed photo at "174 mm" sewed 84 x 58 mm, and a

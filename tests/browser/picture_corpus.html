@@ -165,7 +165,8 @@ const PICS = [
     { role: "ink", col: "#c43d2e", draw: (c) => { c.fillStyle = "#c43d2e"; c.fillRect(400, 120, 300, 300); } },
     { role: "ink", col: "#2c7be5", draw: (c) => { circle(c, 400, 500, 70); c.fillStyle = "#2c7be5"; c.fill(); } }] },
   // a picture in a coloured frame (a product card): the frame and the card aren't the design
-  { name: "framed", n: 2, back: "#f3ead8", layers: [
+  // (`extra` with edge: "Sew the edge band too" sews the band, and the card inside it stays fabric)
+  { name: "framed", n: 2, back: "#f3ead8", extra: [["fill", 100, 3, false, true]], layers: [
     { role: "bg", col: "#355e3b", draw: (c) => { c.fillStyle = "#355e3b"; c.fillRect(0, 0, W, 36); c.fillRect(0, H - 36, W, 36); c.fillRect(0, 0, 36, H); c.fillRect(W - 36, 0, 36, H); } },
     { role: "ink", col: "#d1495b", draw: (c) => { c.fillStyle = "#d1495b"; for (let k = 0; k < 5; k++) { const a = (k * 2 * Math.PI) / 5 - Math.PI / 2; circle(c, 400 + 80 * Math.cos(a), 280 + 80 * Math.sin(a), 62); c.fill(); } } },
     { role: "ink", col: "#edae49", draw: (c) => { circle(c, 400, 280, 45); c.fillStyle = "#edae49"; c.fill(); } }] },
@@ -204,16 +205,37 @@ const PICS = [
     return out;
   })() },
   // the round 10 child's drawing: a sun with thin rays, a ground line and a dinosaur with a 1.5 mm eye (at 100 mm).
-  // Cross-stitch drops the rays and the line, Filled the eye: said either way.
-  { name: "child_drawing", n: 4, lost: ["cross_s100", "fill_s100"], cases: [["fill", 100, 4], ["line", 100, 4], ["cross", 100, 4]], layers: (() => {
+  // Cross-stitch drops the rays and the line: said. (Filled dropped the eye until round 13: an eye is sewn now.)
+  { name: "child_drawing", n: 4, lost: ["cross_s100"], cases: [["fill", 100, 4], ["line", 100, 4], ["cross", 100, 4]], layers: (() => {
     const r = rng(23), rays = Array.from({ length: 8 }, (_, k) => { const a = (k * Math.PI) / 4; return wobbly(r, [[650 + 60 * Math.cos(a), 110 + 60 * Math.sin(a)], [650 + 95 * Math.cos(a), 110 + 95 * Math.sin(a)]], 2); });
     return [
       { role: "ink", col: "#f5c400", draw: (c) => { circle(c, 650, 110, 45); c.fillStyle = "#f5c400"; c.fill(); } },
       { role: "stroke", col: "#f5c400", width: 5, lines: rays, draw: (c, q, L) => { c.strokeStyle = L.col; for (const p of L.lines) polyStroke(c, p, 5); } },
       { role: "stroke", col: "#4a7a2a", width: 5, lines: [wobbly(r, [[40, 560], [400, 550], [760, 562]], 3)], draw: (c, q, L) => { c.strokeStyle = L.col; polyStroke(c, L.lines[0], 5); } },
       { role: "ink", col: "#3aa655", draw: (c) => { c.fillStyle = "#3aa655"; c.beginPath(); c.ellipse(300, 420, 170, 90, 0, 0, 2 * Math.PI); c.fill(); c.beginPath(); c.ellipse(470, 300, 60, 45, -0.4, 0, 2 * Math.PI); c.fill(); c.fillRect(420, 300, 50, 110); } },
-      { role: "ink", col: "#111111", draw: (c) => { circle(c, 490, 290, 6); c.fillStyle = "#111111"; c.fill(); } }];
+      { role: "eye", col: "#111111", draw: (c) => { circle(c, 490, 290, 6); c.fillStyle = "#111111"; c.fill(); } }];
   })() },
+  // the round 13 newcomer's dino.png, redrawn: an 8 px ground line across the whole width (taken for a frame and never
+  // sewn), a light body in an 8 px dark outline (traced as two lines), a 1.5 mm eye (left out) and a sun ray 1.5 mm
+  // from the head (joined to it by a stitch). `centre`: a stroke sewn once along its centre in a line drawing, within
+  // that many mm; `gap`: a point between two colours no line drawing stitches across
+  { name: "ground_line", n: 6, cases: [["fill", 100, 6], ["line", 100, 6], ["cross", 100, 6]], layers: (() => {
+    const body = [[330, 468], [360, 380], [450, 342], [560, 350], [620, 300], [650, 230], [700, 220], [720, 245], [680, 270], [640, 400], [700, 470], [650, 480],
+      [600, 440], [560, 468], [540, 520], [510, 520], [520, 468], [430, 468], [420, 520], [390, 520], [400, 468], [330, 468]];
+    const rays = Array.from({ length: 12 }, (_, k) => { const a = (k * Math.PI) / 6; return [[680 + 75 * Math.cos(a), 100 + 75 * Math.sin(a)], [680 + 105 * Math.cos(a), 100 + 105 * Math.sin(a)]]; });
+    return [
+      { role: "stroke", col: "#2ca02c", width: 8, lines: [[[0, 530], [800, 530]]], draw: (c, q, L) => { c.strokeStyle = L.col; polyStroke(c, L.lines[0], 8, "butt"); } },
+      { role: "ink", col: "#f9d423", draw: (c) => { circle(c, 680, 100, 60); c.fillStyle = "#f9d423"; c.fill(); } },
+      { role: "stroke", col: "#f9d423", width: 6, lines: rays, gap: [680, 214], draw: (c, q, L) => { c.strokeStyle = L.col; for (const p of L.lines) polyStroke(c, p, 6); } },
+      { role: "ink", col: "#98dc8c", draw: (c) => { c.fillStyle = "#98dc8c"; c.beginPath(); body.forEach(([x, y], i) => (i ? c.lineTo(x, y) : c.moveTo(x, y))); c.fill(); } },
+      { role: "stroke", col: "#2ca02c", width: 8, centre: 0.3, lines: [body], draw: (c, q, L) => { c.strokeStyle = L.col; polyStroke(c, body, 8); } },
+      { role: "eye", col: "#000000", draw: (c) => { circle(c, 690, 238, 6); c.fillStyle = "#000"; c.fill(); } }];
+  })() },
+  // the same ground line with 30 px of paper at each end
+  { name: "ground_line_inset", n: 3, cases: [["fill", 100, 3], ["line", 100, 3]], layers: [
+    { role: "stroke", col: "#2ca02c", width: 8, lines: [[[30, 530], [770, 530]]], draw: (c, q, L) => { c.strokeStyle = L.col; polyStroke(c, L.lines[0], 8, "butt"); } },
+    { role: "ink", col: "#7a4a1e", draw: (c) => { c.fillStyle = "#7a4a1e"; c.fillRect(130, 330, 40, 196); } },
+    { role: "ink", col: "#f9d423", draw: (c) => { circle(c, 680, 100, 60); c.fillStyle = "#f9d423"; c.fill(); } }] },
   // etsy_4's class: a greyish lavender script title over a darker purple flower
   { name: "lavender_title", n: 3, layers: [
     { role: "text", col: "#8e86b5", draw: (c) => text(c, "Easter Bouquets", 400, 140, font("script", 90), "#8e86b5") },
@@ -314,10 +336,10 @@ const job = (msg) => new Promise((ok, no) => {
 });
 // as sewPicture in app.js: measure, then sized by sewSized (the same tries the page makes)
 async function sew(bitmap, c) {
-  const box = contentBox(bitmap), key = `${c.tag}`, k = LEARN / Math.max(box.sw, box.sh);
+  const box = c.edge ? { sx: 0, sy: 0, sw: bitmap.width, sh: bitmap.height } : contentBox(bitmap), key = `${c.tag}`, k = LEARN / Math.max(box.sw, box.sh);
   const learn = pictureImage(bitmap, box, Math.max(1, Math.round(box.sw * k)), Math.max(1, Math.round(box.sh * k)));
   const hoop = c.turn ? { ...HOOP, w: HOOP.h, h: HOOP.w } : HOOP;
-  const opts = { colors: c.colors, removeBackground: true, fillAngle: 45, density: DENSITY.standard, skip: [], hoop, turn: !!c.turn, palette: null, style: c.style, cross: c.cross || 2.5, line: undefined };
+  const opts = { colors: c.colors, removeBackground: true, fillAngle: 45, density: DENSITY.standard, skip: [], hoop, turn: !!c.turn, palette: null, style: c.style, cross: c.cross || 2.5, line: undefined, edge: c.edge || undefined };
   const m = await job({ key, learn, opts });
   if (!m.ok) return { error: m.error, code: m.code };
   const r = await sewSized((pl) => job({ key, ref: c.tag.split(`_${c.style}_`)[0], learn, img: pictureImage(bitmap, pl.crop, pl.w, pl.h), crop: pl.frac, opts }),
@@ -347,7 +369,8 @@ function threadMap(pattern, turn) {
   }
   const dts = blocks.map((b) => distanceTransform(b));
   const all = new Float64Array(w * h).fill(Infinity), who = new Int8Array(w * h);
-  dts.forEach((d, b) => { for (let i = 0; i < w * h; i++) if (d[i] < all[i]) { all[i] = d[i]; who[i] = b; } });
+  // (a tie goes to the later block: it's sewn on top, an eye over its face)
+  dts.forEach((d, b) => { for (let i = 0; i < w * h; i++) if (d[i] <= all[i]) { all[i] = d[i]; who[i] = b; } });
   // (mm to the nearest thread and the block it belongs to)
   return (x, y) => { const X = Math.round((x - x0) / G), Y = Math.round((y - y0) / G); if (X < 0 || Y < 0 || X >= w || Y >= h) return [Infinity, -1]; const i = Y * w + X; return [all[i] * G, who[i]]; };
 }
@@ -387,7 +410,7 @@ const KNOWN = {
 function big(p, style, pxMm) {
   const areaMm2 = p.px.length * pxMm * pxMm, wideMm = 2 * p.wide * pxMm, len = areaMm2 / Math.max(0.1, wideMm);
   if (style === "cross") return wideMm >= 5 && areaMm2 >= 25;
-  return (areaMm2 >= 4 && wideMm >= 1) || (wideMm >= 0.5 && len >= 6) || (p.role === "text" && areaMm2 >= 0.8 && wideMm >= 0.6);
+  return (areaMm2 >= 4 && wideMm >= 1) || (wideMm >= 0.5 && len >= 6) || ((p.role === "text" || p.role === "eye") && areaMm2 >= 0.8 && wideMm >= 0.6);
 }
 // up to n of a list, picked at random (seeded by its length): an even stride lined up with a square's rows
 function sample(list, n) {
@@ -403,8 +426,8 @@ async function run(spec) {
   const t0 = performance.now(), bitmap = await picture(spec), reg = spec.empty ? null : regions(spec);
   const list = spec.cases || (QUICK ? [["fill", 100, Math.max(1, spec.n)]] : [["fill", 60, Math.max(1, spec.n)], ["fill", 120, 6], ["line", 100, Math.max(1, spec.n)], ["cross", 100, Math.max(1, spec.n)], ...(spec.extra || [])]);
   log(`${spec.name}: ${bitmap.width}x${bitmap.height}, ${reg ? reg.pieces.length : 0} pieces (${Math.round(performance.now() - t0)} ms)`);
-  for (const [style, size, colors, turn] of list) {
-    const tag = `pc_${spec.name}_${style}_s${size}_c${colors}${turn ? "_turned" : ""}`, c = { tag, style, size, colors, turn }, bad = [];
+  for (const [style, size, colors, turn, edge] of list) {
+    const tag = `pc_${spec.name}_${style}_s${size}_c${colors}${turn ? "_turned" : ""}${edge ? "_edge" : ""}`, c = { tag, style, size, colors, turn, edge }, bad = [];
     const t1 = performance.now();
     let s;
     try { s = await sew(bitmap, c); } catch (e) { s = { error: e.message, code: "throw" }; }
@@ -443,6 +466,11 @@ async function run(spec) {
         if (p.role === "bg") {
           // not sewn: its pixels 2 mm or more from any ink
           let n = 0, hit = 0;
+          if (c.edge) {   // (the band asked for: sewn, in its own colour)
+            for (const j of sample(p.px, 1500)) { n++; if (at(...toMm(j, p))[0] < 0.6) hit++; }
+            if (hit < 0.8 * n) bad.push(`${p.col} edge band asked for but ${Math.round((100 * hit) / n)}% sewn`);
+            continue;
+          }
           for (const j of sample(p.px, 1500)) { if (reg.free[j] * pxMm < 2) continue; n++; if (at(...toMm(j, p))[0] < 0.5) hit++; }
           if (n > 50 && hit / n > (style === "fill" ? 0.1 : 0.2)) bad.push(`${p.col} ${p.role} ${areaMm2.toFixed(0)} mm² sewn (${Math.round((100 * hit) / n)}%)`);
           continue;
@@ -504,18 +532,22 @@ async function run(spec) {
       // line drawing: a crayon or marker stroke 1.5-5 mm wide is sewn once along its centre, not round both edges
       if (style === "line") for (const L of spec.layers) {
         const wd = (L.width || 0) * mmPerPx;
-        if (L.role !== "stroke" || !L.lines?.length || wd < 1.5 || wd > 5) continue;
+        // (a gap between two colours: no stitch across it)
+        if (L.gap) { const [X, Y] = L.gap, d = at(((X - sx) * plan.w) / plan.crop.sw / r.res - plan.w / 2 / r.res, ((Y - sy) * plan.h) / plan.crop.sh / r.res - plan.h / 2 / r.res)[0]; if (d < 0.3) bad.push(`stitched across the gap at ${X},${Y} (thread ${d.toFixed(2)} mm from it)`); }
+        if (L.role !== "stroke" || !L.lines?.length || (!L.centre && (wd < 1.5 || wd > 5))) continue;
         let n = 0, hit = 0;
         for (const line of L.lines) for (let i = 0; i + 1 < line.length; i++) for (let t = 0; t < 1; t += 0.2) {
           const X = line[i][0] + (line[i + 1][0] - line[i][0]) * t, Y = line[i][1] + (line[i + 1][1] - line[i][1]) * t;
           const mm = [((X - sx) * plan.w) / plan.crop.sw / r.res - plan.w / 2 / r.res, ((Y - sy) * plan.h) / plan.crop.sh / r.res - plan.h / 2 / r.res];
-          n++; if (at(...mm)[0] <= Math.max(0.6, wd * 0.25)) hit++;
+          n++; if (at(...mm)[0] <= (L.centre || Math.max(0.6, wd * 0.25))) hit++;
         }
         if (n && hit / n < 0.85) bad.push(`stroke ${L.col} ${wd.toFixed(1)} mm not along its centre (${Math.round((100 * hit) / n)}%)`);
       }
+      // a frame only where one is drawn (round 13: a child's ground line across the bottom was left out as a frame)
+      if (r.framed && !spec.layers.some((L) => L.role === "bg")) bad.push("taken for a frame round the picture, with none drawn");
       // no thread nobody drew (fill, threads enough): every thread matches a drawn colour or a shadow
       if (style === "fill" && spec.colours !== false && colors >= spec.n) {
-        const drawn = spec.layers.filter((L) => L.role !== "bg").flatMap((L) => L.cols || [L.col]);
+        const drawn = spec.layers.filter((L) => L.role !== "bg" || c.edge).flatMap((L) => L.cols || [L.col]);
         for (const th of thread) if (!drawn.some((x) => matches(x, th))) bad.push(`thread ${th} (${family(th)}) matches nothing drawn`);
       }
       // trims: a jump per sewable piece at most, plus two a colour (cross-stitch and line drawings join pieces), and
