@@ -7,8 +7,8 @@
 // file the machine can't take. Saved designs (.needleworks.json) are fuzzed in the browser (tests/browser/engine_fuzz.html).
 // Run: node tests/open_fuzz.test.mjs [count=600] [seed=1]   (~1 min; tests/external/pes adds Brother-made samples)
 import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "fs";
-import { COLOR_CHANGE, END, JUMP, STITCH, designStats, writePES } from "../js/core/formats.js";
-import { fix, openedFile } from "../js/doctor.js";
+import { COLOR_CHANGE, END, JUMP, STITCH, designStats, readEmbroidery, writePES } from "../js/core/formats.js";
+import { fitFix, fix, openedFile } from "../js/doctor.js";
 import { judge } from "../js/gate.js";
 
 const COUNT = +(process.argv[2] || 600), SEED = +(process.argv[3] || 1);
@@ -94,14 +94,16 @@ for (let i = 0; i < COUNT; i++) {
   // Download: Make it the largest that fits is a resize, the doctor's `fix` with a scale)
   const st = designStats(o.d), fits = st.widthMm <= HOOP.w - 4 && st.heightMm <= HOOP.h - 4;
   if (!fits) {
-    // (Make it the largest that fits: the size box goes down to 50 %, and shrinking ticks Remove tiny stitches and Thin)
+    // (Make it the largest that fits: the size box goes down to 50 %, and shrinking ticks Remove tiny stitches and Thin;
+    // made to fit as it comes out, as the Open tab's worker does: re-stitched, it came out a hair bigger, Too big)
     tooBig++;
-    const scale = Math.min((HOOP.w - 4) / st.widthMm, (HOOP.h - 4) / st.heightMm) * 0.995;
+    const scale = Math.floor(Math.min((HOOP.w - 4) / st.widthMm, (HOOP.h - 4) / st.heightMm) * 1000 - 2) / 1000;
     if (scale < 0.5 || rnd() > 0.25 || o.stuck) continue;
     try {
-      const p = fix(o.fixBase || o.d, { scale, tiny: true, thin: true, join: o.colourless }), ps = designStats(p);
-      // (re-stitched, it can come out a hair bigger: the tab then says Too big and has no Download)
-      if (ps.widthMm > HOOP.w - 4 || ps.heightMm > HOOP.h - 4) { overshoot++; continue; }
+      const made = fitFix(o.fixBase || o.d, { scale, tiny: true, thin: true, join: o.colourless }, [HOOP.w - 4, HOOP.h - 4]);
+      if (!made) { overshoot++; continue; }
+      const p = made.pattern, ps = designStats(readEmbroidery(writePES(p), "x.pes"));
+      if (ps.widthMm > HOOP.w - 4 || ps.heightMm > HOOP.h - 4) { fail(`made the largest that fits, it's still ${ps.widthMm} x ${ps.heightMm} mm`, f); continue; }
       const j = judgeSafe({ name: "x.pes", bytes: writePES(p), against: p }, HOOP);
       shrunk++;
       if (!j.ok) fail(`shrunk to ${(scale * 100).toFixed(0)} %, it's refused: ${j.error}`, f);
@@ -136,6 +138,19 @@ for (const src of seeds) {
     if (blk + 200 > b.length) continue;
     const d = b.slice(); d[blk + 17] ^= 0x15; for (const k of [40, 77, 120]) d[blk + k] ^= 0x22;
     try { const o = openedFile(d, src.name); if (o.disagree && !o.damaged) fail("a PES with its machine block damaged was called two different designs", { name: src.name, from: src.name, kind: "damaged", bytes: d }); damage++; } catch {}
+  }
+  // (round 13: a PES cut before its stitches was "no stitches... not an embroidery file"; random bytes behind a DST
+  // header opened as a 212-stitch design with 7 thread changes)
+  const said = (bytes, name) => { try { openedFile(bytes, name); return "opened"; } catch (err) { return err.plain ? err.message : `threw ${err.constructor.name}`; } };
+  if (/\.pes$/i.test(src.name) && b.length > 12) {
+    const at = Math.max(40, u32(b, 8) - 100), m = said(b.slice(0, at), src.name);
+    damage++; if (!/cut short/.test(m)) fail(`a PES cut before its stitches says: ${m}`, { name: src.name, from: src.name, kind: "cut before PEC", bytes: b.slice(0, at) });
+  }
+  const junk = b.slice(0, 512 + 3 * 300);
+  if (/\.dst$/i.test(src.name) && junk.length > 512 + 3 * 40) {
+    for (let i = 512; i < junk.length; i++) junk[i] = ri(0, 255);
+    const m = said(junk, src.name);
+    damage++; if (!/doesn't read as a DST/.test(m)) fail(`random bytes behind a DST header: ${m}`, { name: src.name, from: src.name, kind: "junk dst", bytes: junk });
   }
 }
 console.log(`damage said: ${damage} damaged seeds checked`);

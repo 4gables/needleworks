@@ -1,8 +1,8 @@
 // The design doctor's fixes (resize 50-250 %, re-stitched past 80-120 %; tiny stitches; thinning; colour sort) must
 // always give a file that validates.
 import { readFileSync, readdirSync, existsSync } from "fs";
-import { readEmbroidery, validatePES, writePES } from "../js/core/formats.js";
-import { checkup, fix, landJumps, sortColors } from "../js/doctor.js";
+import { designStats, readEmbroidery, validatePES, writePES } from "../js/core/formats.js";
+import { checkup, fitFix, fix, landJumps, openedFile, sortColors } from "../js/doctor.js";
 import { moves, verdictOf } from "../js/quality.js";
 import { distanceTransform } from "../js/core/raster.js";
 
@@ -90,6 +90,30 @@ for (const dir of dirs) for (const f of readdirSync(dir).filter((x) => /\.(pes|d
     const k = new Set(v.map((q) => q.key)), p = fix(readEmbroidery(bytes, "x.pes"), { thin: k.has("dense"), tiny: k.has("tiny") || k.has("same"), satin: k.has("sparse") });
     const after = verdictOf(writePES(p));
     if (after.length) { bad++; console.error(`FAIL ${f} fixed copy still: ${after.map((q) => q.key)}`); }
+  }
+  // Every size the Open tab offers as fitting fits as it comes out (round 13: "Largest that fits: 224.2 %" re-stitched
+  // flower_ludd 176.1 mm in 176, Too big, Download off; wreath and ufront too): the largest, as app.js `largest()`
+  // scales it, and a little under, made by `fitFix` as the tab's worker makes them, in a 5x7 and a 4x4 field.
+  const o = openedFile(new Uint8Array(readFileSync(`${dir}/${f}`)), f), sz = designStats(o.d);
+  for (const box of [[126, 176], [96, 96]]) {
+    const fit = Math.min(box[0] / sz.widthMm, box[1] / sz.heightMm), top = Math.floor(fit * 1000 - 2) / 1000;
+    for (const scale of [Math.min(2.5, top), Math.min(2.5, top) - 0.03]) {
+      if (scale < 0.5) continue;
+      n++;
+      const made = fitFix(o.fixBase || o.d, { scale }, box);
+      if (!made) { bad++; console.error(`FAIL ${f} ${scale * 100} % in ${box}: no size fits`); continue; }
+      const b = writePES(made.pattern), st = designStats(readEmbroidery(b, "x.pes")), v = validatePES(b, made.pattern);
+      if (st.widthMm > box[0] || st.heightMm > box[1] || made.scale > scale) { bad++; console.error(`FAIL ${f} ${scale * 100} % in ${box}: made at ${made.scale * 100} %, ${st.widthMm} x ${st.heightMm} mm`); }
+      if (!v.ok) { bad++; console.error(`FAIL ${f} fitted ${made.scale}: ${v.error}`); }
+    }
+  }
+  // A file that fails the check as it came opens with the fixes for it ticked, and that copy passes (round 13:
+  // "Save a copy" saved peace.pes failing, nothing ticked; gnome.pes's 12.7 mm stitch the same)
+  if (o.check.verdict.length) {
+    n++;
+    const k = o.need, p = fix(o.fixBase || o.d, { tiny: k.has("tiny") || k.has("same"), thin: k.has("dense"), split: k.has("long"), satin: k.has("sparse"), join: o.colourless });
+    const after = verdictOf(writePES(p));
+    if (after.length) { bad++; console.error(`FAIL ${f} opened with ${[...k]} ticked, still: ${after.map((q) => q.key)}`); }
   }
   // Remove tiny stitches leaves next to none the checker counts, shrunk or re-stitched (a run ending in two short
   // stitches can keep one: needleworks_rl at 90 %)

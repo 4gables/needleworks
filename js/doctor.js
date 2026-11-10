@@ -673,6 +673,26 @@ export function fix(pattern, { scale = 1, tiny = false, thin = false, sort = fal
   const done = slide(thin ? relieve(out, LIMIT) : out);
   return blockThreads({ stitches: tiny ? dropTiny(done) : done, threads: pattern.threads });
 }
+// `fix` at a size meant to fit `box` ([w, h] mm: the hoop's field less the margin), made smaller by what the copy goes
+// over until it fits. A re-stitched copy comes out a little bigger than its source scaled (ends reach out to where the
+// source sews, rows meet the edge): "Largest that fits: 224.2 %" made flower_ludd 176.1 mm in 176, Too big, as did
+// wreath and ufront. Returns { pattern, scale } (the scale it was made at), or null when even half size won't fit.
+export function fitFix(pattern, opts, box) {
+  let scale = opts.scale ?? 1;
+  for (let k = 0; k < 8 && scale >= 0.5; k++) {
+    const p = fix(pattern, { ...opts, scale }), [w, h] = extent(p);
+    if (w <= box[0] * 10 && h <= box[1] * 10) return { pattern: p, scale };
+    // (a step under the overshoot, in whole 0.1 %: the next try lands inside, or near enough for one more)
+    scale = Math.min(scale - 0.001, Math.floor(scale * Math.min((box[0] * 10) / w, (box[1] * 10) / h) * 1000 - 1) / 1000);
+  }
+  return null;
+}
+// the size of what's sewn (stitches only, as the hoop check measures the file), 0.1 mm
+function extent(p) {
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+  for (const [x, y, c] of p.stitches) if (c === STITCH) { if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
+  return [x1 - x0, y1 - y0];
+}
 // One thread per colour block, as the writer needs: it lists every thread it's given in the PEC header, and the
 // machine (and pe900_check) expects one per block. A PES whose header named two threads for its one block was saved
 // "Checked" with "2 colours" for 1 (round 6's disagree.pes).
@@ -760,17 +780,37 @@ export function notEmbroidery(bytes, name) {
     : type ? " Picture to stitches can turn it into stitches." : /^a (photo|drawing)/.test(what) ? " Save it as a JPG or PNG, then Picture to stitches can turn it into stitches." : " Look for the .pes file that came with it.";
   return { message: `${name} is ${what}, not an embroidery design.${how}`, picture: type };
 }
+// A .dst whose records aren't DST records: every one has its third byte's two low bits set (the format's own marker),
+// so random bytes fail three in four. Random bytes behind a DST header opened as a 212-stitch design with 7 thread
+// changes, "ends early". (A few changed bytes in a real file don't come near: it opens, damaged or cut short.) Read
+// past an end code (random bytes hold one every 16 records) but not padding (zeros, spaces, 0x1A).
+function notDST(bytes, name) {
+  if (!/\.dst$/i.test(name) || /^#PE[SC]/.test(String.fromCharCode(...bytes.subarray(0, 4)))) return false;
+  const pad = (v) => v === 0 || v === 0x1a || v === 0x20;
+  let n = 0, bad = 0;
+  for (let i = 512; i + 3 <= bytes.length && n < 4000; i += 3) {
+    const [a, b, c] = bytes.subarray(i, i + 3);
+    if ((c & 0xf3) === 0xf3 || (pad(a) && pad(b) && pad(c))) continue;
+    n++; if ((c & 3) !== 3) bad++;
+  }
+  return n >= 8 && bad > n * 0.1;
+}
 export function openedFile(bytes, name) {
   // (a picture, a PDF, a zip or an empty file, said as what it is)
   const not = notEmbroidery(bytes, name);
   if (not) throw Object.assign(new Error(not.message), { plain: true, picture: not.picture, saved: not.saved });
-  // (jumps landed on their first stitch: a DST converted here, or a fixed copy, would gain a hole where each ended)
-  let d = centred(firstMove(landJumps(readEmbroidery(bytes, name))));
-  // (a needle move: a stitch that goes somewhere. A file cut down to one stitch on the origin opened, then Download
-  // refused it as having no stitches)
-  if (!d.stitches.some((s, i) => s[2] === STITCH && i && (s[0] !== d.stitches[i - 1][0] || s[1] !== d.stitches[i - 1][1]))) throw Object.assign(new Error(`${name} has no stitches in it. It may be damaged or not an embroidery file: try downloading it again.`), { plain: true });
+  const plain = (message) => Object.assign(new Error(message), { plain: true });
+  if (notDST(bytes, name)) throw plain(`${name} doesn't read as a DST design: what follows its header isn't stitches. It may be damaged, or another kind of file renamed .dst: try downloading it again.`);
   // (a file cut short still decodes, as the part that's there: peace.pes cut in half opened as 2,658 stitches, "Fits")
   const short = endsEarly(bytes, name);
+  // (cut short before its stitches, a PES cut in half before its PEC block: said as cut short, not "not an embroidery file")
+  const cut = `${name} was cut short before its stitches: only the start of the file is there. Download it again from where it came from.`;
+  // (jumps landed on their first stitch: a DST converted here, or a fixed copy, would gain a hole where each ended)
+  let d;
+  try { d = centred(firstMove(landJumps(readEmbroidery(bytes, name)))); } catch (err) { if (short) throw plain(cut); throw err; }
+  // (a needle move: a stitch that goes somewhere. A file cut down to one stitch on the origin opened, then Download
+  // refused it as having no stitches)
+  if (!d.stitches.some((s, i) => s[2] === STITCH && i && (s[0] !== d.stitches[i - 1][0] || s[1] !== d.stitches[i - 1][1]))) throw plain(short ? cut : `${name} has no stitches in it. It may be damaged or not an embroidery file: try downloading it again.`);
   // A PES whose design block (what PE-DESIGN opens) isn't what its PEC block (what the machine sews) holds: its
   // threads are the PEC block's too (the header said "Red" for a block the machine sews green), and it's saved
   // again as what the machine sews, so both agree. (A file cut short disagrees too: it says so already.)
@@ -802,9 +842,10 @@ export function openedFile(bytes, name) {
   const out = isPes ? bytes : stuck ? null : writePES(d);
   // (the checkup reads the file as it will be saved: the original bytes, or the copy written here)
   const check = checkup(out ? readEmbroidery(out, "x.pes") : d);
-  // A file that's written again here anyway (a misplaced or cut-short PES, a DST) is written fixed: what it fails
-  // is ticked. dense_k.pes was saved as "_fixed" with only its box mended, still 40 hits/mm².
-  const need = new Set(isPes || stuck ? [] : check.verdict.map((q) => q.key));
+  // What it fails is ticked, so the copy saved here is fixed. dense_k.pes was saved as "_fixed" with only its box
+  // mended, still 40 hits/mm²; and a PES the machine takes as it is was too ("Save a copy" of peace.pes, 25 hits/mm²
+  // and 15.7 mm stitches, nothing ticked, gnome.pes's 12.7 mm stitch the same): saving it as it came means unticking.
+  const noFix = stuck || (tooMany && !fewer), need = new Set(noFix ? [] : check.verdict.map((q) => q.key));
   return { d, out, check, need, isPes, repair, hard, misplaced, short, disagree, damaged, colourless, tooMany, blocks, stops, merged, stuck,
-    noFix: stuck || (tooMany && !fewer), fixBase: isPes && fewer ? fewer : null };
+    noFix, fixBase: isPes && fewer ? fewer : null };
 }

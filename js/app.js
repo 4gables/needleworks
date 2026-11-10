@@ -1608,6 +1608,9 @@ function docJob(msg) {
       if (r.id !== docSeq || !state.opened) return;
       docIdle();
       if (!r.ok) { showError("This fix didn't work on this design: " + r.error); return; }
+      // (a size meant to fit, made smaller till the re-stitched copy did: that's the size now, and nothing bigger fits)
+      const o = state.opened;
+      if (r.scale != null && r.scale !== o.opts.scale) { o.opts.scale = r.scale; (o.fits ||= {})[fieldKey()] = r.scale; sizeUI(); }
       showError(""); showOpened(r.pattern, r.bytes, r.check, true);
     };
     docWorker.onerror = (e) => { docDone(); docIdle(); if (state.mode === "open") showError("Something went wrong while fixing this design. " + (e.message || "")); };
@@ -1624,14 +1627,17 @@ function openView() {
   // (a quick fix shows no spinner; re-stitching says so)
   const id = docSeq;
   docBusy = setTimeout(() => id === docSeq && busy(true, scale < 0.8 || scale > 1.2 ? "Re-stitching…" : "Working…"), 150);
-  docJob({ id, d: o.fixBase || o.d, opts: { ...o.opts, join: o.colourless } });
+  // (a size up to the largest that fits is made to fit as it comes out: re-stitched copies come out a little bigger)
+  const h = hoop(), fit = scale <= largest().scale + 1e-9 ? [h.w - 2 * MARGIN, h.h - 2 * MARGIN] : null;
+  docJob({ id, d: o.fixBase || o.d, opts: { ...o.opts, join: o.colourless }, fit });
 }
 function showOpened(p, bytes, check, changed) {
   const o = state.opened, { scale, tiny, thin, sort, split, satin } = o.opts;
   // ("fixed" only when it passes the check: never a "_fixed" file that fails, nor "_fixed_fixed" from the dialog; and
   // only when something needed fixing: shrinking ticks Remove tiny stitches and Thin by itself, and a plain resize of
-  // a file that passed read "Save fixed copy" as if it had been broken)
-  const fixes = o.repair || !!o.merged || sort || split || satin || ((tiny || thin) && (!o.auto || !!o.check.verdict.length));
+  // a file that passed read "Save fixed copy" as if it had been broken. A file that failed as it came and passes now
+  // is fixed at any size: gnome.pes at 50 and 80 % was "_fixed", at 120 and 160 % not, though each split its stitch.)
+  const fixes = o.repair || !!o.merged || !!o.check.verdict.length || sort || split || satin || ((tiny || thin) && !o.auto);
   const fixed = fixes && !check.verdict.length;
   // (too many thread changes to write as PES: shown from its own bytes, no download)
   if (o.stuck) bytes = o.bytes;
@@ -1703,12 +1709,16 @@ function hardWords(o) {
     .filter(Boolean).join(" and ");
 }
 // the largest size that fits the hoop (field less the margin), as a scale and a whole percent, a little under so the
-// re-stitched copy's rounding can't take it over
+// re-stitched copy's rounding can't take it over. Scaled from the file, until a copy made to fit came out smaller
+// (`fits`, per hoop: re-stitching grows a design a little); openView makes any size up to it fit as it comes out.
+// `top`: it's the slider's 250 %, not the hoop, that stops it (a 23 x 43 mm file said "Largest that fits: 250 %").
+const fieldKey = () => { const h = hoop(); return `${h.w}x${h.h}`; };
 function largest() {
   const h = hoop(), [w, ht] = state.opened.size;
   // (250 % is as big as it goes: when that fits it's 250, not "249.8 %")
-  const fit = Math.min((h.w - 2 * MARGIN) / w, (h.h - 2 * MARGIN) / ht), scale = fit >= 2.5 ? 2.5 : Math.floor(fit * 1000 - 2) / 1000;
-  return { scale, pct: Math.floor(scale * 1000) / 10, mm: Math.round(state.opened.longer * scale) };
+  const fit = Math.min((h.w - 2 * MARGIN) / w, (h.h - 2 * MARGIN) / ht), top = fit >= 2.5;
+  const made = state.opened.fits?.[fieldKey()], scale = Math.min(top ? 2.5 : Math.floor(fit * 1000 - 2) / 1000, made ?? Infinity);
+  return { scale, top: top && scale === 2.5, pct: Math.floor(scale * 1000) / 10, mm: Math.round(state.opened.longer * scale) };
 }
 // what a file failed as it came, for "As it came, this file ..."
 const NEED = { dense: "was too dense in places", long: "had stitches over 12 mm", tiny: "had too many tiny stitches", same: "had stitches into the hole the needle was already in", sparse: "had satin stitches too far apart", colours: "listed the wrong number of threads" };
@@ -1811,8 +1821,9 @@ function sizeUI() {
   $("doc-fit-row").hidden = big.scale < 0.5 || (at && !capped);
   $("doc-fit").hidden = at;
   // (information in the hint's colour, the action a short link: the whole line as a red link read as an error)
-  $("doc-fit-note").textContent = capped ? `${capped} mm is too big for the ${hoop().name}: ${big.mm} mm is the largest that fits.` : `Largest that fits the ${hoop().name}: ${big.pct} % (${big.mm} mm). `;
-  $("doc-fit").textContent = "Use this size"; $("doc-fit").setAttribute("aria-label", `Use this size: ${big.pct} %, the largest that fits`);   // (the visible words first, for voice control)
+  $("doc-fit-note").textContent = capped ? `${capped} mm is too big for the ${hoop().name}: ${big.mm} mm is the largest that fits.`
+    : big.top ? `As big as it goes here: 250 % (${big.mm} mm), and it still fits the ${hoop().name}. ` : `Largest that fits the ${hoop().name}: ${big.pct} % (${big.mm} mm). `;
+  $("doc-fit").textContent = "Use this size"; $("doc-fit").setAttribute("aria-label", `Use this size: ${big.pct} %, ${big.top ? "as big as it goes" : "the largest that fits"}`);   // (the visible words first, for voice control)
   // within 80-120 % the stitches are scaled as they are; past that they're re-stitched at the new size
   $("doc-scale-hint").textContent = o.scale >= 0.8 && o.scale <= 1.2 ? "Up to 20 % either way the stitches are scaled as they are (denser smaller, more open bigger), with the satin stitches spaced evenly again."
     : "Re-stitched at the new size: fills and satin stitches stay as close together as the file had them (satin stitches packed too tight or too open come out even). Check it in the preview: lettering and fine detail can change.";

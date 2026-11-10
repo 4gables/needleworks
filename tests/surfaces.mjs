@@ -117,8 +117,12 @@ const CASES = [
   // (round 10: what a picture leaves out, said on every surface: the doodles at 60 mm)
   { name: "picture: doodles left out", tab: "picture", image: "doodles", act: `(() => { const s = document.getElementById("pic-size"); s.value = 60; s.dispatchEvent(new Event("input", { bubbles: true })); })()` },
   { name: "open: clean", tab: "open", file: "clean" },
-  { name: "open: dense", tab: "open", file: "dense" },
-  { name: "open: tiny", tab: "open", file: "tiny" },
+  // (round 13: a file that fails opens with its fixes ticked, the copy passing: `fixed`; unticked, as it came, the
+  // file's verdict is said on every surface)
+  { name: "open: dense", tab: "open", file: "dense", fixed: true },
+  { name: "open: dense as it came", tab: "open", file: "dense", asCame: true },
+  { name: "open: tiny", tab: "open", file: "tiny", fixed: true },
+  { name: "open: tiny as it came", tab: "open", file: "tiny", asCame: true },
   { name: "open: packed satin", tab: "open", file: "packed" },
   { name: "open: sparse satin", tab: "open", file: "sparse" },
   { name: "open: 121 colours", tab: "open", file: "colours" },
@@ -318,6 +322,11 @@ for (const c of CASES) {
         await ev(`(() => { const s = document.getElementById("doc-scale"); s.value = ${c.scale}; s.dispatchEvent(new Event("input", { bubbles: true })); s.dispatchEvent(new Event("change", { bubbles: true })); return 1; })()`);
         await sleep(3000);
       }
+      if (c.asCame) {
+        await sleep(800);
+        await ev(`(() => { for (const b of document.querySelectorAll("#doctor-fix input[type=checkbox]")) if (b.checked && !b.disabled) b.click(); return 1; })()`);
+        await sleep(2500);
+      }
     }
     if (c.act) { await sleep(1500); await ev(`(() => { ${c.act}; return 1; })()`); await sleep(1500);
       // (a picture sews again: wait for it)
@@ -327,6 +336,12 @@ for (const c of CASES) {
     const exp = r.expected, idsOf = (l) => l.map((p) => p.id);
     for (const p of exp) seenKinds.add(`${r.mode}:${p.id.replace(/:.*$/, "")}${p.file ? ":" + p.id.split(":")[1] : ""}`);
     console.log(`  ${r.mode}: ${exp.map((p) => `${p.id}(${p.level})`).join(" ") || "no problems"}`);
+    // (a file that failed as it came opens fixed: "Save fixed copy", nothing of the file's verdict left; as it came, it is)
+    if (c.fixed || c.asCame) {
+      const files = exp.filter((p) => p.id.startsWith("file:")).length, btn = await ev(`document.getElementById("download").textContent`);
+      if (c.fixed && (files || btn !== "Save fixed copy")) fail(c.name, `opened with its fixes ticked: "${btn}", ${files} of the file's problems left`);
+      if (c.asCame && !files) fail(c.name, "as it came, the file's verdict isn't said");
+    }
     // every surface shows the same problems
     const check = (surface, got, expected) => { if (got !== undefined && !same(got, expected)) fail(c.name, `${surface} shows [${got.join(" ")}], the view has [${expected.join(" ")}]`); };
     check("beside Download", r.download, idsOf(want(exp, "download")));
