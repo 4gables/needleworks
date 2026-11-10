@@ -2,7 +2,8 @@
 // and Luggage tag opened saying "Ashley has small loops that fill in"; the Pet bandana with a 7-letter name was too big
 // for the 5x7 until the hoop was turned). Every starter, on every hoop, opened through its card in the real page, must
 // open with no problem above a tip (js/words.js levels: nothing `block` or `look`, no file verdict) and fit the hoop;
-// and a starter made for a name must still fit the 5x7 with a 10-letter name typed over it.
+// and a starter made for a name must still fit the 5x7 with a 10-letter name typed over it. Cut files pass the gate
+// and don't turn with the hoop.
 // usage: node tests/cdp.mjs PORT start DIR; serve the site (tests/batch_server.py out/batch HTTP); then
 //        node tests/starters.mjs PORT http://127.0.0.1:HTTP [starter-filter]
 // ~3 minutes; one line per starter and hoop; "DONE <cases> <problems>"; exit code 1 when anything is wrong.
@@ -57,6 +58,23 @@ for (const hoop of ["5x7", "4x4"]) {
     if (only && !id.includes(only)) continue;
     await ev(`(() => { document.querySelector('#st-cards [data-start="${id}"]').click(); return 1; })()`);
     say(id, hoop, "", await ev(SETTLED));
+    // its cut files (appliqué, in-the-hoop fronts) pass the gate and read as the design does whichever way the hoop is
+    // turned (a turned MOM's cut file had its letters sideways, round 10)
+    const cut = () => ev(String.raw`nwTest.cut("svg").concat(nwTest.cut("dxf")).map((f) => ({ name: f.name, ok: f.ok, error: f.error, size: (f.bytes.match(/width="([\d.]+)mm" height="([\d.]+)mm"/) || []).slice(1).join("x") }))`);
+    const before = hoop === "5x7" && await cut();
+    if (before?.length) {
+      await ev(`(() => { document.getElementById("turn").click(); return 1; })()`);
+      await ev(SETTLED);
+      const after = await cut();
+      await ev(`(() => { document.getElementById("turn").click(); return 1; })()`);
+      await ev(SETTLED);
+      n++;
+      const wrong = [...before, ...after].filter((f) => !f.ok).map((f) => `${f.name}: ${f.error}`);
+      // (none when the design doesn't fit the other way round: nothing to compare)
+      if (after.length && (before[0].size !== after[0].size || before[1].name !== after[1].name)) wrong.push(`cut file ${before[0].size} mm, ${after[0].size} with the hoop turned`);
+      if (wrong.length) bad++;
+      console.log(`${wrong.length ? "FAIL" : "ok  "} ${id} ${hoop} cut files ${before.map((f) => f.name).join(", ")}${after.length ? "" : " (doesn't fit turned)"}${wrong.length ? ": " + wrong.join(" | ") : ""}`);
+    }
     // the name it's made for (the biggest lettering, as One for each name picks it) swapped for a long one, keeping
     // its swashes and any lines after the first
     const named = hoop === "5x7" && await ev(String.raw`(() => {

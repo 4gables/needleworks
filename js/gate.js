@@ -12,6 +12,14 @@ import { zip } from "./zip.js";
 import { safeName, uniqueName } from "./core/typed.js";
 
 const no = (f, error) => ({ ...f, ok: false, error, problems: [], hard: [] });
+// a cut file's shapes must be the size its page and its name say (`_52x165mm`, sheet.js cutName): a cutter that
+// opened MOM_cut_52x165mm.svg showed 56 x 169.2 mm, the shapes plus a 2 mm margin (round 10)
+function sized(f, w, h, page = null) {
+  if (page && (Math.abs(page[0] - w) > 0.15 || Math.abs(page[1] - h) > 0.15)) return no(f, "The cut file's page isn't the size of its shapes.");
+  const m = f.name.match(/_(\d+)x(\d+)mm\.\w+$/);
+  if (m && (Math.abs(+m[1] - w) > 0.55 || Math.abs(+m[2] - h) > 0.55)) return no(f, `The cut file's shapes are ${w.toFixed(1)} x ${h.toFixed(1)} mm, not the size in its name.`);
+  return { ...f, ok: true, error: "", problems: [], hard: [] };
+}
 // a cut file: an SVG at actual size, every outline closed and every number a number
 function judgeSVG(f) {
   const t = typeof f.bytes === "string" ? f.bytes : new TextDecoder().decode(f.bytes);
@@ -19,7 +27,8 @@ function judgeSVG(f) {
   if (!size || !/<\/svg>\s*$/.test(t)) return no(f, "The cut file is damaged.");
   if (!(+size[1] > 0 && +size[2] > 0 && +size[1] < 1000 && +size[2] < 1000)) return no(f, "The cut file has no size.");
   if (!paths.length || paths.some((d) => !/^(M-?[\d.]+,-?[\d.]+(L-?[\d.]+,-?[\d.]+){2,}Z)+$/.test(d))) return no(f, "The cut file has a shape that isn't closed.");
-  return { ...f, ok: true, error: "", problems: [], hard: [] };
+  const xy = paths.flatMap((d) => [...d.matchAll(/(-?[\d.]+),(-?[\d.]+)/g)].map((m) => [+m[1], +m[2]]));
+  return sized(f, Math.max(...xy.map((q) => q[0])) - Math.min(...xy.map((q) => q[0])), Math.max(...xy.map((q) => q[1])) - Math.min(...xy.map((q) => q[1])), [+size[1], +size[2]]);
 }
 // a DXF cut file: ASCII group-code pairs from SECTION to EOF, every outline a closed POLYLINE of 3 or more vertices
 // with numbers in reach (under 1 m)
@@ -27,7 +36,7 @@ function judgeDXF(f) {
   const t = (typeof f.bytes === "string" ? f.bytes : new TextDecoder().decode(f.bytes)).split(/\r?\n/);
   if (t.at(-1) === "") t.pop();
   if (t.length % 2 || t[0].trim() !== "0" || t[1] !== "SECTION" || t.at(-1) !== "EOF") return no(f, "The cut file is damaged.");
-  let shapes = 0, vertices = -1, closed = false;
+  let shapes = 0, vertices = -1, closed = false, x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
   for (let i = 0; i < t.length; i += 2) {
     const code = t[i].trim(), v = t[i + 1];
     if (code === "0") {
@@ -35,10 +44,14 @@ function judgeDXF(f) {
       else if (v === "VERTEX") { if (vertices < 0) return no(f, "The cut file is damaged."); vertices++; }
       else if (v === "SEQEND") { if (vertices < 3 || !closed) return no(f, "The cut file has a shape that isn't closed."); shapes++; vertices = -1; }
     } else if (code === "70" && vertices === 0 && t[i - 2]?.trim() !== "9") closed = (+v & 1) === 1;
-    else if (code === "10" || code === "20") { const x = +v; if (!/^-?\d+(\.\d+)?$/.test(v) || !(Math.abs(x) < 1000)) return no(f, "The cut file has no size."); }
+    else if (code === "10" || code === "20") {
+      const x = +v; if (!/^-?\d+(\.\d+)?$/.test(v) || !(Math.abs(x) < 1000)) return no(f, "The cut file has no size.");
+      // (a vertex's own coordinates, not the POLYLINE's 0,0 reference point)
+      if (t[i - (code === "10" ? 3 : 5)] === "VERTEX") { if (code === "10") { x0 = Math.min(x0, x); x1 = Math.max(x1, x); } else { y0 = Math.min(y0, x); y1 = Math.max(y1, x); } }
+    }
   }
   if (!shapes || vertices >= 0) return no(f, "The cut file has a shape that isn't closed.");
-  return { ...f, ok: true, error: "", problems: [], hard: [] };
+  return sized(f, x1 - x0, y1 - y0);
 }
 // a saved design: what Open saved reads back
 function judgeJSON(f) {

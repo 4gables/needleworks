@@ -7,7 +7,7 @@
 import { readFileSync, readdirSync } from "fs";
 import { COLOR_CHANGE, END, STITCH, readEmbroidery, writePES } from "../js/core/formats.js";
 import { handOut, judge } from "../js/gate.js";
-import { cutDXF, cutSVG } from "../js/sheet.js";
+import { cutDXF, cutName, cutSVG } from "../js/sheet.js";
 
 let bad = 0, n = 0;
 const fail = (m) => { bad++; console.error("FAIL " + m); };
@@ -94,6 +94,15 @@ ok(!judge({ name: "x_cut.dxf", bytes: cutDXF([[loop.map(([x, y]) => [x, y * NaN]
 ok(!judge({ name: "x_cut.dxf", bytes: cutDXF([[[[0, 0], [1, 1]]]]) }).ok, "a DXF cut file with a 2-point shape passed");
 ok(!judge({ name: "x_cut.dxf", bytes: cutDXF([[loop]]).replace("70\r\n1\r\n10", "70\r\n0\r\n10") }).ok, "a DXF cut file with an open shape passed");
 ok(!judge({ name: "x_cut.dxf", bytes: cutDXF([[loop]]).slice(0, 200) }).ok, "a cut-short DXF cut file passed");
+// the size in a cut file's name is its shapes' size, and the SVG's page is too (MOM_cut_52x165mm.svg opened as 56 x
+// 169.2 mm: the shapes plus a 2 mm margin)
+const two = [[loop], [loop.map(([x, y]) => [x + 40, y + 5])]];
+for (const ext of ["svg", "dxf"]) {
+  const make = ext === "svg" ? cutSVG : cutDXF, name = cutName("x", two, ext);
+  ok(name === `x_cut_70x25mm.${ext}` && judge({ name, bytes: make(two, "x") }).ok, `a ${ext} cut file named by its size refused (${name})`);
+  ok(!judge({ name: `x_cut_74x29mm.${ext}`, bytes: make(two, "x") }).ok, `a ${ext} cut file bigger in its name than its shapes passed`);
+}
+ok(!judge({ name: "x_cut.svg", bytes: cutSVG([[loop]], "x").replace('width="30mm" height="20mm"', 'width="34mm" height="24mm"') }).ok, "an SVG cut file with a margin round its shapes passed");
 ok(judge({ name: "d.needleworks.json", bytes: JSON.stringify({ needleworks: 1, pieces: [{ kind: "text", text: "Emma" }] }) }).ok, "a saved design refused");
 ok(!judge({ name: "d.needleworks.json", bytes: "{" }).ok && !judge({ name: "d.needleworks.json", bytes: '{"needleworks":1,"pieces":[]}' }).ok, "a broken saved design passed");
 ok(!judge({ name: "x.exe", bytes: new Uint8Array(10) }).ok, "an unknown file passed");

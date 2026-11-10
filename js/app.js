@@ -6,7 +6,7 @@ import { DEFAULT_MACHINE, MACHINES, MARGIN, hoop as getHoop } from "./core/machi
 import { DENSITY, LEARN, contentBox, picturePlan, pictureImage } from "./core/digitize.js";
 import { hexToRgb, nearestBrotherThread, pecThread } from "./core/threads.js";
 import { CLOTHS, colorBlocks, draw } from "./render.js";
-import { FINISH, FIRST_STEP, TURNED, TURN_PIC, cutDXF, cutSize, cutSVG, nextThread, sewMinutes, sewSheet, youHtml } from "./sheet.js";
+import { FINISH, FIRST_STEP, TURNED, TURN_PIC, cutDXF, cutName, cutSVG, nextThread, sewMinutes, sewSheet, youHtml } from "./sheet.js";
 import { handOut, judge } from "./gate.js";
 import { DST_COLOURS, checkup, fewerBlocks, fix, heat, openedFile, pauses, shortJumps, sortedChanges } from "./doctor.js";
 import { HARD, MAX_BLOCKS, denseWords, moves, verdictOf } from "./quality.js";
@@ -565,15 +565,21 @@ addEventListener("beforeprint", () => { if (!$("sheet").innerHTML) fillSheet(); 
 addEventListener("afterprint", () => { $("sheet").innerHTML = ""; });
 // The fabric shapes for a cutting machine (Ashley: "my Cricut Maker 3 and or my Silhouette Cameo"): SVG for Cricut
 // Design Space (and CanvasWorkspace, Silhouette's paid editions), DXF for Silhouette's free edition. The size is in the
-// name: a DXF keeps none, so Silhouette can open it scaled, and the size to set is right there.
-const cutFile = (ext, make) => () => {
-  const v = state.view; if (!v?.sheet?.cut?.length) return;
-  const name = v.filename.replace(/\.pes$/i, ""), size = cutSize(v.sheet.cut).match(/^([\d.]+) × ([\d.]+)/);
-  const r = handOut([{ name: `${name}_cut_${Math.round(+size[1])}x${Math.round(+size[2])}mm.${ext}`, bytes: make(v.sheet.cut, name) }]);
+// name (sheet.js cutName). The shapes are as the design reads (`upright`), not as the machine sews it in a turned hoop:
+// a turned MOM came out with its letters sideways (round 10).
+const cutFiles = (v, ext) => {
+  const shapes = v?.sheet?.upright || v?.sheet?.cut;
+  if (!shapes?.length) return [];
+  const name = v.filename.replace(/\.pes$/i, "");
+  return [{ name: cutName(name, shapes, ext), bytes: (ext === "dxf" ? cutDXF : cutSVG)(shapes, name) }];
+};
+const cutFile = (ext) => () => {
+  const files = cutFiles(state.view, ext); if (!files.length) return;
+  const r = handOut(files);
   if (!r.ok) showError("Cut file stopped: " + r.error);
 };
-$("cut-file").onclick = cutFile("svg", cutSVG);
-$("cut-dxf").onclick = cutFile("dxf", cutDXF);
+$("cut-file").onclick = cutFile("svg");
+$("cut-dxf").onclick = cutFile("dxf");
 
 // ---------- on my item ----------
 // a photo of the real bib or towel under the design at true size: two dots on something measured set the scale
@@ -1569,7 +1575,7 @@ function sizeUI() {
   $("doc-fit").textContent = "Use this size"; $("doc-fit").setAttribute("aria-label", `Use this size: ${big.pct} %, the largest that fits`);   // (the visible words first, for voice control)
   // within 80-120 % the stitches are scaled as they are; past that they're re-stitched at the new size
   $("doc-scale-hint").textContent = o.scale >= 0.8 && o.scale <= 1.2 ? "Up to 20 % either way the stitches are scaled as they are (denser smaller, more open bigger), with the satin stitches spaced evenly again."
-    : "Re-stitched at the new size: the stitches stay as close together as the file had them. Check it in the preview: lettering and fine detail can change.";
+    : "Re-stitched at the new size: fills and satin stitches stay as close together as the file had them (satin stitches packed too tight or too open come out even). Check it in the preview: lettering and fine detail can change.";
 }
 // A new size. Shrinking packs short stitches into tiny ones, closer together: it ticks Remove tiny stitches and Thin,
 // and untick them again back at 100 % or more if it was the slider that ticked them (ufront back at 100 % had lost 88
@@ -1694,7 +1700,7 @@ const studio = initStudio({
     if (!pattern) { state.views.design = null; if (state.mode === "design") setView(null); return; }
     pattern = toMachine(pattern);
     if (look.split) look = { ...look, split: look.split.map((p) => ({ ...p, pattern: toMachine(p.pattern) })) };
-    if (designTurned() && look.sheet?.cut) look = { ...look, sheet: { ...look.sheet, cut: look.sheet.cut.map((c) => turnCut(c)) } };
+    if (designTurned() && look.sheet?.cut) look = { ...look, sheet: { ...look.sheet, upright: look.sheet.cut, cut: look.sheet.cut.map((c) => turnCut(c)) } };
     // (a design the writer can't hold, such as two 121-colour design files, 241 thread changes: said, and no stale file
     // left to download; it threw past here and the last design stayed on screen)
     let bytes;
@@ -1721,4 +1727,4 @@ if (new URLSearchParams(location.search).has("shared")) (async () => {
 // a link to another tab on this page (#design, #open...) switches to it; #bookmark opens the Bookmark starter
 addEventListener("hashchange", () => { const m = location.hash.slice(1); if (m === "bookmark" || (m !== state.mode && MODES.includes(m))) setMode(m, false); });
 // for tests/surfaces.mjs: the view on screen, its problems and its share text (what every surface should agree on)
-globalThis.nwTest = { view: () => state.view, problems: () => problemsOf(state.view), share: () => state.view && shareText(state.view) };
+globalThis.nwTest = { view: () => state.view, problems: () => problemsOf(state.view), share: () => state.view && shareText(state.view), cut: (ext = "svg") => cutFiles(state.view, ext).map((f) => ({ ...judge(f), bytes: String(f.bytes) })) };

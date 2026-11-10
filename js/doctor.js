@@ -493,7 +493,8 @@ const MAXS = 6.8;   // the writer splits stitches over 7 mm in equal parts (the 
 // over 30 mm wide (median) are filled instead (the peace ring at 250 % is 25 mm: filling those columns took trims 54 -> 82)
 const PIECE = 5.5, SHORT = 16, WIDE = 30;
 // a column end reaches 0.5 mm further on; satin same-edge gaps and fill rows (mm) kept from the source within these
-const EXT = 0.5, SATIN = [0.3, 0.5], ROWS = [0.35, 0.5];
+// (rows down to 0.15, the cover of the densest satin kept: 0.3 mm on each edge is a thread every 0.15 mm)
+const EXT = 0.5, SATIN = [0.3, 0.5], ROWS = [0.15, 0.5];
 const clamp = (v, [a, b]) => Math.min(b, Math.max(a, v));
 // a satin column's gap between hits on one edge, at the source's own size, brought into SATIN. Over OPEN it's a
 // zigzag underlay (or meant open) and stays a line: rebuilt as satin, peace.pes's underlay took 81 % more thread.
@@ -526,14 +527,14 @@ function refill(runs, angle, taken = new Set(), scale = 0, from = null) {
   for (const i of cut) shape.data[i] = 0;
   const loops = contours(shape).filter((l) => l.length > 8).map((l) => l.map(([x, y]) => [x0 + x / R, y0 + y / R]));
   if (!loops.length) return null;
-  // the source's row spacing: its area over the length of its rows (stitches within 15° of the fill's direction),
-  // at its own size, kept within ROWS (peace.pes's fills, re-stitched at 0.4, took 41-67 % more thread than the source)
-  let rows = 0;
-  if (scale) for (const p of runs) for (let i = 1; i < p.length; i++) {
-    const dx = p[i][0] - p[i - 1][0], dy = p[i][1] - p[i - 1][1], a = ((Math.atan2(dy, dx) * 180) / Math.PI + 360) % 180, off = Math.abs(a - angle);
-    if (Math.min(off, 180 - off) <= 15) rows += Math.hypot(dx, dy);
-  }
-  const density = rows ? clamp(mine.length / (R * R) / rows / scale, ROWS) : 0.4;
+  // the source's row spacing, from the thread it lays per mm² (all its stitches here, underlay and travel too, at its
+  // own size) less what our underlay adds (a row every 2.5 mm), kept within ROWS: the copy covers as the source did
+  // at any size (rows within 15° of the fill's direction alone read gnome's hat as 0.18 for 0.15, and the old 0.35
+  // floor gave its fills half the thread at 50 and 250 %; peace.pes's, re-stitched at 0.4, took 41-67 % more)
+  let thread = 0;
+  if (scale) for (const p of runs) for (let i = 1; i < p.length; i++) thread += Math.hypot(p[i][0] - p[i - 1][0], p[i][1] - p[i - 1][1]);
+  const perMm2 = (thread * scale) / (mine.length / (R * R)) - 1 / 2.5;
+  const density = thread ? clamp(perMm2 > 0 ? 1 / perMm2 : Infinity, ROWS) : 0.4;
   // (rows the same way round, started from the end nearer the needle: the tatami starts at the outline's far point
   // along its angle turned by (1, -1), and at the opposite one at angle + 180°)
   let dir = angle;
@@ -543,7 +544,10 @@ function refill(runs, angle, taken = new Set(), scale = 0, from = null) {
     for (const q of pts) { const t = q[0] * v[0] + q[1] * v[1]; if (t > hi[0] * v[0] + hi[1] * v[1]) hi = q; if (t < lo[0] * v[0] + lo[1] * v[1]) lo = q; }
     if (Math.hypot(lo[0] - from[0], lo[1] - from[1]) < Math.hypot(hi[0] - from[0], hi[1] - from[1])) dir = angle + 180;
   }
-  const paths = fillPolygon(loops, { angle: dir, density });
+  // (sewn the other way round too, when that has fewer parts: a section the rows strand behind finished ones is a
+  // trim, and dense rows strand more; ufront's big fill at 0.16 mm: 4 parts one way, 1 the other)
+  let paths = fillPolygon(loops, { angle: dir, density });
+  if (paths.length > 1) { const other = fillPolygon(loops, { angle: dir + 180, density }); if (other.length < paths.length) paths = other; }
   // (a point this fill will cover, 0.25 mm in from its edge)
   const on = (X, Y) => X >= 0 && Y >= 0 && X < w && Y < h && shape.data[Y * w + X];
   paths.inside = ([x, y]) => { const X = Math.round((x - x0) * R), Y = Math.round((y - y0) * R); return on(X, Y) && on(X - 1, Y) && on(X + 1, Y) && on(X, Y - 1) && on(X, Y + 1); };
