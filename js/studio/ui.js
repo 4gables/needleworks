@@ -12,7 +12,7 @@ import { THREADING, TURN_PIC, pickIt, snipsSaid, turnedNote, youHtml } from "../
 import { notEmbroidery, shortJumps } from "../doctor.js";
 import { QUILTS, quiltOf } from "./quilt.js";
 import { MOTIFS } from "./motifs.js";
-import { quiltDone, scaledFit, BORDERS, FABRICS, THREADS, SHAPES, TEXT_SHAPES, splitPieces, archFit, archStart, frontPanel, inkHeight, monoSize, archRoom, archShrink, archTight, cleanPiece, cleanPieces, clearSize, collision, collisions, inFrame, letterMetrics, underPatch, crossName, crossStep, layoutSize, touching, touchingAll, towelMin, fineLine, loopsFill, compose, fileBlocks, blocksPattern, scaleBlocks, FILE_SCALE, fittedSizes, sewnBoxes, sewn, sewnBox, followFrame, label, minSize, pieceBounds, pieceStitches, previewLook, smallText, bulkReady } from "./pieces.js";
+import { quiltDone, scaledFit, BORDERS, FABRICS, THREADS, SHAPES, TEXT_SHAPES, splitPieces, archFit, archStart, frontPanel, inkHeight, monoSize, archRoom, archShrink, archTight, cleanPiece, cleanPieces, clearSize, collision, collisions, inFrame, letterMetrics, underPatch, crossName, crossStep, layoutSize, touching, touchingAll, towelMin, fineLine, loopsFill, compose, fileBlocks, blocksPattern, scaleBlocks, FILE_SCALE, fittedSizes, sewnBoxes, sewn, sewnBox, followFrame, label, minSize, pieceBounds, pieceStitches, previewLook, smallText, bulkReady, carveDone, patchFillOf, drawAhead, pacer, PACED } from "./pieces.js";
 
 const SCRIPT = "NW Great Vibes", PRINT = "NW Josefin Sans", ROUND = "NW Quicksand", BOLD = "NW Yellowtail";
 // exact Brother PEC thread colours, so the name on screen is the one the machine shows
@@ -523,7 +523,7 @@ export function initStudio(api) {
     return what.length ? `${base}, so ${FABRICS[fabric].name} only changes how ${what.join(" and ")} ${what.length > 1 ? "are" : "is"} sewn${fabric === "towel" ? " (bold, on a light base)" : " (to suit a knit)"}.`
       : `${base}, so the fabric chosen here doesn't change the stitches.`;
   }
-  $("st-fabric").onclick = (e) => { const b = e.target.closest("[data-fab]"); if (!b || b.dataset.fab === fabric) return; remember(); fabric = b.dataset.fab; save(); sewnOn(); make(); warn(); };
+  $("st-fabric").onclick = (e) => { const b = e.target.closest("[data-fab]"); if (!b || b.dataset.fab === fabric) return; remember(); fabric = b.dataset.fab; save(); sewnOn(); make(); setTimeout(warn); };   // (warn in a task of its own: see make)
   $("st-thread").onclick = (e) => { const b = e.target.closest("[data-thread]"); if (!b || b.dataset.thread === thread) return; remember(); thread = b.dataset.thread; save(); sewnOn(); make(); };
   $("st-baste").onchange = (e) => { remember(); baste = e.target.checked; save(); sewnOn(); make(); };
   // What's wrong with piece p, as every surface says it: { list: [{ id, kind, level, text, piece }], d: what was
@@ -584,9 +584,26 @@ export function initStudio(api) {
   // the swashes the words have (`~` before the first line, after the last), as the Swash buttons show them
   const swashOn = (text) => { const ls = text.split("\n").filter((l) => l.trim()); return { lead: swashes(ls[0] || "").lead, tail: swashes(ls[ls.length - 1] || "").tail }; };
   // too-small lettering, said plainly (updated in place so typing keeps focus)
+  // (each new lettering its fixes need drawn in a task of its own, `pacer`: started again after each, everything before
+  // it cached; never said from a run that was stopped)
   async function warn() {
+    for (let k = 0; k < 30; k++) {
+      pacer.on = true; pacer.hit = false; pacer.since = performance.now();
+      try { await warnNow(); } catch (err) { if (err !== PACED) throw err; } finally { pacer.on = false; }
+      if (!pacer.hit) return;
+      await nextTask();
+    }
+    await warnNow();
+  }
+  async function warnNow() {
     const w = $("st-edit").querySelector("[data-warn]"), p = current(); if (!w || !p) return;
-    if (p.font) try { await loadFont(p.font); } catch { return; }
+    const on = pacer.on, wait = async (promise) => { pacer.on = false; try { return await promise; } finally { pacer.on = on; pacer.since = performance.now(); } };
+    if (p.font) try { await wait(loadFont(p.font)); } catch { return; }
+    // (the fixes worked out a few tasks apart, so typing is answered between them: a long line's fixes draw it on two
+    // lines and in a print font, 1.5 s in one task. A piece changed meanwhile has a newer warn coming: this one stops)
+    const was = JSON.stringify(p), apart = async () => { await wait(nextTask()); return !w.isConnected || current() !== p || JSON.stringify(p) !== was; };
+    // (new words drawn first, a task at a time, as make does: warn came before make had drawn them)
+    for (const draw of drawAhead(p)) if (draw() && await apart()) return;
     const fit = $("st-edit").querySelector("[data-fit]"), fs = fittedSizes(pieces).get(p.id);
     if (fit) {
       // (in a tall frame, turned a quarter to run up it, as letters on a key fob do: offered when that's much bigger;
@@ -597,8 +614,10 @@ export function initStudio(api) {
       if (r) { const o = r.nextElementSibling, cut = fs && fs !== +r.value; o.textContent = cut ? `${fs} mm sewn` : shown(r.value, "mm"); o.title = cut ? `Set to ${shown(r.value, "mm")}, sewn at ${shown(fs, "mm")} to fit inside the frame` : ""; }
       fit.hidden = !fs; fit.innerHTML = fs ? `Shrunk to ${fs} mm so it fits inside the frame.${up ? ` Turned to run up the frame it can be ${up} mm: <button type="button" class="link" data-run-up="${up}">Turn it to run up the frame</button>` : ""}` : "";
     }
+    if (await apart()) return;
     // what's wrong with it, worked out once (`pieceProblems`) as every other surface says it; here each with its fix
     const { list, d } = pieceProblems(p), { q, m, room, nears, near, gone, fills, towel, max, lettering, onTowel } = d;
+    if (await apart()) return;
     const ids = (kind) => list.filter((x) => x.kind === kind).map((x) => x.id).join(" ");
     const tag = (kind, html) => (html && ids(kind) ? `<span data-problem="${ids(kind)}">${html}</span>` : "");
     // Every one-tap fix is checked before it's offered: it must leave nothing it could have avoided (a towel size that
@@ -638,6 +657,7 @@ export function initStudio(api) {
           : `${what} At ${need} mm it would be ${mmText([l.w, l.h])}, too big for the hoop even turned. Use fewer or shorter lines${onTowel ? ", or a bolder font (Yellowtail, Satisfy)." + cotton : "."}`;
       }
     }
+    if (await apart()) return;
     // an arch too tight or wrapped too far round: a wider curve, or smaller letters, whichever lands in the hoop
     let arc = "";
     if (ids("arch")) {
@@ -711,6 +731,7 @@ export function initStudio(api) {
     const lines = !d.fs && (m || fills || (d.thin && fabric !== "towel")) ? ((c) => (c ? ` On ${c.n === 2 ? "two" : "three"} lines${c.turn ? " with the hoop turned" : ""} it can be ${c.size} mm. ${btn(`data-lines="${c.size}" data-text="${encodeURIComponent(c.text)}"`, `Put it on ${c.n === 2 ? "two" : "three"} lines`, { fits: c.turn ? "turn" : "fits" })}` : ""))(lineChoice(p)) : "";
     const withLines = ["small", "towel", "loops", "thin"].find((k) => ids(k));
     // (said plainly, with a one-tap fix where there is one; each item names the problem it's about, `data-problem`)
+    if (await apart()) return;
     const print = ids("caps") ? landing(p, { font: ROUND }) : null;
     const caps = print ? `Capitals in a joined script run together (an H can read as h). ${print.fits ? `${btn(`data-font="${ROUND}"`, "Sew it in Quicksand (print)", print)}, or type it in small letters.` : "Type it in small letters, or pick a print font."}` : "";
     const said = { named, lines: oneLine, caps, covered: under, hidden: same, pushed: kerned, motif: small,
@@ -720,6 +741,7 @@ export function initStudio(api) {
       undrawn: "These words come out as no stitches at all: use fewer or other letters.",
       thin: bold && `At this size it sews as a thin line.${bold.fits ? ` ${btn(`data-seg-set="style:satin"`, "Make it bold", bold)} (small loops may fill in).` : ` Bold, it would ${no(bold)}.`}`,
       loops: line && `At this size the small loops (the holes in letters like b and e) fill in.${line.fits ? ` ${btn(`data-seg-set="style:line"`, "Thin line", line)} keeps them open` : ""}${fillsAt?.fits ? `${line.fits ? ", or" : ""} ${btn(`data-size="${fills}"`, `${line.fits ? "make" : "Make"} it ${fills} mm`, fillsAt)}` : ""}${fillsGrow ? `${line.fits ? ", or" : ""} ${line.fits ? fillsGrow.replace(">Make", ">make") : fillsGrow}${/data-frame-grow/.test(fillsGrow) ? ` for ${fills} mm letters` : ""}` : ""}${line.fits || fillsAt?.fits || fillsGrow ? "." : ""}` };
+    if (pacer.hit) return;   // (a run stopped on the way: said by the next)
     w.innerHTML = [...new Set(list.map((x) => x.kind))].map((k) => tag(k, said[k] + (k === withLines ? lines : ""))).filter(Boolean).join(" <br>");   // (a space too: read aloud or copied, "lines.On two lines")
     w.hidden = !w.innerHTML;
     const auto = $("st-edit").querySelector('[data-seg="style"] [data-v="auto"]');
@@ -966,6 +988,7 @@ export function initStudio(api) {
     clearTimeout(timer); timer = setTimeout(make, now ? 0 : 160);
   }
 
+  const nextTask = () => new Promise((r) => setTimeout(r));
   async function make(dragging = false) {
     thumbs();
     const s = ++seq;
@@ -975,28 +998,36 @@ export function initStudio(api) {
       await Promise.all(fonts.map(loadFont));
       if (s !== seq) return;
       if (!dragging) restitchFiles();
+      // (new words drawn in tasks of their own first: see `drawAhead`)
+      if (!dragging) for (const p of pieces) for (const draw of drawAhead(p)) if (draw()) { await nextTask(); if (s !== seq) return; }
       // what's wrong with it, every piece's problems in one list, two hoopings too (worked out when the design settles, not on every
       // drag frame: the last list stands meanwhile); lettering wrapped round into itself can't be sewn, so Download
       // waits for it
-      if (!dragging) { const fit = fittedSizes(pieces); problems = [...new Map(pieces.flatMap((p) => pieceProblems(p, fit).list).map((x) => [x.id, x])).values()]; }
-      // (quilting not worked out yet is done by a worker: `unquilted`, then `quiltSoon`)
+      if (!dragging) { const fit = fittedSizes(pieces); await nextTask(); if (s !== seq) return; problems = [...new Map(pieces.flatMap((p) => pieceProblems(p, fit).list).map((x) => [x.id, x])).values()]; }
+      // (the problems, the stitches and the preview each in a task of its own, so a key or a tap between them is
+      // answered: one task of all three held a busy design's page up 0.6-0.9 s)
+      if (!dragging) { await nextTask(); if (s !== seq) return; }
+      // (quilting and a patch's fill not worked out yet are done by a worker: `unquilted`, then `quiltSoon`)
       let composed;
       const unquilted = dragging ? null : [], noRoom = dragging ? null : [];
-      try { composed = compose(pieces, api.hoop(), { fabric, baste, thread, dragging, later: unquilted, unquilted: noRoom }); }
+      try { composed = compose(pieces, api.hoop(), { fabric, baste, thread, dragging, later: unquilted, unquilted: noRoom, fillLater: true }); }
       catch (err) {
         if (!err.overBy) throw err;
         if (s !== seq) return;
+        // (a patch's fill is worked out too behind a design too big for the hoop: shown, and only it remade it)
+        const fill = unquilted?.find((j) => j.kind === "patch"); if (fill) quiltSoon(fill);
         // fitted with Fit to hoop and since grown by a font or style change: fitted again (it came out 1 mm over)
         if (fitted && !dragging && !refitted) { refitted = true; fitHoop(); return; }
         split(err, dragging); return;
       }
       if (s !== seq) return;
+      if (!dragging) { await nextTask(); if (s !== seq) return; }
       refitted = false;
       if (two && !dragging) { two = false; save(); }   // (fits one hooping again: growing past it later asks again)
       if (!dragging) roomier();
       // (quilting asked for with no room left for it in the frame: said, as every problem is)
       for (const id of noRoom || []) { const f = pieces.find((o) => o.id === id); if (f) problems.push({ id: `quilt:${id}`, kind: "quilt", level: LOOK, piece: id, text: `The ${shapeLabel(f)} has no room left inside for its quilting, so it isn't quilted: make the ${shapeLabel(f)} bigger, or what's in it smaller.` }); }
-      const resizing = !dragging && pieces.find((p) => p.kind === "file" && p.pending), quilting = unquilted?.length > 0;
+      const resizing = !dragging && pieces.find((p) => p.kind === "file" && p.pending), quilting = unquilted?.length > 0, filling = quilting && unquilted[0].kind === "patch";
       if (quilting) quiltSoon(unquilted[0]);
       const { design, steps, done, ready, small, later } = stepsOf(composed, true);
       stepsUI(steps, done, small, ready);
@@ -1004,8 +1035,8 @@ export function initStudio(api) {
       const notes = [turnText(), $("st-tip").hidden ? "" : $("st-tip").textContent, fabricTip(), threadTip(small)];
       api.setView(design.pattern(), fileName(), {
         ...look, problems, fixHint: fixHint(),
-        block: resizing ? `Re-stitching ${resizing.name} at ${Math.round(resizing.scale * 100)} %…` : quilting ? "Working out the quilting…" : "",
-        blockLabel: resizing ? "Re-stitching…" : quilting ? "Quilting…" : "",
+        block: resizing ? `Re-stitching ${resizing.name} at ${Math.round(resizing.scale * 100)} %…` : filling ? "Working out the patch's fill…" : quilting ? "Working out the quilting…" : "",
+        blockLabel: resizing ? "Re-stitching…" : filling ? "Filling…" : quilting ? "Quilting…" : "",
         fabric: look.fabric, steps: steps.length, turnNote: turnText(), bare: bareNow,   // (an in-the-hoop front: the background; appliqué: pink gingham)
         sheet: { steps: steps.map((st) => ({ you: st.you, sews: st.sews.join(" ") })), after: done, ready, cut: steps.filter((st) => st.cut).map((st) => st.cut),
           notes } });
@@ -1026,7 +1057,7 @@ export function initStudio(api) {
       else { console.error(err); api.showError(err.message); }
     }
   }
-  // ---------- quilting, worked out off the page ----------
+  // ---------- quilting and patch fills, worked out off the page ----------
   // A stippled or echoed frame's quilting is worked out again whenever anything on it moves or changes (seconds on a
   // busy design): the preview shows the last quilting meanwhile and Download waits. One job at a time, the newest
   // waiting one next; the design is made again when it's done.
@@ -1035,7 +1066,8 @@ export function initStudio(api) {
     if (quiltBusy) { if (quiltBusy.key !== job.key) quiltNext = job; return; }
     const finish = (paths) => {
       const done = quiltBusy; quiltBusy = null;
-      quiltDone(done.key, paths ?? quiltOf(done));   // (no worker, or it failed: worked out here)
+      // (no worker, or it failed: worked out here)
+      if (done.kind === "patch") carveDone(done.key, paths ?? patchFillOf(done)); else quiltDone(done.key, paths ?? quiltOf(done));
       const n = quiltNext; quiltNext = null;
       if (n && n.key !== done.key) quiltSoon(n);
       make();
@@ -2078,6 +2110,8 @@ export function initStudio(api) {
     const H = (f) => (f.shape === "circle" ? f.w : f.h);
     const sizes = p.size == null ? [p.size] : [...new Set(Array.from({ length: 10 }, (_, i) => Math.max(least(p), Math.round(p.size * (1 - i / 10) * 2) / 2)))];
     const big = roughly(p);
+    // (what's on each frame, worked out once: it was measured again for every size tried, ~0.1 s of + Appliqué letters)
+    const boxes = new Map(), boxesOn = (f) => { if (!boxes.has(f)) boxes.set(f, onFrame(f, others).map((o) => pieceBounds(sewnAt(o, others))).filter(Boolean)); return boxes.get(f); };
     for (const size of sizes) {
       // (lettering is fitted to the frame it lands in: across it, and a monogram up and down too, so it may be asked
       // bigger than the frame)
@@ -2087,7 +2121,7 @@ export function initStudio(api) {
       const cx = (fb[0] + fb[2]) / 2, cy = (fb[1] + fb[3]) / 2;
       for (const f of frames) {
         // what's in it already (frames too: the quilt block's heart), and the spots round that
-        const [t] = frontPanel(f), mid = middleOf(f, q0), bs = onFrame(f, others).map((o) => pieceBounds(sewnAt(o, others))).filter(Boolean);
+        const [t] = frontPanel(f), mid = middleOf(f, q0), bs = boxesOn(f);
         const spots = [[mid.x, mid.y]];
         if (bs.length) {
           const L = Math.min(...bs.map((b) => b[0])), T = Math.min(...bs.map((b) => b[1])), R = Math.max(...bs.map((b) => b[2])), B = Math.max(...bs.map((b) => b[3]));
@@ -2314,7 +2348,9 @@ export function initStudio(api) {
     if (!p) return null;
     const mono = p.kind === "monogram";
     // (a design that already runs into itself isn't shrunk name by name for it: every name would come out smaller)
-    const clean = !collision(pieces), opts = { fabric, baste, thread };
+    // (worked out with the first name: every preview asks whether there's lettering to swap, ~50 ms on 15 pieces)
+    let clean = null;
+    const isClean = () => (clean ??= !collision(pieces)), opts = { fabric, baste, thread };
     return {
       canTurn: !api.turned() && api.hoop().w !== api.hoop().h,
       what: mono ? p.letters : unswashed(p.text).replace(/\s*\n\s*/g, " / "), monogram: mono,
@@ -2380,7 +2416,7 @@ export function initStudio(api) {
             if (thin && lastBold && !refined && !floor && size < lastBold - 0.5) { floor = size; size = lastBold - 0.5; continue; }
             if (thin && xh({ ...q, size: now }) >= 0.85 * xh({ ...p, size: was }) && !minSize({ ...q, size: now })) { q = { ...q, style: "satin" }; ps = pieces.map((r) => (r.id === p.id ? q : r)); }
             const turned = api.turned(), pattern = compose(ps, hp, opts).design.pattern();
-            const hit = clean && touching({ ...q, size: now }, ps);
+            const hit = isClean() && touching({ ...q, size: now }, ps);
             if (hit && shrink && f > 0.55) {
               if (floor && size - 0.5 > floor) { size -= 0.5; continue; }
               if (floor) { size = floor; floor = 0; refined = true; continue; }

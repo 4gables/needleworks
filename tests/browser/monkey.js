@@ -114,7 +114,7 @@ async function idle(max = 15000) {
   while (performance.now() - t0 < max) {
     await sleep(20);
     const s = W.__mk, busy = s.timers.size || s.raf.size || s.idle.size || filePending() || D.fonts.status !== "loaded" || ($("busy") && !$("busy").hidden)
-      || /Quilting|Re-stitching/.test($("download").textContent);   // (workers: quilting, a design file re-stitched)
+      || /Quilting|Filling|Re-stitching/.test($("download").textContent);   // (workers: quilting, a patch's fill, a design file re-stitched)
     calm = busy ? 0 : calm + 1;
     if (calm >= 3) return performance.now() - t0;
   }
@@ -264,7 +264,7 @@ function checks(f, sc, act, before) {
     }
   }
   // every way out follows Download's rule: nothing else saves or shares a design Download won't make
-  if ($("download").disabled && !/Quilting|Re-stitching/.test(sc.dl)) for (const id of ["share", "sheet-print", "along-open", "names-open"]) {
+  if ($("download").disabled && !/Quilting|Filling|Re-stitching/.test(sc.dl)) for (const id of ["share", "sheet-print", "along-open", "names-open"]) {
     const el = $(id); if (el && !el.hidden && !el.disabled) add("exit", `“${sc.dl}” but ${el.textContent.trim()} is on`);
   }
   // a starter brings its own fabric and thread weight, or cotton and automatic (towel and 30 wt stuck to later starters)
