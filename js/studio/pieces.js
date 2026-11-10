@@ -1813,10 +1813,9 @@ function frameAround(p, pieces, shapes) {
 export function fittedSizes(pieces) {
   const out = new Map();
   pieces.forEach((p) => {
-    const mono = p.kind === "monogram", r = (((p.rot || 0) % 360) + 360) % 360, side = r === 90 || r === 270;
-    if ((p.kind !== "text" && !mono) || (p.shape && p.shape !== "straight") || (r % 180 && !side)) return;
-    const frame = frameAround(p, pieces.filter((f) => f === p || !(f.rot || 0)));
+    const frame = fitFrame(p, pieces);
     if (!frame) return;
+    const mono = p.kind === "monogram", r = (((p.rot || 0) % 360) + 360) % 360, side = r === 90 || r === 270;
     const b = pieceBounds({ ...p, x: 0, y: 0, rot: 0 }); if (!b) return;
     const dy = (p.y - frame.y) / (frameH(frame) / 2), gap = frame.border === "line" ? 4 : 8, [pt, pb] = frontPanel(frame);
     // room across the frame at the lettering's height (narrower toward the top and bottom of round shapes)
@@ -1844,6 +1843,13 @@ export function fittedSizes(pieces) {
     if (k < 1) out.set(p.id, clearOf(p, frame, Math.max(5, Math.floor(p.size * k * 2) / 2)));
   });
   return out;
+}
+// The frame whose fit sizes p (`fittedSizes`), whether or not it shrinks it now: straight lettering or a monogram, square
+// on, centred in an earlier unturned frame; else null
+export function fitFrame(p, pieces) {
+  const r = (((p.rot || 0) % 360) + 360) % 360;
+  if ((p.kind !== "text" && p.kind !== "monogram") || (p.shape && p.shape !== "straight") || r % 90) return null;
+  return frameAround(p, pieces.filter((f) => f === p || !(f.rot || 0))) || null;
 }
 // The fitted size, made smaller (0.5 mm steps, down to 60 %) until the stitches clear the frame's (CLEAR): the room
 // above is the frame's outline, so a scallop's valleys or a satin border's inner edge could still meet the letters

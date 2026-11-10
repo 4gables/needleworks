@@ -853,11 +853,15 @@ $("names-make").onclick = async () => {
   // (an in-the-hoop design hoops bare stabilizer: it's the fabric laid on it that goes round)
   const lay = state.views.design?.bare ? "lay the fabric pieces" : "hoop the fabric";
   const side = made.filter((m) => m.sideways), runs = made.filter((m) => m.runs), thin = made.filter((m) => m.thin);
-  $("names-note").classList.toggle("warn", bad.length > 0 || runs.length > 0 || poor.length > 0 || left.length > 0 || thin.length > 0 || twice.length > 0);
+  // (names under the font's least x-height where the design's own is too: made, as the design is, but said; "Made 9
+  // files" was all a batch of 1.4 mm letters said)
+  const tiny = made.filter((m) => m.size[0] && m.size[1] && m.size[0] < m.size[1] - 0.05);
+  $("names-note").classList.toggle("warn", bad.length > 0 || runs.length > 0 || poor.length > 0 || left.length > 0 || thin.length > 0 || twice.length > 0 || tiny.length > 0);
   $("names-note").textContent = `${files.length ? `Made ${files.length} ${files.length === 1 ? "file" : "files"}, saved as one .zip (open it and copy the .pes files to the USB stick). ` : ""}`
     + (side.length === made.length && side.length > 1 ? `Every file is turned like the design: ${lay} a quarter turn round for each, with the top of the name toward the right of the hoop (the machine shows them on their side). `
       : side.length ? `${lay[0].toUpperCase() + lay.slice(1)} a quarter turn round for ${side.map((m) => m.file).join(", ")}: the machine shows ${side.length === 1 ? "it" : "them"} on ${side.length === 1 ? "its" : "their"} side, with the top of the name toward the right of the hoop. ` : "")
     + (runs.length ? `Runs into another piece: ${runs.map((m) => m.name).join(", ")} (${$("names-shrink").checked ? "even at half size: shorten" : `tick "Make long names smaller", or shorten`} ${runs.length === 1 ? "it" : "them"}). ` : "")
+    + (tiny.length ? `Too small to stitch cleanly, like the design's own lettering: ${tiny.map((m) => m.name).join(", ")} (letters ${mmText(Math.min(...tiny.map((m) => m.size[0])))} tall; this font needs ${mmText(tiny[0].size[1])}). Make the lettering bigger first. ` : "")
     + (thin.length ? `Sewn as a thin line, not bold like the design (too small for bold once shrunk to fit): ${thin.map((m) => m.name).join(", ")}. ` : "")
     + (bad.length ? `Couldn't make: ${bad.join(", ")}. ` : "")
     + (twice.length ? `${twice.length === 1 ? "1 name was" : `${twice.length} names were`} typed twice, made once: ${twice.map(brief).join(", ")}. ` : "")

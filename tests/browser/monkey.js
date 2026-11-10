@@ -15,6 +15,8 @@
 //             fitting design fitting and does something; Undo takes it back in one step
 //   stale     what's shown (size and stitch chips, Fits <hoop>, steps count, fabric/thread/turn buttons, the Open
 //             tab's "Largest that fits", the Picture tab's size) equals a fresh computation after any settings change
+//   asked     words, font, thread or fabric changes keep lettering's asked size while its frame still fits it, and
+//             the height control reads the size it's sewn at
 //   undo      undo then redo, and Save design then Open saved, give back the same design
 //   toast     a note's action (Undo, "Make it as big as…", "Use the 5x7 instead", "Turn the hoop and add it", "Add it at
 //             N %", "… anyway") does what it says: changes the design or the hoop, leaves what the note was about
@@ -236,6 +238,18 @@ function checks(f, sc, act, before) {
   // the size control says the size it's sewn at when a frame shrinks it (it said 24 mm beside "Shrunk to 22 mm")
   const fitNote = D.querySelector("#st-edit [data-fit]"), szOut = D.querySelector('#st-edit input[data-k="size"] + output');
   if (fitNote && !fitNote.hidden && szOut) { const m = /Shrunk to ([\d.]+) mm/.exec(fitNote.textContent); if (m && !szOut.textContent.includes(`${m[1]} mm`)) add("stale", `the height reads “${szOut.textContent}” beside “Shrunk to ${m[1]} mm”`); }
+  // the height reads the size it's sewn at (after "Ashley Ashley Ashley" -> "Ashley" it read 24 mm beside 9 mm letters)
+  if (sel && szOut && (sel.kind === "text" || sel.kind === "monogram") && !(fitNote && !fitNote.hidden)) {
+    const fit = P.fittedSizes(s.pieces), want = fit.get(sel.id) ?? sel.size, m = /^([\d.]+) mm/.exec(szOut.textContent.trim());
+    if (m && Math.abs(+m[1] - want) > 0.5) add("stale", `the height reads “${szOut.textContent}” but ${P.label(sel)} is sewn at ${want} mm`);
+  }
+  // a change that doesn't set a size keeps the size asked for while a frame still fits the lettering (shorter words
+  // after longer ones the heart had shrunk kept the shrunk 9 mm)
+  if (before?.d && ASKED.has(act.t === "menu" ? `menu-${String(act.what).split("=")[0]}` : act.t) && before.d.pieces.length === s.pieces.length)
+    s.pieces.forEach((p, i) => {
+      const q = before.d.pieces[i];
+      if (p.kind === "text" && q.kind === "text" && p.size !== q.size && P.fitFrame(p, s.pieces)) add("asked", `${act.t}${act.what ? ` (${String(act.what).slice(0, 30)})` : ""} changed ${P.label(p)}'s size ${q.size} -> ${p.size} mm`);
+    });
   // placing things for the user never takes a design that fitted past the hoop
   if (before?.f && PLACING.has(act.t) && before.f.fits && !f.fits && !act.allowBig) add("placed", `${act.t}${act.what ? ` (${act.what})` : ""} took a design that fitted past the hoop (${f.s.pieces.length} pieces)`);
   if ((act.t === "fit" || act.t === "starter") && !f.fits && !act.skipped) add("placed", `${act.t}${act.what ? ` (${act.what})` : ""} left the design too big`);
@@ -276,6 +290,7 @@ function checks(f, sc, act, before) {
   if (st && (s.fabric !== (st.fabric || "cotton") || String(s.thread) !== String(st.thread || "auto"))) add("stale", `starter ${st.id} kept fabric ${s.fabric} / thread ${s.thread}`);
   return bad;
 }
+const ASKED = new Set(["text", "swatch", "fabric", "thread", "baste", "menu-font"]);
 const PLACING = new Set(["add", "paste", "listop-dup", "starter", "file", "fix", "fixall", "bigfix", "toastfix", "fit", "twoup", "sameon"]);
 
 // ---------- actions ----------
@@ -425,6 +440,9 @@ async function exec(d) {
       const t0 = performance.now(); $("names-make").click();
       while (/Making the files/.test($("names-note").textContent) && performance.now() - t0 < 30000) await sleep(50);
       act.what = $("names-note").textContent.slice(0, 120);
+      // (a name made under the font's least x-height is said: a batch of 1.4 mm letters said "Made 9 files")
+      const tiny = all("#names-thumbs figure[data-size]").filter((fg) => { const [xh, least] = fg.dataset.size.split(" ").map(Number); return xh && least && xh < least - 0.05; });
+      if (tiny.length && !/Too small to stitch cleanly/.test($("names-note").textContent)) act.extra.push({ kind: "names", msg: `${tiny.length} names made under the font's least height, not said (“${act.what}”)` });
       $("names").close(); break;
     }
     case "tab": {

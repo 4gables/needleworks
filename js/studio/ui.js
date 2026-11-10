@@ -12,7 +12,7 @@ import { THREADING, TURN_PIC, pickIt, snipsSaid, turnedNote, youHtml } from "../
 import { notEmbroidery, shortJumps } from "../doctor.js";
 import { QUILTS, quiltOf } from "./quilt.js";
 import { MOTIFS } from "./motifs.js";
-import { quiltDone, scaledFit, BORDERS, FABRICS, THREADS, SHAPES, TEXT_SHAPES, splitPieces, archFit, archStart, frontPanel, inkHeight, monoSize, archRoom, archShrink, archTight, cleanPiece, cleanPieces, clearSize, collision, collisions, inFrame, letterMetrics, underPatch, crossName, crossStep, layoutSize, touching, touchingAll, towelMin, fineLine, loopsFill, compose, fileBlocks, blocksPattern, scaleBlocks, FILE_SCALE, fittedSizes, sewnBoxes, sewn, sewnBox, followFrame, label, minSize, pieceBounds, pieceStitches, previewLook, smallText, bulkReady, carveDone, patchFillOf, drawAhead, pacer, PACED } from "./pieces.js";
+import { quiltDone, scaledFit, BORDERS, FABRICS, THREADS, SHAPES, TEXT_SHAPES, splitPieces, archFit, archStart, frontPanel, inkHeight, monoSize, archRoom, archShrink, archTight, cleanPiece, cleanPieces, clearSize, collision, collisions, inFrame, letterMetrics, underPatch, crossName, crossStep, layoutSize, touching, touchingAll, towelMin, fineLine, loopsFill, compose, fileBlocks, blocksPattern, scaleBlocks, FILE_SCALE, fittedSizes, fitFrame, sewnBoxes, sewn, sewnBox, followFrame, label, minSize, pieceBounds, pieceStitches, previewLook, smallText, bulkReady, carveDone, patchFillOf, drawAhead, pacer, PACED } from "./pieces.js";
 
 const SCRIPT = "NW Great Vibes", PRINT = "NW Josefin Sans", ROUND = "NW Quicksand", BOLD = "NW Yellowtail";
 // exact Brother PEC thread colours, so the name on screen is the one the machine shows
@@ -1016,10 +1016,11 @@ export function initStudio(api) {
     const p = current(); if (!p) return;
     remember(!now);
     // (a change that takes lettering out of its frame's fit, bent into an arch or turned off square, keeps the size it
-    // was sewn at: Arch up on a name the oval shrank 60 -> 39 mm sewed it at 60, wrapped into itself)
+    // was sewn at: Arch up on a name the oval shrank 60 -> 39 mm sewed it at 60, wrapped into itself. Only out of the
+    // fit: shorter words that now fit at the asked size keep it, "Ashley Ashley Ashley" -> "Ashley" stayed 9 mm)
     const fs = p.size == null ? null : fittedSizes(pieces).get(p.id), was = p.size;
     fn(p);
-    if (fs != null && p.size === was && fittedSizes(pieces).get(p.id) == null) p.size = fs;
+    if (fs != null && p.size === was && !fitFrame(p, pieces)) p.size = fs;
     if (!keep) fitted = false; save(); list();
     clearTimeout(warnTimer); warnTimer = setTimeout(warn, 300);
     clearTimeout(timer); timer = setTimeout(make, now ? 0 : 160);
