@@ -40,6 +40,11 @@ const RAW_MEASURE = process.env.EMPTY ? [] : [
 ];
 // [file, function, reason]: functions that may read a piece's asked size
 const RAW_SIZE = process.env.EMPTY ? [] : [
+  ["js/studio/ui.js", "snug", "pieces no frame fits (fit.has excluded): asked = sewn; each size checked by landing()"],
+  ["js/studio/ui.js", "snugWay", "sets the asked size snug() found (unfitted piece)"],
+  ["js/studio/ui.js", "lineRest", "the line pitch from the size the lines were sewn at (set from sewn() just before)"],
+  ["js/studio/ui.js", "placeRest", "a new straight piece no frame fits yet: asked = sewn; spotIn/freeRoom measure it sewn"],
+  ["js/studio/ui.js", "followed", "an arched word (never frame-fitted): asked = sewn"],
   ["js/studio/ui.js", "drawEditor", "the controls show the size asked; warn() says the sewn one beside it (\"N mm sewn\")"],
   ["js/studio/ui.js", "pieceProblems", "q.size is the fitted size; motifs are never fitted"],
   ["js/studio/ui.js", "warnNow", "fixes and notes compare the asked size with d.fs, the sewn one; each fix is checked by landing()"],

@@ -1966,7 +1966,8 @@ export function initStudio(api) {
   // "day"); then, where that runs into something or past the hoop, placed as a new piece is
   function placeRest(p, rest) {
     if (p.shape === "up") {
-      const a = pieceBounds(sewn(p, pieces)), b = pieceBounds({ ...rest, x: 0, y: 0 });
+      // (the line's box as it's sewn where it is, a frame may shrink it, about its place)
+      const a = pieceBounds(sewn(p, pieces)), b = pieceBounds(sewn(rest, [...pieces, rest]))?.map((v, i) => v - (i % 2 ? rest.y : rest.x));
       if (a && b) {
         const m = letterMetrics(unswashed(rest.text).split("\n")[0], rest.font, rest.size, rest.style), gap = Math.max(2, Math.min((m.xh || rest.size) / 2, rest.size / 4));
         rest.x = Math.round(((a[0] + a[2]) / 2 - (b[0] + b[2]) / 2) * 2) / 2; rest.y = Math.ceil((a[3] + gap - b[1]) * 2) / 2;
