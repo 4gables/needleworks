@@ -491,13 +491,23 @@ export function initStudio(api) {
   }
 
   const nextTask = () => new Promise((r) => setTimeout(r));
+  let waitSaid = false, madeOnce = false;   // ("Getting the lettering ready…" is up; a design has been made)
   async function make(dragging = false) {
+    try { return await build(dragging); } finally { madeOnce = true; if (waitSaid) { waitSaid = false; api.busy(false); } }
+  }
+  async function build(dragging) {
     if (faces) thumbs();   // (the starters' fonts after the design's own: `facesOn`)
     const s = ++seq;
     api.showError(""); $("st-big").hidden = true;
     try {
       const fonts = [...new Set(pieces.filter((p) => p.font).map((p) => p.font))];
-      await Promise.all(fonts.map(loadFont));
+      // (said while a font is on its way: on a slow first load the preview read "Nothing to stitch yet: type some
+      // words" for the 4-5 s the bookmark's font took)
+      // (and until the design is made: `make` takes the note down)
+      // (at once for the first design, where there's nothing to look at meanwhile; later only when a font takes a while)
+      const say = () => { if (s === seq) { waitSaid = true; api.busy(true, "Getting the lettering ready…"); } };
+      const wait = madeOnce || !fonts.length ? setTimeout(say, 250) : (say(), 0);
+      try { await Promise.all(fonts.map(loadFont)); } finally { clearTimeout(wait); }
       // (the design's own fonts first, then the rest; a design with no lettering waits until it's still a moment, so a
       // passing empty state, before the design is in, doesn't ask for every font at once)
       if (fonts.length) facesOn(); else setTimeout(() => { if (s === seq) facesOn(); }, 1500);

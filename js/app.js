@@ -498,6 +498,16 @@ $("share").onclick = async () => {
   }
 };
 
+// Ctrl+S (⌘S) goes to Download from anywhere on the page: from the Words box it was 48-67 Tabs away. It takes focus
+// there and Enter saves, so the button says what it will save, or why it can't, before anything is downloaded.
+addEventListener("keydown", (e) => {
+  if (!(e.metaKey || e.ctrlKey) || e.altKey || e.shiftKey || e.key.toLowerCase() !== "s") return;
+  e.preventDefault();
+  if (document.querySelector("dialog[open]")) return;
+  const b = $("download");
+  if (b.disabled) { toast(`${b.textContent.trim() === "Download PES" ? "Nothing to download yet" : b.textContent.trim()}${$("error").textContent ? ": the note over the preview says why." : "."}`); return; }
+  b.focus(); b.scrollIntoView({ block: "nearest" });
+});
 $("download").onclick = () => {
   const v = state.view; if (!v) return;
   // never hand out a file we haven't proven decodes to exactly this design and the machine can take
