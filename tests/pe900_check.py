@@ -1,4 +1,6 @@
-"""Independent check that PES files will sew on a Brother PE900 (5x7 hoop).
+"""Independent check that PES files will sew on a Brother PE900 (5x7 hoop), or, for a file whose name holds
+"6x10", on a 160 x 260 mm field (Brother NQ1700E class; such a file bigger than 130 x 180 must also carry the
+160 x 260 page in its PES header, where PE-DESIGN reads the hoop).
 
 Uses pyembroidery (the reader/writer Ink/Stitch ships, whose PES files are sewn on Brother machines every day)
 plus a raw byte walk of the PEC block, so it shares no code with js/core/formats.js.
@@ -14,6 +16,7 @@ from collections import Counter
 import pyembroidery as pe
 
 FIELD_W, FIELD_H = 130.0, 180.0     # PE900 5x7 sewable field, mm
+BIG_W, BIG_H = 160.0, 260.0         # the 6" x 10" field (files named *6x10*)
 MAX_STITCH = 12.1                   # longest needle move we produce (mm); stricter than sold designs (some reach 15 mm)
 TINY = 0.3                          # stitches shorter than this pile thread / break it, unless part of a tie-in
 MAX_PER_MM2 = 24                    # needle hits in any 1x1 mm cell within one colour block (nest / broken needle risk);
@@ -111,6 +114,7 @@ def needle_moves(cmds):
 def check(path):
     b = open(path, "rb").read()
     errs, info = [], {}
+    FW, FH = (BIG_W, BIG_H) if "6x10" in path.rsplit("/", 1)[-1] else (FIELD_W, FIELD_H)
 
     # 1. independent structure walk
     try:
@@ -169,7 +173,8 @@ def check(path):
         if (abs(sw / 10 - r["pec_wh"][0]) > 0.15) or (abs(sh / 10 - r["pec_wh"][1]) > 0.15):
             errs.append(f"PES design block size {sw / 10} x {sh / 10} doesn't match PEC {r['pec_wh']}")
         # translation puts the block's bottom-left on the 130x180 page, offset by (350, 100) like pyembroidery/PE-Design
-        if not (350 <= tf[4] <= 350 + 1300 and 100 <= tf[5] <= 100 + 1800 + sh):
+        # (the page's centre is at 1000, 1000 whatever the hoop: 350 and 100 are that less half of 130 x 180 mm)
+        if not (1000 - FW * 5 <= tf[4] <= 1000 + FW * 5 and 1000 - FH * 5 <= tf[5] <= 1000 + FH * 5 + sh):
             errs.append(f"PES design block placed off the hoop page: {tf}")
 
     # 2. pyembroidery reads it (box fields removed, so it decodes from the origin like the machine) and writes
@@ -198,8 +203,19 @@ def check(path):
     y0, y1 = min(p[1] for p in pts), max(p[1] for p in pts)
     w, h = x1 - x0, y1 - y0
     info["size_mm"] = (round(w, 1), round(h, 1))
-    if w > FIELD_W or h > FIELD_H:
-        errs.append(f"{w:.1f} x {h:.1f} mm is bigger than the {FIELD_W:.0f} x {FIELD_H:.0f} mm field")
+    if w > FW or h > FH:
+        errs.append(f"{w:.1f} x {h:.1f} mm is bigger than the {FW:.0f} x {FH:.0f} mm field")
+    # the PES header's page (v6: the two u16 after the five strings and 0, 0): 100 x 100 as always written, or the
+    # 160 x 260 hoop for a design no 130 x 180 field holds (PE-DESIGN reads its hoop there; machines don't read it)
+    if b[:8] == b"#PES0060":
+        o = 16
+        for _ in range(5):
+            o += 1 + b[o]
+        page = struct.unpack_from("<4H", b, o)
+        need = (0, 0, 160, 260) if (min(w, h) > 130.05 or max(w, h) > 180.05) else (0, 0, 100, 100)
+        info["page"] = page[2:]
+        if page != need:
+            errs.append(f"PES header page {page} for a {w:.1f} x {h:.1f} mm design, expected {need}")
     if abs(r["pec_wh"][0] - w) > 0.15 or abs(r["pec_wh"][1] - h) > 0.15:
         errs.append(f"PEC size field {r['pec_wh']} doesn't match the stitches {w:.1f} x {h:.1f}")
 

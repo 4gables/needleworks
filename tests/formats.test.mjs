@@ -40,6 +40,24 @@ for (const name of ["ashley_v3", "multi"]) {
   ok(golden.length === full.length && golden.every((b, i) => b === full[i]), `writer ${name}: output changed from the locked golden file`);
 }
 
+// 1b. the 6" x 10" page (docs/writer-changes.md W1): a design no 130 x 180 field holds is written with the 160 x 260
+//     hoop in its header (where PE-DESIGN 11 reads the hoop), every other byte as with the 100 x 100 page; a design a
+//     5x7 holds keeps the 100 x 100 page. Locked like the others (opened in PE-DESIGN 11, 2026-11-11).
+{
+  const cmds = JSON.parse(readFileSync("tests/fixtures/ashley_v3_commands.json"));
+  const big = { stitches: cmds.commands.map(([x, y, c]) => [Math.round(x * 1.5), Math.round(y * 1.5), c]), threads: cmds.threads.map((t) => ({ color: t.color, description: t.description, brand: "" })) };
+  const full = writePES(big), old = writePES(big, [100, 100]), page = (b) => [b[25] | (b[26] << 8), b[27] | (b[28] << 8)];
+  ok(page(full).join() === "160,260", `6x10: page ${page(full)}, expected 160,260`);
+  ok(page(writePES({ stitches: cmds.commands, threads: big.threads })).join() === "100,100", "5x7 design: the page changed from 100,100");
+  ok(full.length === old.length && full.every((v, i) => v === old[i] || (i >= 25 && i <= 28)), "6x10: bytes other than the page differ from the 100 x 100 file");
+  const fit = (w, h) => validatePES(full, big, { name: "hoop", w, h }).ok;
+  ok(fit(160, 260) && !fit(130, 180), "6x10: validatePES should pass the 160 x 260 field and refuse the 130 x 180");
+  if (process.argv.includes("--write-6x10")) writeFileSync("tests/fixtures/golden/big_6x10.pes", full);
+  const golden = new Uint8Array(readFileSync("tests/fixtures/golden/big_6x10.pes"));
+  ok(golden.length === full.length && golden.every((v, i) => v === full[i]), "writer big_6x10: output changed from the locked golden file");
+  console.log("writer: big_6x10 (81 x 253 mm) carries the 160 x 260 page; a 5x7 design the 100 x 100");
+}
+
 // 2. reader: every sample reads like pyembroidery. Brother-made files: pyembroidery reads the box prefix as a
 //    first jump, so drop it and shift back. pyembroidery-made files (box prefix = opening jump, which machines
 //    load clipped) are flagged misplaced and read as meant, exactly like pyembroidery.
