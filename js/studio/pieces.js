@@ -1000,7 +1000,7 @@ const trimIt = (what, where = "") => ({ trim: what, where });
 // (keyed on the fabric and thread weight only where they change the piece's stitches, `sewnWith`: changing fabric or
 // thread on a 15-piece design rebuilt every frame and motif, 1.5 s)
 const built = new Map();
-export function pieceStages(p, fab = "cotton") {
+export function pieceStages(p, fab = cloth) {
   const { x, y, rot, id, flip, ...shape } = p, key = JSON.stringify(shape) + sewnWith(p, fab);
   if (!built.has(key)) {
     const st = localStages(p, fab);
@@ -1965,7 +1965,7 @@ export function fitFrame(p, pieces) {
 // (a Great Vibes JMK in a scallop, after Circle -> Scallop). Left as it was when no smaller size clears.
 const cleared = new Map();
 function clearOf(p, frame, size) {
-  const { x, y, id, ...shape } = p, key = JSON.stringify([shape, x - frame.x, y - frame.y, { ...frame, x: 0, y: 0, id: 0 }, size, wt]);
+  const { x, y, id, ...shape } = p, key = JSON.stringify([shape, x - frame.x, y - frame.y, { ...frame, x: 0, y: 0, id: 0 }, size, wt, cloth]);
   if (!cleared.has(key)) {
     const edge = cloud(pieceStitches(frame));
     let s = size;
@@ -2048,7 +2048,13 @@ export const THREADS = {
   40: { name: "40 wt", tip: "40 wt is the standard machine embroidery thread: a 75/11 embroidery needle." },
   60: { name: "60 wt", tip: "60 wt is fine, for small letters and fine detail: a 65/9 or 70/10 needle and 60 wt bobbin thread." },
 };
-let wt = "auto";   // set by compose for the length of a build
+// What the design is sewn with: the thread weight and the fabric. `compose` sets both for the length of its build
+// (from its opts), and the editor sets them with `sewAs` whenever the design's change, so everything measured outside
+// a build (what touches what, the size that clears a frame, Fit to hoop) is measured on the stitches that will be
+// sewn. Until 2026-11 only `compose` set the weight and nothing set the fabric: those checks measured 40 wt stitches
+// on cotton whatever the design used (towel lettering is wider and sits on a lattice 0.3 mm wider each side).
+let wt = "auto", cloth = "cotton";
+export function sewAs(fabric, thread) { cloth = FABRICS[fabric] ? fabric : "cotton"; wt = THREADS[thread] ? String(thread) : "auto"; }
 const sd = (x) => satinFor(wt, x), fd = (x) => fillFor(wt, x);   // (the numbers: core/recipes.js WEIGHTS)
 
 // Quilting in a frame (`quilt`: stipple or echo) fills it around everything else on it, sewn right after the frame
@@ -2425,9 +2431,9 @@ function trimsFor(trims, own) {
   return `Unless you laid ${cut}, take the hoop off the machine (leave the fabric in the hoop), trim ${what}, and put the hoop back. ${own || "Press Start."}`;
 }
 export function compose(pieces, hoop, opts = {}) {
-  const was = wt;
-  wt = THREADS[opts.thread] ? String(opts.thread) : "auto";
-  try { return build(pieces, hoop, opts); } finally { wt = was; }
+  const was = [cloth, wt];
+  sewAs(opts.fabric, opts.thread);
+  try { return build(pieces, hoop, opts); } finally { [cloth, wt] = was; }
 }
 function build(pieces, hoop, opts) {
   const fab = FABRICS[opts.fabric] ? opts.fabric : "cotton";

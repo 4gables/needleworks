@@ -136,7 +136,11 @@ export function verdictOf(bytes) {
     const out = verdict(readEmbroidery(bytes, "check.pes"));
     if (designBlockAgrees(bytes) === false) out.push({ key: "block", text: "PE-DESIGN would show a different design from the one the machine sews." });
     return out;
-  } catch { return []; }
+  } catch (e) {
+    // (the check itself failing is not a pass: it read as "no problems" and the dialog said Checked)
+    console.error(e);
+    return [{ key: "unchecked", text: "This file couldn't be checked, so look at the preview before you sew it." }];
+  }
 }
 
 // A file that ends before its stitches do (cut short in a download or copy): PES/PEC whose stitch block runs past

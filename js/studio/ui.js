@@ -12,7 +12,7 @@ import { THREADING, TURN_PIC, pickIt, snipsSaid, turnedNote, youHtml } from "../
 import { notEmbroidery, shortJumps } from "../doctor.js";
 import { QUILTS, quiltOf } from "./quilt.js";
 import { MOTIFS } from "./motifs.js";
-import { quiltDone, scaledFit, BORDERS, FABRICS, THREADS, SHAPES, TEXT_SHAPES, splitPieces, archFit, archStart, archWrap, ARCH, frontPanel, inkHeight, monoSize, archRoom, archShrink, archTight, cleanPiece, cleanPieces, clearSize, collision, collisions, inFrame, letterMetrics, underPatch, crossName, crossStep, layoutSize, touching, touchingAll, towelMin, fineLine, loopsFill, compose, fileBlocks, blocksPattern, scaleBlocks, FILE_SCALE, fittedSizes, fitFrame, sewnBoxes, sewn, sewnBox, followFrame, label, minSize, pieceBounds, pieceStitches, previewLook, smallText, bulkReady, carveDone, patchFillOf, drawAhead, pacer, PACED } from "./pieces.js";
+import { sewAs, quiltDone, scaledFit, BORDERS, FABRICS, THREADS, SHAPES, TEXT_SHAPES, splitPieces, archFit, archStart, archWrap, ARCH, frontPanel, inkHeight, monoSize, archRoom, archShrink, archTight, cleanPiece, cleanPieces, clearSize, collision, collisions, inFrame, letterMetrics, underPatch, crossName, crossStep, layoutSize, touching, touchingAll, towelMin, fineLine, loopsFill, compose, fileBlocks, blocksPattern, scaleBlocks, FILE_SCALE, fittedSizes, fitFrame, sewnBoxes, sewn, sewnBox, followFrame, label, minSize, pieceBounds, pieceStitches, previewLook, smallText, bulkReady, carveDone, patchFillOf, drawAhead, pacer, PACED } from "./pieces.js";
 
 const SCRIPT = "NW Great Vibes", PRINT = "NW Josefin Sans", ROUND = "NW Quicksand", BOLD = "NW Yellowtail";
 // exact Brother PEC thread colours, so the name on screen is the one the machine shows
@@ -202,6 +202,7 @@ export function initStudio(api) {
   // colours sewn only as guide lines hidden under fabric (an appliqué file's placement line): any thread will do
   let guides = new Set();
   let fabric = FABRICS[saved?.fabric] ? saved.fabric : "cotton", baste = !!saved?.baste, thread = THREADS[saved?.thread] ? String(saved.thread) : "auto";
+  sewAs(fabric, thread);
   // made to fit with Fit to hoop: a font or style change that then takes it past the hoop fits it again
   let fitted = !!saved?.fitted, refitted = false;
   // sewn in two hoopings because they chose it ("Sew it in two hoopings"), until it fits one again: a design that grew
@@ -251,7 +252,7 @@ export function initStudio(api) {
   }
   const buttons = () => { $("st-undo").disabled = $("bar-undo").disabled = !history.length; $("st-redo").disabled = !future.length; };
   function restore(h) {
-    let turn, hoop; ({ pieces, sel, fabric, baste, thread = "auto", fitted = false, two = false, turn, title = "", from = "", tip = "", hoop } = JSON.parse(h));
+    let turn, hoop; ({ pieces, sel, fabric, baste, thread = "auto", fitted = false, two = false, turn, title = "", from = "", tip = "", hoop } = JSON.parse(h)); sewAs(fabric, thread);
     // (the hoop it was in, not offered as a roomier hoop: undoing Open saved said the 5x7 had room to make it bigger)
     if (hoop && hoop !== api.hoopId()) { api.setHoop(hoop); lastHoop = null; }
     if (turn != null) api.setTurn(turn);
@@ -555,6 +556,7 @@ export function initStudio(api) {
   let drawnId = null;
   function ui() { api.keepFocus($("panel-design"), () => { list(); editor(); sewnOn(); }); api.paint?.(); }
   function sewnOn() {
+    sewAs(fabric, thread);   // (pieces.js measures with the design's fabric and thread)
     $("st-fabric").innerHTML = Object.entries(FABRICS).map(([k, f]) => `<button type="button" data-fab="${k}" aria-pressed="${k === fabric}">${f.name}</button>`).join("");
     // (Make another, under the starter too for a lone in-the-hoop project: in the frame's own settings only, a newcomer
     // making two bookmarks didn't find it and made one for each name instead)
@@ -1264,6 +1266,13 @@ export function initStudio(api) {
         save(); if (q && current()?.id === q.id) editor(); make();
       };
     }
+    // (a worker that dies never answers: the piece stayed pending and Download waited for good)
+    fileWorker.onerror = (err) => {
+      const job = fileJob; fileJob = null; fileWorker.terminate(); fileWorker = null;
+      const q = job && pieces.find((o) => o.id === job.id && o.kind === "file" && o.pending);
+      if (q) { resizeFile(q, 1); api.showError(`${q.name} couldn't be resized: ${err.message || "something went wrong"}`); }
+      save(); make();
+    };
     fileJob = { id: p.id, scale: p.scale, key: fileKey(p, p.scale) };
     fileWorker.postMessage({ id: 0, d: blocksPattern(p.orig), opts: { scale: p.scale, tiny: p.scale < 1, thin: true, grow: true } });
   }
@@ -1295,7 +1304,7 @@ export function initStudio(api) {
     api.fit(); api.showStep(null);
     api.setTurn(!!o.turn);   // (a square hoop ignores it)
     pieces = ps; sel = ps.length ? ps[ps.length - 1].id : null;
-    fabric = own(FABRICS, o.fabric) ? o.fabric : "cotton"; baste = o.baste === true; thread = own(THREADS, String(o.thread)) ? String(o.thread) : "auto";
+    fabric = own(FABRICS, o.fabric) ? o.fabric : "cotton"; baste = o.baste === true; thread = own(THREADS, String(o.thread)) ? String(o.thread) : "auto"; sewAs(fabric, thread);
     fitted = o.fitted === true; two = o.two === true; refitted = false;
     from = o.from || ""; title = o.title || ""; tip = o.tip || "";
     edited = false; sent = false; recentUI();
