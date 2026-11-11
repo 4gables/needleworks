@@ -13,6 +13,10 @@ Reference for this part of Needleworks: the rules, the reason for each (it stops
   instead) or an A,B,A' same-hole, merged stitches under 4 mm then a second pass to 7 mm, checks windows whose corner
   cell is empty. Rounding half-to-even like the writer.
 - `finish` also moves a design over 200 mm from the centre onto it (a PES box holds 204.8 mm).
+- A tie-in is 0.7 mm toward the run's first point over 0.3 mm on, or 0.5 (then 0.8) where one of the run's next
+  four points lies within 0.12 mm of the 0.7 one (`recipes.js` `TIE_INS`): a run whose second point is 0.7 mm on
+  put three hits in that hole (71 starts over the batch: script columns begun at a junction, picture runs). All
+  three lengths are within what sold designs use (0.5-0.8).
 - `turnPattern` (clockwise: sideways design into the machine's hoop); `turnForMachine` thins again after the turn.
 - `satin(p, width, density = 0.4, pullComp, closed, fold, wAt, shape)`: `density` = gap between hits on the SAME
   edge (Ink/Stitch default; Brother files 0.30-0.42). Stations `density`/2 apart by whichever of outer edge, inner

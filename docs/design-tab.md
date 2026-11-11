@@ -55,6 +55,14 @@ Reference for this part of Needleworks: the rules, the reason for each (it stops
   rebuildable: `build()` moves a start after a pause on (5 % steps) until it's 5.5 mm from where the needle stopped
   (`reseam`; gang moves the first frame's). An appliqué frame's border after quilting keeps its own start (started
   where the quilting stopped, 1.4 mm across the pause: a loose thread).
+- Several appliqués in one thread sew stage by stage together (`gangAppliques` in compose.js): all the outlines,
+  one stop to lay the fabric, all the tack-downs, one stop to trim, all the satins: 3 stops for two hearts (or a
+  heart and appliqué letters) where sewn one after the other took 6. Only pieces that are placement, tack-down and
+  satin and nothing else (a quilted appliqué frame is left alone), whose stitches don't overlap (boxes + 1 mm), with
+  nothing sewn between them in the list that the later one would lie on. Each outline keeps its own seams. The
+  stops that remain are the ones the maker needs: lay the fabric (after the outlines), trim it (after the
+  tack-downs); a different thread for the satin or a name is its own stop as before. Batch: `st_appl_two_hearts`,
+  `st_appl_heart_letters`.
 - Appliqué: placement, pause (lay fabric, trim), tack-down, pause, satin. Real appliqué (`appliqued()`, not an ITH
   front or the pouch) shows the guide (`#st-appl`) until "Got it" (`studio.applSeen`).
 - Appliqué letters (`APPLIQUE_FONTS` Graduate, Lilita One, Alfa Slab One): each ink piece closed (`closeMask`,

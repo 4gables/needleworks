@@ -128,7 +128,10 @@ export function letters(text, family, size, style = "auto", spacing = 0, kern = 
   // Print letters each start where the move from the last one is either over 5 mm (trimmed; the move runs from the end
   // of one column to the start of the next, half a column and pull off the centre lines, so 0.5 mm to spare) or, where
   // no start makes it that long, the leftmost (Quicksand "Abbie dog" at 5 mm: 5 loose threads in 28 mm)
-  else if (chain && print) comps = order(edges, 0, (5.5 + (satinW ? satinW / 2 + 0.3 : 0)) / s, true, { at: laid, ...dots });
+  // (S1b: a print letter may also begin partway along a plain stroke, an o's ring or a stem with no shaped end, every
+  // half mm or tenth of the x-height: a narrow letter's ends are all within 5 mm of the last one, so each was a loose
+  // thread. Strokes with a taper, a shaped end or sides keep their ends: those are measured along the whole stroke.)
+  else if (chain && print) comps = order(edges, 0, (5.5 + (satinW ? satinW / 2 + 0.3 : 0)) / s, false, { at: laid, ...dots, step: Math.max(0.5, xh * 0.1) / s, whole: (j) => !!(tapers[j] || (satinW && (ends[j] || sides[j]))), skip: true });
   // Strokes round a counter are narrowed so it stays open (`counterCaps`; not when satin is asked for: "Make it bold"
   // says small loops may fill). The fourth entry is that stroke's column, or 0 for the word's.
   const caps = style === "satin" || !satinW ? new Map() : notchCaps(notches, s, satinW, counterCaps(counters, s, satinW));
