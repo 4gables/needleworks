@@ -38,8 +38,9 @@ if has '^js/(core/|studio/(pieces|outline|quilt|motifs)|doctor|worker|quilt-work
   # save a new one with --save= when a release moves it)
   say "== scoreboard (change from tests/fixtures/quality.json in brackets)"; to 300 node tests/flow_lint.mjs --score --against=tests/fixtures/quality.json $OUT/batch
   [[ -n $BASE ]] && say "compare: changed files vs $BASE" && for f in $BASE/*.pes; do cmp -s $f $OUT/batch/${f:t} || say "  changed ${f:t}"; done | tail -40
-  # (picture_corpus.sh starts and stops its own browser on the port it's given: not ours)
-  has '^js/core/digitize' && run picture_corpus 600 zsh tests/picture_corpus.sh $((CDP+3)) $HP $OUT/pc
+  # (picture_corpus.sh starts and stops its own browser and its own server on the ports it's given: not ours. Given
+  # our server's port its files landed in our batch folder and its own checker count came out blank)
+  has '^js/core/digitize' && run picture_corpus 600 zsh tests/picture_corpus.sh $((CDP+3)) $((HP+1)) $OUT/pc
   has '^js/core/(text|raster|fonts)|^js/studio/pieces' && { node tests/cdp.mjs $CDP goto "$U/tests/browser/lettering_look.html?v=$RANDOM" >/dev/null; for i in $(seq 1 120); do t=$(node tests/cdp.mjs $CDP eval document.title); [[ $t == *DONE* ]] && break; sleep 5; done; say "== lettering_look $t"; [[ $t == *" 0\""* ]] || fail=1; }
 fi
 

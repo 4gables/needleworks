@@ -19,7 +19,7 @@ Phase 1, the base (no visible change, byte-identical batches):
     area, where it can be proven against the check it joins (perf into monkey and matrix into files_flow: F2;
     picture_history into picture_corpus: S4; starters into studio_batch: U1); dead code in shipped files goes
     with F1, which edits those files anyway (so F0 ships no code and needs no cache bump)
-- [ ] **F1 Recipes and context** (branch `f1-recipes`; batches byte-identical to v12 after each step, 439 of 439)
+- [x] **F1 Recipes and context** ( batches byte-identical to v12 after each step, 439 of 439)
   - [x] `js/core/recipes.js`: limits, move costs, thread-weight factors; design, geom, quality, doctor, render,
     pieces read them
   - [x] sew context: `sewAs(fabric, thread)` set by the editor and by `compose`; fits and collisions outside a
@@ -29,13 +29,14 @@ Phase 1, the base (no visible change, byte-identical batches):
     faster) and the Thickness view (was offset 0 only)
   - [x] lettering satins by fabric, satin border recipes and fill rows in `recipes.js` (439 of 439 identical).
     Still inline, to move as S1-S3 rework their builders: satin width rule, towel lattice, underlay shapes
-  - [ ] `relieve` and the doctor's `slide`/`crowd` onto `density.js` (their block rule differs from the checker's:
-    a pause isn't a block edge for them, so they thin more than the checker asks; changing that changes bytes, so
-    it goes with S2)
-  - [ ] shared geometry and colour helpers (point-in-polygon, marching squares, scanline fill, boxes, CIELAB,
-    luminance)
-  - [x] first part released as v13 (check.sh passed: 439 files unchanged, scoreboard unchanged, ui_sweep 330/0,
-    monkey 960 steps 0 problems, files_flow, steps_lint, entry_state, said_flow, lettering_look all 0)
+  - [x] `js/core/colour.js` (one CIELAB, one luminance: same numbers) and `geom.js` `within()` for the three
+    point-in-polygon copies
+  - [x] second part released as v14 (439 batch files and 117 picture-corpus files identical to v12; monkey 960
+    steps 0 problems; ui_sweep's Picture state was "never ready" twice in the full run and passed alone twice:
+    watch it)
+  - Moved on, with the reason: `relieve` and the doctor's `slide`/`crowd` onto `density.js` goes with S2 (their
+    block rule differs from the checker's, so aligning it changes bytes); the marching-squares and scanline-fill
+    copies go with S3 (it rewrites fills; merging them now risks vertex order); bounding-box copies with F2
 - [ ] **F2 Structure**: pieces.js, digitize.js, ui.js, app.js split; one worker job queue; one memo per `make()`
 - [ ] **F3 Atomic releases**: one release's files per load, never a mix
 
