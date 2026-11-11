@@ -2,7 +2,10 @@
 // SHA-256 of this release's copy (the service worker installs a release only when every file it fetched is that copy).
 // `node tests/sw.test.mjs --write` fills the hashes in after files change; without it a stale hash fails here (CI),
 // since a release with one would never install.
+// `--wip` (CI on a round's branch): a stale hash is said, not failed. Hashes are written once, at the release, so
+// a branch in progress always has some (2026-11-11: 17 failed-build emails from four branches doing just that).
 import { createHash } from "crypto";
+const WIP = process.argv.includes("--wip");
 import { readFileSync, readdirSync, writeFileSync } from "fs";
 const sw = readFileSync("sw.js", "utf8"), listed = new Set([...sw.matchAll(/"([^"]+\.(?:js|woff2|png|css|html|webmanifest))"/g)].map((m) => m[1]));
 const want = [["js", /\.js$/], ["js/core", /\.js$/], ["js/studio", /\.js$/], ["fonts", /\.woff2$/], ["assets", /\.png$/]]
@@ -22,7 +25,7 @@ if (stale.length && process.argv.includes("--write")) {
   console.log(`sw: ${stale.length} hashes written (${stale.map((e) => e.file).join(", ").slice(0, 200)})`);
 } else if (stale.length) {
   console.error(`sw.js hashes are stale for ${stale.length} files (run node tests/sw.test.mjs --write, and bump CACHE for a release):\n  ` + stale.map((e) => e.file).join("\n  "));
-  process.exit(1);
+  if (!WIP) process.exit(1);
 } else console.log(`sw: ${entries.length} hashes match`);
 // the fingerprint of the set in the cache's name
 {
@@ -30,7 +33,7 @@ if (stale.length && process.argv.includes("--write")) {
   const has = (now.match(/^const SET = "([0-9a-f]*)";$/m) || [])[1];
   if (has === undefined || !/const CACHE = `needleworks-v\d+-\$\{SET\}`/.test(now)) { console.error("sw.js: CACHE must be `needleworks-vN-${SET}` with a const SET line"); process.exit(1); }
   if (has !== set && process.argv.includes("--write")) { writeFileSync("sw.js", now.replace(/^const SET = "[0-9a-f]*";$/m, `const SET = "${set}";`)); console.log(`sw: set ${set}`); }
-  else if (has !== set) { console.error("sw.js SET is stale (run node tests/sw.test.mjs --write)"); process.exit(1); }
+  else if (has !== set) { console.error("sw.js SET is stale (run node tests/sw.test.mjs --write)"); if (!WIP) process.exit(1); }
 }
 
 // Every module's imports resolve: the file exists, is in the offline list, and exports each name asked for (through

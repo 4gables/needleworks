@@ -146,7 +146,8 @@ Read the topic's file before changing its code; each holds the rules, their reas
   up to 10 minutes after a push a browser ran new and old modules together (2026-10-31: a new ui.js with the last
   pieces.js drew the bookmark squashed). Guard: `zsh tests/upgrade.sh`.
 - To release: bump the number in `CACHE` (`needleworks-vN-${SET}`), then `node tests/sw.test.mjs --write` as the
-  last change (it writes the hashes and `SET`; CI fails on a stale one, since that release would never install),
+  last change (it writes the hashes and `SET`; CI fails on a stale one on main and tags, since that release would never
+  install, and only reports it on a round's branch),
   merge as one commit, tag `vN`. After pushing, wait until the live sw.js shows vN. A visitor already on the site
   gets the release at their next visit or by the Reload note; a first visit or Cmd+Shift+R gets it at once.
 - 4gables.com is the `4gables/website` repo's custom domain (a project site). Other repos appear under
