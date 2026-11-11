@@ -114,7 +114,7 @@ Reference for this part of Needleworks: the rules, the reason for each (it stops
 - **Locks on a single line of thread** (`recipes.js` `LOCKS`): a lock's one hit aside needs stitches to hide in.
   Where the points it would lie beside are within 0.25 mm of one line (a fine-line letter, a line border, a
   picture's run, a fill's row) it goes on that line, 0.45 mm past the lock's far hit. Beside it, it stood 0.4 mm
-  off the stroke, a nub (and most of the pictures' "locks outside cover": 90 -> 16 on the 12 Filled samples).
+  off the stroke, a nub.
   Halfway between the lock's hits made two 0.35 mm stitches, which the file rounds to the checker's tiny 0.3.
   Only where the line goes on as far as the lock reaches (1.15 mm): on a dot it made a fine-line i's dot a bar.
 - **Left:** pictures build without easing (8 of 28 batch pictures still peak at 24: `digitize.js`); towel names in
