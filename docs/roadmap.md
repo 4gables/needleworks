@@ -37,7 +37,12 @@ Phase 1, the base (no visible change, byte-identical batches):
   - Moved on, with the reason: `relieve` and the doctor's `slide`/`crowd` onto `density.js` goes with S2 (their
     block rule differs from the checker's, so aligning it changes bytes); the marching-squares and scanline-fill
     copies go with S3 (it rewrites fills; merging them now risks vertex order); bounding-box copies with F2
-- [ ] **F2 Structure**: pieces.js, digitize.js, ui.js, app.js split; one worker job queue; one memo per `make()`
+- [ ] **F2 Structure** (branch `f2-structure`; byte-identical after each step)
+  - [x] `js/core/fill.js`: the fill engine out of digitize.js (439 of 439 identical)
+  - [ ] pieces.js split (shapes, clean, fit, lettering, stages, compose)
+  - [ ] one memo per `make()` for placed stitches, boxes and clouds; perf folded into monkey's budget
+  - [ ] digitize.js: colour learning and styles apart
+  - [ ] ui.js and app.js over one shared state; one worker job queue; matrix folded into files_flow
 - [ ] **F3 Atomic releases**: one release's files per load, never a mix
 
 Phase 2, stitch quality (measured against the scoreboard, VM-checked):
