@@ -3,9 +3,18 @@
 // to the count asked, each matched to a Brother thread), labelled onto any working image, and what of the picture
 // is ink. Size and Turn never change the threads. The stitches are digitize.js. (Part of digitize.js until 2026-11.)
 import { labOf } from "./colour.js";
+import { FILL } from "./fill.js";
 import { distanceTransform, label } from "./raster.js";
-import { PEC_MATCH, nearestBrotherThread, pecThread, rgbToHex } from "./threads.js";
+import { PEC_MATCH, hexToRgb, nearestBrotherThread, pecThread, rgbToHex } from "./threads.js";
 
+export const DEFAULTS = {
+  colors: 6,          // thread colours (not counting background)
+  sizeMm: 100,        // longest side of the finished design
+  removeBackground: true,
+  fillAngle: FILL.angle,   // degrees
+  density: 0.35,      // mm between fill rows (DENSITY.solid)
+  res: FILL.res,      // working pixels per mm (5 lost the narrow notches of small lettering, e.g. an M)
+};
 // ---------- colour ----------
 export const srgbToLab = labOf;   // (core/colour.js)
 // CIEDE2000 colour difference of two Lab colours (Sharma, Wu & Dalal 2005). Plain Lab distance overweights chroma:

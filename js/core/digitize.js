@@ -10,19 +10,10 @@ import { MARGIN } from "./machines.js";
 import { ROWS } from "./recipes.js";
 import { distanceTransform, label, order, skeletonEdges } from "./raster.js";
 import { PEC_MATCH, hexToRgb, nearestBrotherThread, pecThread, rgbToHex } from "./threads.js";
-import { across, deltaE2000, pixels, srgbToLab } from "./palette.js";
-export { analyze, labelWith, learnColours, pictureInk, toPalette } from "./palette.js";
+import { DEFAULTS, across, deltaE2000, pixels, srgbToLab } from "./palette.js";
+export { DEFAULTS, analyze, labelWith, learnColours, pictureInk, toPalette } from "./palette.js";
 
 export { FILL_PATTERNS, fillPolygon, routeBudget };   // (core/fill.js)
-export const DEFAULTS = {
-  colors: 6,          // thread colours (not counting background)
-  sizeMm: 100,        // longest side of the finished design
-  removeBackground: true,
-  fillAngle: FILL.angle,   // degrees
-  density: 0.35,      // mm between fill rows (DENSITY.solid)
-  res: FILL.res,      // working pixels per mm (5 lost the narrow notches of small lettering, e.g. an M)
-};
-
 // fill row spacing in mm. Solid covers the fabric; standard is lighter and faster. 0.3 fails the PE900 check:
 // the links between rows become stitches under 0.3 mm, which nest.
 export const DENSITY = ROWS;   // (core/recipes.js)

@@ -46,6 +46,11 @@ Phase 1, the base (no visible change, byte-identical batches):
   - [x] `lettering.js`: drawing a word to strokes, counters, arches, column shapes and `stitchLetters` out of
     pieces.js (now 1,313 lines, from 2,553); the thread weight is passed to `stitchLetters`, the drawing state is
     read and set through `drawings()`/`inkOnly()`
+  - Tooling lesson: moving code between modules is checked by an undefined-name pass (TypeScript's checker over a
+    copy, kept in the session scratchpad). It ran vacuously through v15-v18 (one line of typed.js it can't parse made
+    it skip the pass without saying so); the batches and browser checks carried those releases, and the repaired
+    pass confirms them clean. It caught nothing on the first palette.js attempt, which `check.sh` did catch
+    (pictures changed). Decide in F3 whether it joins `check.sh` (it needs TypeScript fetched: a dev-only tool)
   - [ ] speed on a busy design (`tests/perf.mjs`, 15 pieces + appliqué letters: 6-9 of 23 actions over 500 ms,
     worst 745-830 ms, run to run). Measured, not guessed:
     - a per-piece memo for collision measuring changed nothing (clouds and `near` are ~57 ms of a towel change):
