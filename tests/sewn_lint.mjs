@@ -9,7 +9,7 @@
 // Stale entries fail too. Run: node tests/sewn_lint.mjs (< 1 s, CI).
 import { readFileSync } from "fs";
 
-const FILES = ["js/studio/ui.js", "js/app.js", "js/sheet.js", "js/words.js", "js/gate.js", "js/studio/pieces.js", "js/studio/compose.js", "js/studio/names.js", "js/studio/placing.js", "js/studio/recent.js"];
+const FILES = ["js/studio/ui.js", "js/app.js", "js/sheet.js", "js/words.js", "js/gate.js", "js/studio/pieces.js", "js/studio/compose.js", "js/studio/names.js", "js/studio/placing.js", "js/studio/recent.js", "js/studio/threadsaid.js", "js/studio/toobig.js"];
 // (pieces.js: its measuring calls only; its builders stitch the size they're handed)
 const SIZES_IN = (f) => f !== "js/studio/pieces.js" && f !== "js/studio/compose.js";
 const MEASURE = /\b(pieceBounds|touchingAll|touching|inFrame)\(/g;
@@ -26,7 +26,7 @@ const RAW_MEASURE = process.env.EMPTY ? [] : [
   ["js/studio/ui.js", "warnNow", "candidate sizes fitted with fittedSizes on the same line (two lines, the size fix)"],
   ["js/studio/ui.js", "roundAll", "a first frame drawn round the pieces as asked, so it shrinks none of them"],
   ["js/studio/ui.js", "landing", "frames (never fitted) and the piece at fit / f0, its fitted sizes"],
-  ["js/studio/ui.js", "twoHoopings", "lettering no frame fits (filtered by !fit.has), split at a word gap"],
+  ["js/studio/toobig.js", "twoHoopings", "lettering no frame fits (filtered by !fit.has), split at a word gap"],
   ["js/studio/ui.js", "reArch", "arched lettering: never frame-fitted"],
   ["js/studio/ui.js", "pickStarter", "q at its fitted size, made on the line before"],
   ["js/studio/placing.js", "roughly", "a quick bound at the asked size, scaled to each candidate size"],
@@ -44,8 +44,8 @@ const RAW_SIZE = process.env.EMPTY ? [] : [
   ["js/app.js", "makePicture", "s is the Picture tab's settings (the Size asked), compared with the file as sewn for the size note"],
   ["js/studio/ui.js", "frameLines", "compares what the frame sews (fs, fittedSizes) with the size asked: the offer is for words shrunk under 80 % of it, tried at asked sizes down from it"],
   ["js/app.js", "keepPicture", "blob.size is the picture file's bytes (the storage cap), not a piece"],
-  ["js/studio/ui.js", "snug", "pieces no frame fits (fit.has excluded): asked = sewn; each size checked by landing()"],
-  ["js/studio/ui.js", "snugWay", "sets the asked size snug() found (unfitted piece)"],
+  ["js/studio/toobig.js", "snug", "pieces no frame fits (fit.has excluded): asked = sewn; each size checked by landing()"],
+  ["js/studio/toobig.js", "snugWay", "sets the asked size snug() found (unfitted piece)"],
   ["js/studio/ui.js", "lineRest", "the line pitch from the size the lines were sewn at (set from sewn() just before)"],
   ["js/studio/ui.js", "placeRest", "a new straight piece no frame fits yet: asked = sewn; spotIn/freeRoom measure it sewn"],
   ["js/studio/ui.js", "followed", "an arched word (never frame-fitted): asked = sewn"],
@@ -58,7 +58,7 @@ const RAW_SIZE = process.env.EMPTY ? [] : [
   ["js/studio/ui.js", "landing", "the capped test itself: change.size asked vs the size it's sewn"],
   ["js/studio/ui.js", "asLettering", "a monogram turned to lettering keeps the size asked, then fitted where it is"],
   ["js/studio/ui.js", "lineChoice", "offered only when no frame fits it (!d.fs): asked = sewn"],
-  ["js/studio/ui.js", "twoHoopings", "lettering no frame fits: asked = sewn"],
+  ["js/studio/toobig.js", "twoHoopings", "lettering no frame fits: asked = sewn"],
   ["js/studio/ui.js", "autoWords", "the words made biggest name the file: what was asked (intent), not what a frame left"],
   ["js/studio/ui.js", "main", "the words made biggest are the name the names batch swaps (intent)"],
   ["js/studio/ui.js", "pickStarter", "a starter's own sizes, fitted (fitHoop, fittedSizes) before it's shown"],
