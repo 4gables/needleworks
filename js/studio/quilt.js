@@ -357,7 +357,9 @@ export const LINED = (kind) => kind === "crosshatch" || kind === "stripes";
 // needle steps along it only to the line next door: the lines read as one switchback. A line stops `clear` mm short
 // of whatever else is on the frame; from there the needle steps to the line next door when the straight way is clear
 // (a quilter travels along a motif's edge), else the thread is cut.
-function lines(edge, obstacles, { kind, bound = edge, cover = false, clear = 2.5, solids, from = null } = {}) {
+// `lap`: the border is no line on the frame line (scallops, diamonds): the needle's way along it would show in
+// stretches, so it ends with one whole round of it, a base line under the border.
+function lines(edge, obstacles, { kind, bound = edge, cover = false, clear = 2.5, solids, from = null, lap = false } = {}) {
   const F = freeMask(edge, obstacles, 0, clear, solids), { m: { w, h }, dtB, x0, y0 } = F;
   const free = (x, y) => {
     const X = Math.round((x - x0) * RES - 0.5), Y = Math.round((y - y0) * RES - 0.5);
@@ -458,6 +460,12 @@ function lines(edge, obstacles, { kind, bound = edge, cover = false, clear = 2.5
       back = cover && e0.f && !e1.f ? Object.assign(path.slice(i0), { from: e0 }) : null;
     }
     row = -1; back = null;
+  }
+  if (lap && cover && cur?.f && path) {
+    const all = bound.map((q, i) => [(((cum[i] - cur.s) % T) + T) % T, q]).filter((u) => u[0] > 1e-6).sort((u, v) => u[0] - v[0]);
+    for (const [, q] of all) stitchTo(q);
+    stitchTo(cur.q);
+    if (Math.hypot(path[path.length - 1][0] - cur.q[0], path[path.length - 1][1] - cur.q[1]) > 1e-9) path.push(cur.q);
   }
   return out.filter((l) => l.length > 1);
 }

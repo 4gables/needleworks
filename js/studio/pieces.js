@@ -18,6 +18,7 @@ import { inchFirst, measure, measure2 } from "../words.js";
 import { MOTIFS } from "./motifs.js";
 import { letterOutlines, motifOutlines } from "./outline.js";
 import { QUILTS, contours, quiltOf } from "./quilt.js";
+import { COVERS, TRIMS, blanket, trimmed } from "./borders.js";
 import { BORDERS, EYE, MIN, SCALLOP_IN, SHAPES, eyeAt, eyeWide, frameH, frontAcross, frontPanel, hasEye, shapeOf, zipY } from "./shapes.js";
 import { FABRICS, THREADS } from "./fabrics.js";
 import { FILE_SCALE } from "./files.js";
@@ -351,7 +352,7 @@ const trimIt = (what, where = "") => ({ trim: what, where });
 // monogram: { kind: "monogram", letters, font, size, style }  (3 letters: small, BIG, small)
 // frame:    { kind: "frame", shape: SHAPES key, w, h, border: BORDERS key, fill (patch thread), quilt: a QUILTS key }
 // letters:  { kind: "letters", text, font (APPLIQUE_FONTS), size }  (appliqué letters)
-// motif:    { kind: "motif", motif: MOTIFS key, size, style: "fill"|"outline"|"applique" }
+// motif:    { kind: "motif", motif: MOTIFS key, size, style: "fill"|"outline"|"applique", pattern: "contour" (rings) }
 // file:     { kind: "file", name, blocks: [{ color, name, paths }] }  (an opened PES/DST, stitches as is)
 //
 // A piece sews in stages; each stage is one colour block. `pause` forces a machine stop even in the same thread,
@@ -540,7 +541,9 @@ const seamStage = (f, make) => ({ seam: f, reseam: (g) => seamed(make(g)), paths
 // a frame that's only a border: satin (3 mm), bold (a triple run) or a line
 // (the edge walk isn't closed: it ends on the side the zigzag starts. Closing it stepped 2.2 mm back across the
 // border, a trim and two locks on every satin frame, until 2026-10-31)
-export const plainBorder = (e, border) => border === "satin" ? satinEdge(e, EDGES.frame)
+// (or a line with a shape to it, `trim`: borders.js)
+export const plainBorder = (e, border, trim) => border === "satin" ? satinEdge(e, EDGES.frame)
+  : border === "fancy" ? trimmed(e, trim)
   : border === "bold" ? [run(e, 2.0, true), run(back(e), 2.0, true), run(e, 2.0, true)].map(loop)
   : [loop(run(e, 2.2, true))];
 
@@ -574,8 +577,11 @@ function localStages(p, fab = "cotton") {
         { color: p.color, pause: true, ...seamStage(1 / 3, (f) => tack(seamAt(edge, f))),
           you: `Lay the appliqué fabric over the ${name} outline, right side up, ${past()}${cutPiece()}. Press Start: the machine tacks it down.`, then: trimIt("the appliqué fabric"),
           sews: "", under: true },
-        { color: p.color, pause: true, ...seamStage(2 / 3, (f) => satinBorder(seamAt(edge, f))), you: "Press Start.", sews: "Covers the raw edge with a satin border.", border: true },
+        // (a blanket-stitch edge, `cover`: the cut edge stays in sight, so the fabric mustn't fray)
+        p.cover === "blanket" ? { color: p.color, pause: true, ...seamStage(2 / 3, (f) => blanket(seamAt(edge, f))), you: "Press Start.", sews: "Sews a blanket stitch round the edge.", border: true }
+          : { color: p.color, pause: true, ...seamStage(2 / 3, (f) => satinBorder(seamAt(edge, f))), you: "Press Start.", sews: "Covers the raw edge with a satin border.", border: true },
       ];
+      if (p.cover === "blanket") stages[0].before = "Appliqué fabric that won't fray at a cut edge: felt, or cotton with fusible web ironed on its back. A blanket stitch holds the edge down and leaves it in sight.";
     } else if (p.border === "zip") {
       // in-the-hoop zipper pouch: zipper across the top, the front in two folded pieces either side of it, whatever
       // goes on the front (the pieces after it), then the back face down and one seam through everything; turned
@@ -653,7 +659,7 @@ function localStages(p, fab = "cotton") {
       stages = [...fill, { color: p.color, edge: true, solid: [edge], paths: satinBorder(edge), sews: `Sews the patch's satin-stitch edge.`,
         after: `Take it out of the hoop, trim or tear the stabilizer away and cut the patch out close to the satin-stitched edge without nicking it. To put it on, iron patch adhesive (or fusible web) on the back and press it on, or sew it on by hand or machine just inside the edge.` }];
     } else {
-      stages = [{ color: p.color, paths: plainBorder(edge, p.border), sews: `Sews the ${name} frame.`, border: true }];
+      stages = [{ color: p.color, paths: plainBorder(edge, p.border, p.trim), sews: `Sews the ${name} frame.`, border: true }];
     }
   } else if (p.kind === "letters") {
     // appliqué letters: one piece of fabric for the whole word, outlined letter by letter (holes too)
@@ -662,7 +668,7 @@ function localStages(p, fab = "cotton") {
     // (named as a motif: "Sews the baby." for the onesie drawing)
     const m = MOTIFS[p.motif] || MOTIFS.heart, loops = motifOutlines(m.d, p.size), name = m.name.toLowerCase();
     if (p.style === "applique") stages = appliqued(loops, p.color, `the ${name} motif`, `the ${name} motif`, "around it (and inside any holes)");
-    else if (loops.length) stages = [{ color: p.color, paths: motifStitches(loops, p.style, fab), sews: `Sews the ${name} motif${p.style === "outline" ? " as an outline" : ""}.`, ...(p.style === "outline" ? {} : { solid: loops }) }];
+    else if (loops.length) stages = [{ color: p.color, paths: motifStitches(loops, p.style, fab, p.pattern), sews: `Sews the ${name} motif${p.style === "outline" ? " as an outline" : ""}.`, ...(p.style === "outline" ? {} : { solid: loops }) }];
   } else if (p.kind === "file") {
     // (each block keeps the thread name the file gives it: all named after the piece, a combined gnome.pes listed
     // "gnome" for every thread)
@@ -712,9 +718,10 @@ export function patchFill(p, loops, fab, name = shapeOf(p).name.toLowerCase()) {
 
 // a motif filled (tatami inside, then a narrow satin edge over the row ends) or as a satin outline
 // (outline and holes nearest first, each from where the needle is: `rings`)
-function motifStitches(loops, style, fab = cloth) {
+// (`pattern`: "contour" fills it in rings that follow its outline)
+function motifStitches(loops, style, fab = cloth, pattern = "tatami") {
   if (style === "outline") return rings(loops, (l) => edgeSatin(l, 2.2));
-  const rec = fillRecipe(fab), fill = filled(loops, { inset: 0.6, density: fd(rec.rows), pull: rec.pull }), end = fill[fill.length - 1];
+  const rec = fillRecipe(fab), fill = filled(loops, { inset: 0.6, density: fd(rec.rows), pull: rec.pull, ...(pattern === "contour" ? { pattern } : {}) }), end = fill[fill.length - 1];
   return [...fill, ...rings(loops, (l) => [loop(run(l, 2.0, true)), loop(satin(l, 1.4, sd(0.4), 0.2, true))], end && end[end.length - 1])];
 }
 
@@ -1123,12 +1130,15 @@ export function cleanPiece(p) {
   } else if (p.kind === "motif") {
     q.motif = own(MOTIFS, q.motif) ? q.motif : "heart"; q.size = num(q.size, MIN, BIG, 40);
     q.style = pick(q.style, ["fill", "outline", "applique"], "fill");
+    if (q.pattern != null && q.pattern !== "contour") delete q.pattern;
   } else if (p.kind === "frame") {
     q.shape = own(SHAPES, q.shape) ? q.shape : "circle"; q.border = own(BORDERS, q.border) ? q.border : "satin";
     q.w = num(q.w, MIN, BIG, 80); q.h = num(q.h, MIN, BIG, q.w);
     if (q.fill != null) q.fill = hex(q.fill, "#0e1f7c");
     if (q.blend != null) { q.blend = hex(q.blend, undefined); if (!q.blend) delete q.blend; }
     if (q.pattern != null && !own(FILL_PATTERNS, q.pattern)) delete q.pattern;
+    if (q.trim != null && !own(TRIMS, q.trim)) delete q.trim;
+    if (q.cover != null && !own(COVERS, q.cover)) delete q.cover;
     if (q.quilt != null && !own(QUILTS, q.quilt)) delete q.quilt;
     if (q.hang != null) q.hang = q.hang === true;
     if (q.eyelet != null) q.eyelet = q.eyelet === true;

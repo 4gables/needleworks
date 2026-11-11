@@ -120,6 +120,18 @@ for (const [shape, border, quilt, text] of [["square", "satin", "crosshatch", "R
   await save(`st_quilt_${shape}_${quilt}_${border}`, [P({ kind: "frame", shape, border, w: 100, h: 84, quilt, color: "#ed171f", ...(border === "ith" ? { hang: false } : {}) }),
     ...(text ? [P({ kind: "text", text, font: FONTS[1].family, size: 16 })] : [])]);
 log("quilting: done");
+// fills in rings, borders with a shape to them, a blanket-stitch appliqué edge
+for (const shape of ["circle", "heart", "scallop"]) await save(`st_rings_${shape}_patch`, [P({ kind: "frame", shape, border: "patch", w: 70, h: 64, fill: "#c70156", color: "#770176", pattern: "contour" }),
+  P({ kind: "text", text: "Rosie", font: FONTS[1].family, size: 12, color: "#ffffff" })], "5x7", false, shape === "scallop" ? { fabric: "knit" } : {});
+await save("st_rings_carved_patch", [P({ kind: "frame", shape: "circle", border: "patch", w: 80, h: 80, fill: "#0e1f7c", color: "#ed171f", pattern: "contour" }), P({ kind: "motif", motif: "star", size: 40, style: "fill", color: "#ffd900" })]);
+for (const m of ["heart", "star", "butterfly", "leaf"]) await save(`st_rings_motif_${m}`, [P({ kind: "motif", motif: m, size: 44, style: "fill", pattern: "contour", color: "#ed171f" })]);
+await save("st_rings_motif_small", [P({ kind: "motif", motif: "heart", size: 14, style: "fill", pattern: "contour", color: "#ed171f" })]);
+for (const [shape, trim] of [["circle", "scallop"], ["heart", "diamond"], ["square", "blanket"], ["oval", "scallop"], ["bookmark", "diamond"]])
+  await save(`st_trim_${shape}_${trim}`, [P({ kind: "frame", shape, border: "fancy", trim, w: 90, h: 70, color: "#ed171f" }), P({ kind: "text", text: "Rosie", font: FONTS[1].family, size: 14 })]);
+await save("st_trim_square_scallop_quilted", [P({ kind: "frame", shape: "square", border: "fancy", trim: "scallop", w: 100, h: 84, quilt: "crosshatch", color: "#ed171f" }), P({ kind: "text", text: "Rosie", font: FONTS[1].family, size: 16 })]);
+for (const shape of ["heart", "circle", "square"]) await save(`st_blanket_${shape}_applique`, [P({ kind: "frame", shape, border: "applique", cover: "blanket", w: 84, h: 76, color: "#0e1f7c" }),
+  P({ kind: "text", text: "Ashley", font: FONTS[0].family, size: 16, color: "#ed171f" })]);
+log("rings and borders: done");
 // motifs in every style, sizes from small to large; lettering with motifs either side
 const { MOTIFS } = await import("../../js/studio/motifs.js");
 for (const [k, i] of Object.keys(MOTIFS).map((k, i) => [k, i]))

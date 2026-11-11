@@ -32,7 +32,8 @@ function withQuilt(p, stages, others, dragging = false, later = null, empty = nu
     const job = { key, kind: p.quilt, edge, obstacles, opts: { inset: p.border === "line" || p.border === "bold" ? 3 : 4.5, solids,
       // (straight lines run to the frame line where a border covers it, else to 3 mm inside it; an appliqué's tack-down
       // leaves the needle on the frame line a third round: they start from there)
-      ...(LINED(p.quilt) ? { cover: covered, bound: covered ? edge : inset(shapeOf(p).path(p.w, p.h), 3).map(placer(p)), from: covered && p.border === "applique" ? seamAt(edge, 1 / 3)[0] : null } : {}) } };
+      ...(LINED(p.quilt) ? { cover: covered, bound: covered ? edge : inset(shapeOf(p).path(p.w, p.h), 3).map(placer(p)), from: covered && p.border === "applique" ? seamAt(edge, 1 / 3)[0] : null,
+        lap: p.border === "fancy" && p.trim !== "blanket" } : {}) } };
     if (later) later.push(job); else quiltDone(key, quiltOf(job));
   }
   const paths = quilted.get(key) || lastQuilt.get(frame) || [];
@@ -61,7 +62,7 @@ function withQuilt(p, stages, others, dragging = false, later = null, empty = nu
   // (an appliqué's border sews after a pause, so it isn't joined on: it keeps its own start, moved on by compose if
   // that's within 5.5 mm of where the quilting stopped: `reseam`. Started where the quilting stopped, it began 1.4 mm
   // away across the pause, a loose thread)
-  const border = p.border === "applique" || !led.at ? stages[b] : { ...stages[b], paths: plainBorder(startAt(edge, led.at), p.border) };
+  const border = p.border === "applique" || !led.at ? stages[b] : { ...stages[b], paths: plainBorder(startAt(edge, led.at), p.border, p.trim) };
   return [...stages.slice(0, b), q, border, ...stages.slice(b + 1)];
 }
 // Quilting led on to the frame line at its ends (within 8 mm of it, by a straight run that keeps 1.5 mm clear of
