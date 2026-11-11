@@ -9,7 +9,7 @@
 // Stale entries fail too. Run: node tests/sewn_lint.mjs (< 1 s, CI).
 import { readFileSync } from "fs";
 
-const FILES = ["js/studio/ui.js", "js/app.js", "js/sheet.js", "js/words.js", "js/gate.js", "js/studio/pieces.js", "js/studio/compose.js"];
+const FILES = ["js/studio/ui.js", "js/app.js", "js/sheet.js", "js/words.js", "js/gate.js", "js/studio/pieces.js", "js/studio/compose.js", "js/studio/names.js"];
 // (pieces.js: its measuring calls only; its builders stitch the size they're handed)
 const SIZES_IN = (f) => f !== "js/studio/pieces.js" && f !== "js/studio/compose.js";
 const MEASURE = /\b(pieceBounds|touchingAll|touching|inFrame)\(/g;
@@ -34,7 +34,7 @@ const RAW_MEASURE = process.env.EMPTY ? [] : [
   ["js/studio/ui.js", "spotInOf", "candidate sizes, fitted (sewnAt) before a spot is taken"],
   ["js/studio/ui.js", "freeRoom", "free space outside frames (nothing fitted there), q at fs, the in-the-hoop frame"],
   ["js/studio/ui.js", "freeSpot", "a piece put in free space above or below: no frame fits it there"],
-  ["js/studio/ui.js", "once", "names batch: q at `now`, its fitted size"],
+  ["js/studio/names.js", "once", "names batch: q at `now`, its fitted size"],
   ["js/studio/pieces.js", "touching", "p as handed: its callers pass it sewn (checked here)"],
   ["js/studio/pieces.js", "fittedSizes", "works the fit out from the size asked"],
   ["js/studio/pieces.js", "monoSize", "candidate sizes, each fitted with fittedSizes"],
@@ -72,7 +72,7 @@ const RAW_SIZE = process.env.EMPTY ? [] : [
   ["js/studio/ui.js", "spotIn", "a copy keeps its original's asked size"],
   ["js/studio/ui.js", "spotInOf", "candidate sizes from the asked one; s.size is the sewn one"],
   ["js/studio/ui.js", "freeRoom", "candidate sizes from the asked one, fitted before one is taken"],
-  ["js/studio/ui.js", "once", "names batch: q at a candidate size, `now` its fitted size"],
+  ["js/studio/names.js", "once", "names batch: q at a candidate size, `now` its fitted size"],
   ["js/app.js", "names-make.onclick", "m.size is a made name's sewn size (its file's)"],
   ["js/app.js", "picSettings", "the picture's Size control (sewSized makes the sewn design that size)"],
   ["js/app.js", "sewPicture", "the picture's Size, handed to sewSized"],

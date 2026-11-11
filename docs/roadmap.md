@@ -75,7 +75,11 @@ Phase 1, the base (no visible change, byte-identical batches):
     steps 0 problems)
   - [x] `core/palette.js`: colour learning, labelling and ink out of digitize.js (now 1,105 lines, from 2,081:
     the three picture styles and sizing)
-  - [ ] ui.js and app.js over one shared state; one worker job queue; matrix folded into files_flow
+  - [x] ui.js, first parts out: `starters.js` (the Start from designs, one id counter) and `names.js` (One for
+    each name), the latter through `S`, the editor's state-and-helpers object (getters over the closure's state):
+    the way every further part of ui.js moves out, one at a time, each proven by the name check + monkey + sweep
+  - [ ] ui.js: the rest (problems and fixes, too-big and fit, placement, editor, recent designs); app.js by its
+    sections; one worker job queue; matrix folded into files_flow
 - [ ] **F3 Atomic releases**: one release's files per load, never a mix
 
 Phase 2, stitch quality (measured against the scoreboard, VM-checked):

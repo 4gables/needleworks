@@ -14,166 +14,18 @@ import { notEmbroidery, shortJumps } from "../doctor.js";
 import { QUILTS, quiltOf } from "./quilt.js";
 import { MOTIFS } from "./motifs.js";
 import { sewAs, quiltDone, scaledFit, BORDERS, FABRICS, THREADS, SHAPES, TEXT_SHAPES, splitPieces, archFit, archStart, archWrap, ARCH, frontPanel, inkHeight, monoSize, archRoom, archShrink, archTight, cleanPiece, cleanPieces, clearSize, collision, collisions, inFrame, letterMetrics, underPatch, crossName, crossStep, layoutSize, touching, touchingAll, towelMin, fineLine, loopsFill, compose, fileBlocks, blocksPattern, scaleBlocks, FILE_SCALE, fittedSizes, fitFrame, sewnBoxes, sewn, sewnBox, followFrame, label, minSize, pieceBounds, pieceStitches, previewLook, smallText, bulkReady, carveDone, patchFillOf, drawAhead, pacer, PACED } from "./pieces.js";
+import { forNames as namesFor } from "./names.js";
+import { BLACK, BOLD, NAVY, RED, ROUND, SCRIPT, STARTERS, WHITE, appl, frame, ids, mono, motif, piece, text } from "./starters.js";
+export { STARTERS } from "./starters.js";
 
-const SCRIPT = "NW Great Vibes", PRINT = "NW Josefin Sans", ROUND = "NW Quicksand", BOLD = "NW Yellowtail";
-// exact Brother PEC thread colours, so the name on screen is the one the machine shows
-const RED = "#ed171f", NAVY = "#0e1f7c", BLACK = "#000000";
-const PINK = "#f993bc", WHITE = "#f0f0f0";
 // thread weight in plain words, on the chips (the number is printed on the spool; a bigger number is a finer thread)
 const WT_TITLE = { auto: "Standard 40 weight thread, the usual machine embroidery thread", 30: "30 weight: a thicker thread, for bold letters",
   40: "40 weight: the usual machine embroidery thread", 60: "60 weight: a finer thread, for small letters and fine detail" };
 const SMALL_TIP = "Small letters come out crisper with 60 wt thread (a finer thread: the weight is printed on the spool, and a bigger number is finer) and a 65/9 or 70/10 needle (a fine needle: the size is on the needle pack), and with the machine slowed down.";
 export const COLORS = [RED, NAVY, "#00673e", "#770176", "#e8a900", "#f993bc", BLACK, "#f0f0f0"];
 
-let nextId = 1;
-const piece = (o) => ({ id: nextId++, x: 0, y: 0, color: NAVY, ...o });
-const text = (o) => piece({ kind: "text", text: "Ashley", font: SCRIPT, size: 18, shape: "straight", radius: 30, ...o });
-const mono = (o) => piece({ kind: "monogram", letters: "aMs", font: SCRIPT, size: 30, ...o });
-const appl = (o) => piece({ kind: "letters", text: "AB", font: APPLIQUE_FONTS[0].family, size: 60, color: NAVY, ...o });
-const motif = (o) => piece({ kind: "motif", motif: "heart", size: 40, style: "fill", color: RED, ...o });
-const frame = (o) => piece({ kind: "frame", shape: "circle", w: 80, h: 80, border: "satin", color: RED, ...o });
 // the least a frame is made, each way: the Width and Height sliders' (a circle is w across both ways)
 const FRAME_MIN = 20, frameH = (f) => (f.shape === "circle" ? f.w : f.h);
-
-// (the bookmark had its own panel and engine until 2026-10-31; it's pieces like every other starter now, and its
-// swash checkboxes became "~" typed at either end of the words)
-const SACRAMENTO = "NW Sacramento";
-// Every starter opens with nothing to warn about on either hoop (tests/starters.mjs): "Ashley" in Great Vibes has
-// small loops that fill in from 16 to 22 mm, so script names are 24 mm where there's room and Yellowtail where there
-// isn't (the bib, ornament, luggage tag, towel). Starters made for one name lying across (the pet bandana, the
-// stocking cuff, name with motifs, tote bag, towel) open with the hoop turned like the bookmark, so a 10-letter name
-// typed over it still fits the 5x7 ("Biscuit" on the bandana was 149 mm, too big upright).
-export const STARTERS = [
-  // A name along an in-the-hoop bookmark: cotton front, felt back, one thread, a ribbon hole. It lies across with the
-  // hoop turned (`turn`), so the name reads straight and still uses the 7 in side (it stood on end until 2026-10-31,
-  // hard to read). The letters' height is about 72 % of the inside height, as the old bookmark sized them; a long name
-  // shrinks to fit its length.
-  { id: "bookmark", name: "Bookmark", note: "in the hoop, with a ribbon hole", turn: true, make: () => [
-    frame({ shape: "bookmark", w: 165, h: 50, border: "ith", hang: false, eyelet: true, color: RED }),
-    text({ text: "~Ashley~", font: SACRAMENTO, size: 26, x: 8, color: RED })],
-    // (a short one on the 4x4: everything scaled down left the name 15 mm, too small to stitch cleanly)
-    small: () => [frame({ shape: "bookmark", w: 95, h: 40, border: "ith", hang: false, eyelet: true, color: RED }),
-      text({ text: "~Ashley~", font: SACRAMENTO, size: 22, x: 7, color: RED })],
-    tip: "Made in the hoop on tear-away stabilizer, cotton on the front and felt on the back. Full size needs the 5\" × 7\" hoop. Type ~ at either end of a name for a swash." },
-  { id: "monogram", name: "Monogram", note: "3 initials in a frame", make: () => [frame({ shape: "circle", w: 90, h: 90, border: "satin" }), mono({ size: 23 })] },
-  { id: "ring", name: "Name in a circle", note: "lettering around a ring", make: () => [
-    frame({ shape: "circle", w: 92, h: 92, border: "bold" }),
-    text({ text: "HANDMADE", font: PRINT, size: 9, shape: "up", radius: 33, color: RED }),
-    text({ text: "WITH LOVE", font: PRINT, size: 7, shape: "down", radius: 36, color: RED }),
-    mono({ letters: "A", size: 30, y: 2 })] },
-  { id: "oval", name: "Oval badge", note: "words arched round an oval", make: () => [
-    frame({ shape: "oval", w: 120, h: 84, border: "satin" }),
-    // curves just inside the border (what "Follow the frame" gives with the fonts loaded)
-    text({ text: "HANDMADE", font: PRINT, size: 9, shape: "up", radius: 45, ry: 27, color: RED }),
-    text({ text: "WITH LOVE", font: PRINT, size: 7, shape: "down", radius: 54, ry: 36, color: RED }),
-    text({ size: 24 })] },
-  { id: "framed", name: "Name in a frame", note: "a name inside a border", make: () => [frame({ shape: "oval", w: 110, h: 64, border: "satin" }), text({ size: 24 })] },
-  { id: "quilt", name: "Quilt label", note: "who it's for, who made it", make: () => [
-    frame({ shape: "square", w: 110, h: 70, border: "line", color: BLACK }),
-    // (Quicksand at 9 mm: Josefin's single-storey a sewed as an o at label sizes, its stem merged with the bowl, and
-    // 8 mm warned "too small" out of the box)
-    text({ text: "Made for", font: ROUND, size: 9, y: -23, color: BLACK }),
-    text({ text: "Ashley", size: 24, y: -3, color: RED }),
-    text({ text: "by Ashley in 2026", font: ROUND, size: 9, y: 19, color: BLACK })],
-    tip: "Stitch it on cotton backed with tear-away stabilizer, then turn the edges under and hand-sew it to the back of the quilt." },
-  { id: "bib", name: "Baby bib", note: "a name over a little heart", make: () => [
-    frame({ shape: "heart", w: 46, h: 42, border: "applique", y: 14, color: PINK }),
-    text({ text: "Ashley", font: BOLD, size: 15, shape: "up", radius: 32, y: 14, color: NAVY })],   // (30 ran into the heart's dip)
-    // (a made bib can't be hooped: `float` is how step 1, Have ready and When it's done say it's done, whatever the
-    // fabric; the tip said "press the bib onto sticky stabilizer" while step 1 said "Hoop the towel or fleece")
-    float: { hoop: "Hoop sticky (self-adhesive) tear-away stabilizer on its own, paper side up. Score the paper inside the hoop, peel it off and press the bib onto the sticky side, smooth, where the design goes",
-      ready: "Sticky (self-adhesive) tear-away stabilizer: a bib can't be hooped, so it's stuck on top of the hooped stabilizer.",
-      after: "Take the hoop off, peel the bib off the stabilizer and snip any loose threads. Tear the stabilizer left on the back away gently.",
-      fabric: "The bib is stuck onto sticky stabilizer, not hooped (see step 1)." },
-    tip: "A bib is already made, so it isn't hooped: step 1 floats it on sticky stabilizer. On a terry bib, pick Towel / fleece under Sewing on." },
-  { id: "towel", name: "Towel name", note: "a big name that stands up to terry", make: () => [text({ text: "Ashley", font: BOLD, size: 32, style: "satin" })], fabric: "towel", baste: true, turn: true },
-  { id: "ornament", name: "Ornament", note: "two-sided, sewn in the hoop", make: () => [
-    frame({ shape: "circle", w: 80, h: 80, border: "ith", hang: true, color: RED }),
-    text({ text: "Ashley", font: BOLD, size: 20, y: -4 }),
-    text({ text: "2026", font: PRINT, size: 8, y: 14 })],
-    tip: "Made in the hoop, front and back, with a ribbon loop for hanging. Smaller (Fit to hoop or the size slider) makes a keychain." },
-  { id: "mugrug", name: "Mug rug", note: "quilted, sewn in the hoop", make: () => [
-    frame({ shape: "square", w: 120, h: 90, border: "ith", quilt: "stipple", hang: false, color: NAVY }),
-    text({ text: "Tea time", size: 18, color: RED })],
-    tip: "Made in the hoop: front fabric with thin batting under it, then backing." },
-  { id: "coaster", name: "Coaster", note: "echo-quilted round a letter", make: () => [
-    frame({ shape: "circle", w: 96, h: 96, border: "ith", quilt: "echo", hang: false, color: RED }),
-    mono({ letters: "A", size: 34, color: NAVY })],
-    tip: "Made in the hoop, front and back. Thin batting under the front fabric makes the echo lines puff up." },
-  { id: "quiltblock", name: "Quilt block", note: "a stippled square with a heart", make: () => [
-    frame({ shape: "square", w: 112, h: 112, border: "bold", quilt: "stipple", color: BLACK }),
-    frame({ shape: "heart", w: 52, h: 48, border: "satin", color: RED })],
-    tip: "Hoop the quilt sandwich (top, batting, backing) or float it on tear-away stabilizer. Stitch the blocks, then sew them together." },
-  { id: "pouch", name: "Zipper pouch", note: "sewn in the hoop, turned through the zipper", make: () => [
-    frame({ shape: "square", w: 110, h: 90, border: "zip", color: NAVY }),
-    text({ text: "Makeup", size: 20, y: 14, color: RED })],   // (at 16 its a and e loops filled in)
-    tip: "Medium-weight cotton or canvas works best. Use a nylon coil zipper (the needle can't hit metal teeth, so keep the zipper tab past the side while it sews)." },
-  { id: "keyfob", name: "Key fob", note: "two-sided, with a ribbon loop", make: () => [
-    frame({ shape: "square", w: 44, h: 80, border: "ith", hang: true, color: RED }),
-    mono({ letters: "J", size: 30, y: 6, color: NAVY })],
-    tip: "Like the ornament, with a loop of ribbon or webbing taped on before the back goes on. Felt or vinyl doesn't fray, so it can be cut right up to the satin stitches." },
-  { id: "applique", name: "Appliqué", note: "a fabric shape with a name", make: () => [
-    frame({ shape: "heart", w: 84, h: 76, border: "applique", y: -4 }), text({ size: 24, y: -4, color: NAVY })] },   // (18 at -6 ran into the lobes)
-  { id: "initials", name: "Appliqué letters", note: "fabric letters with satin-stitched edges", make: () => [appl({ text: "AB", size: 60 })] },
-  { id: "patch", name: "Patch", note: "a filled badge with an edge", make: () => [
-    frame({ shape: "circle", w: 76, h: 76, border: "patch", fill: NAVY, color: RED }),
-    mono({ letters: "JD", size: 26, font: PRINT, color: "#f0f0f0" })] },
-  { id: "decorated", name: "Name with motifs", note: "a little heart either side", make: () => [text({ text: "Ashley", size: 24, deco: "heart", color: RED })], turn: true },
-  { id: "words", name: "Just lettering", note: "a word or name on its own", make: () => [text({ size: 24 })] },
-  // more of what people sew most (2026-10-31), then a few of our own
-  { id: "tag", name: "Luggage tag", note: "two-sided, with a hole for the strap", make: () => [
-    frame({ shape: "square", w: 60, h: 100, border: "ith", hang: false, eyelet: true, color: NAVY }),
-    text({ text: "Ashley", font: BOLD, size: 16, y: 4, color: RED }),
-    text({ text: "555-0123", font: ROUND, size: 8, y: 26, color: NAVY })],
-    // (a little shorter on the 4x4, so it isn't shrunk: at 95 % its name's loops filled in)
-    small: () => [frame({ shape: "square", w: 60, h: 92, border: "ith", hang: false, eyelet: true, color: NAVY }),
-      text({ text: "Ashley", font: BOLD, size: 16, y: 4, color: RED }),
-      text({ text: "555-0123", font: ROUND, size: 8, y: 26, color: NAVY })],
-    tip: "Made in the hoop like the bookmark. Felt or vinyl on the back doesn't fray; a strip of clear vinyl over the front makes it wipe clean." },
-  { id: "pocket", name: "Pocket monogram", note: "small initials for a shirt or polo", make: () => [mono({ letters: "jKm", font: PRINT, size: 20, color: NAVY })],
-    fabric: "knit", tip: "Sew it on the left chest, about 7-9 in down from the shoulder seam. Hoop cut-away stabilizer with the shirt, and a water-soluble topper on piqué." },
-  { id: "tote", name: "Tote bag", note: "two lines of words for a canvas bag", make: () => [text({ text: "Ashley's\nbooks", font: ROUND, size: 18, color: NAVY })], turn: true,
-    fabric: "canvas", tip: "Turn the bag inside out to hoop the front panel only, with tear-away stabilizer behind it." },
-  { id: "stocking", name: "Stocking cuff", note: "a name with swashes for the cuff", make: () => [text({ text: "~Ashley~", size: 28, color: WHITE })], turn: true,
-    fabric: "felt", tip: "Sew the cuff before the stocking is put together, so it can be hooped flat. White on red felt reads from across the room." },
-  { id: "birth", name: "Birth announcement", note: "name, date and weight for a keepsake", make: () => [
-    // (`most`: the longest the frame gets from a one-tap fix or Fit to hoop, for the 6 in display hoop of the tip:
-    // "Make the frame 106 mm" made it 149 mm tall)
-    frame({ shape: "oval", w: 100, h: 140, border: "line", color: NAVY, most: 140 }),
-    motif({ motif: "baby", size: 25, y: -40, color: PINK }),
-    text({ text: "Ashley", size: 24, y: -6, color: NAVY }),
-    text({ text: "June 1, 2026\n7 lb 2 oz · 20 in", font: ROUND, size: 7, y: 22, color: NAVY })],
-    // (scaled to the 4x4 the baby was too small to fill and the date too small to stitch)
-    small: () => [frame({ shape: "oval", w: 94, h: 94, border: "line", color: NAVY, most: 140 }),
-      motif({ motif: "baby", size: 25, y: -26, color: PINK }),
-      text({ text: "Ashley", size: 24, y: 0, color: NAVY }),
-      text({ text: "June 1, 2026\n7 lb 2 oz · 20 in", font: ROUND, size: 7, y: 25, color: NAVY })],
-    tip: "Pretty framed in a 6 in embroidery hoop on the wall. Cotton or linen with medium tear-away stabilizer." },
-  { id: "wedding", name: "Wedding keepsake", note: "two names and the date in a scallop", make: () => [
-    frame({ shape: "scallop", w: 120, h: 120, border: "satin", color: "#e8a900" }),
-    text({ text: "Sam\n& Alex", size: 20, y: -12, leading: 115, color: NAVY }),
-    text({ text: "06.20.2026", font: ROUND, size: 8, y: 30, color: NAVY })] },
-  { id: "bookplate", name: "Book plate", note: "“from the library of”, for a book cover", make: () => [
-    frame({ shape: "square", w: 96, h: 120, border: "line", color: BLACK }),
-    text({ text: "from the library of", font: ROUND, size: 8, y: -36, color: BLACK }),
-    text({ text: "Ashley", size: 24, y: -10, color: RED }),
-    motif({ motif: "book", size: 25, y: 26, color: NAVY })],
-    small: () => [frame({ shape: "square", w: 90, h: 94, border: "line", color: BLACK }),
-      text({ text: "from the library of", font: ROUND, size: 8, y: -33, color: BLACK }),
-      text({ text: "Ashley", size: 24, y: -10, color: RED }),
-      motif({ motif: "book", size: 25, y: 22, color: NAVY })],
-    tip: "Sew it on linen or cotton, then glue or stitch it inside a fabric book cover. Goes with the Bookmark." },
-  { id: "pet", name: "Pet bandana", note: "a pet's name between two paws", make: () => [text({ text: "~Buddy~", size: 20, deco: "paw", color: NAVY })], turn: true,
-    tip: "Sew it on one corner of a cotton square before it's folded into a bandana, with tear-away stabilizer." },
-  { id: "kitchen", name: "Kitchen sign", note: "family name and a year", make: () => [
-    frame({ shape: "oval", w: 120, h: 80, border: "bold", color: RED }),
-    text({ text: "Grandma's\nKitchen", size: 16, y: -4, color: NAVY }),
-    text({ text: "EST. 1968", font: ROUND, size: 6, y: 25, color: RED })],
-    small: () => [frame({ shape: "oval", w: 94, h: 72, border: "bold", color: RED }),
-      text({ text: "Grandma's\nKitchen", size: 16, y: -3, color: NAVY }),
-      text({ text: "EST. 1968", font: ROUND, size: 6, y: 23, color: RED })],
-    tip: "Good on a flour-sack tea towel (pick Cotton) or an apron." },
-];
 
 // A design saved from here (.needleworks.json), from a file's bytes, or null: dropped on the page, shared to it, opened on
 // the Open tab or added with + Design file, it was called a damaged embroidery file.
@@ -193,7 +45,7 @@ export function initStudio(api) {
   let pieces = (Array.isArray(saved?.pieces) ? saved.pieces : []).map(cleanPiece).filter(Boolean);
   if (!pieces.length) pieces = STARTERS.find((s) => s.id === "framed").make();   // (a first visit: a name, not the initials "aMs")
   if (new Set(pieces.map((p) => p.id)).size < pieces.length || !pieces.every((p) => Number.isInteger(p.id))) pieces.forEach((p, i) => (p.id = i + 1));
-  nextId = Math.max(0, ...pieces.map((p) => p.id)) + 1;
+  ids.next = Math.max(0, ...pieces.map((p) => p.id)) + 1;
   // (nothing selected stays so through a reload: `?? last` picked the last piece again)
   let sel = saved?.sel === null ? null : saved?.sel ?? pieces[pieces.length - 1]?.id, seq = 0, timer = 0;
   // what it's sewn on (changes the stitches for knit and towel) and the basting box
@@ -1735,7 +1587,7 @@ export function initStudio(api) {
       const b0 = pieceBounds({ ...long, x: 0, y: 0 }), h0 = inkHeight(t, long.font), m0 = letterMetrics(t, long.font, long.size, long.style);
       // (each word at the same letter scale, its baseline and outer end where they were)
       const part = (text, end) => {
-        const size = Math.round(((long.size * inkHeight(text, long.font)) / h0) * 2) / 2, q = { ...long, id: end ? long.id : nextId, of: long.of ?? long.id, text, size, x: 0, y: 0 };
+        const size = Math.round(((long.size * inkHeight(text, long.font)) / h0) * 2) / 2, q = { ...long, id: end ? long.id : ids.next, of: long.of ?? long.id, text, size, x: 0, y: 0 };
         const b = pieceBounds(q), m = letterMetrics(text, long.font, size, long.style);
         if (!b) return null;
         q.x = Math.round((long.x + (end ? b0[2] - b[2] : b0[0] - b[0])) * 2) / 2;
@@ -1752,7 +1604,7 @@ export function initStudio(api) {
         if (big) { over ||= big; continue; }
         const ps = pieces.flatMap((p) => (p === long ? [a, b] : [p]));
         for (const [h, tt] of ways) if (splitPieces(ps, h)) {
-          nextId = Math.max(nextId, a.id + 1);
+          ids.next = Math.max(ids.next, a.id + 1);
           return { ok: `It can be sewn in two hoopings${tt ? ", with the hoop turned" : ""}, with ${label(a)} and ${label(b)} as two pieces:`, pieces: ps, turn: tt };
         }
       }
@@ -1897,7 +1749,7 @@ export function initStudio(api) {
     if (had && !sameDesign(had, snap())) {
       const files = JSON.parse(had).pieces.filter((p) => p.kind === "file");
       const bring = files.length && { label: files.length === 1 ? `Add ${files[0].name} to it` : `Add your ${files.length} design files to it`,
-        run: () => { remember(); for (const f of files) putFile({ ...f, id: nextId++ }); } };
+        run: () => { remember(); for (const f of files) putFile({ ...f, id: ids.next++ }); } };
       toast(`Replaced your design with “${s.name}”.${keptSaid(kept)}`, [bring, { label: "Undo", run: undo }].filter(Boolean));
     }
     // phones: the preview is above the cards, so the change happened off-screen (scrolled to its top, so the sewing
@@ -1988,7 +1840,7 @@ export function initStudio(api) {
     if (b.dataset.op === "del") { deleted = Date.now(); toast(`Removed ${label(pieces[i])}.`, { label: "Undo", run: undo }); pieces.splice(i, 1); if (sel === id) sel = pieces[Math.max(0, i - 1)]?.id; }
     else if (b.dataset.op === "dup") {
       // the copy goes just below the original, where there's room (else wherever there's room, as a new piece does)
-      const bb = sewnBox(pieces[i], pieces), c = { ...structuredClone(pieces[i]), id: nextId++, y: pieces[i].y + (bb ? bb[3] - bb[1] + 4 : 10) }, was = sewn(pieces[i], pieces).size;
+      const bb = sewnBox(pieces[i], pieces), c = { ...structuredClone(pieces[i]), id: ids.next++, y: pieces[i].y + (bb ? bb[3] - bb[1] + 4 : 10) }, was = sewn(pieces[i], pieces).size;
       if (!place(c, (q) => pieces.splice(i + 1, 0, q), pieces[i])) return;
       smallerSaid(c, was, "The copy");
     }
@@ -2190,7 +2042,7 @@ export function initStudio(api) {
     // (both keep what they were split from, `of`: the file is named after all of it, "Happy Birthday", not the straight
     // line alone)
     p.of ??= p.id;
-    const rest = { ...p, id: nextId++, text: lines.slice(1).join("\n"), shape: "straight", y: Math.round((y0 + pitch / 2) * 2) / 2 };
+    const rest = { ...p, id: ids.next++, text: lines.slice(1).join("\n"), shape: "straight", y: Math.round((y0 + pitch / 2) * 2) / 2 };
     delete rest.ry; delete rest.deco; delete rest.kern;
     p.text = lines[0]; delete p.kern;
     if (move) p.y = Math.round((y0 - (pitch * (lines.length - 1)) / 2) * 2) / 2;
@@ -2380,7 +2232,7 @@ export function initStudio(api) {
     api.setMode("design");
     const hoop0 = api.hoopId(), hoopName0 = api.hoop().name, mh0 = api.machineHoop();
     // the hoop (when this machine has it) and the turn it was saved with
-    const kept = newDesign((nextId = 1, loaded.map((p) => ({ ...p, id: nextId++ }))), { fabric: data.fabric, baste: data.baste, thread: data.thread, fitted: data.fitted, two: data.two, turn: data.turned,
+    const kept = newDesign((ids.next = 1, loaded.map((p) => ({ ...p, id: ids.next++ }))), { fabric: data.fabric, baste: data.baste, thread: data.thread, fitted: data.fitted, two: data.two, turn: data.turned,
       from: o.from, tip: o.tip, title: typeof data.title === "string" ? tidy(data.title).slice(0, 60) : "" });
     // (said, with a way back to the hoop that was picked: it switched from the 5x7 to the 4x4 with nothing said)
     // (the hoop it was saved for isn't a bigger hoop picked, to offer filling: that note took the place of this one)
@@ -2439,11 +2291,11 @@ export function initStudio(api) {
   function addPieces(ps, got = {}, verb = "Pasted", said = "") {
     const also = said ? ` ${said}` : "";
     if (!pieces.length && own(FABRICS, got.fabric)) {
-      newDesign(ps.map((q) => ({ ...structuredClone(q), id: nextId++ })), { fabric: got.fabric, baste: got.baste, thread: got.thread, turn: got.turned, title: typeof got.title === "string" ? tidy(got.title).slice(0, 60) : "" });
+      newDesign(ps.map((q) => ({ ...structuredClone(q), id: ids.next++ })), { fabric: got.fabric, baste: got.baste, thread: got.thread, turn: got.turned, title: typeof got.title === "string" ? tidy(got.title).slice(0, 60) : "" });
       settle(); save(); ui(); make(); toast(`${verb} the design.${also}`); return;
     }
     remember(); fitted = false;
-    const add = ps.map((q) => ({ ...structuredClone(q), id: nextId++ })), bs = sewnBoxes(add);
+    const add = ps.map((q) => ({ ...structuredClone(q), id: ids.next++ })), bs = sewnBoxes(add);
     // one piece goes where a new one would (`place`): beside its original, or in a frame, or in free space
     if (add.length === 1 && pieces.length) { const was = sewn(add[0], add).size; if (place(add[0], (q) => pieces.push(q))) toast(`${verb} ${label(add[0])}.${smallerSaid(add[0], was, "", true)}${also}`); return; }
     // several in free space beside what's there (below, else above), moved together, then the layout recentred: it was
@@ -2705,7 +2557,7 @@ export function initStudio(api) {
     const across = f.w >= (f.shape === "circle" ? f.w : f.h), step = (across ? (f.shape === "circle" ? f.w : f.h) : f.w) + 8;
     // (past the last one already there: a third goes beside the second)
     const far = twins.reduce((m, q) => Math.max(m, across ? q.y - f.y : q.x - f.x), 0);
-    const copies = on.map((q) => ({ ...structuredClone(q), id: nextId++, ...(across ? { y: q.y + far + step } : { x: q.x + far + step }) }));
+    const copies = on.map((q) => ({ ...structuredClone(q), id: ids.next++, ...(across ? { y: q.y + far + step } : { x: q.x + far + step }) }));
     pieces = [...pieces, ...copies]; recentre();
     try { compose(pieces, api.hoop(), { fabric, baste, thread, later: [], measure: true }); return "fits"; } catch (err) { if (!err.overBy) throw err; }
     if (api.hoop().w !== api.hoop().h) { api.setTurn(!api.turned()); try { compose(pieces, api.hoop(), { fabric, baste, thread, later: [], measure: true }); return "turned"; } catch (err) { api.setTurn(!api.turned()); if (!err.overBy) throw err; } }
@@ -2715,7 +2567,7 @@ export function initStudio(api) {
   // fit beside it, with nothing on it then too small or running into anything; tried on a copy of the design, or 0
   function smallerTwins(f) {
     const side = f.w >= (f.shape === "circle" ? f.w : f.h) && f.shape !== "circle" ? "h" : "w", was = f[side];
-    const keep = pieces, turn = api.turned(), id = nextId, bad0 = collisions(pieces).length;
+    const keep = pieces, turn = api.turned(), id = ids.next, bad0 = collisions(pieces).length;
     try {
       for (let n = Math.floor(was) - 1; n >= Math.max(20, was * 0.6); n--) {
         pieces = structuredClone(keep);
@@ -2728,7 +2580,7 @@ export function initStudio(api) {
         if (fit && collisions(pieces).length <= bad0) return n;
       }
       return 0;
-    } finally { pieces = keep; nextId = id; if (api.turned() !== turn) api.setTurn(turn); }
+    } finally { pieces = keep; ids.next = id; if (api.turned() !== turn) api.setTurn(turn); }
   }
   const shapeLabel = (f) => label(f).toLowerCase();
   // the empty frames alike f, when f has something on it
@@ -2741,7 +2593,7 @@ export function initStudio(api) {
     remember();
     const added = [];
     for (const g of to) {
-      const copies = on.map((q) => ({ ...structuredClone(q), id: nextId++, x: q.x - f.x + g.x, y: q.y - f.y + g.y }));
+      const copies = on.map((q) => ({ ...structuredClone(q), id: ids.next++, x: q.x - f.x + g.x, y: q.y - f.y + g.y }));
       pieces.splice(pieces.indexOf(g) + 1, 0, ...copies); added.push(...copies);
     }
     const fits = fitsNow(), hit = added.find((q) => touching(sewnAt(q), pieces));
@@ -2774,114 +2626,14 @@ export function initStudio(api) {
   $("st-guide").hidden = !!api.store.get("studio.guideSeen", false);
   $("st-guide-close").onclick = () => { $("st-guide").hidden = true; api.store.set("studio.guideSeen", true); };
 
-  // one file per name: the biggest lettering (the name, nearly always) gets each name in turn; when that's a monogram
-  // (the coaster, the key fob), each line's initials take its place
-  function forNames() {
-    const p = main();
-    if (!p) return null;
-    const mono = p.kind === "monogram";
-    // (a design that already runs into itself isn't shrunk name by name for it: every name would come out smaller)
-    // (worked out with the first name: every preview asks whether there's lettering to swap, ~50 ms on 15 pieces)
-    let clean = null;
-    const isClean = () => (clean ??= !collision(pieces)), opts = { fabric, baste, thread };
-    return {
-      canTurn: !api.turned() && api.hoop().w !== api.hoop().h, refused,
-      what: mono ? p.letters : unswashed(p.text).replace(/\s*\n\s*/g, " / "), monogram: mono,
-      // the ZIP is named after the design (the starter or the saved file it came from), not "names_4.zip"
-      zip: api.safeName(title || from || label(pieces.find((q) => q.kind === "frame") || p), "names"),
-      // Each name is checked like the design itself: a letter the font lacks is refused (a stand-in glyph was stitched),
-      // and a name that runs into another piece is made smaller with `shrink` (Lily-Rose's y in the bib's heart) or
-      // said. shrink: a name too long for the hoop, or running into something, is tried at 90 %, 80 %… down to half.
-      // With the hoop turned, a name that sews as it is (same size, nothing run into, as bold) with the hoop upright
-      // is made upright; only the ones that need the room are turned (`turned`), each said so in its caption and the
-      // note (Bo and Grace fitted upright but were turned with Benjamin: every file hooped sideways for nothing).
-      // Each name is drawn at the design's own letter scale (`inkHeight`: the size is the height of
-      // the word's strokes, so "emma", with no capital, came out twice Emma's size); fewer initials grow to the
-      // monogram's width (`monoSize`).
-      // (`hp`: another hoop to try it in, the turned one, to see whether the hoop turned would spare shrinking it)
-      // A name that would come out too small to sew clearly (under the font's least x-height, `minSize`, where the
-      // design's own lettering isn't) is refused, said with the size it would have been: in the oval a 36-letter name
-      // fitted across the frame came out at 28 % with 2 mm letters, "(smaller)" all it said. A name of two or more
-      // words is tried on two lines first (`lines: 2`).
-      build: (name, shrink = false, hp) => {
-        const h = api.hoop();
-        if (!hp && api.turned() && h.w !== h.h) {
-          try { const u = whole(name, false, { ...h, w: h.h, h: h.w }); if (!u.smaller && !u.runs && !u.thin && !u.lines) return { ...u, turned: false }; } catch {}
-        }
-        return whole(name, shrink, hp || h);
-      },
-    };
-    function whole(name, shrink, hp) {
-        const m = once(name, shrink, hp);
-        // (and one shrunk under 70 % whose letters come out a quarter bigger on two lines)
-        if (!m.small && !(m.smaller && m.pct < 70)) return m;
-        const one = !mono && (p.text || "").split("\n").filter((l) => l.trim()).length === 1, gaps = [...name.matchAll(/ +/g)];
-        if (one && gaps.length) {
-          const g = gaps.reduce((a, b) => (Math.abs(b.index - name.length / 2) < Math.abs(a.index - name.length / 2) ? b : a));
-          let two = null;
-          try { two = once(name.slice(0, g.index) + "\n" + name.slice(g.index + g[0].length), shrink, hp); } catch {}
-          if (two && !two.small && (m.small || two.pct >= m.pct * 1.25)) return { ...two, name, lines: 2 };
-        }
-        if (!m.small) return m;
-        throw new Error(`too long to sew clearly in this design: its letters would be ${m.small.toFixed(1)} mm tall`);
-    }
-    // why a name can't be made, from its letters alone (said as it's typed, and by Make: the same checks), else ""
-    function refused(name) {
-      if (!/[\p{L}\p{N}]/u.test(name)) return "no letters to stitch";
-      // (as long as the editor takes, `MAX_WORDS`: a 200-letter name drew nothing and its file held the heart alone)
-      const most = mono ? MAX_INITIALS : MAX_WORDS;
-      if (name.length > most) return `too long: ${most} letters and spaces at most`;
-      const gone = missing(name, p.font);
-      if (gone.length) return `the font has no ${lackList(gone)}`;
-      if (mono && initials(name).length > 3) return "a monogram takes 3 initials at most";
-      return "";
-    }
-    function once(name, shrink, hp) {
-        const no = refused(name);
-        if (no) throw new Error(no);
-        // (each name keeps the design's swashes: "~Emma~" -> "~Lily~")
-        const ls = (p.text || "").split("\n").filter((l) => l.trim()), ends = (t) => withSwash(withSwash(t, "lead", swashes(ls[0] || "").lead), "tail", swashes(ls[ls.length - 1] || "").tail);
-        const h0 = mono ? 0 : inkHeight(p.text.split("\n").find((l) => l.trim()) || p.text, p.font), h1 = mono ? 0 : inkHeight(name, p.font);
-        // (from the size the design's lettering is sewn at: from the size asked, a frame that shrank "Ashley" 60 -> 39 mm
-        // let "Al" grow to 54 % bigger letters than the design's, with nothing said)
-        const was = fittedSizes(pieces).get(p.id) ?? p.size;
-        const size0 = mono ? monoSize(p, name, pieces) : h0 && h1 ? Math.min(60, (was * h1) / h0) : was;
-        // A name the design sews bold stays bold where it can. Shrinking clear of something in 10 % steps, a step that
-        // turns it thin goes back and walks down half a mm at a time from the last bold size first ("Jack" ran into the
-        // bib's heart at 18 mm and sewed thin at 15.5 though 16 cleared it bold, as typed in the editor). Shrunk by a
-        // frame to letters at least 85 % of the design's x-height, it's sewn bold (satin) rather than thin. A thin line
-        // only where bold genuinely can't sew, and the dialog says so.
-        const bold = fabric !== "towel" && (p.style || "auto") === "auto" && !fineLine({ ...p, size: was });
-        const xh = (q) => (mono ? q.size : letterMetrics(q.text.split("\n").find((l) => l.trim()) || q.text, q.font, q.size, "auto").xh || 0);
-        const step = (v) => Math.round(v * 2) / 2;
-        let f = 1, size = step(size0), lastBold = 0, floor = 0, refined = false;
-        for (;;) {
-          try {
-            let q = { ...p, [mono ? "letters" : "text"]: mono ? name : ends(name), size }, ps = pieces.map((r) => (r.id === p.id ? q : r));
-            // (lettering inside a frame shrinks to fit it, so a long name can come out small without f changing)
-            const now = fittedSizes(ps).get(p.id) ?? q.size, ref = mono ? was : size0, thin = bold && fineLine({ ...q, size: now });
-            if (thin && lastBold && !refined && !floor && size < lastBold - 0.5) { floor = size; size = lastBold - 0.5; continue; }
-            if (thin && xh({ ...q, size: now }) >= 0.85 * xh({ ...p, size: was }) && !minSize({ ...q, size: now })) { q = { ...q, style: "satin" }; ps = pieces.map((r) => (r.id === p.id ? q : r)); }
-            const turned = api.turned(), pattern = compose(ps, hp, opts).design.pattern();
-            const hit = isClean() && touching({ ...q, size: now }, ps);
-            if (hit && shrink && f > 0.55) {
-              if (floor && size - 0.5 > floor) { size -= 0.5; continue; }
-              if (floor) { size = floor; floor = 0; refined = true; continue; }
-              if (!thin) lastBold = size;
-              f -= 0.1; size = step(size0 * f); continue;
-            }
-            // (never a file without the name in it)
-            if (!pieceStitches({ ...q, size: now }).length) throw new Error("it comes out as no stitches");
-            // (`small`: the x-height it would sew at, when that's under the least that reads and the design's isn't)
-            const small = minSize({ ...q, size: now }) && !minSize({ ...p, size: was }) ? xh({ ...q, size: now }) || 0.1 : 0;
-            return { pattern, name, turned, runs: hit ? label(hit) : "", smaller: now < ref * 0.95,   // (said from 5 % smaller: "Ben (smaller)" stood beside an Ava the same height)
-             // (`xh`, `least`, `own`: the x-height it sews at, the least that reads, the design's own: tests/text_fuzz.mjs)
-             pct: Math.round((100 * now) / ref), small, xh: xh({ ...q, size: now }), least: mono ? 4 : fontOf(p.font).min || 4, own: xh({ ...p, size: was }), thin: fabric !== "towel" && fineLine({ ...q, size: now }) && !fineLine({ ...p, size: was }) };
-          }
-          catch (err) { if (!shrink || !err.overBy || f < 0.55) throw err; f -= 0.1; size = step(size0 * f); floor = 0; }
-        }
-    }
-  }
+  // The editor's state (as it is when read) and helpers, for the parts of the editor that live in their own files.
+  // A part takes what it uses from here; add to it as more parts move out.
+  const S = {
+    api, main,
+    get pieces() { return pieces; }, get fabric() { return fabric; }, get baste() { return baste; }, get thread() { return thread; },
+    get title() { return title; }, get from() { return from; },
+  };
+  const forNames = () => namesFor(S);
 
   cards(); ui(); recentUI();
   const starter = (id, tweak) => pickStarter(STARTERS.find((x) => x.id === id), tweak);
