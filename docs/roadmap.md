@@ -51,7 +51,7 @@ Phase 1, the base (no visible change, byte-identical batches):
     it skip the pass without saying so); the batches and browser checks carried those releases, and the repaired
     pass confirms them clean. It caught nothing on the first palette.js attempt, which `check.sh` did catch
     (pictures changed). Decide in F3 whether it joins `check.sh` (it needs TypeScript fetched: a dev-only tool)
-  - [ ] speed on a busy design (`tests/perf.mjs`, 15 pieces + appliqué letters: 6-9 of 23 actions over 500 ms,
+  - [x] speed on a busy design (`tests/perf.mjs`, 15 pieces + appliqué letters: 6-9 of 23 actions over 500 ms,
     worst 745-830 ms, run to run). Measured, not guessed:
     - a per-piece memo for collision measuring changed nothing (clouds and `near` are ~57 ms of a towel change):
       reverted. The audit's O(n²) reading was right about the shape of the code, wrong about the cost
@@ -66,6 +66,9 @@ Phase 1, the base (no visible change, byte-identical batches):
     - plain fills kept by shape and settings (`filled`): 60 wt change 554 -> 278 ms, worst freeze 687 -> 562,
       5 of 23 over 500 ms. Left: 30 wt and knit (fills that really differ: through the worker), towel and typing
       on the 17-piece design (lettering re-stitched: ~520-550 ms)
+    - a shape drawn and measured for filling is kept (`shaped` in fill.js: the mask, its parts, the distance
+      transform don't depend on row spacing): 107 fills identical to v23's; 30 wt 541 -> 440 ms, knit 531 -> 441.
+      `tests/perf.mjs`: 0 of 23 over 500 ms, worst 455 ms (the margin is thin: runs vary by ~10 %)
   - [ ] perf folded into monkey's budget once the freeze is under 500 ms
   - [x] released so far as v15 (439 batch and 117 corpus files identical to v12; monkey 960 steps 0 problems;
     ui_sweep's one failure is the Picture-tab intermittent, which v12 has too: `docs/decisions.md`)

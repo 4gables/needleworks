@@ -314,9 +314,15 @@ export function routeFill(groups, comp, mask, res, budget = routeBudget(), worn 
 // poly: one closed outline, or several (holes too, even-odd); `inset` mm keeps the rows off the edge (a satin covers it)
 // opts.pattern: a FILL_PATTERNS key; opts.share: this layer's part of the density across the shape (see tatami);
 // opts.underlay: false for a second layer
-export function fillPolygon(poly, { angle = FILL.angle, density = ROWS.solid, res = FILL.res, inset = 0, pattern = "tatami", share = null, underlay = true } = {}) {
-  const loops = Array.isArray(poly[0][0]) ? poly : [poly], pts = loops.flat();
-  const xs = pts.map((p) => p[0]), ys = pts.map((p) => p[1]);
+// A shape drawn and measured for filling: its mask (inset), its separate parts and each pixel's distance to the edge.
+// None of it depends on how the shape is filled, so it's kept by the outlines, the inset and the scale: a change of
+// row spacing (30 wt thread, knit) drew and measured every filled shape again, two distance transforms and a labelling
+// each, ~260 ms of a busy design's thread change. Read only (the rows and their travel never write to it).
+const drawn = new Map();
+function shaped(loops, inset, res) {
+  const key = JSON.stringify([loops, inset, res]);
+  if (drawn.has(key)) { const v = drawn.get(key); drawn.delete(key); drawn.set(key, v); return v; }
+  const pts = loops.flat(), xs = pts.map((p) => p[0]), ys = pts.map((p) => p[1]);
   const x0 = Math.min(...xs) - 1, y0 = Math.min(...ys) - 1;
   const w = Math.ceil((Math.max(...xs) - x0 + 1) * res), h = Math.ceil((Math.max(...ys) - y0 + 1) * res);
   const mask = { w, h, data: new Uint8Array(w * h) };
@@ -332,11 +338,18 @@ export function fillPolygon(poly, { angle = FILL.angle, density = ROWS.solid, re
       for (let x = Math.max(0, Math.ceil((cut[k] - x0) * res - 0.5)); x < Math.min(w, Math.floor((cut[k + 1] - x0) * res - 0.5) + 1); x++) mask.data[y * w + x] = 1;
   }
   if (inset) { const e = distanceTransform(mask); for (let i = 0; i < w * h; i++) if (e[i] <= inset * res) mask.data[i] = 0; }
-  const { labels, count } = label(mask), dt = distanceTransform(mask), paths = [];
+  const { labels, count } = label(mask), dt = distanceTransform(mask), parts = Array.from({ length: count + 1 }, () => []);
+  for (let i = 0; i < w * h; i++) if (labels[i]) parts[labels[i]].push(i);
+  const v = { x0, y0, mask, labels, count, dt, parts };
+  drawn.set(key, v); if (drawn.size > 6) drawn.delete(drawn.keys().next().value);
+  return v;
+}
+export function fillPolygon(poly, { angle = FILL.angle, density = ROWS.solid, res = FILL.res, inset = 0, pattern = "tatami", share = null, underlay = true } = {}) {
+  const loops = Array.isArray(poly[0][0]) ? poly : [poly];
+  const { x0, y0, mask, labels, count, dt, parts } = shaped(loops, inset, res), paths = [];
   const toMm = (p) => p.map(([x, y]) => [x0 + (x + 0.5) / res, y0 + (y + 0.5) / res]);
   for (let id = 1; id <= count; id++) {
-    const comp = { id, labels, dt, pixels: [] };
-    for (let i = 0; i < w * h; i++) if (labels[i] === id) comp.pixels.push(i);
+    const comp = { id, labels, dt, pixels: parts[id] };
     if (comp.pixels.length < 1.5 * res * res) continue;
     const under = underlay ? tatami(mask, comp, res, { angle: angle + 90, spacing: 2.5, stitch: 3, inset: 0.4, pull: 0 }) : [];
     const fill = tatami(mask, comp, res, { angle, spacing: density, stitch: 3.5, pull: 0.15, pattern, share });
