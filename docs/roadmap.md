@@ -34,7 +34,8 @@ Phase 1, the base (no visible change, byte-identical batches):
     it goes with S2)
   - [ ] shared geometry and colour helpers (point-in-polygon, marching squares, scanline fill, boxes, CIELAB,
     luminance)
-  - [ ] release: cache bump, tag
+  - [x] first part released as v13 (check.sh passed: 439 files unchanged, scoreboard unchanged, ui_sweep 330/0,
+    monkey 960 steps 0 problems, files_flow, steps_lint, entry_state, said_flow, lettering_look all 0)
 - [ ] **F2 Structure**: pieces.js, digitize.js, ui.js, app.js split; one worker job queue; one memo per `make()`
 - [ ] **F3 Atomic releases**: one release's files per load, never a mix
 
