@@ -126,7 +126,10 @@ export function explained(texts) {
       const m = left[i][0].exec(t); if (!m) continue;
       const end = /[.!?](?=\s|$)/g; end.lastIndex = m.index;
       const e = end.exec(t), at = e ? e.index + 1 : t.length;
-      t = `${t.slice(0, at)} ${left[i][1]}${t.slice(at)}`;
+      // (a step ends on "Press Start": a word first used in that sentence is explained before it, not after)
+      const from = Math.max(0, ...[...t.slice(0, m.index).matchAll(/[.!?]\s+/g)].map((q) => q.index + q[0].length));
+      if (/press Start/i.test(t.slice(from, at))) t = `${t.slice(0, from)}${left[i][1]} ${t.slice(from)}`;
+      else t = `${t.slice(0, at)} ${left[i][1]}${t.slice(at)}`;
       left.splice(i--, 1);
     }
     return t;
