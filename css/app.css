@@ -887,3 +887,15 @@ body { overflow-wrap: break-word; }
 .spools-own input[type="text"] { flex: 1 1 130px; min-width: 0; box-sizing: border-box; font: 16px/1.4 var(--body); padding: 7px 10px; border: 1.5px solid var(--field-line); border-radius: 10px; background: var(--bg); color: var(--ink); }
 .spool-chips button.x { border: 0; background: none; color: var(--muted); cursor: pointer; font: inherit; padding: 0 2px; min-width: 24px; min-height: 24px; }
 @media (pointer: coarse) { .spools-own input[type="text"], .spool-chips button.x { min-height: 44px; } }
+
+/* Arrange (layout tools): the selected piece repeated in a circle or set in the corners, and a monogram's order */
+.arrange .add { align-items: center; } .arrange select { min-height: 40px; }
+.arrange button[disabled] { opacity: .5; }
+.mono-names { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin: 8px 0; align-items: end; }
+.mono-orders, #st-mono { min-width: 0; }
+.mono-names label { display: grid; gap: 4px; font-size: 13px; font-weight: 600; } .mono-names input { min-width: 0; width: 100%; }
+.mono-orders { display: grid; gap: 6px; }
+.mono-orders button { display: grid; grid-template-columns: 5.2em minmax(0, 1fr); gap: 10px; align-items: center; text-align: left; min-height: 48px; width: 100%; min-width: 0; white-space: normal; }
+.mono-orders .mono-eg { font: 600 15px var(--mono); letter-spacing: .12em; white-space: nowrap; } .mono-orders .mono-eg b { font-size: 22px; }
+.mono-orders small { display: block; color: var(--muted); font-weight: 400; }
+@media (max-width: 400px) { .mono-names { grid-template-columns: 1fr; } }

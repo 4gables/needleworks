@@ -2,6 +2,7 @@
 // Design tab UI: start from a card, edit pieces in a short list, drag them on the preview.
 import { editorPanel } from "./editor.js";
 import { problemsOfPieces, sewsThin } from "./problems.js";
+import { layoutPanel } from "./layout.js";
 import { offPage } from "./offpage.js";
 import { stepsPanel } from "./stepsui.js";
 import { fixes } from "./fixes.js";
@@ -163,6 +164,7 @@ export function initStudio(api) {
   // the editor's parts (each reads the editor through S when it's used, so they can all be made here)
   const { newProblem, landing, hard, against, overlapping, runUp, frameLines, twoLines, frameOf, frameFor, display, sizeChange, roomIn, worseSaid, keepWord, moveAway, and, grown, asLettering, lineChoice, hoopLines, roundAll, carried, asText, sewAfter, resizeFrame } = fixes(S);
   const { recentUI, keptSaid, keep } = recentDesigns(S);
+  const { arrangeUI } = layoutPanel(S);
   const { swatchTip, threadOf, machineName, allThread, threadTip, threadNames, sameSpool, relabelThreads, oneThread } = threadSaid(S);
   const { split, appliqued } = tooBigWays(S);
   const { spotIn, freeRoom, freeSpot, sewnAt, noRoom, onFrame, fitsWith, ungang, spotFor, MOTIF_MIN, alike } = placing(S);
@@ -423,7 +425,7 @@ export function initStudio(api) {
   const editor = () => api.keepFocus($("st-edit"), drawEditor);
 
   let drawnId = null;   // (the piece the editor panel was last drawn for)
-  function ui() { api.keepFocus($("panel-design"), () => { list(); editor(); sewnOn(); }); api.paint?.(); }
+  function ui() { api.keepFocus($("panel-design"), () => { list(); editor(); sewnOn(); arrangeUI(); }); api.paint?.(); }
   // the design's one in-the-hoop project, upright (the one "Make another in the hoop" copies), or null
   const loneProject = () => { const ith = pieces.filter((f) => f.kind === "frame" && (f.border === "ith" || f.border === "zip") && !(f.rot || 0)); return ith.length === 1 ? ith[0] : null; };
   function sewnOn() {

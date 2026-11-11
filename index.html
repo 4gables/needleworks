@@ -247,6 +247,26 @@
           <label class="ghost st-load" for="st-load" title="Open a design saved from here">Open saved</label>
           <input type="file" id="st-load" accept=".json,application/json" class="sr-file">
         </div>
+        <details class="recent arrange" id="st-arrange">
+          <summary>Arrange</summary>
+          <p class="hint" id="st-arrange-for"></p>
+          <div class="add" id="st-arrange-tools">
+            <button type="button" class="ghost" data-lay="ring" title="Copies of the selected piece round the middle of the hoop, each turned to face out">Repeat in a circle</button>
+            <label class="sr" for="st-ring-n">How many round the circle</label>
+            <select id="st-ring-n" title="How many round the circle"><option>4</option><option>5</option><option selected>6</option><option>8</option><option>10</option><option>12</option></select>
+            <button type="button" class="ghost" data-lay="corners" title="The selected piece and three mirrored copies, one in each corner">One in each corner</button>
+            <button type="button" class="ghost" data-lay="down" title="Flip the selected piece top to bottom (Mirror, in the list, flips it left to right)">Flip top to bottom</button>
+          </div>
+          <div id="st-mono" hidden>
+            <p class="hint">Which initial goes where: type the names and pick an order.</p>
+            <div class="mono-names">
+              <label>First name <input type="text" id="st-mono-first" autocomplete="off" maxlength="30"></label>
+              <label>Middle name, or a partner’s first <input type="text" id="st-mono-middle" autocomplete="off" maxlength="30"></label>
+              <label>Last name <input type="text" id="st-mono-last" autocomplete="off" maxlength="30"></label>
+            </div>
+            <div id="st-mono-orders" class="mono-orders"></div>
+          </div>
+        </details>
         <details class="recent" id="st-recent-box" hidden>
           <summary>Recent designs <span class="hint inline" id="st-recent-count"></span></summary>
           <p class="hint">Designs you had here before, kept in this browser. Tap one to open it again.</p>
