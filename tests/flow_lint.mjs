@@ -16,9 +16,15 @@
 // "avoid" = near + hidden + loop + reverse (each trim counted once). Brother-made samples (tests/external/pes) are
 // the reference for what professionals leave.
 // Run: node tests/flow_lint.mjs [--blocks] [--json] FILES...   (a directory is read for its .pes/.dst files)
+// Scoreboard (docs/roadmap.md; printed by tests/check.sh for every batch): --score [--against=quality.json]
+// [--save=quality.json] sums by kind of design (pictures, small print, arcs, towel, frames...) with the checker's
+// tiny stitches and the files whose densest square millimetre sits at the limit (built over it, then thinned), and
+// the change from a saved board. "Better" for a stitch round = its group's row improved and no other row got worse.
 // e.g. node tests/flow_lint.mjs out/batch tests/external/pes    (~20 s for the 401-file batch)
 import { readFileSync, readdirSync, statSync } from "fs";
+import { writeFileSync } from "fs";
 import { COLOR_CHANGE, END, JUMP, STITCH, STOP, TRIM, readEmbroidery } from "../js/core/formats.js";
+import { LIMIT, moves, peak } from "../js/quality.js";
 
 const NEAR = 20, HIDE_MAX = 120, SAVE = 10, R_COVER = 3, R_LOCK = 5, LOCK_ZONE = 10;   // 0.1 mm units
 
@@ -139,12 +145,46 @@ export function group(name) {
   return "other";
 }
 
+// batch file name -> its row on the scoreboard
+const KIND = {
+  "small print": ["small", "small2"], "arcs and ovals": ["arc", "oval", "ring", "wave", "bridge"], towel: ["towel"],
+  "caption starters": ["birth", "bookplate", "pet", "kitchen", "wedding", "tag", "tote"],
+  "frames, fills, in-the-hoop": ["frame", "framed", "patch", "pattern", "blend", "carve", "motif", "quilt", "q", "quiltblock", "appl", "applique", "keyfob", "bookmark", "coaster", "mugrug", "ornament", "pouch", "baste", "file"],
+};
+export function kind(name) {
+  const b = name.replace(/^.*\//, "").replace(/\.(pes|dst)$/i, "");
+  if (/^(pic|pc|picture)_/.test(b)) return `pictures, ${/_line(_|$)/.test(b) ? "line" : /_cross(_|$)/.test(b) ? "cross-stitch" : "filled"}${/^pc_/.test(b) ? " (corpus)" : ""}`;
+  if (/^bm_/.test(b)) return "bookmark names";
+  const m = b.match(/^st_([a-z0-9]+)/);
+  if (!m) return "other";
+  for (const [k, v] of Object.entries(KIND)) if (v.includes(m[1])) return k;
+  return "other lettering and starters";
+}
+const SCORE = ["stitches", "trims", "loose", "wasted", "ends", "lockOut", "zeroTie", "tiny", "atLimit", "over"];
+function score(files, opts) {
+  const arg = (k) => { const a = [...opts].find((o) => o.startsWith(`--${k}=`)); return a && a.slice(k.length + 3); };
+  const board = {};
+  for (const f of files) {
+    const p = readEmbroidery(new Uint8Array(readFileSync(f)), f), t = flow(p).total, pk = peak(p).max, G = (board[kind(f)] ??= { files: 0 });
+    const row = { stitches: t.stitches, trims: t.trims, loose: t.short, wasted: t.avoid, ends: t.ends, lockOut: t.lockOut, zeroTie: t.zeroTie, tiny: moves(p.stitches).tiny, atLimit: +(pk >= LIMIT), over: +(pk > LIMIT) };
+    G.files++; for (const k of SCORE) G[k] = (G[k] || 0) + row[k];
+  }
+  const was = arg("against") ? JSON.parse(readFileSync(arg("against"), "utf8")) : null;
+  const cell = (g, k) => { const v = board[g][k], w = was?.[g]?.[k]; return String(v) + (w == null || w === v ? "" : `(${v > w ? "+" : ""}${v - w})`); };
+  const head = ["kind", "files", ...SCORE], lines = Object.keys(board).sort().map((g) => [g, cell(g, "files"), ...SCORE.map((k) => cell(g, k))]);
+  const wide = head.map((h, i) => Math.max(h.length, ...lines.map((l) => l[i].length)));
+  for (const l of [head, ...lines]) console.log(l.map((c, i) => (i ? c.padStart(wide[i]) : c.padEnd(wide[i]))).join("  "));
+  if (was) for (const g of Object.keys(was)) if (!board[g]) console.log(`(no files now for "${g}")`);
+  if (arg("save")) writeFileSync(arg("save"), JSON.stringify(board, null, 1) + "\n");
+}
+
 if (import.meta.url === `file://${process.argv[1]}`) {
   const args = process.argv.slice(2), opts = new Set(args.filter((a) => a.startsWith("--"))), files = [];
   for (const a of args.filter((x) => !x.startsWith("--"))) {
     if (statSync(a).isDirectory()) for (const f of readdirSync(a).sort()) { if (/\.(pes|dst)$/i.test(f)) files.push(`${a}/${f}`); }
     else files.push(a);
   }
+  if (opts.has("--score")) { score(files, opts); process.exit(0); }
   const rows = [], groups = new Map();
   for (const f of files) {
     const res = flow(readEmbroidery(new Uint8Array(readFileSync(f)), f)), t = res.total, g = group(f);
