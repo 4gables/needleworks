@@ -1227,13 +1227,22 @@ function localStages(p, fab = "cotton") {
   }
   return stages.map((st) => ({ ...st, paths: st.paths.filter((q) => q.length) }));
 }
-
+// A plain fill of a shape, kept by the shape and its settings alone. A piece's stitches are kept by everything they
+// depend on, the thread weight among it: going to 60 wt (which changes a satin, not a fill) or to another fabric and
+// back made every motif's and patch's fill again on the page, ~500 ms of a busy design's thread change.
+const fills = new Map();
+function filled(loops, opts) {
+  const key = JSON.stringify([loops, opts]);
+  let f = fills.has(key) && recent(fills, key);
+  if (!f) { f = fillPolygon(loops, opts); fills.set(key, f); if (fills.size > 40) fills.delete(fills.keys().next().value); }
+  return f.slice();
+}
 // A patch's fill in its thread, in a FILL_PATTERNS `pattern`; with `blend`, two layers across the patch, the first
 // thinning out as the second fills in (row spacing changes gradually in each), the second with no underlay of its
 // own (Hatch's colour blend, on one needle)
 function patchFill(p, loops, fab, name = shapeOf(p).name.toLowerCase()) {
   const base = { density: fd(fab === "knit" ? ROWS.standard : ROWS.solid), pattern: p.pattern || "tatami" }, color = p.fill || p.color;
-  const st = !p.blend || p.blend === color ? [{ color, paths: fillPolygon(loops, base), sews: `Fills the ${name} patch.`, patchFill: true }]
+  const st = !p.blend || p.blend === color ? [{ color, paths: filled(loops, base), sews: `Fills the ${name} patch.`, patchFill: true }]
     : [{ color, paths: fillPolygon(loops, { ...base, share: (f) => 1 - f }), sews: `Fills the ${name} patch, fading out.`, patchFill: true },
       { color: p.blend, paths: fillPolygon(loops, { ...base, underlay: false, share: (f) => f }), sews: `Blends the second colour in across the patch.`, patchFill: true }];
   // what to hoop (`patch`: step 1 says so) and a stabilizer firm enough for a dense fill (thousands of stitches)
@@ -1245,7 +1254,7 @@ function patchFill(p, loops, fab, name = shapeOf(p).name.toLowerCase()) {
 // (outline and holes nearest first, each from where the needle is: `rings`)
 function motifStitches(loops, style) {
   if (style === "outline") return rings(loops, (l) => edgeSatin(l, 2.2));
-  const fill = fillPolygon(loops, { inset: 0.6, density: fd(ROWS.solid) }), end = fill[fill.length - 1];
+  const fill = filled(loops, { inset: 0.6, density: fd(ROWS.solid) }), end = fill[fill.length - 1];
   return [...fill, ...rings(loops, (l) => [loop(run(l, 2.0, true)), loop(satin(l, 1.4, sd(0.4), 0.2, true))], end && end[end.length - 1])];
 }
 

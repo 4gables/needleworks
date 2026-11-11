@@ -40,8 +40,3 @@ What was tried and rejected (don't retry without new numbers) and what is known 
 - Flow: fill-internal hidden moves in `fillPolygon`, repeated tie-in holes in `Design.path`, ~47 script moves on arcs.
 - Text: CJK/Arabic names save as design.pes (the fonts lack them anyway).
 - Not built: photo stitch, free-standing lace, 3D puff.
-- Picture tab, intermittent: in a full `ui_sweep --quick` run the `picture` state is "never ready" (Download still
-  disabled 30 s after the sample picture opens) in 1-2 of ~330 cases, at a different window size each time. Present
-  at v12 too (1 of 2 runs), never when the state runs alone (80 of 80). Picture output is unaffected (corpus
-  byte-identical). Not yet known whether the page's worker stalls (it restarts after 60 s) or the test's tabs get
-  in each other's way; `check.sh` reports it as a failure until it is found.

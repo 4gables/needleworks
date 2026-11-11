@@ -53,9 +53,16 @@ Phase 1, the base (no visible change, byte-identical batches):
       re-made because the weight is in their cache key, though 60 wt doesn't change a fill). Next: fills through
       the worker as carved patches already go (`fillLater`), and the weight out of a fill's key where it changes
       nothing
+    - plain fills kept by shape and settings (`filled`): 60 wt change 554 -> 278 ms, worst freeze 687 -> 562,
+      5 of 23 over 500 ms. Left: 30 wt and knit (fills that really differ: through the worker), towel and typing
+      on the 17-piece design (lettering re-stitched: ~520-550 ms)
   - [ ] perf folded into monkey's budget once the freeze is under 500 ms
   - [x] released so far as v15 (439 batch and 117 corpus files identical to v12; monkey 960 steps 0 problems;
     ui_sweep's one failure is the Picture-tab intermittent, which v12 has too: `docs/decisions.md`)
+  - [x] that intermittent found and fixed: a picture with nothing to stitch was kept and reopened at the next
+    visit with its error (`docs/pictures.md`); ui_sweep `picture-after-blank` fails without the fix
+  - [x] released as v16 with the fill cache (check.sh passed: 439 files unchanged, ui_sweep 340/0, monkey 960
+    steps 0 problems)
   - [ ] digitize.js: colour learning and styles apart
   - [ ] ui.js and app.js over one shared state; one worker job queue; matrix folded into files_flow
 - [ ] **F3 Atomic releases**: one release's files per load, never a mix
