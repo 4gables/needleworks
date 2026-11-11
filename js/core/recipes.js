@@ -68,7 +68,8 @@ export const ROWS = { solid: 0.35, standard: 0.4 };
 // along their length and the row ends up short (Wilcom's published pull compensation: 0.20 mm on cotton and drill,
 // 0.35 on T-shirt knit, 0.40 on fleece; 0.15 everywhere until 2026-11). `rows`: knit takes the standard spacing (a
 // dense fill puckers jersey and piqué). Every fill's row ends lie under a satin (a patch's or motif's edge, the
-// lettering sewn on it), so the pull decides how far under.
+// lettering sewn on it), so the pull decides how far under. A patch takes felt's pull whatever the design is sewn on
+// (it is sewn on its own fabric); only its rows follow the design's fabric.
 export const FILLS = {
   cotton: { pull: 0.2, rows: ROWS.solid },
   felt: { pull: 0.2, rows: ROWS.solid },

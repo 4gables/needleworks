@@ -377,7 +377,7 @@ export function pieceStages(p, fab = cloth) {
 function sewnWith(p, fab) {
   const lettering = p.kind === "text" || p.kind === "monogram";
   // (a fill's recipe, core/recipes.js FILLS: a patch's, a filled motif's, the motif either side of lettering)
-  const fill = (p.kind === "frame" && p.border === "patch") || p.kind === "motif" || (lettering && p.deco) ? Object.values(fillRecipe(fab)).join("/") : "";
+  const rec = fillRecipe(fab), fill = p.kind === "frame" && p.border === "patch" ? rec.rows : p.kind === "motif" || (lettering && p.deco) ? rec.pull + "/" + rec.rows : "";
   const f = (lettering ? (fab === "towel" || fab === "knit" ? fab : "") : "") + fill;
   return "\n" + f + "\n" + (lettering || wt === "30" || wt === "60" ? wt : "");
 }
@@ -698,7 +698,9 @@ function filled(loops, opts) {
 // thinning out as the second fills in (row spacing changes gradually in each), the second with no underlay of its
 // own (Hatch's colour blend, on one needle)
 export function patchFill(p, loops, fab, name = shapeOf(p).name.toLowerCase()) {
-  const rec = fillRecipe(fab), base = { density: fd(rec.rows), pull: rec.pull, pattern: p.pattern || "tatami" }, color = p.fill || p.color;
+  // (the rows follow what the patch goes on, lighter on knit; the pull is the patch's own fabric's, felt or twill,
+  // whatever it's sewn on later: a towel design's patch is cotton's, and a change to Towel fills nothing again)
+  const base = { density: fd(fillRecipe(fab).rows), pull: fillRecipe("felt").pull, pattern: p.pattern || "tatami" }, color = p.fill || p.color;
   const st = !p.blend || p.blend === color ? [{ color, paths: filled(loops, base), sews: `Fills the ${name} patch.`, patchFill: true }]
     : [{ color, paths: fillPolygon(loops, { ...base, share: (f) => 1 - f }), sews: `Fills the ${name} patch, fading out.`, patchFill: true },
       { color: p.blend, paths: fillPolygon(loops, { ...base, underlay: false, share: (f) => f }), sews: `Blends the second colour in across the patch.`, patchFill: true }];

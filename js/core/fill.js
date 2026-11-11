@@ -14,6 +14,7 @@ export const FILL = { angle: 45, res: 8 };
 // own fill against a trim, two locks and often a loose thread to snip (2 mm until 2026-10-30: 3 mm took 5-15% of the
 // trims and a third of the loose threads off the batch pictures)
 export const SEWN = 3;
+const SCRAP = 3;
 
 // Fill patterns: where each row's needle points fall, as a fraction of the stitch length by row number. Tatami's
 // quarter steps hide the points; the others line them up into a texture you can see (programmable fills).
@@ -282,10 +283,14 @@ export function makeRouter(mask, res, cell, hop = null, budget = routeBudget(), 
 // more than SEWN mm. groups: [underlay paths, fill paths] in px; the underlay is covered by the fill, so travel over it is
 // hidden too. inOrder: the next section is always entered at its first row (a drawn shape's fill, `fillPolygon`).
 // spare: sections of the first so many groups are left out when only a jump would reach them (a bit of edge run
-// isn't worth a trim).
-export function routeFill(groups, comp, mask, res, budget = routeBudget(), worn = Infinity, inOrder = false, spare = 0) {
-  const { w } = mask, R = makeRouter(mask, res, (x, y) => (comp.labels[y * w + x] === comp.id ? 1 : 0), null, budget, worn);
+// isn't worth a trim). With inOrder, a fill section under SCRAP mm of thread (a row or two in a corner, which rows
+// read off a drawing never saw; every such fill's edge lies under a satin) is sewn only where the needle already is:
+// going to one stranded the next real section behind finished rows (the snowflake motif at 20 mm, 3 parts -> 4).
+export function routeFill(groups, comp, mask, res, budget = routeBudget(), worn = Infinity, inOrder = false, spare = 0, cell = null) {
+  const { w } = mask, R = makeRouter(mask, res, cell || ((x, y) => (comp.labels[y * w + x] === comp.id ? 1 : 0)), null, budget, worn);
   const out = [];
+  // (under SCRAP mm of thread in all: a row or two in a corner)
+  const short = (p) => { let t = 0; for (let i = 1; i < p.length && t < SCRAP * res; i++) t += Math.hypot(p[i][0] - p[i - 1][0], p[i][1] - p[i - 1][1]); return t < SCRAP * res; };
   let cur = null;
   groups.forEach((paths, gi) => {
     // sections in the fill's own row order (top to bottom of the sweep): each next one begins beside rows still to
@@ -308,7 +313,7 @@ export function routeFill(groups, comp, mask, res, budget = routeBudget(), worn 
       }
       let p = left.splice(k, 1)[0]; if (rev) p = p.slice().reverse();
       const d = cur ? Math.hypot(p[0][0] - cur[0], p[0][1] - cur[1]) : Infinity;
-      if (gi < spare && cur && d > res && !r) continue;
+      if (cur && d > res && ((!r && gi < spare) || (inOrder && gi === groups.length - 1 && short(p)))) continue;
       // within 1 mm: sew straight on (skipping a first point that would make a stitch under 0.4 mm)
       if (cur && d <= res) out[out.length - 1].push(...(d < 0.4 * res ? p.slice(1) : p));
       else if (r && r.sewnMm <= SEWN) out[out.length - 1].push(...R.stitches(r), ...p);
@@ -351,12 +356,13 @@ function shaped(loops, inset, res) {
     for (let k = 0; k + 1 < cut.length; k += 2)
       for (let x = Math.max(0, Math.ceil((cut[k] - x0) * res - 0.5)); x < Math.min(w, Math.floor((cut[k + 1] - x0) * res - 0.5) + 1); x++) mask.data[y * w + x] = 1;
   }
+  const whole = inset ? mask.data.slice() : mask.data;   // (the shape before the inset comes off)
   if (inset) { const e = distanceTransform(mask); for (let i = 0; i < w * h; i++) if (e[i] <= inset * res) mask.data[i] = 0; }
   const { labels, count } = label(mask), parts = Array.from({ length: count + 1 }, () => []);
   for (let i = 0; i < w * h; i++) if (labels[i]) parts[labels[i]].push(i);
   // (each pixel's distance to the edge: only rows read off the drawing ask for it)
   let dt = null;
-  const v = { x0, y0, mask, labels, count, parts, get dt() { return (dt ||= distanceTransform(mask)); } };
+  const v = { x0, y0, mask, whole, labels, count, parts, get dt() { return (dt ||= distanceTransform(mask)); } };
   drawn.set(key, v); if (drawn.size > 6) drawn.delete(drawn.keys().next().value);
   return v;
 }
@@ -499,8 +505,19 @@ export function fillPolygon(poly, { angle = FILL.angle, density = ROWS.solid, re
     if (comp.pixels.length < 1.5 * res * res) continue;
     const edge = underlay ? edgeRuns(px, comp, mask, res, UNDER.inset * res, UNDER.run) : [];
     // (sections taken strictly in row order, each from its first row: going to whichever end of the first was nearer
-    // sewed it backwards and stranded the rest behind it, 275 parts against 184 over 164 test shapes; each part is a trim)
-    paths.push(...routeFill([edge, across ? of(across, id, UNDER.stitch, "tatami") : [], of(along, id, 3.5, pattern)], comp, mask, res, undefined, undefined, true, 1).map(toMm));
+    // sewed it backwards and stranded the rest behind it, 275 parts against 184 over 164 test shapes; each part is a
+    // trim. Where that still leaves parts, the sweep from the far side is tried too and the fewer kept: 30 motifs at
+    // 20 mm, 56 parts -> 49)
+    // (travel may use the inset band too: the satin the inset is there for covers it. A 20 mm snowflake's arms are
+    // 1 mm wide once inset, too thin for the router's 0.5 mm cells to join up)
+    const cell = inset ? (x, y) => (labels[y * mask.w + x] === id ? 1 : shape.whole[y * mask.w + x] ? 2 : 0) : null;
+    const groups = [edge, across ? of(across, id, UNDER.stitch, "tatami") : [], of(along, id, 3.5, pattern)];
+    let best = routeFill(groups, comp, mask, res, undefined, undefined, true, 1, cell);
+    if (best.length > 1) {
+      const other = routeFill([edge, groups[1], groups[2].map((p) => p.slice().reverse()).reverse()], comp, mask, res, undefined, undefined, true, 1, cell);
+      if (other.length < best.length) best = other;
+    }
+    paths.push(...best.map(toMm));
   }
   return paths;
 }

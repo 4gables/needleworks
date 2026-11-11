@@ -45,18 +45,27 @@ Reference for this part of Needleworks: the rules, the reason for each (it stops
   canvas), 0.35 (knit) or 0.40 (towel, fleece) at both ends, Wilcom's published values; 0.15 everywhere before. Knit
   takes 0.4 mm rows, the rest 0.35. Every fill's row ends lie under a satin, so the pull decides how far under: never
   past its outer edge (a motif's is 0.7 mm out, towel rows end 0.2 mm inside the outline).
+- **A patch's pull is its own fabric's** (felt or twill: 0.20), whatever the design is sewn on; only its rows follow
+  the design's fabric (lighter on knit, as before). Given the towel's pull, a change to Towel filled every patch
+  again at every size the too-big fixes try: +100 ms on the busy design (476 -> 570 ms, over the budget).
 - **Underlay:** an edge run 0.4 mm inside the (inset) outline in 2.5 mm stitches, one line round every outline and
   hole, then rows across the fill's every 2.5 mm, also 0.4 mm inside. The edge run holds the fabric where the rows
   pull hardest. Its points are the outline's moved along their normals; one that lands under 0.28 mm from the edge
   (a sharp corner, a narrow neck) is left out and the run broken there.
 - **Sections in row order, each entered at its first row** (`routeFill(…, inOrder)`). Going to whichever end of the
-  first section was nearer sewed it backwards and stranded the rest behind finished rows: 275 parts against 184 over
-  164 test shapes (the old drawing-based rows: 220). Each part is a trim. Sewing small sections first was no better
-  (273). Pictures keep the nearer-end rule until measured on them.
+  first section was nearer sewed it backwards and stranded the rest behind finished rows. Where parts remain, the
+  sweep from the far side is tried too and the fewer kept. Each part is a trim.
+- **Travel may use the inset band** (`cell` 2: the satin the inset is there for covers it). Inset by 0.6 mm, a 20 mm
+  motif's arms are 1 mm wide, too thin for the router's 0.5 mm cells to join up, and every arm was a part.
+- **A scrap** (a fill section under 3 mm of thread: a row or two in a corner, which rows read off a drawing never
+  saw) is sewn only where the needle already is; going to one stranded the next real section.
+- Parts, old rows -> these rules: 164 test shapes 220 -> 141; the 30 motifs at 20 mm 61 -> 34 (every motif one part
+  but the paw, five separate pads). In-order alone: 184; nearer-end with exact rows: 275; small sections first: 273.
+  Pictures keep the nearer-end rule until measured on them.
 - A step between rows may leave the shape by the pull and 0.15 mm, no more; further and the path is split there, as
   before. A bit of edge run that only a jump would reach is left out (`spare`): it isn't worth a trim.
 - Speed: no distance transform for a shape without an inset (the edge-run and row-step tests look at eight places
-  round a point instead), and one search straight to the next section before any flood: 12 test fills in 237 ms
-  against 420 ms for the old rows on the same machine.
-- A piece's stitch cache and a carved patch's fill are kept by the fabric's fill recipe (`sewnWith`, `carve`'s key):
-  kept by "knit or not", a towel design showed cotton's fill.
+  round a point instead), and one search straight to the next section before any flood: 12 test fills in 199 ms
+  against 351 ms for the old rows on the same machine.
+- A piece's stitch cache is kept by what its fill reads of the fabric (`sewnWith`): a patch's rows, a motif's pull and
+  rows.
