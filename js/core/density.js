@@ -49,3 +49,74 @@ export function density(stitches, skip = () => false) {
   }
   return { max, cells: [...cells.values()] };
 }
+
+// Which thread block each stitch is in, for the counts made while stitches can still be moved (`relieve`, the doctor's
+// `slide`, `Hits` in a `Design`): only a colour change starts a new one. A pause (STOP) between two parts of one
+// thread doesn't: the same thread goes into the same holes either side of it. So these never allow more than the
+// checker's count above, which starts a block at a pause too (as pyembroidery and pe900_check read the file).
+export function threadBlocks(stitches) {
+  const blk = new Int32Array(stitches.length);
+  for (let i = 0, b = 0; i < stitches.length; i++) { if (stitches[i][2] === COLOR_CHANGE) b++; blk[i] = b; }
+  return blk;
+}
+
+// The same count kept while a design is built (`Design`, where a piece's stitches give way before they pile up:
+// recipes.js `EASE`). add(X, Y): a hit, in 0.1 mm as the file rounds it. top(X, Y): the most hits any 1 mm window
+// holding that point would have with one more hit there (an upper bound while that is clearly few: the hits of the
+// cells round it; counted window by window only where it is close).
+// (`fine`: the hits in each half mm square of the hoop and 30 mm round it, a plain count to rule most points out
+// with: the 25 squares that reach every window holding the point. Along a satin's edge they hold 8-12 hits, and
+// that is all the reckoning nearly every point of a design needs: looking through the 1 mm cells' own hits for
+// each one made a busy design a fifth slower to build. Outside it, a point is reckoned the long way.)
+export class Hits {
+  constructor(hoop = null) {
+    this.cells = new Map(); this.grid = new Uint16Array(20 * 20);
+    this.half = hoop ? Math.ceil((Math.max(hoop.w, hoop.h) / 2 + 30) * 2) : 0;   // (half mm squares either way from the middle)
+    this.side = 2 * this.half; this.fine = this.half ? new Uint8Array(this.side * this.side) : null;
+  }
+  clear() { this.cells = new Map(); if (this.fine) this.fine.fill(0); }
+  key(cx, cy) { return (cx + 4096) * 8192 + cy + 4096; }
+  add(X, Y) {
+    const k = this.key(Math.floor(X / 10), Math.floor(Y / 10));
+    let c = this.cells.get(k);
+    if (!c) this.cells.set(k, (c = []));
+    c.push(X, Y);
+    if (this.fine) {
+      const fx = Math.floor(X / 5) + this.half, fy = Math.floor(Y / 5) + this.half;
+      if (fx >= 0 && fy >= 0 && fx < this.side && fy < this.side) { const j = fy * this.side + fx; if (this.fine[j] < 255) this.fine[j]++; }
+    }
+  }
+  top(X, Y, under = Infinity) {
+    if (this.fine && under > 0 && under < 200) {
+      // (the half mm squares from 0.9 mm before the point to 0.9 mm after)
+      const ax = Math.floor((X - 9) / 5) + this.half, bx = Math.floor((X + 9) / 5) + this.half, ay = Math.floor((Y - 9) / 5) + this.half, by = Math.floor((Y + 9) / 5) + this.half;
+      if (ax >= 0 && ay >= 0 && bx < this.side && by < this.side) {
+        let n = 1;
+        for (let y = ay; y <= by; y++) { const row = y * this.side; for (let x = ax; x <= bx; x++) n += this.fine[row + x]; }
+        if (n <= under) return n;
+      }
+    }
+    const x0 = Math.floor((X - 9) / 10), x1 = Math.floor((X + 9) / 10), y0 = Math.floor((Y - 9) / 10), y1 = Math.floor((Y + 9) / 10);
+    const near = [];
+    let n = 1;
+    for (let cx = x0; cx <= x1; cx++) for (let cy = y0; cy <= y1; cy++) { const c = this.cells.get(this.key(cx, cy)); if (c) { near.push(c); n += c.length / 2; } }
+    if (n <= under) return n;
+    // every window holding (X, Y): its corner 0-9 back from the point each way; the hits within 9 of it, summed
+    // from the top left, then four reads a window
+    // (first the hits within 0.9 mm either way, all a window holding the point can reach: few enough, and that is
+    // the answer too; only then window by window. Along a satin's edge the cells round a point hold 30-50 hits and
+    // the windows 6-10, and counting every window for every point made a busy design a half slower to build.)
+    let m = 1;
+    for (const c of near) for (let i = 0; i < c.length; i += 2) { const dx = c[i] - X, dy = c[i + 1] - Y; if (dx >= -9 && dx <= 9 && dy >= -9 && dy <= 9) m++; }
+    if (m <= under) return m;
+    const g = this.grid; g.fill(0);
+    for (const c of near) for (let i = 0; i < c.length; i += 2) { const dx = c[i] - X, dy = c[i + 1] - Y; if (dx >= -9 && dx <= 9 && dy >= -9 && dy <= 9) g[(dy + 10) * 20 + dx + 10]++; }
+    for (let y = 1; y < 20; y++) for (let x = 1; x < 20; x++) g[y * 20 + x] += g[y * 20 + x - 1] + g[(y - 1) * 20 + x] - g[(y - 1) * 20 + x - 1];
+    let top = 0;
+    for (let oy = 0; oy < 10; oy++) for (let ox = 0; ox < 10; ox++) {
+      const m = g[(oy + 10) * 20 + ox + 10] - g[oy * 20 + ox + 10] - g[(oy + 10) * 20 + ox] + g[oy * 20 + ox];
+      if (m > top) top = m;
+    }
+    return top + 1;
+  }
+}

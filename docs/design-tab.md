@@ -41,7 +41,8 @@ Reference for this part of Needleworks: the rules, the reason for each (it stops
 - Automatic = 40 wt, small lettering for 60. 30 wt: lettering 0.45, other satins x1.15, fills +0.05. 60 wt: 0.34,
   x0.88, fills unchanged (0.3 mm rows fail the check).
 ### Frames, appliqué, patches
-- Borders: line, bold, satin, patch, appliqué, `ith`, `zip`; `quilt` stipple | echo. Bold laps and tack-downs go back
+- Borders: line, bold, fancy (`trim`: scallop | diamond | blanket), satin, patch, appliqué (`cover`: satin | blanket),
+  `ith`, `zip`; `quilt` stipple | echo | crosshatch | stripes. Bold laps and tack-downs go back
   from the same start (`back(e)`; a reverse cost trims and long jumps).
 - Heart: top dip filled with a 3 mm round, bottom cusp an arc of a 2.2 mm circle, the border's inside half (a satin
   can't turn a sharp inside corner: underlay poked out; 1.8 folded once the border was 4 mm). The arc's angles stay in
@@ -84,6 +85,16 @@ Reference for this part of Needleworks: the rules, the reason for each (it stops
   more, 1.5 mm inside the outline; thin lettering keeps the fill as its base (carving every stroke tripled trims).
   Cached per patch shape, piece stitch hash and hole mask (it was the slow part).
 - On a patch a piece gets a thread that shows (`against`); `underPatch` flags a later patch covering it.
+- Borders with a shape to them (`borders.js`, `recipes.js` `BORDER_RUNS`), each one path that ends where it began,
+  so `startAt` can begin it where the quilting stopped and nothing is trimmed. Scallops: half-ovals 7 mm long and
+  2.2 high standing out from the line, six stitches each, sewn round and back through the same holes (one thread
+  read as a faint line beside a satin name). Diamonds: two zigzags 1.6 mm either side of the line, 5 mm a diamond.
+  Blanket stitch: 3 mm along the line, each stitch three times, and a 3 mm prong into the shape at every hole. The
+  normal at a point is taken from the outline 0.6 mm either side of it, so prongs fan round a corner.
+- A blanket-stitch appliqué edge (`cover: "blanket"`): the line runs on the tack-down, at the fabric's cut edge, the
+  prongs hold the fabric. The cut edge stays in sight, so Have ready asks for felt or cotton backed with fusible web.
+  Frames only: appliqué letters and motifs keep their satin (`applRoutes` plans its moves under satins to come).
+- A bold line is already a triple run (three laps through the same holes): no separate bean stitch.
 ### In-the-hoop
 - `ith` (Ornament, Key fob): the outline on bare stabilizer (with the ribbon hole's circle when `eyelet`, started half
   way round from its satin ring's start; Ashley asked to see where the hole goes), appliqué front, the pieces, then a
@@ -105,6 +116,18 @@ Reference for this part of Needleworks: the rules, the reason for each (it stops
   threads under the 5 mm trim setting).
 - The quilt stage goes in the frame's thread right after the frame, before a `border: true` stage, led onto the frame
   by `toFrame`, the border starting there (`startAt`). Starters: Mug rug, Coaster, Quilt block.
+- Stripes (8 mm apart) and crosshatch (two sets at right angles, 10 mm; `lines`, `recipes.js` `QUILT_LINES`), at 45°:
+  sewn as one line the way a quilter does it, along a line and then along the frame line itself to another line's
+  end. Whatever border the frame has is sewn over the frame line afterwards, so that travel is out of sight (under a
+  thin line it adds a pass or two to stretches of the line; 3 mm inside the line it showed as a broken second
+  outline, worse). A line stops 2.5 mm short of a piece; from there the needle steps to the line next door if the
+  straight way is clear, else sews back through its own holes to the frame (a line sewn twice against a trim with
+  both locks in the open: trims in the quilting of a named square 8 -> 0). A stretch that never gets 3 mm from the
+  frame line is left out (it read as a second, crooked border on an oval). Under a scalloped or diamond border,
+  which is no line on the frame line, the quilting ends with one whole round of it (`lap`): a base line.
+- Measured 2026-11 (v27, 167 frame, appliqué, motif and quilting files): 9 avoidable moves in all, 6 of them in the
+  lettering sewn on the frames; the stage builders (`applRoutes`, `rings`, `toFrame`, `seamStage`) already enter each
+  part where the last ended. A shared planner had nothing left to take here; what was left was inside fills (below).
 ### Motifs (`motifs.js`)
 - Our own drawings: 256-unit paths from circles, ellipses, rounded polygons, brush strokes, nonzero, parts at least 26
   units (`tests/browser/motifs.html?sheet=shapes|stitch`). `FACING` ones mirror for deco.
@@ -246,11 +269,17 @@ Reference for this part of Needleworks: the rules, the reason for each (it stops
   colour; blocks named Placement/Tackdown/Cutting get appliqué words; same-thread blocks keep their pause. Resize via
   `orig` + `scale` 0.5-2.5, re-stitched by `fix` in a worker (`resizeFile`/`restitchFiles`; `pending` holds Download).
   Open tab "Add words to this design" (`studio.addWords`).
+- The file's own block names travel with it: a copy written by the Open tab names threads as the machine does, and
+  the doctor's `fix` hands back threads without names, so `open-words` puts the opened file's names back block for
+  block and a re-stitch keeps `orig`'s (gnome.pes fixed, words added, fitted: 18 steps of "Sews gnome (colour 1)" and
+  no word on the appliqué fabric).
 ### One for each name
 - `main()` (biggest text or monogram, letters before a date) names the file and is swapped. Names drawn at the
   design's letter scale (`inkHeight`), keep bold, shrink to fit (90 %… 55 %) or are captioned; a missing glyph refuses
   a name; past 40 are left out; with the hoop turned, a name that sews the same upright (size, nothing run into, as bold, one
-  line) is made upright, only names needing the room turned, each captioned "hoop turned" and named in the hooping note
+  line) is made upright, only names needing the room turned (unless the hoop was turned on purpose: the design's own
+  name sews upright too, a towel starter hooped sideways; then every file stays turned, `onPurpose`: the single
+  download was turned and the batch upright, nothing said, v27 tester), each captioned "hoop turned" and named in the hooping note
   (Bo and Grace were turned with Benjamin). Each file's caption says its loose threads (`shortJumps`). The dialog says
   problems as names are typed (`namesTyped`/`namesSaid`, `forNames().refused` shared with Make). Each file validated and judged;
   `<starter or file>_<N>_names|monograms.zip`, names deduplicated ignoring case (emma/Emma collide on macOS, FAT).
@@ -260,6 +289,27 @@ Reference for this part of Needleworks: the rules, the reason for each (it stops
   (`Lily_Noah.pes`).
 - A batch name under the font's least x-height is refused (names with spaces tried on two lines first); captions say
   "smaller, N %"; exact duplicates are said. "One for each name" follows Download's block rule.
+
+### Arrange (`layout.js`)
+- Layout tools make ordinary pieces: a piece's place is x, y, `rot` and `flip` (flipped left to right, then turned:
+  `placer`), so a copy is the piece with those changed and nothing new is stitched. The copies take the piece's place
+  in the list, in its thread: a wreath of 8 has no thread change.
+- Mirrors as rot and flip: left to right = flip, rot -> -rot; top to bottom = flip, rot -> 180 - rot; both = rot + 180.
+  Lettering (text, monogram, appliqué letters) is never mirrored: its copies are plain copies, and Flip top to bottom
+  is off for it.
+- Repeat in a circle: n copies round the hoop's centre, each turned to face out. A piece standing 5 mm or more off
+  centre sets the radius and the start; one in the middle gets `ringRadius`: 2 mm clear of its neighbours, three
+  quarters of the way out to the field's edge when there is room (at the edge a wreath leaves no middle for words).
+  Too many for the hoop is the design's usual "too big", with its usual ways out.
+- One in each corner: where the piece stands is one corner (the field's corner, 3 mm in, from the middle), the other
+  three its mirrors across the centre lines. Mirrored top to bottom a figure stands on its head (right for a
+  flourish, wrong for a bunny): the note offers "Stand the bottom two upright" (left-to-right mirrors only).
+- A frame isn't arranged (it holds other pieces; copies would each claim them).
+- Monogram orders (`MONOGRAMS`, `monogramOf`): from first, middle (or a partner's first) and last name: surname big in
+  the middle (first LAST middle), a couple (first LAST partner), in order all one size (plain lettering: a monogram
+  piece always sews the middle of three bigger), two initials. Each choice shows the letters as they will sew.
+- Guards: said_flow (8 in a circle are 8 pieces in one thread, said with Undo; corners mirrored and inside the hoop;
+  no top-to-bottom flip for lettering), ui_sweep `design-arrange`, batch files `st_lay_*`.
 
 ## Bookmark (a starter since 2026-10-31)
 - Was its own panel and engine (`bookmark.js`, `#panel-bookmark`, `bookmarks_N.zip`); now the first "Start from" card,

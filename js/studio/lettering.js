@@ -77,7 +77,9 @@ const WIDE = 5;
 // with them)
 // `warp`: where a point of these letters (mm) goes when they are bent (an arch, a wave, a bridge): the pieces are
 // chained by the moves as they will be sewn (`order` at)
-export function letters(text, family, size, style = "auto", spacing = 0, kern = null, chain = true, warp = null) {
+// `asRead`: print letters are sewn in reading order whatever loose threads that leaves (a knit or a towel: see the
+// skip order below)
+export function letters(text, family, size, style = "auto", spacing = 0, kern = null, chain = true, warp = null, asRead = false) {
   text = (text || "").replace(/\s*\n\s*/g, " ").trim();
   const sw = swashes(text);
   if (kern && (sw.cut[0] || sw.cut[1])) kern = kern.slice(sw.cut[0], kern.length - sw.cut[1]);
@@ -96,7 +98,8 @@ export function letters(text, family, size, style = "auto", spacing = 0, kern = 
   // 5880000000000 mm wide, and a stand-in keycap emoji thinned to a point in Meow Script; any word's strokes are taller)
   const [x0, y0, x1, y1] = bounds(sized), s = size / Math.max(y1 - y0, (/[\p{L}\p{N}]/u.test(text) ? 0.5 : 1) * info.mid), cx = sized === info.sized ? (x0 + x1) / 2 : (() => { const b = bounds(info.sized); return (b[0] + b[2]) / 2; })();
   // (print letters: the third entry marks the first stroke of each separate piece after the first, so the needle jumps
-  // to it and never stitches across, however close: an i's stem reaching up to its dot was sewn to it)
+  // to it and never stitches across, however close: an i's stem reaching up to its dot was sewn to it. In a script,
+  // a mark sewn straight after another, an ë's second dot: `order`.)
   const print = !!fontOf(family).print;
   // A satin column as wide as the font's own stroke but at least 15% of the x-height up to 1.2 mm, and 12% beyond
   // (thin scripts and monoline fonts get a satin sized to the letters; 15% on big letters doubled thin scripts like
@@ -120,21 +123,33 @@ export function letters(text, family, size, style = "auto", spacing = 0, kern = 
   // over the arched batch files. Now `linkReach`, and the stitch across is allowed for by `stitchLetters`.)
   const reach = linkReach(satinW);
   // (a lone stroke under a column long, 0.9 mm in a fine line, is a dot: 1 mm of satin, 0.7 mm of line: `stitchLetters`)
-  const dots = { dot: (satinW || 0.9) / s, dotLen: (satinW ? 1 : 0.7) / s };
+  // (apart: a mark's centre line is at least this far from every other piece's, its column clear of theirs: `order`)
+  const dots = { dot: (satinW || 0.9) / s, dotLen: (satinW ? 1 : 0.7) / s, apart: (satinW ? satinW * 0.75 : 0.4) / s, above: info.baseline - 0.3 * info.mid };
+  // Strokes round a counter are narrowed so it stays open (`counterCaps`; not when satin is asked for: "Make it bold"
+  // says small loops may fill). The fourth entry is that stroke's column, or 0 for the word's.
+  const caps = style === "satin" || !satinW ? new Map() : notchCaps(notches, s, satinW, counterCaps(counters, s, satinW));
+  // (a big script's column follows the ink, `thickOf` below: its width at a point of the strokes, in their own scale)
+  const calli = thick && satinW >= 2 && style !== "line", lo = Math.max(THIN, satinW * 0.45);
+  let inkAt0 = null;
+  const col = (q) => {
+    if (!calli) return satinW / s;
+    if (!inkAt0) { inkAt0 = new Map(); edges.forEach((e, j) => { const t = thick[j], hi = Math.min(WIDE, xh * 0.2, caps.get(j) || Infinity); if (t) e[2].forEach(([x, y], i) => inkAt0.set(x + "," + y, Math.min(hi, Math.max(lo, t.w[i] * s)))); }); }
+    return (inkAt0.get(q[0] + "," + q[1]) ?? satinW) / s;
+  };
   const laid = warp && ((q) => { const m = warp([(q[0] - cx) * s, (q[1] - info.baseline) * s]); return [m[0] / s, m[1] / s]; });
   // (a move is loose thread up to 5 mm from the column's edge the needle leaves, half a column and pull off the
   // centre lines the starts are measured between: as print below. Two dots 4.2 mm apart were reckoned a trim.)
-  if (chain && !print && reach > 0.2) comps = order(edges, reach / s, (5.5 + (satinW ? satinW / 2 + 0.3 : 0)) / s, false, { at: laid, step: Math.min(reach / 2, 0.35) / s, ...dots });
+  if (chain && !print && reach > 0.2) comps = order(edges, reach / s, (5.5 + (satinW ? satinW / 2 + 0.3 : 0)) / s, false, { at: laid, step: Math.min(reach / 2, 0.35) / s, ...dots, ...(satinW ? { col, pad: (LINK.pull + LINK.open) / s, far: LINK.far / s } : {}) });
   // Print letters each start where the move from the last one is either over 5 mm (trimmed; the move runs from the end
   // of one column to the start of the next, half a column and pull off the centre lines, so 0.5 mm to spare) or, where
   // no start makes it that long, the leftmost (Quicksand "Abbie dog" at 5 mm: 5 loose threads in 28 mm)
   // (S1b: a print letter may also begin partway along a plain stroke, an o's ring or a stem with no shaped end, every
   // half mm or tenth of the x-height: a narrow letter's ends are all within 5 mm of the last one, so each was a loose
   // thread. Strokes with a taper, a shaped end or sides keep their ends: those are measured along the whole stroke.)
-  else if (chain && print) comps = order(edges, 0, (5.5 + (satinW ? satinW / 2 + 0.3 : 0)) / s, false, { at: laid, ...dots, step: Math.max(0.5, xh * 0.1) / s, whole: (j) => !!(tapers[j] || (satinW && (ends[j] || sides[j]))), skip: true });
-  // Strokes round a counter are narrowed so it stays open (`counterCaps`; not when satin is asked for: "Make it bold"
-  // says small loops may fill). The fourth entry is that stroke's column, or 0 for the word's.
-  const caps = style === "satin" || !satinW ? new Map() : notchCaps(notches, s, satinW, counterCaps(counters, s, satinW));
+  // (On a knit or a towel they are sewn as read, `asRead`: the letters sewn second lie between ones already sewn, and
+  // on a fabric that gives under the needle each pass shifts it a little, so the second pass can sit off the first's
+  // baseline: a digitizer's note on v27. On a stable fabric the passes register, as an underlay and its satin do.)
+  else if (chain && print) comps = order(edges, 0, (5.5 + (satinW ? satinW / 2 + 0.3 : 0)) / s, false, { at: laid, ...dots, step: Math.max(0.5, xh * 0.1) / s, whole: (j) => !!(tapers[j] || (satinW && (ends[j] || sides[j]))), skip: !asRead });
   // (the fifth entry: a corner's taper, { atEnd: the point is at the end of this stroke, prof: [mm from the point,
   // the ink's width across there in mm], nearest the point first, k })
   const taperOf = (p, e) => {
@@ -176,7 +191,6 @@ export function letters(text, family, size, style = "auto", spacing = 0, kern = 
   // is 2 mm or more (big lettering): the ink's width, from `THIN` mm (hairlines) to the column's cap. A 60 mm Great
   // Vibes name sewed as an even 2.6 mm line, a marker pen's, and its j's dot a tick. Smaller, the ink's hairlines are
   // narrower than a column can be sewn and its thick strokes hardly wider than the column.)
-  const calli = thick && satinW >= 2 && style !== "line", lo = Math.max(THIN, satinW * 0.45);
   const thickOf = (p, e) => {
     const t = calli && thick[e];
     if (!t) return null;
@@ -187,7 +201,7 @@ export function letters(text, family, size, style = "auto", spacing = 0, kern = 
     const L = d[d.length - 1] || 1, rows = p.map(([x, y], i) => { const v = at.get(x + "," + y); return [d[i] / L, v == null ? null : Math.min(hi, Math.max(lo, v * s))]; });
     return rows.some((r) => r[1] !== null) ? rows : null;
   };
-  const parts = comps.flatMap((c, k) => c.map(([p, mode, e], j) => [p.map(([x, y]) => [(x - cx) * s, (y - info.baseline) * s]), mode, print && k > 0 && j === 0, caps.get(e) || 0, taperOf(p, e), endsOf(p, e), sidesOf(p, e), thickOf(p, e)]));
+  const parts = comps.flatMap((c, k) => c.map(([p, mode, e], j) => [p.map(([x, y]) => [(x - cx) * s, (y - info.baseline) * s]), mode, k > 0 && j === 0 && (print || (!!c.mark && !!comps[k - 1].mark)), caps.get(e) || 0, taperOf(p, e), endsOf(p, e), sidesOf(p, e), thickOf(p, e), j === 0 && !!c.link]));
   const open = Math.min(satinW || Infinity, ...caps.values());
   const pockets = counters.map((c) => ({ peak: c.peak * s, saddle: c.saddle * s }));
   return { parts, satinW, xh, stroke, open, pockets, top: (y0 - info.baseline) * s, bottom: (y1 - info.baseline) * s };
@@ -299,9 +313,10 @@ function inkAt(rows, w, least = 0) {
 export function stitchLetters(parts, satinW, fab = "cotton", small = false, weight = "auto") {
   const { zigzagFrom: zz, pull, gap: density } = letterRecipe(fab, weight, small);   // (core/recipes.js LETTERS)
   let gap = false, last = null, lastW = satinW;   // (a skipped stroke hands its jump on to the next one sewn)
+  let far = false;
   let linked = null;   // (where the last piece ended, while the next waits for its first stitches: `linkReach`)
   if (!satinW) parts = pointed(parts);
-  return parts.map(([p0, mode, g, cap, taper, ends, sides, thick]) => {
+  return parts.map(([p0, mode, g, cap, taper, ends, sides, thick, link]) => {
     // (a corner is narrowed to the ink, and stops where that's under the narrowest column: not on a towel, which
     // keeps its wide columns, nor in a fine line (`pointed`); its centre run goes on to where the point is)
     const w = cap && fab !== "towel" ? Math.min(cap, satinW) : satinW;   // (a towel keeps its wide column)
@@ -333,11 +348,12 @@ export function stitchLetters(parts, satinW, fab = "cotton", small = false, weig
     // nothing, a dot's run, like `gap`; measured to where the stitches start, a dot's being its own end.)
     // (0.3 mm to spare over what `order` reckoned between centre lines: a start it chained and this refused would be
     // a 2 mm loose thread)
-    if (from && Math.hypot(p0[0][0] - from[0], p0[0][1] - from[1]) > 1e-6) linked = g ? null : from;
+    // (`link`, the ninth entry: `order` reckoned this piece stitched to, by the columns' own widths where they meet)
+    if (from && Math.hypot(p0[0][0] - from[0], p0[0][1] - from[1]) > 1e-6) { linked = g ? null : from; far = !g && !!link; }
     if (r.length) {
       const d = linked && !r.gap ? Math.hypot(r[0][0] - linked[0], r[0][1] - linked[1]) : Infinity;
-      if (d <= linkReach(satinW) + 0.3) r.reach = Math.max(r.reach || 0, d + (satinW ? (fromW + 0.3 + pull) / 2 : 0) + 0.1);
-      linked = null;
+      if (d <= (far ? LINK.far : linkReach(satinW)) + 0.3) r.reach = Math.max(r.reach || 0, d + (satinW ? (fromW + 0.3 + pull) / 2 : 0) + 0.1);
+      linked = null; far = false;
     }
     return r;
   });
@@ -390,6 +406,9 @@ export function stitchLetters(parts, satinW, fab = "cotton", small = false, weig
       const zz2 = zigzag(mid, Math.max(satinW - 0.8, satinW * 0.5), 2.5);
       return [...(d0 > 0 ? run(slice(p, 0, d0), 1.2) : [p[0]]), ...zz2, ...(d1 < L ? run(slice(p, d1, L), 1.2) : [p[p.length - 1]])];
     }
+    // (a big script's column, as wide as the ink there: the zigzag follows it, 0.4 mm inside each edge, and is a
+    // centre line through its hairlines)
+    if (mode === "run" && satinW >= zz && wAt && ink) return [p[0], ...satin(p, satinW, 2.5, 0, false, false, (t) => Math.max(0.05, wAt(t) - 0.8)), p[p.length - 1]];
     if (mode === "run") return satinW >= zz && !wAt ? [p[0], ...zigzag(p, Math.max(satinW - 0.8, satinW * 0.5), 2.5), p[p.length - 1]] : satinW ? run(p, 1.2) : spaced(followRun(p, 1.6, 0.1, 0.8));
     // pull comp 0.15 mm a side; 0.05 on thin columns (more widens them enough to close small counters). It starts
     // from the centre: two satins back to back at a junction ended and began on opposite edges, a column's width

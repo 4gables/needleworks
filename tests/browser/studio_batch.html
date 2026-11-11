@@ -20,7 +20,7 @@ for (const f of [...FONTS, ...APPLIQUE_FONTS]) await document.fonts.load(`40px "
 const only = new URLSearchParams(location.search).get("only");   // (?only=regex: just those files, while working on one kind)
 async function save(name, pieces, hoopId = "5x7", expectTooBig = false, opts = {}) {
   if (only && !new RegExp(only).test(name)) return;
-  const hoop = getHoop("brother-pe900", hoopId);
+  const hoop = getHoop(opts.machine || "brother-pe900", hoopId);
   let pattern;
   // (a starter laid out with the hoop turned, the bookmark: in the sideways field, then turned into the machine's way)
   try { pattern = opts.turn ? turnForMachine(compose(pieces, { ...hoop, w: hoop.h, h: hoop.w }, opts).design.pattern()) : compose(pieces, hoop, opts).design.pattern(); }
@@ -114,12 +114,41 @@ log("layout: done");
 for (const shape of Object.keys(SHAPES)) for (const quilt of ["stipple", "echo"])
   await save(`st_quilt_${shape}_${quilt}`, [P({ kind: "frame", shape, border: shape === "heart" ? "applique" : "satin", w: 100, h: 84, quilt, color: "#ed171f" }),
     P({ kind: "text", text: "Rosie", font: FONTS[1].family, size: 16 })]);
+// straight-line quilting: under a border that covers the frame line (satin, appliqué, in the hoop) and inside one that doesn't
+for (const [shape, border, quilt, text] of [["square", "satin", "crosshatch", "Rosie"], ["circle", "satin", "stripes", "Rosie"], ["heart", "applique", "crosshatch", "Rosie"],
+  ["oval", "line", "crosshatch", "Rosie"], ["square", "bold", "stripes", "Rosie"], ["circle", "ith", "crosshatch", ""], ["scallop", "satin", "crosshatch", ""]])
+  await save(`st_quilt_${shape}_${quilt}_${border}`, [P({ kind: "frame", shape, border, w: 100, h: 84, quilt, color: "#ed171f", ...(border === "ith" ? { hang: false } : {}) }),
+    ...(text ? [P({ kind: "text", text, font: FONTS[1].family, size: 16 })] : [])]);
 log("quilting: done");
+// fills in rings, borders with a shape to them, a blanket-stitch appliqué edge
+for (const shape of ["circle", "heart", "scallop"]) await save(`st_rings_${shape}_patch`, [P({ kind: "frame", shape, border: "patch", w: 70, h: 64, fill: "#c70156", color: "#770176", pattern: "contour" }),
+  P({ kind: "text", text: "Rosie", font: FONTS[1].family, size: 12, color: "#ffffff" })], "5x7", false, shape === "scallop" ? { fabric: "knit" } : {});
+await save("st_rings_carved_patch", [P({ kind: "frame", shape: "circle", border: "patch", w: 80, h: 80, fill: "#0e1f7c", color: "#ed171f", pattern: "contour" }), P({ kind: "motif", motif: "star", size: 40, style: "fill", color: "#ffd900" })]);
+// (a ring fill carved round a monogram: its parts lie close together, and a hop of 5 mm or less is a loose thread)
+await save("st_rings_carved_mono", [P({ kind: "frame", shape: "circle", border: "patch", w: 76, h: 76, fill: "#0e1f7c", color: "#ed171f", pattern: "contour" }), P({ kind: "monogram", letters: "JD", font: FONTS.find((f) => f.print)?.family || FONTS[0].family, size: 34, color: "#ffffff" })]);
+for (const m of ["heart", "star", "butterfly", "leaf"]) await save(`st_rings_motif_${m}`, [P({ kind: "motif", motif: m, size: 44, style: "fill", pattern: "contour", color: "#ed171f" })]);
+await save("st_rings_motif_small", [P({ kind: "motif", motif: "heart", size: 14, style: "fill", pattern: "contour", color: "#ed171f" })]);
+for (const [shape, trim] of [["circle", "scallop"], ["heart", "diamond"], ["square", "blanket"], ["oval", "scallop"], ["bookmark", "diamond"]])
+  await save(`st_trim_${shape}_${trim}`, [P({ kind: "frame", shape, border: "fancy", trim, w: 90, h: 70, color: "#ed171f" }), P({ kind: "text", text: "Rosie", font: FONTS[1].family, size: 14 })]);
+await save("st_trim_square_scallop_quilted", [P({ kind: "frame", shape: "square", border: "fancy", trim: "scallop", w: 100, h: 84, quilt: "crosshatch", color: "#ed171f" }), P({ kind: "text", text: "Rosie", font: FONTS[1].family, size: 16 })]);
+for (const shape of ["heart", "circle", "square"]) await save(`st_blanket_${shape}_applique`, [P({ kind: "frame", shape, border: "applique", cover: "blanket", w: 84, h: 76, color: "#0e1f7c" }),
+  P({ kind: "text", text: "Ashley", font: FONTS[0].family, size: 16, color: "#ed171f" })]);
+log("rings and borders: done");
 // motifs in every style, sizes from small to large; lettering with motifs either side
 const { MOTIFS } = await import("../../js/studio/motifs.js");
 for (const [k, i] of Object.keys(MOTIFS).map((k, i) => [k, i]))
   await save(`st_motif_${k}`, [P({ kind: "motif", motif: k, size: [20, 45, 80][i % 3], style: ["fill", "outline", "applique"][i % 3], color: "#ed171f" })]);
 await save("st_motif_small_fill", [P({ kind: "motif", motif: "cat", size: 12, style: "fill" }), P({ kind: "motif", motif: "paw", size: 10, style: "fill", x: 20 })]);
+// marks above the letters, in every script font (the ë of "Zoë" read as an ē in v27: its two dots, under 2 mm apart,
+// were stitched across), and a T whose bar and stem the font leaves a hair apart (Allura, on an arc: trimmed apart)
+for (const f of FONTS.filter((x) => !x.print)) {
+  const tag = f.family.slice(3).replace(/ /g, "");
+  await save(`st_marks_${tag}`, [P({ kind: "text", text: "Zoë Anaïs\nJürgen ijá", font: f.family, size: 19 })]);
+}
+await save("st_marks_small", [P({ kind: "frame", shape: "oval", border: "satin", w: 110, h: 70 }), P({ kind: "text", text: "Zoë", font: FONTS[0].family, size: 12 })]);
+await save("st_arc_Tabitha", [P({ kind: "frame", shape: "circle", border: "line", w: 90, h: 90 }), P({ kind: "text", text: "Tabitha", font: FONTS.find((x) => /Allura/.test(x.family)).family, size: 20, shape: "up", radius: 34 })]);
+await save("st_arc_Tabitha_wide", [P({ kind: "text", text: "Tabitha", font: FONTS.find((x) => /Allura/.test(x.family)).family, size: 20, shape: "up", radius: 70 })]);
+await save("st_lines_Tabitha", [P({ kind: "text", text: "Tabitha", font: FONTS.find((x) => /Allura/.test(x.family)).family, size: 20 })]);
 for (const f of [FONTS[0], FONTS.find((x) => x.print)]) await save(`st_deco_${f.family.slice(3).replace(/ /g, "")}`, [P({ kind: "text", text: "Emma", font: f.family, size: 14, deco: "heart" })]);
 log("motifs: done");
 // bigger than the hoop: two hoopings, each with the alignment crosses
@@ -159,6 +188,46 @@ try {
     P({ kind: "file", name: "ursula", blocks: fileBlocks(d), x: 0, y: -5, rot: 10 }),
     P({ kind: "text", text: "Ursula", font: FONTS[1].family, size: 12, y: 40, color: "#ed171f" })]);
 } catch (e) { log(`skip file combo: ${e.message}`); }
+// a maker's own font file (studio/ownfont.js), when the untracked sample fonts are there: read, drawn by the browser
+// and sewn like a bundled font, script and print
+try {
+  const { addOwnFont } = await import("../../js/studio/ownfont.js");
+  for (const [file, tag] of [["Pacifico-Regular.ttf", "Pacifico"], ["SourceSans3-Regular.otf", "SourceSans"]]) {
+    const r = await fetch(`../external/fonts/${file}`); if (!r.ok) throw new Error("no sample fonts");
+    const got = await addOwnFont(new File([await r.arrayBuffer()], file));
+    await save(`st_ownfont_${tag}`, [P({ kind: "text", text: "Ashley Rose", font: got.family, size: 12 })]);
+  }
+} catch (e) { log(`skip own fonts: ${e.message}`); }
+// the 6" x 10" field (Brother NQ1700E): designs no 5x7 holds, written with the 160 x 260 page (pe900_check judges
+// files named *6x10* on that field)
+{
+  const big = { machine: "brother-nq1700e" };
+  await save("st_6x10_frame_name", [P({ kind: "frame", shape: "oval", border: "satin", w: 150, h: 240, color: "#ed171f" }),
+    P({ kind: "text", text: "Welcome\nHome", font: FONTS[0].family, size: 34 })], "6x10", false, big);
+  await save("st_6x10_patch", [P({ kind: "frame", shape: "circle", border: "patch", w: 150, h: 150, fill: "#0e1f7c", color: "#e8a900" }),
+    P({ kind: "monogram", letters: "JD", font: FONTS.find((x) => x.print).family, size: 70, color: "#f0f0f0" })], "6x10", false, big);
+  await save("st_6x10_banner_turned", [P({ kind: "text", text: "Happy Birthday", font: FONTS[1].family, size: 30 }),
+    P({ kind: "text", text: "Grandma Rose", font: FONTS.find((x) => x.print).family, size: 16, y: 34, color: "#ed171f" })], "6x10", false, { ...big, turn: true });
+}
+// Arrange (js/studio/layout.js): a wreath round a name, words round a circle, a corner set (mirrored, and with the
+// bottom two upright), a piece flipped top to bottom, a monogram in the usual order. The copies follow the piece in
+// the list, so each set sews in one thread.
+{
+  const L = await import("../../js/studio/layout.js"), { sewnBox } = await import("../../js/studio/pieces.js");
+  const field = [126, 176], next = () => id++, size = (p) => { const b = sewnBox(p, [p]); return [b[2] - b[0], b[3] - b[1]]; };
+  const leaf = P({ kind: "motif", motif: "leaf", size: 24, style: "fill", color: "#00673e" });
+  await save("st_lay_wreath_8", [...L.ring(leaf, 8, size(leaf), field, next), P({ kind: "text", text: "Noel", font: FONTS[0].family, size: 18, color: "#ed171f" })]);
+  const love = P({ kind: "text", text: "love", font: FONTS[0].family, size: 12, y: -34, color: "#ed171f" });
+  await save("st_lay_ring_words_5", L.ring(love, 5, size(love), field, next));
+  const bird = P({ kind: "motif", motif: "bird", size: 26, style: "fill", x: -42, y: -66, color: "#0e1f7c" });
+  await save("st_lay_corners", [P({ kind: "text", text: "Emma", font: FONTS[0].family, size: 22, color: "#ed171f" }), ...L.corners(bird, size(bird), field, next)]);
+  await save("st_lay_corners_upright", [P({ kind: "text", text: "Emma", font: FONTS[0].family, size: 22, color: "#ed171f" }), ...L.corners(bird, size(bird), field, next, true)]);
+  const star = P({ kind: "motif", motif: "star", size: 20, style: "fill", color: "#e8a900" });
+  await save("st_lay_corners_4x4", L.corners(star, size(star), [96, 96], next), "4x4");
+  await save("st_lay_flip_down", [L.flipDown(P({ kind: "motif", motif: "tulip", size: 60, style: "fill", rot: 20, color: "#ed171f" }))]);
+  await save("st_lay_mono_surname", [P({ kind: "monogram", letters: L.monogramOf("surname", { first: "Jane", middle: "Ann", last: "Smith" }).letters, font: FONTS[0].family, size: 30 })]);
+  log("arrange: done");
+}
 log(`DONE ${n} files, ${bad} problems`);
 document.title = `DONE ${n} ${bad}`;
 </script>

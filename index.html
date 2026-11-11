@@ -32,13 +32,14 @@
 <link rel="modulepreload" href="js/core/machines.js" fetchpriority="low"><link rel="modulepreload" href="js/core/raster.js" fetchpriority="low"><link rel="modulepreload" href="js/core/recipes.js" fetchpriority="low"><link rel="modulepreload" href="js/core/text.js" fetchpriority="low">
 <link rel="modulepreload" href="js/core/threads.js" fetchpriority="low"><link rel="modulepreload" href="js/core/typed.js" fetchpriority="low"><link rel="modulepreload" href="js/doctor.js" fetchpriority="low"><link rel="modulepreload" href="js/focus.js" fetchpriority="low">
 <link rel="modulepreload" href="js/gate.js" fetchpriority="low"><link rel="modulepreload" href="js/jobs.js" fetchpriority="low"><link rel="modulepreload" href="js/onitem.js" fetchpriority="low"><link rel="modulepreload" href="js/quality.js" fetchpriority="low">
-<link rel="modulepreload" href="js/render.js" fetchpriority="low"><link rel="modulepreload" href="js/sheet.js" fetchpriority="low"><link rel="modulepreload" href="js/state.js" fetchpriority="low"><link rel="modulepreload" href="js/studio/compose.js" fetchpriority="low">
-<link rel="modulepreload" href="js/studio/editor.js" fetchpriority="low"><link rel="modulepreload" href="js/studio/fabrics.js" fetchpriority="low"><link rel="modulepreload" href="js/studio/files.js" fetchpriority="low"><link rel="modulepreload" href="js/studio/fixes.js" fetchpriority="low">
-<link rel="modulepreload" href="js/studio/lettering.js" fetchpriority="low"><link rel="modulepreload" href="js/studio/motifs.js" fetchpriority="low"><link rel="modulepreload" href="js/studio/names.js" fetchpriority="low"><link rel="modulepreload" href="js/studio/offpage.js" fetchpriority="low">
-<link rel="modulepreload" href="js/studio/outline.js" fetchpriority="low"><link rel="modulepreload" href="js/studio/pieces.js" fetchpriority="low"><link rel="modulepreload" href="js/studio/placing.js" fetchpriority="low"><link rel="modulepreload" href="js/studio/problems.js" fetchpriority="low">
-<link rel="modulepreload" href="js/studio/quilt.js" fetchpriority="low"><link rel="modulepreload" href="js/studio/recent.js" fetchpriority="low"><link rel="modulepreload" href="js/studio/shapes.js" fetchpriority="low"><link rel="modulepreload" href="js/studio/starters.js" fetchpriority="low">
-<link rel="modulepreload" href="js/studio/stepsui.js" fetchpriority="low"><link rel="modulepreload" href="js/studio/threadsaid.js" fetchpriority="low"><link rel="modulepreload" href="js/studio/toobig.js" fetchpriority="low"><link rel="modulepreload" href="js/studio/ui.js" fetchpriority="low">
-<link rel="modulepreload" href="js/threadui.js" fetchpriority="low"><link rel="modulepreload" href="js/words.js" fetchpriority="low"><link rel="modulepreload" href="js/zip.js" fetchpriority="low">
+<link rel="modulepreload" href="js/render.js" fetchpriority="low"><link rel="modulepreload" href="js/sheet.js" fetchpriority="low"><link rel="modulepreload" href="js/state.js" fetchpriority="low"><link rel="modulepreload" href="js/studio/borders.js" fetchpriority="low">
+<link rel="modulepreload" href="js/studio/compose.js" fetchpriority="low"><link rel="modulepreload" href="js/studio/editor.js" fetchpriority="low"><link rel="modulepreload" href="js/studio/fabrics.js" fetchpriority="low"><link rel="modulepreload" href="js/studio/files.js" fetchpriority="low">
+<link rel="modulepreload" href="js/studio/fixes.js" fetchpriority="low"><link rel="modulepreload" href="js/studio/layout.js" fetchpriority="low"><link rel="modulepreload" href="js/studio/lettering.js" fetchpriority="low"><link rel="modulepreload" href="js/studio/motifs.js" fetchpriority="low">
+<link rel="modulepreload" href="js/studio/names.js" fetchpriority="low"><link rel="modulepreload" href="js/studio/offpage.js" fetchpriority="low"><link rel="modulepreload" href="js/studio/outline.js" fetchpriority="low"><link rel="modulepreload" href="js/studio/ownfont.js" fetchpriority="low">
+<link rel="modulepreload" href="js/studio/pieces.js" fetchpriority="low"><link rel="modulepreload" href="js/studio/placing.js" fetchpriority="low"><link rel="modulepreload" href="js/studio/problems.js" fetchpriority="low"><link rel="modulepreload" href="js/studio/quilt.js" fetchpriority="low">
+<link rel="modulepreload" href="js/studio/recent.js" fetchpriority="low"><link rel="modulepreload" href="js/studio/shapes.js" fetchpriority="low"><link rel="modulepreload" href="js/studio/starters.js" fetchpriority="low"><link rel="modulepreload" href="js/studio/stepsui.js" fetchpriority="low">
+<link rel="modulepreload" href="js/studio/threadsaid.js" fetchpriority="low"><link rel="modulepreload" href="js/studio/toobig.js" fetchpriority="low"><link rel="modulepreload" href="js/studio/ui.js" fetchpriority="low"><link rel="modulepreload" href="js/threadui.js" fetchpriority="low">
+<link rel="modulepreload" href="js/words.js" fetchpriority="low"><link rel="modulepreload" href="js/zip.js" fetchpriority="low">
 <!-- first screen: end -->
 <link rel="manifest" href="manifest.webmanifest">
 <meta name="copyright" content="(c) 2026 4Gables. All rights reserved.">
@@ -153,8 +154,9 @@
           <legend>Small details</legend>
           <div id="pic-details" class="chips plain">
             <button type="button" data-v="most" aria-pressed="true">Leave out specks</button>
-            <button type="button" data-v="all" aria-pressed="false">Keep all</button>
+            <button type="button" data-v="all" aria-pressed="false">Keep specks</button>
           </div>
+          <p class="hint" id="pic-details-note" role="status" hidden></p>
         </fieldset>
         <label class="check"><input id="pic-bg" autocomplete="off" type="checkbox" checked> Leave the background unstitched</label>
         <details class="more" id="pic-more">
@@ -246,6 +248,26 @@
           <label class="ghost st-load" for="st-load" title="Open a design saved from here">Open saved</label>
           <input type="file" id="st-load" accept=".json,application/json" class="sr-file">
         </div>
+        <details class="recent arrange" id="st-arrange">
+          <summary>Arrange</summary>
+          <p class="hint" id="st-arrange-for"></p>
+          <div class="add" id="st-arrange-tools">
+            <button type="button" class="ghost" data-lay="ring" title="Copies of the selected piece round the middle of the hoop, each turned to face out">Repeat in a circle</button>
+            <label class="sr" for="st-ring-n">How many round the circle</label>
+            <select id="st-ring-n" title="How many round the circle"><option>4</option><option>5</option><option selected>6</option><option>8</option><option>10</option><option>12</option></select>
+            <button type="button" class="ghost" data-lay="corners" title="The selected piece and three mirrored copies, one in each corner">One in each corner</button>
+            <button type="button" class="ghost" data-lay="down" title="Flip the selected piece top to bottom (Mirror, in the list, flips it left to right)">Flip top to bottom</button>
+          </div>
+          <div id="st-mono" hidden>
+            <p class="hint">Which initial goes where: type the names and pick an order.</p>
+            <div class="mono-names">
+              <label>First name <input type="text" id="st-mono-first" autocomplete="off" maxlength="30"></label>
+              <label>Middle name, or a partner’s first <input type="text" id="st-mono-middle" autocomplete="off" maxlength="30"></label>
+              <label>Last name <input type="text" id="st-mono-last" autocomplete="off" maxlength="30"></label>
+            </div>
+            <div id="st-mono-orders" class="mono-orders"></div>
+          </div>
+        </details>
         <details class="recent" id="st-recent-box" hidden>
           <summary>Recent designs <span class="hint inline" id="st-recent-count"></span></summary>
           <p class="hint">Designs you had here before, kept in this browser. Tap one to open it again.</p>
@@ -260,7 +282,7 @@
       </fieldset>
       <details class="steps">
         <summary>How to stitch it <span class="hint inline" id="st-steps-count"></span></summary>
-        <p class="hint">Tap a step to see the design as it is after it. <button type="button" id="st-steps-all" class="link" hidden>Show it all</button>
+        <p class="hint">Tap a step to see the design as it is after it. Sew along, under Download, shows how to hoop and which needle. <button type="button" id="st-steps-all" class="link" hidden>Show it all</button>
           <button type="button" id="st-appl-open" class="link" hidden>Appliqué tips</button></p>
         <ol id="st-steps" class="st-steps"></ol>
       </details>

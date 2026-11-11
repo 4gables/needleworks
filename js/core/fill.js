@@ -4,7 +4,7 @@
 // Open tab's re-stitching (doctor.js) all fill through here. (Part of digitize.js until 2026-11.)
 import { distanceTransform, label } from "./raster.js";
 import { resample } from "./geom.js";
-import { FILLS, ROWS } from "./recipes.js";
+import { CONTOUR, FILLS, ROWS } from "./recipes.js";
 
 // the fill angle (degrees) and working pixels per mm when nothing else is asked (8: 5 lost the narrow notches of
 // small lettering, e.g. an M)
@@ -23,6 +23,8 @@ export const FILL_PATTERNS = {
   brick: { name: "Brick", off: (r) => (r % 2) / 2 },
   chevron: { name: "Chevron", off: (r) => Math.abs((r % 12) - 6) / 12 },
   wave: { name: "Wave", off: (r) => 0.5 + 0.25 * Math.sin((r * Math.PI) / 8) },
+  // (not rows at all: rings that follow the shape's outline inward, `ringFill`. Rows read off a drawing sew it plain.)
+  contour: { name: "Rings", off: (r) => (r % 4) / 4, rings: true },
 };
 // share(f): this layer's part of the full density at f, how far across the shape (0-1) the row lies: rows are
 // spaced spacing / share, none where the share is under 0.15 (a colour blend: two layers whose spacings change
@@ -471,10 +473,159 @@ function edgeRuns(loops, comp, mask, res, d, stitch) {
   }
   return out;
 }
+// The levels of a shape's distance from its edge, as closed lines: `first` px in from the edge, then every `step` px.
+// One pass over the drawing's squares of four pixel centres (marching squares): a square whose corners lie either
+// side of a level holds a piece of that level's line, its ends where the distance (taken as even along a side) passes
+// the level; the pieces are joined end to end into rings. Returns rings[level] = [closed line (px), ...].
+function levelRings(dt, w, h, first, step) {
+  const segs = [];   // per level, six numbers a piece: edge id, x, y of one end, then of the other
+  for (let y = 0; y < h - 1; y++) for (let x = 0; x < w - 1; x++) {
+    const i = y * w + x, a = dt[i], b = dt[i + 1], c = dt[i + w + 1], d = dt[i + w];
+    const hi = a > b ? (a > c ? (a > d ? a : d) : c > d ? c : d) : b > c ? (b > d ? b : d) : c > d ? c : d; if (hi < first) continue;
+    const lo = a < b ? (a < c ? (a < d ? a : d) : c < d ? c : d) : b < c ? (b < d ? b : d) : c < d ? c : d;
+    for (let k = Math.max(0, Math.ceil((lo - first) / step + 1e-9)); first + k * step <= hi; k++) {
+      const L = first + k * step, bits = (a >= L ? 8 : 0) | (b >= L ? 4 : 0) | (c >= L ? 2 : 0) | (d >= L ? 1 : 0);
+      if (!bits || bits === 15) continue;
+      const g = (segs[k] ||= []);
+      // the four sides' crossings: top, bottom, left, right (worked out only where a piece uses them)
+      const T = () => g.push(2 * i, x + (L - a) / (b - a), y), B = () => g.push(2 * (i + w), x + (L - d) / (c - d), y + 1);
+      const Lf = () => g.push(2 * i + 1, x, y + (L - a) / (d - a)), R = () => g.push(2 * (i + 1) + 1, x + 1, y + (L - b) / (c - b));
+      const mid = (a + b + c + d) / 4 >= L;
+      switch (bits) {
+        case 1: case 14: Lf(); B(); break; case 2: case 13: B(); R(); break; case 3: case 12: Lf(); R(); break;
+        case 4: case 11: T(); R(); break; case 6: case 9: T(); B(); break; case 7: case 8: T(); Lf(); break;
+        case 5: if (mid) { T(); Lf(); B(); R(); } else { T(); R(); Lf(); B(); } break;
+        case 10: if (mid) { T(); R(); Lf(); B(); } else { T(); Lf(); B(); R(); } break;
+      }
+    }
+  }
+  return segs.map((g) => {
+    const n = g.length / 6, at = new Map();   // edge id -> the pieces that end on it (one, or one + n * the other)
+    for (let m = 0; m < n; m++) for (const e of [g[6 * m], g[6 * m + 3]]) at.set(e, at.has(e) ? at.get(e) + (m + 1) * (n + 1) : m + 1);
+    const used = new Uint8Array(n), rings = [];
+    for (let m0 = 0; m0 < n; m0++) {
+      if (used[m0]) continue;
+      const ring = [[g[6 * m0 + 1], g[6 * m0 + 2]], [g[6 * m0 + 4], g[6 * m0 + 5]]]; let e = g[6 * m0 + 3], closed = false;
+      used[m0] = 1;
+      for (;;) {
+        const v = at.get(e), m1 = (v % (n + 1)) - 1, m2 = Math.floor(v / (n + 1)) - 1, nx = m1 >= 0 && !used[m1] ? m1 : m2 >= 0 && !used[m2] ? m2 : -1;
+        if (nx < 0) { closed = e === g[6 * m0]; break; }
+        used[nx] = 1;
+        const fw = g[6 * nx] === e; ring.push(fw ? [g[6 * nx + 4], g[6 * nx + 5]] : [g[6 * nx + 1], g[6 * nx + 2]]); e = fw ? g[6 * nx + 3] : g[6 * nx];
+      }
+      if (closed && ring.length > 8) { ring.pop(); rings.push(ring); }
+    }
+    return rings;
+  });
+}
+// A shape filled with rings that follow its outline inward (a contour fill: the stitches lie along the shape, so it
+// catches the light as a shell or a tree's rings do, where rows lie one way across everything). recipes.js CONTOUR.
+// The rings are the levels of the distance from the edge. They are sewn from the outside in, each started where the
+// last one stopped; where the shape pinches into separate middles, all but one middle is sewn from its centre out
+// (reached through cloth its own rings then cover), so the needle is back at the pinch for the next. A way that
+// would lie on finished rings for more than SEWN mm is a trim. Under them: the edge run and the lattice of a plain fill.
+function ringFill(px, shape, comp, res, { spacing, edge, across, cell }) {
+  const { mask, labels } = shape, w = mask.w, step = spacing * res, sp = CONTOUR.stitch * res;
+  // (this part's own distances: 0 outside it)
+  const dt = shape.dt, mine = new Float32Array(dt.length);
+  for (const i of comp.pixels) mine[i] = dt[i];
+  const len = (l) => { let t = 0; for (let i = 0; i < l.length; i++) { const q = l[(i + 1) % l.length]; t += Math.hypot(q[0] - l[i][0], q[1] - l[i][1]); } return t; };
+  // (a ring's points lie a pixel apart, stepped as the drawing is: evened out over 0.6 mm, then one point per 0.25 mm)
+  const tidy = (l) => { const r = resample(l, 0.25 * res, true), n = r.length, k = 2; return r.map((_, i) => { let x = 0, y = 0; for (let j = -k; j <= k; j++) { const q = r[(i + j + n) % n]; x += q[0]; y += q[1]; } return [x / (2 * k + 1), y / (2 * k + 1)]; }); };
+  // (levels half a row apart: every second one is a ring; the ones between are kept only where no ring lies inside
+  // them, round a crest where the rings from two sides meet up to two rows apart: bare cloth along a heart's cleft
+  // and round a hole, a row wide)
+  const halves = levelRings(mine, w, mask.h, CONTOUR.first * res + 0.5, step / 2).map((rs) => rs.map(tidy).filter((l) => l.length > 4 && len(l) >= CONTOUR.least * res));
+  const levels = halves.filter((_, k) => k % 2 === 0).map((rs, k) => rs.map((p) => ({ p, k, kids: [] })));
+  const all = levels.flat();
+  if (!all.length) return routeFill([edge, across], comp, mask, res, undefined, undefined, true, 2, cell);
+  // each ring's parent: the ring one level out that passes nearest its first point
+  const near = (l, q) => { let bd = Infinity, bi = 0; for (let i = 0; i < l.length; i++) { const d = (l[i][0] - q[0]) ** 2 + (l[i][1] - q[1]) ** 2; if (d < bd) { bd = d; bi = i; } } return [Math.sqrt(bd), bi]; };
+  const roots = [];
+  levels.forEach((rs, k) => { for (const r of rs) {
+    let best = null, bd = 2.5 * step;
+    if (k) for (const o of levels[k - 1]) { const [d] = near(o.p, r.p[0]); if (d < bd) { bd = d; best = o; } }
+    if (best) best.kids.push(r); else roots.push(r);
+  } });
+  // the stretches of a between-level that have no ring of the next level within 0.8 of a row: sewn as open lines
+  const seen = new Int16Array(mask.w * mask.h), R2 = Math.ceil(0.8 * step);
+  halves.forEach((rs, k2) => { if (k2 % 2) {
+    const k = (k2 - 1) / 2;
+    for (const c of levels[k + 1] || []) for (const [x, y] of c.p) {
+      const X0 = Math.round(x), Y0 = Math.round(y);
+      for (let dy = -R2; dy <= R2; dy++) for (let dx = -R2; dx <= R2; dx++) if (dx * dx + dy * dy <= 0.64 * step * step) { const X = X0 + dx, Y = Y0 + dy; if (X >= 0 && Y >= 0 && X < mask.w && Y < mask.h) seen[Y * mask.w + X] = k + 1; }
+    }
+    for (const p of rs) {
+      const bare = p.map(([x, y]) => seen[Math.round(y) * mask.w + Math.round(x)] !== k + 1), n = p.length, from = bare.indexOf(false);
+      const arcs = from < 0 ? [p] : [];
+      if (from >= 0) for (let i = 0, arc = []; i <= n; i++) { const q = (from + i) % n; if (i < n && bare[q]) arc.push(p[q]); else { if (arc.length) arcs.push(arc); arc = []; } }
+      for (const a of arcs) {
+        if (a.length * 0.25 < CONTOUR.least / 2) continue;
+        let best = null, bd = 1.5 * step;
+        for (const o of levels[k]) { const [d] = near(o.p, a[a.length >> 1]); if (d < bd) { bd = d; best = o; } }
+        if (best) best.kids.push({ p: a, k, kids: [], open: true });
+      }
+    }
+  } });
+  // the order: a ring, then its middles; every middle but the last from its centre out
+  const size = (r) => (r.n ??= 1 + r.kids.reduce((t, c) => t + size(c), 0));
+  // (the open stretches after the middles sewn outward, before the one sewn inward: beside the pinch, where both end)
+  const inward = (r) => { const ks = r.kids.filter((c) => !c.open).sort((a, b) => size(a) - size(b)), last = ks.pop(); return [r, ...ks.flatMap((c) => inward(c).reverse()), ...r.kids.filter((c) => c.open), ...(last ? inward(last) : [])]; };
+  // (a hole's own rings grow outward from it and meet the outline's at their last: sewn from there back to the hole)
+  const order = roots.sort((a, b) => a.k - b.k || len(b.p) - len(a.p)).flatMap((r, i) => (i ? inward(r).reverse() : inward(r)));
+  const R = makeRouter(mask, res, cell || ((x, y) => (labels[y * w + x] === comp.id ? 1 : 0)));
+  const out = routeFill([edge, across], comp, mask, res, undefined, undefined, true, 2, cell);
+  let cur = out.length ? out[out.length - 1].at(-1) : null, path = out.length ? out[out.length - 1] : null;
+  for (const r of order) {
+    // (an open stretch: from whichever end is nearer)
+    const p = r.open && cur && Math.hypot(r.p.at(-1)[0] - cur[0], r.p.at(-1)[1] - cur[1]) < Math.hypot(r.p[0][0] - cur[0], r.p[0][1] - cur[1]) ? r.p.slice().reverse() : r.p;
+    const n = p.length;
+    let [d, i0] = r.open ? [cur ? Math.hypot(p[0][0] - cur[0], p[0][1] - cur[1]) : Infinity, 0] : cur ? near(p, cur) : [Infinity, 0];
+    // how the needle gets there: straight on (the ring next door), by a hidden way, or not at all (a trim)
+    let how = cur && d <= 2 * step + 0.2 * res ? "on" : "", way = null;
+    if (!how && cur) { way = R.route(cur, p[i0], SEWN); if (way && way.sewnMm <= SEWN) how = "way"; }
+    if (!how && r.open && cur) continue;   // (a stretch along a crest that only a jump reaches isn't worth a trim)
+    // (a jump of 5 mm or less is never cut, a loose thread to snip: the ring starts further round instead, or, too
+    // small for that, the needle sews straight across)
+    if (!how && cur && d <= 5.6 * res) {
+      let bj = -1, bd = Infinity;
+      for (let j = 0; j < n; j++) { const dd = Math.hypot(p[j][0] - cur[0], p[j][1] - cur[1]); if (dd > 5.6 * res && dd < bd) { bd = dd; bj = j; } }
+      if (bj >= 0) i0 = bj; else how = "across";
+    }
+    // round the ring from the point nearest the needle, in whole stitches, home, and `lap` further (so the rings'
+    // starts don't line up into a seam)
+    // (stitches up to CONTOUR.stitch long, shorter where a longer one would leave the ring's line by `off` mm: a
+    // corner gets a needle point; even 3 mm stitches cut every corner, a bare line along a square's diagonals)
+    const end = r.open ? n - 1 : n + Math.round((CONTOUR.lap * res * n) / len(p)), at = (j) => p[(i0 + j) % n], ring = [];
+    for (let a = 0; a < end;) {
+      let j = Math.min(end, a + 3);
+      while (j < end && Math.hypot(at(j)[0] - at(a)[0], at(j)[1] - at(a)[1]) < 0.6 * res) j++;   // (round a hairpin the line doubles back)
+      grow: for (let L = Math.hypot(at(j)[0] - at(a)[0], at(j)[1] - at(a)[1]); j < end; j++) {
+        const q = at(j + 1), A = at(a), dx = q[0] - A[0], dy = q[1] - A[1], D = Math.hypot(dx, dy);
+        if (D > sp) break;
+        for (let i = a + 1; i <= j; i++) if (Math.abs((at(i)[0] - A[0]) * dy - (at(i)[1] - A[1]) * dx) / (D || 1) > CONTOUR.off * res) break grow;
+        L = D;
+      }
+      // (never a last stitch under 0.6 mm: it stops at the one before)
+      if (j >= end && ring.length && Math.hypot(at(end)[0] - at(a)[0], at(end)[1] - at(a)[1]) < 0.6 * res) break;
+      ring.push(at(j)); a = j;
+    }
+    if (how === "on") path.push(...ring);   // (the first stitch slants across to it)
+    else if (how === "way") path.push(...R.stitches(way), p[i0], ...ring);
+    else if (how === "across") path.push(p[i0], ...ring);
+    else out.push((path = [p[i0], ...ring]));
+    R.markSewn([p[i0], ...ring]);
+    cur = path[path.length - 1];
+  }
+  return out;
+}
 // opts.pull: how far each row runs past the outline at both ends (mm; the fabric's, core/recipes.js FILLS)
+// opts.cover: mm inside the first outline that a border sewn later covers (a patch's satin edge reaches 1.2 mm over
+// its fill): travel there is hidden whatever is sewn already, so a section stranded behind finished rows is reached
+// round the edge and not by a trim (a carved heart patch: a 27 mm trim between two parts of one region)
 // opts.raster: rows read off the 8 px/mm drawing, as every fill was until 2026-11 (the Open tab's re-stitching: its
 // outlines are traced from a drawing of the file's stitches already, stair-stepped)
-export function fillPolygon(poly, { angle = FILL.angle, density = ROWS.solid, res = FILL.res, inset = 0, pattern = "tatami", share = null, underlay = true, pull = FILLS.cotton.pull, raster = false } = {}) {
+export function fillPolygon(poly, { angle = FILL.angle, density = ROWS.solid, res = FILL.res, inset = 0, pattern = "tatami", share = null, underlay = true, pull = FILLS.cotton.pull, raster = false, cover = 0 } = {}) {
   const loops = Array.isArray(poly[0][0]) ? poly : [poly];
   const shape = shaped(loops, inset, res), { x0, y0, mask, labels, count, parts } = shape, paths = [];
   const toMm = (p) => p.map(([x, y]) => [x0 + (x + 0.5) / res, y0 + (y + 0.5) / res]);
@@ -502,8 +653,26 @@ export function fillPolygon(poly, { angle = FILL.angle, density = ROWS.solid, re
     return false;
   };
   const across = underlay ? exactRows(px, shape, res, { angle: angle + 90, spacing: UNDER.rows, inset: inset + UNDER.inset, pull: 0 }) : null;
-  const along = exactRows(px, shape, res, { angle, spacing: density, inset, pull, share });
+  // (rings: not a blend's layers, which thin out across the shape as only rows can)
+  const rings = !!FILL_PATTERNS[pattern]?.rings && !share;
+  const along = rings ? null : exactRows(px, shape, res, { angle, spacing: density, inset, pull, share });
   const of = (R, id, stitch, pat) => sewRows(R.rows.map((row) => ({ ...row, ivs: row.ivs.filter((iv) => iv.part === id) })), R.U, R.V, res, stitch * res, pat, leaves);
+  // the covered band: every pixel within `cover` of the first outline
+  let band = null;
+  if (cover > 0) {
+    band = new Uint8Array(mask.w * mask.h);
+    const r = Math.ceil(cover * res), r2 = (cover * res) ** 2, l = px[0];
+    for (let i = 0; i < l.length; i++) {
+      const [ax, ay] = l[i], [bx, by] = l[(i + 1) % l.length], n = Math.max(1, Math.ceil(Math.hypot(bx - ax, by - ay) / (0.5 * r)));
+      for (let k = 0; k < n; k++) {
+        const cx = ax + ((bx - ax) * k) / n, cy = ay + ((by - ay) * k) / n, X0 = Math.round(cx), Y0 = Math.round(cy);
+        for (let dy = -r; dy <= r; dy++) for (let dx = -r; dx <= r; dx++) {
+          const X = X0 + dx, Y = Y0 + dy;
+          if (X >= 0 && Y >= 0 && X < mask.w && Y < mask.h && (X - cx) ** 2 + (Y - cy) ** 2 <= r2) band[Y * mask.w + X] = 1;
+        }
+      }
+    }
+  }
   for (let id = 1; id <= count; id++) {
     const comp = { id, labels, pixels: parts[id] };
     if (comp.pixels.length < 1.5 * res * res) continue;
@@ -514,7 +683,9 @@ export function fillPolygon(poly, { angle = FILL.angle, density = ROWS.solid, re
     // 20 mm, 56 parts -> 49)
     // (travel may use the inset band too: the satin the inset is there for covers it. A 20 mm snowflake's arms are
     // 1 mm wide once inset, too thin for the router's 0.5 mm cells to join up)
-    const cell = inset ? (x, y) => (labels[y * mask.w + x] === id ? 1 : shape.whole[y * mask.w + x] ? 2 : 0) : null;
+    const cell = inset ? (x, y) => (labels[y * mask.w + x] === id ? (band && band[y * mask.w + x] ? 2 : 1) : shape.whole[y * mask.w + x] ? 2 : 0)
+      : band ? (x, y) => (labels[y * mask.w + x] === id ? (band[y * mask.w + x] ? 2 : 1) : 0) : null;
+    if (rings) { paths.push(...ringFill(px, shape, comp, res, { spacing: density, edge, across: across ? of(across, id, UNDER.stitch, "tatami") : [], cell }).map(toMm)); continue; }
     const groups = [edge, across ? of(across, id, UNDER.stitch, "tatami") : [], of(along, id, 3.5, pattern)];
     let best = routeFill(groups, comp, mask, res, undefined, undefined, true, 1, cell);
     if (best.length > 1) {

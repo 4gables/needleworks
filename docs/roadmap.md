@@ -119,21 +119,23 @@ Phase 2, stitch quality (measured against the scoreboard, VM-checked):
     every second or third letter is sewn first (small print loose 27 -> 0, wasted 33 -> 5; caption starters
     12 -> 2 and 13 -> 3; travel about doubles); tie-ins 0.7 mm, or 0.5 where the next point is 0.7 on (zero ties
     73 -> 0 in every group); appliqués in one thread sewn stage by stage together (two take 3 stops, not 6)
-  - [ ] the planner itself (entries chosen from sewn geometry with look-ahead in `compose`); frames, appliqué
-    routes, quilting; `st_lines_JosefinSans` (wasted 1 -> 2 in v27, not traced); Zoë's ë dots (a 2.7 mm loose
+  - [x] v28: the planner for frames, appliqué and quilting was measured and not built (9 avoidable moves in 167
+    files, 6 of them lettering on frames); Zoë's dots, the T of "Tabitha" sewn through
+  - [ ] left: `st_lines_JosefinSans` (wasted 1 -> 2 in v27, not traced); Zoë's ë dots (a 2.7 mm loose
     thread). flow_lint's "loop" on print letters sewn as read is the cost of the no-connector rule
-- [ ] **S2 Density at the source** (crossings, towel lattice)
-  - [ ] in progress on branch `s2-density` (not for release: no full batch, no sheets, no timings). Measured on
-    v27: `relieve` removes about 1,640 points across the batch (towel 790 in 15 of 19 files, arcs and ovals 323,
-    caption starters 256, frames and fills 206, pictures 38), nearly all at script junctions and the inside of
-    tight wide-column turns. Built so far: paths ease as they enter `Design.path` (eight sample files: towel
-    Great Vibes 165 -> 15, kitchen 111 -> 2, oval Allura 67 -> 9; script files still peak at 24). Next: the
-    shared junction node (`docs/stitch-model.md` on that branch); writer change W2 is on branch `w1-page`'s list
+- [x] **S2 Density at the source** (v28): runs give way as they are built (`recipes.js` `EASE`), fans settled
+  before sewing. Files at the 24 limit: frames and fills 61 -> 0, arcs and ovals 23 -> 0, bookmarks 19 -> 4,
+  towel 16 -> 6, starters 9 -> 0; `relieve` removed about 1,640 points on v27, now 9 outside pictures.
+  - [ ] towel names still reach 24 in 6 files; pictures are built without easing (8 of 28 at 24); the doctor's
+    `crowd` counter not on `density.js`; a line of digits only is sized a third smaller ("2026")
 - [ ] **S3 Vector fills** (exact edges, edge-run underlay, pull and density by fabric, contour fill)
   - [x] v26: rows worked out from the outline (row-end error 0.06 mean / 0.19 worst -> 0), edge-run underlay,
     pull by fabric (`recipes.js` `FILLS`), sections sewn in row order. 41 files: trims 182 -> 140, loose 22 -> 13,
     wasted 36 -> 17; 12 test fills 420 -> 237 ms
-  - [ ] contour (spiral) fill; batch files for motifs on knit and towel and for 30/60 wt fills
+  - [x] v28: fill in rings (patch pattern "Rings", Rows/Rings on filled motifs); patch fills travel under the
+    satin edge (heart patch 2 trims -> 1, scallop 4 -> 1)
+  - [ ] ring fill is slow (190-280 ms for a 100 mm patch) and takes 5 trims carved round a monogram; batch files
+    for motifs on knit and towel and for 30/60 wt fills
 - [ ] **S4 Pictures** (shapes made sewable first; no tiny stitches, zero ties or exposed locks)
   - [x] v26, Filled: flecks take the colour round them, travel along the shape's own edge, no tiny row links,
     locks under their own rows. 12 samples: trims 1464 -> 1162, loose 153 -> 67, tiny 336 -> 0, zero ties
@@ -175,11 +177,16 @@ Phase 3, friction and features:
     Reports and screenshots: the session scratchpad's `ut27/` (not kept in the repo)
   - [ ] first load further only with the owner's say (scripts shipped without comments needs
     a release step; a lighter first starter font changes the starters)
-- [ ] **N1** layout tools (mirror, circle repeat, wreath, corner set, monogram layouts)
-- [ ] **N2** borders and quilting (blanket stitch, triple and motif runs, crosshatch, stripe, shaded fill)
-- [ ] **N3** use your own font file
+- [x] **N1** layout tools (v28, Arrange box: repeat in a circle, one in each corner, flip, monogram orders).
+  The ring and corners use the hoop's centre, not a frame's
+- [x] **N2** borders and quilting (v28: Decorative line with scallops, diamonds and blanket stitch; blanket-stitch
+  appliqué edge on frames; crosshatch and stripes). Not built: shaded fill; blanket edge on appliqué letters and motifs
+- [x] **N3** use your own font file (v28: .ttf and .otf, kept in the browser; a saved design opened elsewhere
+  falls back to the default font)
 - [ ] **N4** more Brother machines and hoops
   - [x] v27: "My machine" choice; Brother SE2000 (5x7, 4x4) added
+  - [x] v28: writer change W1 (160 x 260 page for designs no 5x7 holds) and the Brother NQ1700E (6x10); unproven
+    on a 6x10 machine
   - [ ] 6x10 machines wait for writer change W1 (`docs/writer-changes.md`; started on branch `w1-page`: no page
     bytes established yet, the trial PE-DESIGN cannot save, so Brother's 379 samples are the only source: run
     that branch's `tests/vm/measure.ps1`); 4x4-only models (SE700, PE545)

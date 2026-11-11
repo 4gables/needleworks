@@ -333,6 +333,8 @@ canvas#view:active { cursor: grabbing; }
 /* (but a label longer than the column wraps: "Space in this pair" ran over its slider on a phone) */
 .edit .range > span { white-space: normal; }
 .range output { font-size: 14px; color: var(--muted); min-width: 52px; text-align: right; }
+/* (a long read-out, "156 % · 120 × 114 mm (4¾ × 4½ in)", goes under its slider: beside it the slider was 4 px wide) */
+.edit .range.wide { grid-template-columns: 6.6em 1fr; } .edit .range.wide output { grid-column: 1 / -1; margin-top: -4px; }
 .seg { display: flex; flex-wrap: wrap; gap: 6px; }
 .seg button { border: 1.5px solid var(--line); background: var(--panel); color: var(--ink); border-radius: 999px; padding: 6px 12px; cursor: pointer; font: inherit; font-size: 14px; }
 .seg button[aria-pressed="true"] { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
@@ -862,6 +864,8 @@ body { overflow-wrap: break-word; }
   .zoom { flex-direction: column; }
   .facts { max-width: calc(100% - 68px); flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; padding-bottom: 2px; }
   .facts span { flex: none; }
+  /* (the row slides sideways: its right-hand end fades, so the chips past the edge are seen to be there) */
+  .facts { -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent); mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent); padding-right: 28px; }
 }
 #done-sew .link { font-size: inherit; text-decoration: underline; min-height: 0; padding: 0; }   /* (a link in a sentence: no 44 px line) */
 .names .row { flex-wrap: wrap; }
@@ -883,3 +887,15 @@ body { overflow-wrap: break-word; }
 .spools-own input[type="text"] { flex: 1 1 130px; min-width: 0; box-sizing: border-box; font: 16px/1.4 var(--body); padding: 7px 10px; border: 1.5px solid var(--field-line); border-radius: 10px; background: var(--bg); color: var(--ink); }
 .spool-chips button.x { border: 0; background: none; color: var(--muted); cursor: pointer; font: inherit; padding: 0 2px; min-width: 24px; min-height: 24px; }
 @media (pointer: coarse) { .spools-own input[type="text"], .spool-chips button.x { min-height: 44px; } }
+
+/* Arrange (layout tools): the selected piece repeated in a circle or set in the corners, and a monogram's order */
+.arrange .add { align-items: center; } .arrange select { min-height: 40px; }
+.arrange button[disabled] { opacity: .5; }
+.mono-names { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin: 8px 0; align-items: end; }
+.mono-orders, #st-mono { min-width: 0; }
+.mono-names label { display: grid; gap: 4px; font-size: 13px; font-weight: 600; } .mono-names input { min-width: 0; width: 100%; }
+.mono-orders { display: grid; gap: 6px; }
+.mono-orders button { display: grid; grid-template-columns: 5.2em minmax(0, 1fr); gap: 10px; align-items: center; text-align: left; min-height: 48px; width: 100%; min-width: 0; white-space: normal; }
+.mono-orders .mono-eg { font: 600 15px var(--mono); letter-spacing: .12em; white-space: nowrap; } .mono-orders .mono-eg b { font-size: 22px; }
+.mono-orders small { display: block; color: var(--muted); font-weight: 400; }
+@media (max-width: 400px) { .mono-names { grid-template-columns: 1fr; } }

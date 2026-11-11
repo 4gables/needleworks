@@ -3,10 +3,11 @@
 // (rings round the pieces that turn into the frame's shape). mm, y down; built on a 4 px/mm mask of the free space.
 import { followRun, resample, smooth } from "../core/geom.js";
 import { distanceTransform } from "../core/raster.js";
+import { QUILT_LINES } from "../core/recipes.js";
 
 const RES = 4;
 // one frame's quilting (`withQuilt` in pieces.js, and js/quilt-worker.js off the page: the same code, the same stitches)
-export const quiltOf = ({ kind, edge, obstacles, opts }) => (kind === "echo" ? echo : stipple)(edge, obstacles, opts);
+export const quiltOf = ({ kind, edge, obstacles, opts }) => (kind === "echo" ? echo : kind === "crosshatch" || kind === "stripes" ? lines : stipple)(edge, obstacles, { ...opts, kind });
 
 // free space: inside `edge` (closed polygon) by `inset` mm, at least `clear` mm from every point of `obstacles` and
 // from every filled shape in `solids` (each a list of closed loops, even-odd: an appliqué's fabric, a patch, a filled
@@ -344,4 +345,128 @@ export function contours(mask) {
   return loops;
 }
 
-export const QUILTS = { none: "None", stipple: "Stipple", echo: "Echo" };
+export const QUILTS = { none: "None", stipple: "Stipple", echo: "Echo", crosshatch: "Crosshatch", stripes: "Stripes" };
+// the kinds sewn as straight lines (`lines`): compose leads them to the frame line itself
+export const LINED = (kind) => kind === "crosshatch" || kind === "stripes";
+
+// Straight-line quilting: stripes (one set of parallel lines) or a crosshatch (two sets at right angles, diamonds),
+// sewn as one continuous line the way a quilter does it: along a line, then along the edge to the next line.
+// `bound` (a closed polygon) is where the lines end. With `cover` it is the frame line itself and whatever border
+// the frame has is sewn over it afterwards, so the needle goes from any line's end to any other's along it, out of
+// sight. Without (a thin or bold line for a border, which hides nothing) it is the frame line moved in, and the
+// needle steps along it only to the line next door: the lines read as one switchback. A line stops `clear` mm short
+// of whatever else is on the frame; from there the needle steps to the line next door when the straight way is clear
+// (a quilter travels along a motif's edge), else the thread is cut.
+// `lap`: the border is no line on the frame line (scallops, diamonds): the needle's way along it would show in
+// stretches, so it ends with one whole round of it, a base line under the border.
+function lines(edge, obstacles, { kind, bound = edge, cover = false, clear = 2.5, solids, from = null, lap = false } = {}) {
+  const F = freeMask(edge, obstacles, 0, clear, solids), { m: { w, h }, dtB, x0, y0 } = F;
+  const free = (x, y) => {
+    const X = Math.round((x - x0) * RES - 0.5), Y = Math.round((y - y0) * RES - 0.5);
+    return X >= 0 && Y >= 0 && X < w && Y < h && dtB[Y * w + X] > clear * RES;
+  };
+  const gap = kind === "stripes" ? QUILT_LINES.stripes : QUILT_LINES.cross, out = [];
+  // positions on `bound` by length round it
+  const cum = [0];
+  for (let i = 0; i < bound.length; i++) { const a = bound[i], b = bound[(i + 1) % bound.length]; cum.push(cum[i] + Math.hypot(b[0] - a[0], b[1] - a[1])); }
+  const T = cum[bound.length];
+  const pos = (q, how = 0) => {
+    let bd = Infinity, bs = 0;
+    for (let i = 0; i < bound.length; i++) {
+      const a = bound[i], b = bound[(i + 1) % bound.length], dx = b[0] - a[0], dy = b[1] - a[1], L = dx * dx + dy * dy;
+      const t = L ? Math.max(0, Math.min(1, ((q[0] - a[0]) * dx + (q[1] - a[1]) * dy) / L)) : 0, d = Math.hypot(q[0] - a[0] - dx * t, q[1] - a[1] - dy * t);
+      if (d < bd) { bd = d; bs = cum[i] + t * (cum[i + 1] - cum[i]); }
+    }
+    return how ? bd : bs;
+  };
+  // the way round `bound` from position s0 to s1, the shorter of the two (the points between, s1's own not included)
+  const round = (s0, s1) => {
+    const fw = (((s1 - s0) % T) + T) % T, back = fw > T / 2, len = back ? T - fw : fw, pts = [];
+    for (let i = 0; i < bound.length; i++) { const d = back ? (((s0 - cum[i]) % T) + T) % T : (((cum[i] - s0) % T) + T) % T; if (d > 1e-6 && d < len - 1e-6) pts.push([d, bound[i]]); }
+    return { len, pts: pts.sort((u, v) => u[0] - v[0]).map((u) => u[1]) };
+  };
+  let cur = from && cover ? { q: from, s: pos(from), f: true } : null, path = null, back = null;
+  const stitchTo = (q) => {   // straight on to q in stitches up to 2.5 mm, none under 0.6
+    const a = path[path.length - 1], L = Math.hypot(q[0] - a[0], q[1] - a[1]);
+    if (L < 0.6) return;
+    const n = Math.ceil(L / QUILT_LINES.stitch);
+    for (let k = 1; k <= n; k++) path.push([a[0] + ((q[0] - a[0]) * k) / n, a[1] + ((q[1] - a[1]) * k) / n]);
+  };
+  for (const deg of kind === "stripes" ? [QUILT_LINES.angle] : [QUILT_LINES.angle, QUILT_LINES.angle + 90]) {
+    const a = (deg * Math.PI) / 180, U = [Math.cos(a), Math.sin(a)], V = [-U[1], U[0]];
+    // each line's stretches inside `bound` (even-odd) and clear of everything on the frame
+    const vs = bound.map((q) => q[0] * V[0] + q[1] * V[1]), v0 = Math.min(...vs), v1 = Math.max(...vs), n = Math.floor((v1 - v0) / gap), segs = [];
+    for (let r = 0; r <= n; r++) {
+      const v = v0 + (v1 - v0 - n * gap) / 2 + r * gap, cut = [];
+      for (let i = 0; i < bound.length; i++) {
+        const p = bound[i], q = bound[(i + 1) % bound.length], pv = p[0] * V[0] + p[1] * V[1], qv = q[0] * V[0] + q[1] * V[1];
+        if ((pv <= v) !== (qv <= v)) { const t = (v - pv) / (qv - pv); cut.push((p[0] + (q[0] - p[0]) * t) * U[0] + (p[1] + (q[1] - p[1]) * t) * U[1]); }
+      }
+      cut.sort((x, y) => x - y);
+      const at = (u) => [u * U[0] + v * V[0], u * U[1] + v * V[1]];
+      for (let k = 0; k + 1 < cut.length; k += 2) {
+        let open = null;
+        // (a stretch that only clips the edge, never `sliver` mm from it, reads as a second border line: left out)
+        const deep = (ua, ub) => [0.25, 0.5, 0.75].some((f) => pos(at(ua + (ub - ua) * f), 1) >= QUILT_LINES.sliver);
+        const close = (u1, f1) => { if (open && u1 - open.u >= QUILT_LINES.min && (!(open.f && f1) || deep(open.u, u1))) segs.push({ r, ends: [{ q: at(open.u), f: open.f }, { q: at(u1), f: f1 }], done: false }); open = null; };
+        for (let u = cut[k]; ; u = Math.min(cut[k + 1], u + 0.25)) {
+          const ok = free(...at(u));
+          if (ok && !open) open = { u, f: u === cut[k] };
+          if (!ok && open) close(u - 0.25, false);
+          if (u >= cut[k + 1]) { if (open) close(cut[k + 1], true); break; }
+        }
+      }
+    }
+    for (const g of segs) for (const e of g.ends) if (e.f) e.s = pos(e.q);
+    // the way from where the needle is to an end of a line not sewn yet: { len, pts } or null
+    const clearWay = (p, q) => { const L = Math.hypot(q[0] - p[0], q[1] - p[1]); for (let d = 0.5; d < L; d += 0.5) if (!free(p[0] + ((q[0] - p[0]) * d) / L, p[1] + ((q[1] - p[1]) * d) / L)) return false; return true; };
+    const way = (from, e, dr) => {
+      if (from.f && e.f) {
+        const w = round(from.s, e.s);
+        if (!cover && (dr > 1 || w.len > 3 * gap)) return null;
+        return [from.q, ...w.pts, e.q].every((q, i, l) => !i || clearWay(l[i - 1], q)) ? w : null;
+      }
+      if (from.f || e.f || dr > 1) return null;
+      const len = Math.hypot(e.q[0] - from.q[0], e.q[1] - from.q[1]);
+      return len <= 2.5 * gap && clearWay(from.q, e.q) ? { len, pts: [] } : null;
+    };
+    let left = segs.length, row = -1;
+    while (left) {
+      let best = null;
+      if (cur) for (const g of segs) {
+        if (g.done) continue;
+        const dr = row < 0 ? 0 : Math.abs(g.r - row);
+        for (const k of [0, 1]) {
+          const wy = way(cur, g.ends[k], dr), cost = wy && wy.len + (dr > 1 ? 2 * gap * (dr - 1) : 0);
+          if (wy && (!best || cost < best.cost)) best = { g, k, wy, cost };
+        }
+      }
+      // a dead end beside something on the frame, the line's other end on the frame line: back along the line through
+      // its own holes (a line sewn twice, against a trim with both its locks and thread ends out in the open)
+      if (!best && cur && !cur.f && back) { for (let i = back.length - 2; i >= 0; i--) path.push(back[i]); cur = back.from; back = null; continue; }
+      if (!best) {   // nowhere to go from here (or nothing sewn yet): a new line, from the first one left
+        const g = segs.find((x) => !x.done);
+        best = { g, k: g.ends[0].f || !g.ends[1].f ? 0 : 1, wy: null };
+        path = null;
+      }
+      const { g, k, wy } = best, e0 = g.ends[k], e1 = g.ends[1 - k];
+      if (!path) out.push((path = [cur && wy ? cur.q : e0.q]));
+      if (wy) for (const q of [...wy.pts, e0.q]) stitchTo(q);
+      // (a step too short to sew left the needle beside the line's end: it starts from there)
+      const i0 = path.length - 1;
+      stitchTo(e1.q);
+      if (Math.hypot(path[path.length - 1][0] - e1.q[0], path[path.length - 1][1] - e1.q[1]) > 1e-9) path.push(e1.q);
+      g.done = true; left--; row = g.r; cur = e1;
+      back = cover && e0.f && !e1.f ? Object.assign(path.slice(i0), { from: e0 }) : null;
+    }
+    row = -1; back = null;
+  }
+  if (lap && cover && cur?.f && path) {
+    const all = bound.map((q, i) => [(((cum[i] - cur.s) % T) + T) % T, q]).filter((u) => u[0] > 1e-6).sort((u, v) => u[0] - v[0]);
+    for (const [, q] of all) stitchTo(q);
+    stitchTo(cur.q);
+    if (Math.hypot(path[path.length - 1][0] - cur.q[0], path[path.length - 1][1] - cur.q[1]) > 1e-9) path.push(cur.q);
+  }
+  return out.filter((l) => l.length > 1);
+}
+

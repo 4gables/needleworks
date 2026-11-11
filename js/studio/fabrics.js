@@ -9,7 +9,7 @@ import { back } from "../core/geom.js";
 // (`item`: what to do when it's sewn on something already made, a pillowcase or a tote: said only when the design
 // doesn't say what it's sewn on, as a starter's own tip does: the quilt label's sew sheet said "On a pillowcase or bag…")
 export const FABRICS = {
-  cotton: { name: "Cotton", ready: "Tear-away stabilizer.", tip: "On woven cotton, hoop it with tear-away stabilizer underneath.", item: "On a pillowcase or bag, hoop only the front layer (turn it inside out) so it isn't sewn shut.",
+  cotton: { name: "Cotton", ready: "Tear-away stabilizer and a 75/11 embroidery needle (the usual one).", tip: "On woven cotton, hoop it with tear-away stabilizer underneath and use a 75/11 embroidery needle (the usual one).", item: "On a pillowcase or bag, hoop only the front layer (turn it inside out) so it isn't sewn shut.",
     hoop: "Hoop the fabric with tear-away stabilizer under it", after: "Take the hoop off, snip any loose threads and tear the stabilizer away gently, holding the stitches down with your thumb." },
   knit: { name: "Knit / T-shirt", ready: "Cut-away stabilizer (fusible no-show mesh is easiest) and a 75/11 ballpoint needle; on piqué or other textured knits, a water-soluble topper too.", tip: "Knits stretch: hoop them with cut-away stabilizer (fusible no-show mesh is easiest) and use a 75/11 ballpoint needle. Don't stretch the fabric while hooping.",
     hoop: "Hoop the knit with the cut-away stabilizer under it, without stretching it", after: "Take the hoop off and snip any loose threads. Trim the cut-away stabilizer on the back about ¼ in from the stitching, rounding the corners. Don't tear it: it stops the design stretching out of shape in the wash." },

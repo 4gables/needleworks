@@ -66,7 +66,10 @@ export function offPage(S) {
       const failed = r.died || r.code === "slow";
       const q = S.pieces.find((o) => o.id === job.id && o.kind === "file" && o.pending && (failed || o.scale === job.scale));
       let blocks = null;
-      if (r.ok) try { blocks = fileBlocks(r.pattern); restitched.set(job.key, blocks); } catch (err) { r.error = err.message; }
+      // (re-stitched, each block keeps the name the file gave it: the fix hands back threads without them, and a
+      // resized appliqué file's steps lost "Placement Line", "Tackdown" and with them the words about the fabric)
+      const named = (bs, from) => (from && from.length === bs.length ? bs.map((b, i) => (b.name || !from[i].name ? b : { ...b, name: from[i].name })) : bs);
+      if (r.ok) try { blocks = named(fileBlocks(r.pattern), S.pieces.find((o) => o.id === job.id)?.orig); restitched.set(job.key, blocks); } catch (err) { r.error = err.message; }
       if (q && blocks) { q.blocks = blocks; delete q.pending; }
       // (it couldn't be re-stitched at that size: back to the size it came in, and said)
       else if (q) { resizeFile(q, 1); api.showError(`${q.name} couldn't be resized: ${r.error || "something went wrong"}`); }

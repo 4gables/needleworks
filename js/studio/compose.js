@@ -6,7 +6,7 @@ import { Design } from "../core/design.js";
 import { MARGIN } from "../core/machines.js";
 import { back, bounds, circle, enter, moveCost, run } from "../core/geom.js";
 import { distanceTransform, order } from "../core/raster.js";
-import { contours, quiltOf } from "./quilt.js";
+import { LINED, contours, quiltOf } from "./quilt.js";
 import { EYE, eyeAt, hasEye, shapeOf } from "./shapes.js";
 import { FABRICS } from "./fabrics.js";
 import { QUILTED, along, ascii, cloud, cut, fittedSizes, inset, inside, insideLoops, label, moved, near, onOutline, own, patchFill, pick, pieceBounds, pieceStages, pieceStitches, placed, placer, plainBorder, recent, seamAt, sewAs, sewWith, sewing, sewn, startAt, wt } from "./pieces.js";
@@ -27,9 +27,13 @@ function withQuilt(p, stages, others, dragging = false, later = null, empty = nu
   // keyed on every obstacle point: moving a middle piece reused the old quilting, sewn through it
   let h = obstacles.length;
   for (const o of [...obstacles, ...solids.flat()]) for (const [x, y] of o) h = (Math.imul(h ^ Math.round(x * 10), 16777619) ^ Math.round(y * 10)) | 0;
-  const key = JSON.stringify([p, h]);
+  const key = JSON.stringify([p, h]), covered = true;
   if (!quilted.has(key) && !(dragging && lastQuilt.has(frame))) {
-    const job = { key, kind: p.quilt, edge, obstacles, opts: { inset: p.border === "line" || p.border === "bold" ? 3 : 4.5, solids } };
+    const job = { key, kind: p.quilt, edge, obstacles, opts: { inset: p.border === "line" || p.border === "bold" ? 3 : 4.5, solids,
+      // (straight lines run to the frame line where a border covers it, else to 3 mm inside it; an appliqué's or an in-the-hoop
+      // front's tack-down leaves the needle on the frame line a third round: they start from there)
+      ...(LINED(p.quilt) ? { cover: covered, bound: covered ? edge : inset(shapeOf(p).path(p.w, p.h), 3).map(placer(p)), from: covered && (p.border === "applique" || p.border === "ith") ? seamAt(edge, 1 / 3)[0] : null,
+        lap: p.border === "fancy" && p.trim !== "blanket" } : {}) } };
     if (later) later.push(job); else quiltDone(key, quiltOf(job));
   }
   const paths = quilted.get(key) || lastQuilt.get(frame) || [];
@@ -50,12 +54,15 @@ function withQuilt(p, stages, others, dragging = false, later = null, empty = nu
   if (b < 0) return [...stages, q];
   // (after an appliqué's tack-down the needle is on the frame line where it began, a third round: the quilting starts
   // there if it can)
-  const led = toFrame(paths, edge, obstacles, p.border === "applique" ? seamAt(edge, 1 / 3)[0] : null);
+  // (straight lines under a border that covers the frame line begin and end on it already)
+  const end = paths[paths.length - 1].at(-1);
+  const led = LINED(p.quilt) && covered ? { paths, at: onOutline(edge, end)[0] < 0.05 ? end : null }
+    : toFrame(paths, edge, obstacles, p.border === "applique" ? seamAt(edge, 1 / 3)[0] : null);
   q.paths = led.paths;
   // (an appliqué's border sews after a pause, so it isn't joined on: it keeps its own start, moved on by compose if
   // that's within 5.5 mm of where the quilting stopped: `reseam`. Started where the quilting stopped, it began 1.4 mm
   // away across the pause, a loose thread)
-  const border = p.border === "applique" || !led.at ? stages[b] : { ...stages[b], paths: plainBorder(startAt(edge, led.at), p.border) };
+  const border = p.border === "applique" || !led.at ? stages[b] : { ...stages[b], paths: plainBorder(startAt(edge, led.at), p.border, p.trim) };
   return [...stages.slice(0, b), q, border, ...stages.slice(b + 1)];
 }
 // Quilting led on to the frame line at its ends (within 8 mm of it, by a straight run that keeps 1.5 mm clear of
@@ -472,7 +479,7 @@ function build(pieces, hoop, opts) {
     const sides = rect.slice(1).flatMap((q, i) => run([rect[i], q], 4).slice(i ? 1 : 0));
     order[0] = { ...order[0], paths: [sides, ...order[0].paths], sews: Array.isArray(order[0].sews) ? ["Sews a basting box to hold everything flat.", ...order[0].sews] : "Sews a basting box to hold everything flat. " + order[0].sews };
   }
-  const d = new Design(hoop), steps = [], after = [], before = [];
+  const d = new Design(hoop, { ease: true }), steps = [], after = [], before = [];
   // where the next part of the same block starts, past closed rings (a ring the needle has to jump to anyway starts
   // there instead, so the move after it is a stitch; rings after it are entered where it ends: `enter`)
   const items = [];

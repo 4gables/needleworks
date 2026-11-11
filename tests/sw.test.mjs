@@ -28,7 +28,7 @@ console.log(`sw: ${want.length} files listed`);
   for (let i = 0; i < lines.length; i += 4) now.push(lines.slice(i, i + 4).join(""));
   const text = now.join("\n") + "\n";
   if (block[1] !== text && process.argv.includes("--write")) { writeFileSync("index.html", html.replace(block[0], `<!-- first screen: start -->\n${text}<!-- first screen: end -->`)); console.log(`sw: index.html asks for ${first.size} modules`); }
-  else if (block[1] !== text) { console.error("index.html's modulepreload list isn't js/app.js's imports (run node tests/sw.test.mjs --write)"); process.exit(1); }
+  else if (block[1] !== text) { console.error("index.html's modulepreload list isn't js/app.js's imports (run node tests/sw.test.mjs --write)"); if (!WIP) process.exit(1); }   // (written at the release, as the hashes are)
   for (const heavy of ["js/picture.js", "js/opened.js", "js/core/digitize.js", "js/core/palette.js"]) if (first.has(heavy)) { console.error(`${heavy} is part of the first load again (something the Design tab runs imports it): see app.js tabCode`); process.exit(1); }
   const script = (src["js/studio/starters.js"].match(/^export const SCRIPT = "([^"]+)"/m) || [])[1];
   if (!script || !html.includes(`["${script}"]`)) { console.error(`index.html asks early for a first font that isn't starters.js SCRIPT (${script})`); process.exit(1); }

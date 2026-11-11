@@ -92,7 +92,8 @@ export const CLOTHS = {
 // opts: { field (CLOTHS key: the background the design is shown on, inside the hoop; the whole view with the hoop
 //         hidden), fabric (CLOTHS key), fabricShapeBlock, hide: Set, upto, ghost (stitches after upto drawn faint), heat (Map "cx,cy" -> hits per mm²), backdrop ({ bmp, unit, center }: a photo under it), hoop: {w,h} (mm), showHoop, zoom, pan: [x,y], center: [x,y] (0.1 mm),
 //         pad, padTop, padBottom (px kept clear), fit (px per 0.1 mm, held), cache (colorBlocks result), showNeedle (a needle at upto), fieldColor (fill inside the hoop), real (thread twist when zoomed in),
-//         boxes ([[x0, y0, x1, y1]] mm: each hooping of a split design), sel ([x0, y0, x1, y1] mm: the selected piece) }
+//         boxes ([[x0, y0, x1, y1]] mm: each hooping of a split design), sel ([x0, y0, x1, y1] mm: the selected piece),
+//         marks ([[x, y, r]] 0.1 mm: spots ringed) }
 export function draw(canvas, design, opts = {}) {
   const dpr = window.devicePixelRatio || 1;
   const W = canvas.clientWidth, H = canvas.clientHeight;
@@ -258,6 +259,15 @@ export function draw(canvas, design, opts = {}) {
     const x = X((a - m) * 10), y = Y((b - m) * 10), w = (c - a + 2 * m) * 10 * s, h = (d - b + 2 * m) * 10 * s;
     ctx.save(); ctx.lineWidth = 3; ctx.strokeStyle = "rgba(255,255,255,0.85)"; roundRect(ctx, x, y, w, h, 4); ctx.stroke();
     ctx.setLineDash([6, 4]); ctx.lineWidth = 1.5; ctx.strokeStyle = "#b0123b"; roundRect(ctx, x, y, w, h, 4); ctx.stroke();
+    ctx.restore();
+  }
+  if (opts.marks) {   // spots to look at ([x, y, r] in 0.1 mm: a picture's pieces left out), ringed dark and light
+    ctx.save();
+    for (const [mx, my2, r] of opts.marks) {
+      const R = Math.max(9, r * s + 5);
+      ctx.lineWidth = 4; ctx.strokeStyle = "rgba(255,255,255,0.9)"; ctx.beginPath(); ctx.arc(X(mx), Y(my2), R, 0, Math.PI * 2); ctx.stroke();
+      ctx.lineWidth = 2; ctx.strokeStyle = "#b0123b"; ctx.beginPath(); ctx.arc(X(mx), Y(my2), R, 0, Math.PI * 2); ctx.stroke();
+    }
     ctx.restore();
   }
   if (opts.showNeedle && upto < total) {

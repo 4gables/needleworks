@@ -20,6 +20,30 @@ Reference for this part of Needleworks: the rules, the reason for each (it stops
   pieces were trimmed apart. Arcs and ovals: 513 -> 442 trims, 52 -> 13 wasted moves, 7 -> 3 loose threads; bookmark
   names 641 -> 625 trims. What flow_lint still calls a loop there is a gap of 1.5-2.3 mm between columns, a thread
   you would see: left trimmed. Print letters never link (`gap`).
+- Where the columns' own widths at the two points are known (`order` col: a script's column, which follows the
+  ink once it is 2 mm wide), two pieces are stitched across when their centre lines are no further apart than half
+  of each column, 0.3 pull and 0.9 (`LINK.open`), up to 3.6 mm (`far`). `order` marks the piece (`link`, the ninth
+  entry of a part) and `stitchLetters` gives it the reach, so the two never disagree. An Allura T at 20 mm, its
+  stem's end 0.63 mm from its bar by the stitches but 3.08 mm by the centre lines (a column is sewn out to the
+  ink's end, past its centre line's), was trimmed apart: a 16 mm move inside one letter (a digitizer on v27).
+- Marks (`order`: a piece shorter than two and a half dots, clear of every other piece by three quarters of a
+  column, and wholly above the letters: an ë's dots, an accent) are never stitched one to the next: the dots of
+  "Zoë" in Great Vibes at 19 mm, under 2 mm apart, were sewn across and read as "Zoē" (tester, v27). A jump under
+  5 mm between them would lie there as the same bar (the machine doesn't cut it), so a mark is sewn a little
+  earlier or later, or last, wherever that makes every move long enough to be cut; only where that leaves fewer
+  loose threads. A dot is still stitched to from its own letter where near enough, and a full stop from the
+  word's last stroke: jumped to as well, every i in a small word cost a trim and two locks on a 1 mm dot (arcs and
+  ovals went 444 -> 468 trims that way). Batch cases: `st_marks_<font>` (every script font), `st_marks_small`.
+- Underlay under a script column: a centre run below `LETTERS.zigzagFrom` (cotton 2.0 mm, knit 1.5), a zigzag 0.4 mm
+  inside each edge from there. A big script's column, as wide as the ink, has the zigzag too, as wide as the column
+  is there less 0.8 (a centre line through its hairlines). Until S2 it was 2.5 mm on cotton and a centre run only
+  under any column that follows the ink (Allura at 20 mm: 2.2 mm columns on a centre run).
+- Print letters on a knit or a towel are sewn as read (`letters` asRead), whatever loose threads that leaves: the
+  skip order sews the letters between ones already sewn, and on a fabric that gives under the needle the second
+  pass can sit off the first's baseline. On stable fabrics the skip order stays (no loose threads to snip).
+- Known, not done: lines of one piece are each sized to the first line's x-height, and a line of digits or capitals
+  counts their full height as its x-height, so "2026" under "Made with love" comes out a third smaller (and at 9 mm
+  as a fine line under satin lines).
 - Print letters (`order(..., { whole, skip })`): each move between letters is a trim (over 5.5 mm + half a column
   between starts) or a loose thread to snip, never a stitch. Two things keep them trims: a letter may begin partway
   along a plain stroke (every half mm or tenth of the x-height; a stroke with a taper, a shaped end or sides is only
@@ -108,3 +132,26 @@ Reference for this part of Needleworks: the rules, the reason for each (it stops
   and NFD alike, used by the editor, Download note and names batches. Per-font `min` x-height feeds `minSize` (default
   4 mm). Fonts after Meow Script are free lookalikes of embroiderydesigns.com samples (`note`). Try a font in
   `tests/browser/fonts.html?name=<word>`; reject unjoined or spurred ones (Petit Formal, Comforter, Damion).
+
+## Own fonts (`js/studio/ownfont.js`)
+- The maker picks a .ttf or .otf from their device (Font list, last entry). It is read in the page and never leaves
+  it: the browser draws it through a `FontFace` exactly as it draws the bundled fonts, so the lettering engine needs
+  nothing new. The family is `Own <name>`; the entry in `FONTS` has `own: true`, and `print: true` unless most
+  lowercase letters reach their own advance width (a script's joining strokes: Pacifico 1.0, Dancing Script 0.96;
+  Abril Fatface 0.62 and sans fonts about 0.1 are print; the line is 0.8).
+- The file's own tables give what the browser can't be asked: the name (`name`), the letters (`cmap` formats 4, 6,
+  12, registered with `glyphs.js` so `lacks` works as for bundled fonts), and the shapes (`glyf` outlines, or CFF
+  Type 2 charstrings for .otf) measured along scanlines of n o u h m e d b p l: stroke width against the x-height,
+  the thinnest strokes, and how many lines a stem is drawn with. Written from the OpenType and CFF specifications.
+- What the maker is told, under the font row: an outline or inline font (1.6 or more lines per stem: Monoton 4)
+  sews busy and thin; a bold one (stroke over 0.3 x-heights: Abril Fatface 0.39) comes out lighter, since a satin is
+  at most a fifth of the x-height; a high-contrast one loses its hairlines; and the height from which the letters
+  are satin, not a single line (0.8 mm satin). Refused in plain words: .woff/.woff2, .ttc, files that aren't fonts,
+  fonts with fewer than 40 of A-Z a-z (symbol fonts), files over 10 MB, more than 8 fonts.
+- Kept for the next visit and offline: names in localStorage (`nw.ownfonts`, read as the module loads so a saved
+  design keeps its font), files in IndexedDB (`needleworks-fonts`). Until a file is out of IndexedDB its family has
+  an unloaded stand-in face: `document.fonts.check` is true for a family the page has never heard of (Chrome), and
+  lettering would have been drawn and stitched in the fallback font. `loadFont` waits for the real one (`fontWaits`).
+- Limits: no kerning or ligatures beyond what the browser applies when it draws; a variable font sews at its
+  default weight; a design saved to a file and opened where the font isn't kept falls back to the default font.
+
