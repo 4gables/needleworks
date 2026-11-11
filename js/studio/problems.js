@@ -5,7 +5,8 @@
 import { ROUND } from "./starters.js";
 import { nearestBrotherThread } from "../core/threads.js";
 import { MOTIFS } from "./motifs.js";
-import { FONTS, loadFont } from "../core/fonts.js";
+import { FONTS, fontOf, loadFont } from "../core/fonts.js";
+import { letters } from "./lettering.js";
 import { LOOK, BLOCK, TIP, mmText, isolate } from "../words.js";
 import { unswashed, initials, lackList, swashes } from "../core/typed.js";
 import { fittedSizes, label, pieceStitches, minSize, archRoom, touchingAll, loopsFill, fineLine, towelMin, underPatch, TEXT_SHAPES, archTight, pacer, PACED, drawAhead, fitFrame, inFrame, touching, archFit, archShrink, clearSize } from "./pieces.js";
@@ -15,9 +16,14 @@ import { fittedSizes, label, pieceStitches, minSize, archRoom, touchingAll, loop
 // love / by Grandma / March 2026" at 6 mm read "Automatic: thin line" over a satin file: the g and y of the later
 // lines made the joined words taller, so smaller.)
 export function sewsThin(p) {
-  if (p.kind !== "text" || (p.shape && p.shape !== "straight")) return fineLine(p);
-  const first = (p.text || "").split("\n").map((l) => l.trim()).find((l) => l);
-  return fineLine(first === undefined ? p : { ...p, text: first });
+  if (p.kind !== "text" || (p.shape && p.shape !== "straight") || (p.style || "auto") !== "auto") return fineLine(p);
+  const raw = (p.text || "").split("\n"), i = raw.findIndex((l) => l.trim());
+  if (i < 0 || raw.filter((l) => l.trim()).length < 2) return fineLine(p);
+  // (drawn as `textRows` draws it, its spacing and letter pairs with it, so this reads the drawing already made)
+  const line = raw[i].trim(), at = raw.slice(0, i).reduce((a, l) => a + l.length + 1, 0) + raw[i].length - raw[i].trimStart().length;
+  const print = fontOf(p.font).print, kern = Array.from({ length: line.length }, (_, k) => ((print && p.kern?.[at + k]) || 0) / 100);
+  const l = letters(line, p.font, p.size, "auto", print ? (p.spacing || 0) / 100 : 0, kern, false);
+  return l.parts.length > 0 && l.satinW === 0;
 }
 
 export function problemsOfPieces(S) {
