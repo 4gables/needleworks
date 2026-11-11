@@ -10,15 +10,19 @@ measurements behind each number are in the code's comments.
 
 ## Repo map
 - `index.html`, `css/app.css`, `sw.js`, `manifest.webmanifest`; `js/app.js` (tabs, state, `setView`, downloads).
-- `js/core/`: `formats.js` (PES writer, readers, `validatePES`), `threads.js` (PEC palette), `design.js` (`Design`,
-  locks, `finish`), `geom.js`, `raster.js` (skeleton, stroke graph), `text.js` (`renderWord`), `fonts.js`, `glyphs.js`,
-  `digitize.js` (pictures, `fillPolygon`, `contentBox`/`pictureImage`/`LEARN`), `brands.js`/`brandcharts.js`,
+- `js/core/`: `formats.js` (PES writer, readers, `validatePES`), `threads.js` (PEC palette), `recipes.js` (every
+  stitch number and limit, with its reason: read here, never re-typed), `design.js` (`Design`, locks, `finish`,
+  `relieve`), `density.js` (hits per mm² at every offset), `geom.js`, `colour.js`, `raster.js` (skeleton, stroke
+  graph), `text.js` (`renderWord`), `fonts.js`, `glyphs.js`, `fill.js` (tatami, travel router, `fillPolygon`),
+  `digitize.js` (pictures: colours, styles, `contentBox`/`pictureImage`/`LEARN`), `brands.js`/`brandcharts.js`,
   `machines.js`, `typed.js` (all typed text: `tidy`, `lacks`, `safeName`, `uniqueName`, `initials`).
-- `js/studio/`: `pieces.js` (pieces, `compose`, fitting, `FABRICS`), `ui.js` (editor, starters, warnings, one-tap
-  fixes), `outline.js`, `quilt.js`, `motifs.js`. `js/doctor.js` + `doctor-worker.js` (Open tab fixes), `quality.js`
-  (the checker's rules), `words.js` (problems list per view, stop/thread vocabulary), `gate.js` (the only exit for
-  files: `handOut`), `sheet.js` (step text, sew sheet, cut file), `render.js` (`draw`), `worker.js`, `quilt-worker.js`,
-  `zip.js`.
+- `js/studio/`: `pieces.js` (each piece's stitches, fitting, the sew context `sewAs`), `compose.js` (`compose`,
+  quilting and carving stages, `gang`, two hoopings), `shapes.js` (frame shapes), `fabrics.js` (`FABRICS`,
+  `THREADS` words), `files.js` (opened files as pieces), `ui.js` (editor, starters, warnings, one-tap fixes),
+  `outline.js`, `quilt.js`, `motifs.js`. pieces.js still re-exports what moved out of it.
+- `js/doctor.js` + `doctor-worker.js` (Open tab fixes), `quality.js` (the checker's rules), `words.js` (problems
+  list per view, stop/thread vocabulary), `gate.js` (the only exit for files: `handOut`), `sheet.js` (step text, sew
+  sheet, cut file), `render.js` (`draw`), `worker.js`, `quilt-worker.js`, `zip.js`.
 
 ## Hard rules
 - **Proprietary.** `LICENSE`: all rights reserved to 4Gables (a trade name; no personal name anywhere on the site or
