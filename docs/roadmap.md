@@ -46,9 +46,13 @@ Phase 1, the base (no visible change, byte-identical batches):
     - a per-piece memo for collision measuring changed nothing (clouds and `near` are ~57 ms of a towel change):
       reverted. The audit's O(n²) reading was right about the shape of the code, wrong about the cost
     - `relieve` was ~560 ms of a towel change's work; it now sums each window's hits instead of picking its
-      points out (the same points dropped on 441 runs at limits 24, 16 and 10; 1.7x faster)
-    - the longest single freeze didn't move, so it is one phase of `make()`, not the total: profile by phase
-      (drawing lettering, stitching, compose, write + read back, preview) before changing anything else
+      points out and keys its cells by number (the same points dropped as v14's on 879 runs at limits 24, 16 and
+      10; 4.6x faster). Towel change 745 -> 509 ms
+    - what is left of a thread or fabric change's freeze (~550 ms) is fills made on the page: `fillPolygon`,
+      `distanceTransform` and `tatami` are ~500 ms of a thread change on this design (motif and appliqué fills
+      re-made because the weight is in their cache key, though 60 wt doesn't change a fill). Next: fills through
+      the worker as carved patches already go (`fillLater`), and the weight out of a fill's key where it changes
+      nothing
   - [ ] perf folded into monkey's budget once the freeze is under 500 ms
   - [ ] digitize.js: colour learning and styles apart
   - [ ] ui.js and app.js over one shared state; one worker job queue; matrix folded into files_flow

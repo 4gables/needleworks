@@ -171,20 +171,23 @@ export function relieve(st, limit = LIMITS.hits) {
   const X = (i) => XR[i], Y = (i) => YR[i];
   const removable = (i) => { for (let j = i - 5; j <= i + 5; j++) if (j < 0 || j >= n || st[j][2] !== STITCH) return false; return true; };
   const near = (i, d) => { let j = i + d; while (j >= 0 && j < n && !keep[j]) j += d; return j; };
-  const cells = new Map(), key = (b, cx, cy) => `${b},${cx},${cy}`;
+  // (cells keyed by number, in the order their first stitch comes: text keys, built and split again for every stitch
+  // and corner, were most of what was left of the time)
+  const cells = new Map(), key = (b, cx, cy) => (b * 8192 + cx + 4096) * 8192 + cy + 4096;
   for (let i = 0; i < n; i++) if (st[i][2] === STITCH) {
-    const k = key(blk[i], Math.floor(X(i) / 10), Math.floor(Y(i) / 10));
-    if (!cells.has(k)) cells.set(k, []); cells.get(k).push(i);
+    const cx = Math.floor(XR[i] / 10), cy = Math.floor(YR[i] / 10), k = key(blk[i], cx, cy);
+    let c = cells.get(k);
+    if (!c) cells.set(k, (c = { b: blk[i], cx, cy, at: [] }));
+    c.at.push(i);
   }
   // every 1 mm window whose corner lies in a cell is inside that cell and its right/lower neighbours; the corner
   // cell itself can be empty (missed until 2026-10-30: towel names reached 27), so occupied cells' left/upper
   // neighbours are corners too
-  const corners = new Set();
-  for (const k of cells.keys()) { const [b, cx, cy] = k.split(",").map(Number); for (const i of [0, 1]) for (const j of [0, 1]) corners.add(key(b, cx - i, cy - j)); }
+  const corners = new Map();
+  for (const c of cells.values()) for (const i of [0, 1]) for (const j of [0, 1]) { const k = key(c.b, c.cx - i, c.cy - j); if (!corners.has(k)) corners.set(k, [c.b, c.cx - i, c.cy - j]); }
   const sums = new Uint16Array(21 * 21);
-  for (const k of corners) {
-    const [b, cx, cy] = k.split(",").map(Number);
-    const pts = [cells.get(k), cells.get(key(b, cx + 1, cy)), cells.get(key(b, cx, cy + 1)), cells.get(key(b, cx + 1, cy + 1))].flatMap((c) => c || []);
+  for (const [b, cx, cy] of corners.values()) {
+    const pts = [cells.get(key(b, cx, cy)), cells.get(key(b, cx + 1, cy)), cells.get(key(b, cx, cy + 1)), cells.get(key(b, cx + 1, cy + 1))].flatMap((c) => (c ? c.at : []));
     if (pts.length <= limit) continue;
     // the kept hits at each 0.1 mm point of these four cells, summed from the top left: a window's count is four
     // reads, and only a window over the limit is looked at point by point (most aren't; the same windows are thinned,
