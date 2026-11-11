@@ -78,7 +78,7 @@ export const ROWS = { solid: 0.35, standard: 0.4 };
 //             shape with that share of its edge against other colours stays. "all" leaves nothing out (v26).
 export const PICTURES = { fleck: 3, enclosed: 0.8, eyes: 6, start: 4, edge: 0.75,
   details: { all: { start: 0, share: 0, lone: 0, fleck: 3, enclosed: 0.8 }, most: { start: 8, share: 0.1, lone: 8, fleck: 3, enclosed: 0.8 },
-    main: { start: 80, share: 1, tail: 0.3, lone: 15, fleck: 12, enclosed: 0.5, joined: 0.3 } } };
+    main: { start: 80, share: 0.5, tail: 0.3, lone: 15, fleck: 12, enclosed: 0.5, joined: 0.3 } } };
 
 // --- S1: pieces sewn in one go ---
 // Two pieces of script lettering are stitched across, not trimmed apart, when their columns are at most `gap` mm
