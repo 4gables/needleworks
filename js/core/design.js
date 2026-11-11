@@ -2,7 +2,7 @@
 // Build a stitch pattern block by block (mm in, 0.1 mm out).
 import { COLOR_CHANGE, END, JUMP, STITCH, TRIM, writePES } from "./formats.js";
 import { MARGIN } from "./machines.js";
-import { EASE, LIMITS, TIE_INS } from "./recipes.js";
+import { EASE, LIMITS, LOCKS, TIE_INS } from "./recipes.js";
 import { Hits } from "./density.js";
 import { pyRound } from "./threads.js";
 
@@ -12,6 +12,13 @@ function inward(p, d, pts) {
   let s = 0;
   for (const q of pts) s += d[0] * (q[1] - p[1]) - d[1] * (q[0] - p[0]);
   return s < 0 ? -1 : 1;
+}
+
+// Whether the points all lie within `LOCKS.line` mm of the line from p along d: a single line of thread (a fine
+// line's letter, a line border, a picture's run), with no column for a lock's sideways hit to hide in.
+function bare(p, d, pts) {
+  const L = Math.hypot(d[0], d[1]) || 1;
+  return pts.every((q) => Math.abs((q[0] - p[0]) * d[1] - (q[1] - p[1]) * d[0]) / L < LOCKS.line);
 }
 
 export class Design {
@@ -48,26 +55,53 @@ export class Design {
   eased(pts, first = true, from = null) {
     const H = this.hits, n = pts.length, out = [], R = (v) => pyRound(v * 10);
     const keep = (q, hit = true) => { out.push(q); if (hit) H.add(R(q[0]), R(q[1])); };
-    const fits = (q) => H.top(R(q[0]), R(q[1]), EASE.cap) <= EASE.cap;
+    const fits = (q, more = 0) => H.top(R(q[0]), R(q[1]), EASE.cap + more) <= EASE.cap + more;
     const D = (a, b) => Math.hypot(b[0] - a[0], b[1] - a[1]);
-    let skipped = false;
+    // Where this run's own turns crowd one spot (the inside of a tight bend of a wide column, a border's corner:
+    // every stitch of the fan ends on one pivot), which of them come short is settled before any is sewn, evenly
+    // through the fan: of the turns within a 1 mm window of this one, only as many as there is room for go the
+    // whole way, the others between them stop short. Taken as they came, the first of the fan went the whole way
+    // until the spot was full and the rest all stopped short, which left a wedge of the column bare beside the
+    // pivot (a heart patch's tip: the fill showed through its border).
+    const thin = n > 8 ? this.fan(pts) : null;
+    let skipped = false, alt = 0;
     for (let i = 0; i < n; i++) {
       const b = pts[i];
-      if (!i && first && from && !fits(b) && D(from, pts[1]) <= EASE.most && D(from, pts[1]) > EASE.least) continue;
+      if (!i && n > 1 && first && from && !fits(b) && D(from, pts[1]) <= EASE.most && D(from, pts[1]) > EASE.least) continue;
+      // (a hair from the last point kept: never a stitch of its own. With the run's end left out, such a pair was
+      // the last stitch before a lock: the pouch's one tiny stitch)
+      if (i && out.length > (i === n - 1 ? 1 : 0) && D(out[out.length - 1], b) < EASE.hair) continue;
       // (the last point too, where the run is already two points long and the stitch not sewn is a short one: the
       // needle stops a stitch short of a node other strokes end on. `path` still reckons the next run from the end
       // as drawn, so nothing that was stitched to becomes a jump.)
       if (i === n - 1 && i && out.length > 1 && !fits(b) && D(out[out.length - 1], b) <= EASE.merge) continue;
       if (i < 1 || i > n - 2) { keep(b, i > 0 || first); skipped = false; continue; }
       if (!out.length) { keep(b); continue; }   // (the first point was left out: this one starts the run)
+
       const a = out[out.length - 1], c = pts[i + 1], d1 = D(a, b), d2 = D(b, c);
       // (beside the last point kept, after one was left out: the same edge of a satin again)
       if (skipped && d1 < EASE.least && D(a, c) <= EASE.most && D(a, c) > EASE.least) continue;
+      const m = [(a[0] + c[0]) / 2, (a[1] + c[1]) / 2], h = D(m, b), wide = D(a, c);
+      // A short stitch: its end `back` mm short of the edge, never more than `deep` of the way across. `seen` (a
+      // fan): nor so far that the gap it leaves between its neighbours shows. They are `wide` apart at the far
+      // edge (its own two ends there) and, at this one, twice as far as this end is from the last one kept on it:
+      // nothing on a pivot, a third of a mm along a straight edge. (A stitch stopped 1.5 mm short beside a heart's
+      // tip, its neighbours 0.6 mm apart, left a bare wedge there.)
+      const near = out.length > 1 ? 2 * D(out[out.length - 2], b) : 0;
+      const short = (backs, more = 0, seen = true) => d1 >= 0.8 && d2 >= 0.8 && backs.filter((k) => k <= EASE.deep * h && (!seen || (k * wide + (h - k) * near) / h <= EASE.show))
+        .map((k) => [b[0] + ((m[0] - b[0]) * k) / h, b[1] + ((m[1] - b[1]) * k) / h]).find((q) => D(a, q) > EASE.least && D(q, c) > EASE.least && fits(q, more));
+      const fan = thin ? thin[i] : 0;
+      if (fan === 1) {
+        const k = alt++ % EASE.back.length, s = short([...EASE.back.slice(k), ...EASE.back.slice(0, k)]);
+        if (s) { keep(s); skipped = false; continue; }
+      }
       if (fits(b)) { keep(b); skipped = false; continue; }
       const cos = d1 > 0 && d2 > 0 ? ((b[0] - a[0]) * (c[0] - b[0]) + (b[1] - a[1]) * (c[1] - b[1])) / (d1 * d2) : 1;
       if (cos < -0.5) {
-        const m = [(a[0] + c[0]) / 2, (a[1] + c[1]) / 2];
-        const s = d1 >= 0.8 && d2 >= 0.8 && EASE.short.map((t) => [m[0] + (b[0] - m[0]) * t, m[1] + (b[1] - m[1]) * t]).find((q) => D(a, q) > EASE.least && D(q, c) > EASE.least && fits(q));
+        // (in a fan the column's own cover comes before the cap: whole a little over it, else short where that
+        // doesn't show, else short however it shows, before a stitch is left out. Where columns meet, the others
+        // cover what a short stitch leaves.)
+        const s = fan ? (fits(b, EASE.slack) ? b : short(EASE.back) || short(EASE.back, EASE.slack) || short(EASE.back, EASE.slack, false)) : short(EASE.back, 0, false);
         if (s) { keep(s); skipped = false; continue; }
         if (D(a, c) <= EASE.most) { skipped = true; continue; }
       } else if (cos > 0.5) {
@@ -85,6 +119,46 @@ export class Design {
     return out;
   }
 
+  // Which of a run's turns (a satin's ends) come short: 1 for each, where the turns within half a mm of it either way
+  // and the hits already there are more than `EASE.cap`, less the share that still fits, spread evenly (`eased`).
+  fan(pts) {
+    const n = pts.length, turn = new Uint8Array(n), cells = new Map(), K = (gx, gy) => (gx + 32768) * 65536 + gy + 32768, key = (x, y) => K(Math.floor(x * 2), Math.floor(y * 2));
+    let any = false;
+    for (let i = 1; i < n - 1; i++) {
+      const a = pts[i - 1], b = pts[i], c = pts[i + 1], ux = b[0] - a[0], uy = b[1] - a[1], vx = c[0] - b[0], vy = c[1] - b[1];
+      const d1 = Math.hypot(ux, uy), d2 = Math.hypot(vx, vy);
+      if (d1 < 0.8 || d2 < 0.8 || (ux * vx + uy * vy) / (d1 * d2) >= -0.5) continue;
+      turn[i] = 1; any = true;
+      const k = key(b[0], b[1]);
+      let cell = cells.get(k);
+      if (!cell) cells.set(k, (cell = []));
+      cell.push(i);
+    }
+    if (!any) return null;
+    const thin = new Uint8Array(n);
+    let acc = 0, some = false;
+    for (let i = 1; i < n - 1; i++) {
+      if (!turn[i]) continue;
+      const b = pts[i], gx = Math.floor(b[0] * 2), gy = Math.floor(b[1] * 2);
+      // (own: this run's turns within the window; on: those on the pivot itself, within a quarter mm (four or more: along a straight edge they are a third of a mm apart). Only these come
+      // short: the turns beside a corner, a few tenths along the edge from it, keep the column's inner edge where
+      // it is, and room is left for them. Shortened with the rest, they let the fill show beside a heart's tip.)
+      // (wide: within 1 mm, as far as a window holding this turn reaches)
+      let own = 0, on = 0, wide = 0;
+      for (let x = gx - 2; x <= gx + 2; x++) for (let y = gy - 2; y <= gy + 2; y++) for (const j of cells.get(K(x, y)) || []) {
+        const dx = Math.abs(pts[j][0] - b[0]), dy = Math.abs(pts[j][1] - b[1]);
+        if (dx < 1 && dy < 1) { wide++; if (dx < 0.5 && dy < 0.5) { own++; if (dx < 0.25 && dy < 0.25) on++; } }
+      }
+      if (own < EASE.fan) { if (wide >= 2 * EASE.fan) { thin[i] = 2; some = true; } continue; }
+      if (on < 4) { thin[i] = 2; some = true; continue; }
+      const there = this.hits.top(pyRound(b[0] * 10), pyRound(b[1] * 10), 0) - 1, room = Math.max(0, EASE.cap - there - (own - on));
+      if (on <= room) continue;
+      acc += room / on;
+      if (acc >= 1) acc -= 1; else { thin[i] = 1; some = true; }
+    }
+    return some ? thin : null;
+  }
+
   // stitch a run of points; jumps (with a trim) if it starts away from the needle, or when told the way there
   // would show (it crosses open fabric)
   // lockAt: a point under stitches still to come (1 mm along a lettering stroke that's satined back over): the needle
@@ -94,11 +168,12 @@ export class Design {
   path(pts, lock = true, jump = false, lockAt = null, reach = 0, counted = false) {
     if (!pts.length) return;
     const end = pts[pts.length - 1];
+    const at = this.at || this.cur;   // (where the needle is: a stitch short of `cur` when the last run's end gave way)
     const far = !this.cur || jump || Math.hypot(pts[0][0] - this.cur[0], pts[0][1] - this.cur[1]) > Math.max(2.0, reach || 0);
     if (this.hits && !counted) {
       // (the first point is a hit unless the needle is in it already)
-      const first = !this.cur || jump || Math.hypot(pts[0][0] - this.cur[0], pts[0][1] - this.cur[1]) >= 0.3;
-      pts = this.eased(pts, first, far ? null : this.at || this.cur);
+      const first = far || Math.hypot(pts[0][0] - at[0], pts[0][1] - at[1]) >= 0.3;
+      pts = this.eased(pts, first, far ? null : at);
     }
     if (this.cur && far) { this.tieOff(); this.stitches.push([0, 0, TRIM]); }
     if (far && lock && lockAt && Math.hypot(lockAt[0] - pts[0][0], lockAt[1] - pts[0][1]) >= 0.7) {
@@ -121,10 +196,13 @@ export class Design {
         d = [u[0] * tie, u[1] * tie];
         // one hit 0.35 mm to the side, so the needle doesn't go through the same hole three times: on the side the
         // stitches go (it poked 0.5 mm out of script strokes on the other side)
-        const p = pts[0], q = [p[0] + d[0], p[1] + d[1]], k = inward(p, d, pts.slice(1, 7)), e = [p[0] - (k * d[1]) / 2, p[1] + (k * d[0]) / 2];
+        // (on a single line of thread there is no such side: the hit goes on along the line, `past` the tie-in's. Beside
+        // it, it stood 0.4 mm off a fine-line letter's stroke, a nub at the top of an H: tester, 2026-11)
+        const p = pts[0], q = [p[0] + d[0], p[1] + d[1]], k = inward(p, d, pts.slice(1, 7));
+        const e = bare(p, d, pts.slice(1, 7)) ? [q[0] + u[0] * LOCKS.past, q[1] + u[1] * LOCKS.past] : [p[0] - (k * d[1]) / 2, p[1] + (k * d[0]) / 2];
         [p, q, e, q, p].forEach((r, i) => this.st(STITCH, r, counted ? false : !i));   // (the start is counted with the run's points)
       }
-    } else if (Math.hypot(pts[0][0] - this.cur[0], pts[0][1] - this.cur[1]) >= 0.3) this.st(STITCH, pts[0], true);   // (a run that starts where the needle is needs no extra stitch)
+    } else if (Math.hypot(pts[0][0] - at[0], pts[0][1] - at[1]) >= 0.3) this.st(STITCH, pts[0], true);   // (a run that starts where the needle is needs no extra stitch)
     for (let i = 1; i < pts.length; i++) this.st(STITCH, pts[i], true);
     this.started = true; this.ended(pts, end);
   }
@@ -145,7 +223,9 @@ export class Design {
     let d = this.back ? [this.back[0] - c[0], this.back[1] - c[1]] : [1, 0];
     const L = Math.max(Math.hypot(...d), 1e-9); d = [(d[0] / L) * 0.7, (d[1] / L) * 0.7];
     // (the second hit 0.35 mm aside, toward the stitches just sewn so it hides in them)
-    const k = inward(c, d, this.recent || []), q = [c[0] + d[0], c[1] + d[1]], e = [q[0] - (k * d[1]) / 2, q[1] + (k * d[0]) / 2];
+    // (further back along the line where the last stitches were a single line of thread: as a tie-in's)
+    const k = inward(c, d, this.recent || []), q = [c[0] + d[0], c[1] + d[1]];
+    const e = bare(c, d, this.recent || []) ? [q[0] + (d[0] / 0.7) * LOCKS.past, q[1] + (d[1] / 0.7) * LOCKS.past] : [q[0] - (k * d[1]) / 2, q[1] + (k * d[0]) / 2];
     for (const r of [q, c, e, c]) this.st(STITCH, r);
     this.cur = this.at = null;
   }

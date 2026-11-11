@@ -406,6 +406,7 @@ function textRows(p, fab = "cotton") {
   // spacing and leading are percentages of the size; spacing only for print fonts (script letters pulled apart came
   // out unjoined, which reads as broken handwriting)
   const style = styleOn(p, fab), print = fontOf(p.font).print, sp = print ? (p.spacing || 0) / 100 : 0;
+  const asRead = fab === "knit" || fab === "towel";   // (print letters in reading order on a fabric that gives: lettering.js `letters`)
   // each line with where it starts in the words (pair adjustments are keyed by that)
   const raw = (p.text || "").split("\n"), at = raw.map((_, i) => raw.slice(0, i).reduce((a, l) => a + l.length + 1, 0));
   const kept = raw.map((l, i) => [l.trim(), at[i] + l.length - l.trimStart().length]).filter(([l]) => l).slice(0, 3);
@@ -419,7 +420,7 @@ function textRows(p, fab = "cotton") {
   // from where the next began though they pass within 2 mm of it.)
   if (p.shape === "up" || p.shape === "down") {
     const a = Math.max(p.radius, 8), b = Math.max(p.ry ?? p.radius, 8);
-    const l = letters(lines.join(" "), p.font, p.size, style, sp, joined, true, bender(p.shape, a, b));
+    const l = letters(lines.join(" "), p.font, p.size, style, sp, joined, true, bender(p.shape, a, b), asRead);
     return l.parts.length ? [{ parts: bend(l.parts, p.shape, a, b), satinW: l.satinW, xh: l.xh }] : [];
   }
   if (p.shape === "wave" || p.shape === "bridge") {
@@ -428,12 +429,12 @@ function textRows(p, fab = "cotton") {
     const mid = (flat.top + flat.bottom) / 2;   // (letters come with the baseline at y = 0)
     const xs = flat.parts.flatMap(([q]) => q.map((v) => v[0])), x0 = minOf(xs), x1 = maxOf(xs);
     const f = p.shape === "wave" ? ((g) => ([x, y]) => g([x, y - mid]))(waver(x0, x1, p)) : bridger(x0, x1, p);
-    const l = letters(lines.join(" "), p.font, p.size, style, sp, joined, true, f);
+    const l = letters(lines.join(" "), p.font, p.size, style, sp, joined, true, f, asRead);
     return [{ parts: p.shape === "wave" ? wave(l.parts.map(([q, ...r]) => [q.map(([x, y]) => [x, y - mid]), ...r]), p) : bridge(l.parts, p), satinW: l.satinW, xh: l.xh }];
   }
   // straight: one size for every line (scaled to the first line's x-height), baselines `leading` x size apart
-  let ls = lines.map((t, i) => letters(t, p.font, p.size, style, sp, kerns[i]));
-  if (ls.length > 1) ls = ls.map((l, i) => (i && l.xh ? letters(lines[i], p.font, (p.size * ls[0].xh) / l.xh, style, sp, kerns[i]) : l));
+  let ls = lines.map((t, i) => letters(t, p.font, p.size, style, sp, kerns[i], true, null, asRead));
+  if (ls.length > 1) ls = ls.map((l, i) => (i && l.xh ? letters(lines[i], p.font, (p.size * ls[0].xh) / l.xh, style, sp, kerns[i], true, null, asRead) : l));
   ls = ls.filter((l) => l.parts.length);
   if (!ls.length) return [];
   // Baselines `leading` x size apart, and the ink of one line at least half an x-height (a quarter of the size at most:
