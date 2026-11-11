@@ -23,7 +23,7 @@ node tests/cdp.mjs $CDP start $OUT/chrome >/dev/null 2>&1; node tests/cdp.mjs $C
 trap 'node tests/cdp.mjs $CDP stop >/dev/null 2>&1; node tests/cdp.mjs $((CDP+1)) stop >/dev/null 2>&1; kill $SRV 2>/dev/null' EXIT
 
 # stitches: anything that builds, writes or reads them
-if has '^js/(core/|studio/(pieces|outline|quilt|motifs)|doctor|worker|quilt-worker)'; then
+if has '^js/(core/|studio/(pieces|compose|lettering|shapes|fabrics|files|starters|names|outline|quilt|motifs)|doctor|worker|quilt-worker)'; then
   say "== batches (stitch code changed)"
   rm -f $OUT/batch/*.pes(N)
   for pg in pe900_batch studio_batch; do
@@ -40,8 +40,8 @@ if has '^js/(core/|studio/(pieces|outline|quilt|motifs)|doctor|worker|quilt-work
   [[ -n $BASE ]] && say "compare: changed files vs $BASE" && for f in $BASE/*.pes; do cmp -s $f $OUT/batch/${f:t} || say "  changed ${f:t}"; done | tail -40
   # (picture_corpus.sh starts and stops its own browser and its own server on the ports it's given: not ours. Given
   # our server's port its files landed in our batch folder and its own checker count came out blank)
-  has '^js/core/digitize' && run picture_corpus 600 zsh tests/picture_corpus.sh $((CDP+3)) $((HP+1)) $OUT/pc
-  has '^js/core/(text|raster|fonts)|^js/studio/pieces' && { node tests/cdp.mjs $CDP goto "$U/tests/browser/lettering_look.html?v=$RANDOM" >/dev/null; for i in $(seq 1 120); do t=$(node tests/cdp.mjs $CDP eval document.title); [[ $t == *DONE* ]] && break; sleep 5; done; say "== lettering_look $t"; [[ $t == *" 0\""* ]] || fail=1; }
+  has '^js/core/(digitize|palette|fill|colour)' && run picture_corpus 600 zsh tests/picture_corpus.sh $((CDP+3)) $((HP+1)) $OUT/pc
+  has '^js/core/(text|raster|fonts)|^js/studio/(pieces|lettering)' && { node tests/cdp.mjs $CDP goto "$U/tests/browser/lettering_look.html?v=$RANDOM" >/dev/null; for i in $(seq 1 120); do t=$(node tests/cdp.mjs $CDP eval document.title); [[ $t == *DONE* ]] && break; sleep 5; done; say "== lettering_look $t"; [[ $t == *" 0\""* ]] || fail=1; }
 fi
 
 run files_flow 600 node tests/files_flow.mjs $CDP $U
