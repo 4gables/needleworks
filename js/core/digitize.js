@@ -5,6 +5,7 @@
 import { Design } from "./design.js";
 import { arclen, followRun } from "./geom.js";
 import { MARGIN } from "./machines.js";
+import { ROWS } from "./recipes.js";
 import { distanceTransform, label, order, skeletonEdges } from "./raster.js";
 import { PEC_MATCH, hexToRgb, nearestBrotherThread, pecThread, rgbToHex } from "./threads.js";
 
@@ -19,7 +20,7 @@ export const DEFAULTS = {
 
 // fill row spacing in mm. Solid covers the fabric; standard is lighter and faster. 0.3 fails the PE900 check:
 // the links between rows become stitches under 0.3 mm, which nest.
-export const DENSITY = { solid: 0.35, standard: 0.4 };
+export const DENSITY = ROWS;   // (core/recipes.js)
 // A colour's fill reaches this far (mm) under the colours sewn after it, so thread pull can't open a gap of fabric
 // where two colours meet (digitizing guides: 0.2-0.4 mm).
 const OVERLAP = 0.35;

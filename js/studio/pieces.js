@@ -8,7 +8,7 @@ import { DENSITY, FILL_PATTERNS, fillPolygon } from "../core/digitize.js";
 import { APPLIQUE_FONTS, FONTS, fontOf } from "../core/fonts.js";
 import { machineThreads } from "../core/formats.js";
 import { MARGIN } from "../core/machines.js";
-import { WEIGHTS, fillFor, satinFor } from "../core/recipes.js";
+import { BORDERS as EDGES, fillFor, letterRecipe, satinFor } from "../core/recipes.js";
 import { back, bounds, circle, edgeWalk, enter, filletPolygon, followRun, loop, moveCost, normals, rings, run, satin, zigzag } from "../core/geom.js";
 import { counterPockets, distanceTransform, order } from "../core/raster.js";
 import { strokes } from "../core/text.js";
@@ -525,8 +525,7 @@ function inkAt(rows, w, least = 0) {
   return { at, max: Math.max(...v) };
 }
 function stitchLetters(parts, satinW, fab = "cotton", small = false) {
-  const zz = fab === "knit" ? 1.5 : 2.5, pull = fab === "knit" ? 0.3 : 0;
-  const density = wt === "auto" ? (fab === "knit" ? 0.42 : small ? 0.34 : 0.38) : WEIGHTS[wt].letterSatin + (fab === "knit" ? 0.04 : 0);
+  const { zigzagFrom: zz, pull, gap: density } = letterRecipe(fab, wt, small);   // (core/recipes.js LETTERS)
   let gap = false, last = null, lastW = satinW;   // (a skipped stroke hands its jump on to the next one sewn)
   if (!satinW) parts = pointed(parts);
   return parts.map(([p0, mode, g, cap, taper, ends, sides, thick]) => {
@@ -1157,7 +1156,8 @@ const tack = (e) => [loop(run(e, 2.0, true)), loop(run(back(e), 2.0, true))];
 // the fabric show through and fray past it on Ashley's bookmarks, 2026-11-05). Its centre is 0.2 mm inside the line,
 // so it reaches 1.8 mm out as the 3.6 mm one did (sizes, fits and cut files unchanged: wider both ways, two key fobs
 // no longer fitted the 4x4 hoop) and 2.2 mm in, over the fabric's trimmed edge.
-const satinBorder = (edge) => { const e = inset(edge, 0.2); return [edgeWalk(e, 4.0, true), loop(zigzag(e, 3.0, 2.0, true)), loop(satin(e, 4.0, sd(0.34), 0.3, true))]; };
+const satinEdge = (e, B) => [edgeWalk(e, B.width, true), loop(zigzag(e, ...B.zigzag, true)), loop(satin(e, B.width, sd(B.gap), B.pull, true))];   // (core/recipes.js BORDERS)
+const satinBorder = (edge) => satinEdge(inset(edge, EDGES.edge.inset), EDGES.edge);
 // A closed outline started `f` of the way round, kept there (`seam`: compose doesn't enter it where the needle is).
 // Each stage of an outline sewn in stages (in-the-hoop, appliqué frame, zipper pouch) starts a third further round:
 // all three started at one corner, whose hole took 16 hits and its neighbour 15 more (the locks of three stages) on
@@ -1176,7 +1176,7 @@ const seamStage = (f, make) => ({ seam: f, reseam: (g) => seamed(make(g)), paths
 // a frame that's only a border: satin (3 mm), bold (a triple run) or a line
 // (the edge walk isn't closed: it ends on the side the zigzag starts. Closing it stepped 2.2 mm back across the
 // border, a trim and two locks on every satin frame, until 2026-10-31)
-const plainBorder = (e, border) => border === "satin" ? [edgeWalk(e, 3.0, true), loop(zigzag(e, 2.1, 2.0, true)), loop(satin(e, 3.0, sd(0.4), 0.3, true))]
+const plainBorder = (e, border) => border === "satin" ? satinEdge(e, EDGES.frame)
   : border === "bold" ? [run(e, 2.0, true), run(back(e), 2.0, true), run(e, 2.0, true)].map(loop)
   : [loop(run(e, 2.2, true))];
 
