@@ -3,7 +3,6 @@ import { turnForMachine, turnPattern } from "./core/design.js";
 import { FONTS } from "./core/fonts.js";
 import { STITCH, designStats, machineThreads, readEmbroidery, validatePES, writePES } from "./core/formats.js";
 import { DEFAULT_MACHINE, MACHINES, MARGIN, hoop as getHoop } from "./core/machines.js";
-import { DENSITY, LEARN, MOST, contentBox, lostMuch, picturePlan, pictureImage, sewSized } from "./core/digitize.js";
 import { PEC_MATCH, PEC_THREADS, hexToRgb, nearestBrotherThread, pecThread, rgbToHex } from "./core/threads.js";
 import { CLOTHS, colorBlocks, draw } from "./render.js";
 import { TURNED, TURN_PIC, cutDXF, cutName, cutSVG, firstStep, sewSheet, sewTime, stepTime, told, youHtml } from "./sheet.js";
@@ -19,16 +18,34 @@ import { keepFocus, keyboard, live, next } from "./focus.js";
 import "./onitem.js";   // (it sets itself up: nothing here calls into it)
 import { along, namesFor } from "./along.js";
 import { brandUI, nearOwn, ownSpool, ownedPalette, ownedSpools, owns, threadHtml, threadLabel, threadLine, threadList } from "./threadui.js";
-import { lastPicture, loadPicture, makePicture, sizeLabel } from "./picture.js";
-import { openInfo, route, sizeUI } from "./opened.js";
-export { openDesign } from "./opened.js";
-export { makePicture, paletteUI } from "./picture.js";
+
+// The Picture and Open tabs' code (picture.js, opened.js and the picture engine behind them: a quarter of the
+// scripts) isn't part of the first load: it comes when the first design is on screen, or at once when one of those
+// tabs, a dropped file or a shared one asks for it. Reason: on a slow phone the first preview waited 18 s, every
+// byte of it download (50 KB/s), and the Design tab needs none of this. Until it is here the two tabs say "Getting
+// ready…"; `tabs.picture` / `tabs.opened` are the modules once loaded.
+export const tabs = { picture: null, opened: null, coming: null };
+export function tabCode() {
+  return (tabs.coming ||= Promise.all([import("./picture.js"), import("./opened.js")]).then(([p, o]) => { tabs.picture = p; tabs.opened = o; fillMachines(); return tabs; },
+    (err) => { tabs.coming = null; throw err; }));
+}
+// (what the other parts call before the tabs' code is in does nothing: there is no picture or opened file yet)
+export const makePicture = (...a) => tabs.picture?.makePicture(...a);
+export const paletteUI = (...a) => tabs.picture?.paletteUI(...a);
+export const openDesign = (...a) => tabs.opened.openDesign(...a);
+// a file dropped, pasted or shared: to the tab that takes it, once its code is here
+const route = (file) => { if (file) tabCode().then((t) => t.opened.route(file)).catch(() => showError(NOT_HERE)); };
+const NOT_HERE = "That part of Needleworks didn't load: the internet connection may have dropped. Check it and try again.";
 export { threadHtml } from "./threadui.js";
 
 // the old bookmark panel's colours as saved, mapped to the exact Brother PEC colours (#1a1a1a showed as "Olive Green"),
 // for an old #bookmark link opening the Bookmark starter
 const OLD_THREADS = { "#c8102e": "#ed171f", "#e1252f": "#ed171f", "#f06292": "#f64a8a", "#7b2d8e": "#770176",
   "#1f3a68": "#0e1f7c", "#2e6b3a": "#00673e", "#c99a2e": "#e8a900", "#1a1a1a": "#000000" };
+
+// ---------- start ----------
+fillMachines();
+brandUI();
 
 // ---------- preview ----------
 export const canvas = $("view");
@@ -172,7 +189,7 @@ export function setView(v) {
   clearTimeout(qTimer);
   if (fits && !v.split && !v.verdict) qTimer = setTimeout(() => { if (state.view === v) { v.verdict = verdictOf(v.bytes); warnUI(v); } }, 250);
   // (and the size controls: "Largest that fits the 5x7" stayed after the hoop was changed to 4x4 on another tab)
-  if (state.mode === "open" && state.opened) { openInfo(v, st, fits); if ($("doc-scale")) sizeUI(); }
+  if (state.mode === "open" && state.opened) { tabs.opened.openInfo(v, st, fits); if ($("doc-scale")) tabs.opened.sizeUI(); }
   $("download").textContent = v.split ? `Download ${v.split.length} files (.zip)` : !fits ? "Too big for this hoop" : blocked ? v.blockLabel || "Fix the lettering first" : v.action || `Download ${v.filename}`;
   // (the whole name where the button cuts it short)
   $("download").title = $("download").textContent;
@@ -716,7 +733,7 @@ export function fillMachines() {
   const h = hoop();
   const max = Math.floor(Math.max(h.w, h.h) - 2 * MARGIN - 2);
   $("pic-size").max = max;
-  if (state.pic.size > max) { state.pic.size = max; $("pic-size").value = max; $("pic-size-out").textContent = sizeLabel(max); }
+  if (state.pic.size > max) { state.pic.size = max; $("pic-size").value = max; if (tabs.picture) $("pic-size-out").textContent = tabs.picture.sizeLabel(max); }
 }
 function hoopChanged() { if (state.mode !== "picture") state.pic.req++; for (const m of ["picture", "design"]) if (m !== state.mode) state.views[m] = null; fillMachines(); refresh(); }
 // (on the Design tab a hoop change is an Undo step, as a turn is: Undo puts a design back in the hoop it was in)
@@ -742,7 +759,13 @@ export function setMode(mode, push = true) {
   // (the file chooser in the preview too: at 960 x 540 the panel's was below the fold, under an empty hoop)
   if (mode === "open") $("empty").append(Object.assign(document.createElement("button"), { type: "button", className: "primary", textContent: "Choose a design file", onclick: () => $("open-file").click() }));
   state.zoom = 1; state.pan = [0, 0];
-  if (mode === "picture" && !state.pic.bitmap) lastPicture();
+  // (a tab whose code isn't here yet: shown at once, filled when it is)
+  if (mode !== "design" && !tabs.picture) {
+    setView(null); busy(true, "Getting ready…");
+    tabCode().then(() => { if (state.mode === mode) setMode(mode, false); }, () => { if (state.mode === mode) { busy(false); showError(NOT_HERE); } });
+    return;
+  }
+  if (mode === "picture" && !state.pic.bitmap) tabs.picture.lastPicture();
   else if (mode === "picture" && !state.views.picture) makePicture();
   else if (mode === "design" && !state.views.design) studio.make();
   else setView(state.views[mode] || null);
@@ -788,7 +811,7 @@ function showStep(i) {
   state.step = i; document.dispatchEvent(new CustomEvent("nw:step", { detail: i })); paint();
 }
 export const studio = initStudio({
-  hoop: designHoop, machineHoop: hoop, turned: designTurned, fit: () => { state.zoom = 1; state.pan = [0, 0]; }, store, showError, busy, safeName, escapeHtml, handOut, keepFocus, showStep, step: () => state.step, paint: () => state.mode === "design" && paint(), setMode, toast, hideToast, keyboard: () => keyboard, threadLine, threadHtml, ownSpool, threadList, ownedSpools,
+  hoop: designHoop, machineHoop: hoop, turned: designTurned, pageFaces: uiFonts, fit: () => { state.zoom = 1; state.pan = [0, 0]; }, store, showError, busy, safeName, escapeHtml, handOut, keepFocus, showStep, step: () => state.step, paint: () => state.mode === "design" && paint(), setMode, toast, hideToast, keyboard: () => keyboard, threadLine, threadHtml, ownSpool, threadList, ownedSpools,
   // (undo, redo and Open saved put the hoop's turn back as it was; the caller rebuilds)
   setTurn: (on) => { state.turn.design = !!on; store.set("turn", state.turn); $("turn").setAttribute("aria-pressed", designTurned()); },
   hoopId: () => hoop().id,
@@ -804,7 +827,7 @@ export const studio = initStudio({
     try { bytes = writePES(pattern); }
     catch { state.views.design = null; if (state.mode === "design") setView(null); showError("This design has more thread changes than a file can hold. Use fewer thread colours, or a design file with fewer of them."); return; }
     const v = { pattern, verifyAgainst: pattern, bytes, filename, fabric: "linen", ...look };
-    state.views.design = v;
+    state.views.design = v; setTimeout(firstShown);
     // (painted again only when setView moved the zoom: drawing a busy design twice was ~0.2 s of every change)
     if (state.mode === "design") { const keep = [state.zoom, state.pan]; setView(v); if (state.zoom !== keep[0] || state.pan !== keep[1]) { [state.zoom, state.pan] = keep; paint(); } }
     // (the size as the size chip says it, from the file read back, for words that give the size: the too-big note
@@ -816,11 +839,38 @@ export const studio = initStudio({
 selBox = studio.selBox;
 setMode((location.hash || "#design").slice(1), false);
 
+// Once the first design is on screen (or after 6 s without one: an empty Design tab), and the page is still: the
+// page's own text faces, the other tabs' code, then the offline copy. Not before: all are downloads, and on a slow
+// connection they took the line from the lettering font the first preview was waiting for. (The font list's and
+// the starters' lettering fonts wait for the page's faces too: ui.js `facesOn`.)
+let shownOnce = false;
+function firstShown() {
+  if (shownOnce) return;
+  shownOnce = true;
+  const still = (f) => ("requestIdleCallback" in window ? requestIdleCallback(f, { timeout: 3000 }) : setTimeout(f, 800));
+  // (the faces first and alone, for 5 s at most: they are what the visitor sees change)
+  still(() => uiFonts().then(() => tabCode().then(offline, offline)));
+}
+// The page's own text faces (index.html `nwFonts`). A visit that has had them asks for them at once from then on.
+let uiFontsAsked = null;
+function uiFonts() { return (uiFontsAsked ||= askUiFonts()); }
+function askUiFonts() {
+  globalThis.nwFonts?.();
+  const sheet = document.querySelector('link[rel="stylesheet"][href*="fonts.googleapis.com"]');
+  if (!sheet) return Promise.resolve();
+  const faces = ['400 17px "Atkinson Hyperlegible"', '700 17px "Atkinson Hyperlegible"', '500 17px "Bricolage Grotesque"', '700 17px "Bricolage Grotesque"', '500 14px "IBM Plex Mono"'];
+  const got = () => Promise.all(faces.map((f) => document.fonts.load(f))).then((f) => { if (f[0].length) store.set("uifonts", true); }, () => {});
+  const here = sheet.sheet ? got() : new Promise((r) => { sheet.addEventListener("load", () => got().then(r)); sheet.addEventListener("error", r); });
+  return Promise.race([here, new Promise((r) => setTimeout(r, 5000))]);
+}
+setTimeout(firstShown, 6000);
+
 // installable and offline (sw.js); a picture or design shared to the installed app opens straight away
 // A new release installs beside the one that's running and waits: the page offers it, and reloads into it when it has
 // taken over (sw.js: a page never runs one release's files beside another's). Its design is kept in the browser, so
 // nothing is lost by the reload. (`?sw` on this computer: tests/ only; the page is otherwise https.)
-if ("serviceWorker" in navigator && (location.protocol === "https:" || (location.hostname === "127.0.0.1" && new URLSearchParams(location.search).has("sw")))) {
+function offline() {
+  if (!("serviceWorker" in navigator && (location.protocol === "https:" || (location.hostname === "127.0.0.1" && new URLSearchParams(location.search).has("sw"))))) return;
   let reloading = false;
   const offer = (reg) => toast("A new version of Needleworks is ready.", { label: "Reload", run: () => { reloading = true; reg.waiting?.postMessage("activate"); } });
   navigator.serviceWorker.addEventListener("controllerchange", () => { if (reloading) location.reload(); });
@@ -840,6 +890,19 @@ if (new URLSearchParams(location.search).has("shared")) (async () => {
   history.replaceState(null, "", location.pathname + location.hash);
 })();
 // a link to another tab on this page (#design, #open...) switches to it; #bookmark opens the Bookmark starter
+// a file dropped or pasted anywhere on the page
+document.addEventListener("dragover", (e) => e.preventDefault());
+document.addEventListener("drop", (e) => {
+  e.preventDefault();
+  document.querySelectorAll(".drop.over").forEach((d) => d.classList.remove("over"));
+  route(e.dataTransfer.files[0]);
+});
+document.addEventListener("paste", (e) => {
+  const f = [...(e.clipboardData?.files || [])][0];
+  if (f) { e.preventDefault(); route(f); }
+});
+// skip links move focus without changing the address (its #hash is the tab)
+for (const a of document.querySelectorAll(".skip")) a.onclick = (e) => { e.preventDefault(); const t = $(a.hash.slice(1)); t.focus({ preventScroll: true }); t.scrollIntoView({ block: "start" }); };
 addEventListener("hashchange", () => { const m = location.hash.slice(1); if (m === "bookmark" || (m !== state.mode && MODES.includes(m))) setMode(m, false); });
 // for tests/surfaces.mjs: the view on screen, its problems and its share text (what every surface should agree on)
 globalThis.nwTest = { view: () => state.view, names: (name, shrink) => studio.forNames()?.build(name, shrink), state: () => ({ zoom: state.zoom, scale: state.tf?.scale, whole: !!state.view?.whole, pan: state.pan, step: state.step, turn: designTurned(), hoop: hoop().id, mode: state.mode }), sel: () => selBox(), problems: () => problemsOf(state.view), share: () => state.view && shareText(state.view), cut: (ext = "svg") => cutFiles(state.view, ext).map((f) => ({ ...judge(f), bytes: String(f.bytes) })), fine: () => state.pic.fine && { ...state.pic.fine, checking: state.pic.checking, fixes: state.pic.fixes?.map((f) => f.label) } };

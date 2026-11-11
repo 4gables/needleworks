@@ -10,7 +10,7 @@
 // (Enter, Space, an arrow, a typed letter), asserting focus lands on a live, visible control with a ring and the page
 // doesn't jump. Writes OUT/report.json, OUT/contact.html and OUT/contact.png (thumbnails with their problems).
 //   needs the site served:   .venv/bin/python tests/batch_server.py out/batch 8783
-//   usage: node tests/ui_sweep.mjs [--url http://127.0.0.1:8783/] [--port 9313] [--out out/ui_sweep]
+//   usage: node tests/ui_sweep.mjs [--url http://127.0.0.1:8783/] [--port 9313] [--out out/ui_sweep] [--standin]
 //          [--quick] [--vp 390x844m,1413x717] [--only design,open-file] [--no-keys] [--keys-only]
 //          [--workers 4]   (tabs side by side, each in a browser context of its own)
 // Prints "DONE <shots> <problems>" and exits 1 when there are problems. Full run ~8 min (504 screens, ~200 key
@@ -24,6 +24,7 @@ import zlib from "node:zlib";
 const arg = (k, d) => { const i = process.argv.indexOf("--" + k); return i < 0 ? d : process.argv[i + 1]; };
 const flag = (k) => process.argv.includes("--" + k);
 const URL0 = arg("url", "http://127.0.0.1:8783/");
+const STANDIN = process.argv.includes("--standin");
 const PORT = +arg("port", 9313);
 const OUT = path.resolve(arg("out", "out/ui_sweep"));
 const QUICK = flag("quick");
@@ -187,6 +188,9 @@ async function openTab(url0) {
     window.confirm = (m) => { log("confirm", m); return false; }; window.prompt = (m) => { log("prompt", m); return null; };
     try { Object.defineProperty(navigator, "share", { value: async () => log("share"), configurable: true }); } catch {}
   })();` });
+  // (--standin: the page before its own text faces are in, as a first visit has it until the first design is up:
+  // Google's fonts never arrive, so the text stays in css/app.css's stand-in faces)
+  if (STANDIN) { await send("Network.enable"); await send("Network.setBlockedURLs", { urls: ["*fonts.googleapis.com*", "*fonts.gstatic.com*"] }); }
   const t = { id: targetId, ctx, url0, origin: new URL(url0).origin, send, ev, events, ws };
   t.setViewport = async (vp) => {
     await send("Emulation.setDeviceMetricsOverride", { width: vp.w, height: vp.h, deviceScaleFactor: vp.dpr, mobile: vp.mobile });

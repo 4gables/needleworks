@@ -89,9 +89,37 @@ Reference for this part of Needleworks: the rules, the reason for each (it stops
 - First load: `#busy` is in the page's own markup saying "Getting ready…" (setMode takes it down), then the first
   design says "Getting the lettering ready…" until it's made (`waitSaid`); `.busy` hides `.empty`. Before, a slow
   first load showed an empty preview, then "Nothing to stitch yet" while the font came. Measured on the slow-phone
-  profile against the live site (v25): first preview at 17-20 s = 437 KB of gzipped scripts (13 s) + Great Vibes
-  158 KB (4 s) + the first compose. modulepreload links for all 54 modules and a font preload saved 0.6-1 s of 18.5
-  (it's bandwidth, not round trips): not added. The real cut is loading Picture and Open code when their tab opens.
+  profile (`cdp.mjs slow`: 400 ms, 50 KB/s, CPU 4x) it is all download: every byte asked for before the first
+  preview is 20 ms of waiting, whatever its order, so the only cuts are bytes not sent.
+  - The Picture and Open tabs' code (picture.js, opened.js, digitize.js, palette.js: 65 KB of 441 gzipped) is not
+    in the first load: app.js `tabCode` fetches it when the first design is on screen, or at once when one of those
+    tabs, a dropped, pasted or shared file asks (the tab shows "Getting ready…" meanwhile). Nothing the Design tab
+    runs may import those four again (`sw.test.mjs` fails). What the page does for every tab (the drop and paste
+    handlers, skip links, `fillMachines`, `brandUI`) is in app.js.
+  - index.html lists the first screen's modules as `modulepreload` links (written and checked by `sw.test.mjs`
+    from app.js's imports), after the stylesheet and `fetchpriority="low"`: at the default priority the 51 of them
+    shared the line with the stylesheet and the page stayed blank for 4-8 s; now it paints at 1.6 s.
+  - The first design's lettering font is asked for by a line of script in the page (the saved design's fonts, or
+    the first starter's), not when the scripts are in. The offline copy (sw.js) and the other fonts start after
+    the first preview: both took the line from it.
+  - The page's own text faces (Google Fonts, 109 KB) come after the first design on a first visit (owner's
+    choice, 2026-11-11): index.html's `nwFonts` adds their stylesheet when app.js `uiFonts` asks, alone for up to
+    5 s (the font list's 17 lettering fonts and the starters' wait for them: ui.js `facesOn`; behind those the
+    text changed face at 31 s, now 16.8 s). A visit that has had them (`nw:uifonts`) writes the stylesheet into
+    the page as before, so later visits and offline ones never show the stand-ins. Until they arrive the text is
+    in css/app.css's stand-in faces (`NW Body A/R`, `NW Display A/R`, `NW Mono`: Arial or Roboto set to the final
+    face's width with `size-adjust`, and to its line with the ascent and descent overrides). The swap measured:
+    layout shift 0.0000 at 390 px and 0.0002 at 1413 px; of 157 elements none moved up or down or changed height,
+    the widest sideways move 7 px bar one link at a line's end. Lettering is never drawn or stitched from a
+    stand-in: only `--body`, `--display` and `--mono` have them. `ui_sweep --standin` sweeps the page in that state.
+  - Measured (local server with gzip and HTTP/2, three runs each): first paint 4.0 -> 1.8 s; first preview 17.7 ->
+    14.1-14.2 s; the text changes face once at 16.8 s. Desktop, first visit: preview at 0.4-0.5 s, the faces at
+    1.1-1.4 s; later visits as before. What is left before the preview: scripts 376 KB, Great Vibes 158 KB,
+    Sacramento (the wordmark) 31 KB.
+  - Not done, each the owner's call: the scripts without their comments (a third of their gzipped bytes, 2.7 s:
+    a release step, and the site has none); a lighter font for the first starter (Great Vibes is the heaviest
+    script font; it changes the starters). Small and left: brandcharts.js (16 KB) only for a chosen brand,
+    doctor.js's fixes (13 KB) apart from its counts.
 - "Make another in the hoop" is also among the preview's links (`#another-open`, a lone upright in-the-hoop
   project): on a phone the one under the starters is 1,475 px down.
 - A long line too big for the hoop is offered on two or three lines beside Fit to hoop (`hoopLines`: at its own size

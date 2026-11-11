@@ -50,7 +50,9 @@ Automated checks that each guard a bug class (add a line with every new guard):
 - Doctor fixes give valid, passing files at every size (`doctor.test.mjs`).
 - Offline completeness: every module, font, icon in `FILES` (`sw.test.mjs`). It also checks every import resolves to a file of the app that exports the
   name (a mistyped path stops the page loading; nothing else in Node sees it) and that sw.js's hashes and set
-  fingerprint are current.
+  fingerprint are current. And the first load: index.html's `modulepreload` list is exactly app.js's imports
+  (`--write` writes it, before the hashes), the Picture and Open tabs' code isn't among them, and the font the
+  page asks for early is the first starter's.
 - One release at a time, never a mix: `zsh tests/upgrade.sh` (~1.5 min; three copies of the site served one after
   another: stays whole on the running release, offers the new one, refuses a half-published one). `check.sh` runs it
   when sw.js or app.js's registration changes.
