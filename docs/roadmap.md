@@ -192,6 +192,38 @@ Phase 3, friction and features:
     that branch's `tests/vm/measure.ps1`); 4x4-only models (SE700, PE545)
     wait for a published fact: whether they cut jump stitches
 
+## Cycle 2: as good as the best commercial PES (owner, 2026-11-11)
+The work runs as a loop: fresh review, plan, improve, release. The bar: every file matches or beats the best
+professionally digitized PES measure by measure, and stays compatible with the machine chosen. The fresh review
+of v28 (agents that had not seen the work) found:
+- The "Brother-made" reference files on this machine are not Brother's: three commercial designs from other
+  software, three hobby-tool files, three poor auto-digitized ones, one conversion. Earlier "better than Brother's
+  samples" lines were measured on those. Brother's 379 real samples are inside the PE-DESIGN VM only.
+- Against the three commercial designs: our fills lay 2.8 mm of thread per mm² where they lay 6.0 (rows 0.35 mm
+  apart against 0.18-0.20, lattice 2.5 mm against 1.1-1.3); pictures and fine lines have 47 % of stitches under
+  0.8 mm against 5-7 %; pictures trim 12-28 times per 1,000 stitches against 0.4-1.8 and pile colour on colour
+  (to 32 hits/mm²); the inside of satin curves crowds (same-side gap p5 0.21 against 0.28); every fill is at 45°;
+  36 % of wide print columns have no underlay. At or better than them: trims on lettering, borders, patches and
+  quilting; loose threads; tied ends; colour order; satin borders.
+- Code: a second open tab is not reloaded at a release (mixed files); a failed fill job can leave Download
+  waiting; ring fills 3-5 times slower than rows and unguarded; check.sh skipped batches for borders.js/ownfont.js;
+  the scoreboard never fails; 8 own fonts with no way to remove one.
+- An agent can make a file only by reaching into internals: no entry that returns bytes, verdict, steps and
+  warnings as data; lettering needs a browser; the verdict is prose; a design as data is undocumented and bad
+  input is silently changed; the skill is stale.
+
+- [ ] **P0 References and the parity scoreboard**: Brother's samples measured (out of the VM, untracked),
+  more commercial designs gathered (untracked), eight numbers per kind beside the professional range, printed by
+  check.sh and failing when a row gets worse; batch pruned (504 files: only cases that guard a distinct path)
+- [ ] **P1 Fills and pictures**: fill cover, lattice and angle; ring fill off the page's blocking path; even run
+  lengths; an all-colour density limit; cross-stitch in rows; picture trims
+- [ ] **P2 Satin and lettering**: short stitches inside curves, underlay under print columns, towel counters,
+  the digits-only size bug, crosshatch travel, locks on opened files
+- [ ] **A1 Agent-drivable**: one job format with validation, `make(job)` returning bytes, verdict, steps and
+  problems as data (the UI calls it too), page API and link form, a command-line tool (macOS), docs and the skill;
+  with it the two-tab reload, the stuck fill job, removing an own font
+Unproven until sewn, in the order to sew: fill cover, small print order, script joins, ring fills, the 6x10 page.
+
 Ask the owner first: other formats out (DST, JEF, EXP, VP3), photo stitch, free-standing lace, 3D puff.
 Not planned: wireless send, FCM cut files, BX fonts, an AI helper.
 
