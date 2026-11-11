@@ -11,7 +11,7 @@
 // cache.
 // (`SET`: a fingerprint of the list below, written with the hashes. It is part of the cache's name, so a release whose
 // files changed can never install into the cache the running one is serving from, version number bumped or not.)
-const SET = "7995519356bb";
+const SET = "444e215a923e";
 const CACHE = `needleworks-v26-${SET}`, SHARED = "needleworks-shared";
 const FILES = {
   "index.html": "07f6abc2e52d6bba7087e4a7c606fb42644294768b52da5aa57f1c467392a539",
@@ -84,8 +84,8 @@ const FILES = {
   "js/studio/quilt.js": "05184d2979699b79ef5f258919b74f1bc73633c776abb5684fc96312083e7475",
   "js/studio/recent.js": "e07113e8d84dc02706cc97784682c835be08c128a6d13bdd1a1d936781689ebd",
   "js/studio/threadsaid.js": "848f611cd42126b84096a1c2293c9a0fc08e697f0feaf4dd79ec581868fdfaf2",
-  "js/studio/toobig.js": "dd8ca9eca12c6cea0b1e6562f078f783c8e48f7daacb839dc7865992f1287af4",
-  "js/studio/fixes.js": "cfc1cf73954498b94dadcd72fee58ad8b907436a525ee222231f09efe25e6366",
+  "js/studio/toobig.js": "7990f73316cfb63e70fb89ad2910e1cd15cfc2dba871b77ecd0f958c6513ecd8",
+  "js/studio/fixes.js": "bc5b432f83643b45398329b696a4d357b9f9ec286c790c6e3aed87b6c42a860f",
   "js/studio/stepsui.js": "8960066581345e300b615f19694ce84815b78fb95f80cecb6c7e16b04ddff2d9",
   "js/studio/offpage.js": "879ccd83e56f756c83eed3808249b61c27c0abadb7383db2f20f4c5278cfc6ff",
   "js/studio/problems.js": "72fe1151fe547c3df31dc2709b0d43d5b5e57f3ba524483c86f5dac52c905f7a",
