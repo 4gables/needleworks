@@ -275,8 +275,12 @@ export function makeRouter(mask, res, cell, hop = null, budget = routeBudget(), 
 // yet, so the fill covers the travel. It only jumps (and trims) when every way would lie on top of finished rows for
 // more than SEWN mm. groups: [underlay paths, fill paths] in px; the underlay is covered by the fill, so travel over it is
 // hidden too.
-export function routeFill(groups, comp, mask, res, budget = routeBudget(), worn = Infinity) {
-  const { w } = mask, R = makeRouter(mask, res, (x, y) => (comp.labels[y * w + x] === comp.id ? 1 : 0), null, budget, worn);
+// edge (mm, pictures): travel may also run along the shape's own edge, this far inside it, over rows already sewn
+// (Ink/Stitch's fill travels along the border when it can't travel inside): there it lies beside the row ends in
+// the same thread. A section stranded behind finished rows was a trim, two locks and a restart inside one shape:
+// 282 of the 1,402 trims in the 12 sample pictures. Not over `edgeMax` mm in one go.
+export function routeFill(groups, comp, mask, res, budget = routeBudget(), worn = Infinity, edge = 0, edgeMax = 30) {
+  const { w } = mask, R = makeRouter(mask, res, (x, y) => (comp.labels[y * w + x] !== comp.id ? 0 : edge && comp.dt[y * w + x] <= edge * res ? 2 : 1), null, budget, worn);
   const out = [];
   let cur = null;
   groups.forEach((paths, gi) => {
@@ -293,7 +297,7 @@ export function routeFill(groups, comp, mask, res, budget = routeBudget(), worn 
           const q = back ? left[i][left[i].length - 1] : left[i][0];
           if (Math.hypot(q[0] - cur[0], q[1] - cur[1]) <= res) { k = i; r = null; rev = back; break search; }
           const ri = way(q);
-          if (ri && ri.sewnMm <= SEWN) { k = i; r = ri; rev = back; break search; }
+          if (ri && ri.sewnMm <= SEWN && (!edge || ri.mm <= edgeMax)) { k = i; r = ri; rev = back; break search; }
         }
       }
       let p = left.splice(k, 1)[0]; if (rev) p = p.slice().reverse();

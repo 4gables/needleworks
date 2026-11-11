@@ -40,6 +40,37 @@ Reference for this part of Needleworks: the rules, the reason for each (it stops
   pull, else 0.15. `OVERLAP` 0.35 mm under later colours, shape by shape (growing the raw mask merged specks);
   neighbours alternate angle (+90°). `DENSITY` Standard 0.4 (the app's default; `DEFAULTS.density` is Dense) / Dense
   0.35; 0.3 fails the check (row links under 0.3 mm). Row steps split to 3 mm, row-end stitches over 4 mm halved.
+- What other tools do (public manuals and guides, no code read): the picture is cleaned before any stitch is planned.
+  Wilcom EmbroideryStudio / Hatch / BERNINA "Prepare Bitmap": reduce to the threads wanted, merge like colours, and a
+  "Details" slider that filters out small areas of colour ("minimises the number of trims and colour changes");
+  thin colours can be set to "Detail" (a run or satin line) or "Omit"; then "Remove Small Stitches". mySewnet:
+  Despeckle (spots of 1-100 px). Stitch Era's guide (EduTech Wiki, Geneva): 30-50 % of the traced shapes deleted as
+  too small to stitch, holes filled, shapes that belong together joined. Ink/Stitch: a fill travels inside the shape
+  under rows to come and otherwise along its border; shapes too small for a fill become a run round the outline; a
+  minimum stitch length (0.3 mm on one maker's machines) and no lock for a jump under a set length. Satin columns
+  from 1 mm (0.8 with care), runs below that. No public tool was found that publishes its auto-digitized files to
+  measure; the reference is the 11 hand-digitized designs in `tests/external/pes`: 4.2 trims per 1,000 stitches
+  (ours on the 12 Filled samples: 12.2 before, 10.6 after the rules below), 56 loose threads in 11 files, 4 zero ties.
+- Where the samples' trims came from (12 Filled files, 1,464 trims): 786 a shape's first start and 386 a thin line's
+  (separate pieces of one colour, 5-30 mm apart over fabric: the picture's own count; 147 of them text-like dots kept
+  on purpose), 282 a part of a shape stranded behind its own finished rows. Every one of the 336 tiny stitches was a
+  fill's row link; every one of the 164 zero ties a tie-in whose 0.7 mm point was the path's own next point; half the
+  173 exposed locks sat on a fill's one-stitch first or last row.
+- Flecks (`foldFlecks`, numbers in `recipes.js` `PICTURES`): a piece of a sewn colour that is a dot, or under 3 mm² and
+  1 mm wide or more, with 80 % of its edge against other colours' fills takes the colour it touches most, before
+  anything is sewn. Left out, it was a hole in that fill (rows split round it); sewn, a trim and two locks. Up to 6
+  per colour stay (an eye). Only into a fill with body (4 mm², 1.5 mm wide somewhere): the blend round a dark letter
+  is a ring of a third colour and the letters took it. Lines under 1 mm wide are drawn on top and never folded,
+  only their dots. Worse: folding any piece under 3 mm² (short dashes of leaf veins and petal outlines went).
+- Fill travel along the edge (`routeFill(..., edge)`, 0.75 mm, at most 30 mm in one go): over finished rows travel may
+  run inside the shape's own edge, beside the row ends in the same thread (Ink/Stitch's border travel). Stranded parts
+  282 -> 107, trims -16 %, loose threads -39 % on the samples. Pictures only: patches and motifs pass no `edge`.
+  A stranded part that would sew under 4 mm of thread (less than its own locks) is left out.
+- No tiny stitch (`noTiny`): a row link that rounds to 0.3 mm or less in the file moves its row end 0.1-0.4 mm along
+  the row (336 -> 0). A tie-in never lands on the path's next point (`clearStart`: the path starts one point on;
+  164 -> 7). A fill's locks lie under its rows (`lockAt` 1-2 mm into the path after a jump; a stitch 1-2 mm back onto
+  the last rows before a trim), unless that would shorten a trimmed jump to a loose one (5 mm): exposed locks 173 -> 91
+  (the rest: tips with no covered point within 1.9 mm, and dots).
 - Travel (`makeRouter`, A* on 0.5 mm cells; Ink/Stitch's tatami travel): `routeFill` takes sections in row order
   through rows not sewn yet (`reach`), at most `SEWN` 3 mm on finished rows, repeated travel costs more, `WORN` 20
   crossings closes a cell. Between shapes (up to `TRAVEL` 10 mm) travel hides under fill still to come; moves under

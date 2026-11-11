@@ -107,6 +107,9 @@ export async function makePicture() {
   // (a band of one colour round the edge is taken as a frame and left out (`findFrame`): said, it went with no word)
   state.pic.framed = !!r.framed; if (r.framed) p.edgeSeen = true;
   state.pic.owned = r.owned || null;
+  // (flecks sewn in the colour round them, `foldFlecks`: said in the panel when it's more than a handful, as what
+  // happened; not a problem, so not on the sew sheet)
+  state.pic.folded = r.fine?.folded >= FLECKS ? r.fine.folded : 0;
   const mt = machineThreads(r.pattern.threads);
   state.pic.machineName = new Map(r.pattern.threads.map((t, i) => [t.color, mt[i].name]));
   paletteUI();
@@ -149,16 +152,19 @@ $("pic-merged").onclick = (e) => {
   state.pic.edge = b.dataset.edge === "1"; state.pic.skip = []; state.pic.swap = {}; makePicture();
 };
 const FRAMED = "The band of one colour round the picture's edge looks like a frame round it, so it isn't sewn.";
+// (a fleck alone is a cut thread and two knots, or a hole in the colour round it: core/digitize.js `foldFlecks`)
+const FLECKS = 5, flecked = (n) => `${n} small flecks of colour inside bigger areas are sewn in the colour round them, so each isn't a knot and a cut thread of its own.`;
 export function paletteUI() {
   const cols = state.pic.colorsInfo.filter((c) => !c.background && c.area > 0);
   const edge = state.pic.edge && state.pic.edgeSeen;
-  $("pic-merged").hidden = !state.pic.merged && !state.pic.framed && !edge;
+  $("pic-merged").hidden = !state.pic.merged && !state.pic.framed && !edge && !state.pic.folded;
   // (said as what happened, not as a fault: "3 colours were too close" beside a slider at 6 read like an error)
   const asked = state.pic.colors;
   $("pic-merged").textContent = state.pic.merged ? `${asked} asked for, ${cols.length} used: this picture has only ${cols.length} ${cols.length === 1 ? "colour" : "colours"} different enough to need ${cols.length === 1 ? "a thread of its own" : "threads of their own"} (the rest are shades of ${cols.length === 1 ? "it" : "these"} or of the fabric).` : "";
   // (a guess: the band may be the drawing's own, so it can be sewn, and left out again)
   if (state.pic.framed) $("pic-merged").insertAdjacentHTML("beforeend", `${state.pic.merged ? " " : ""}<span data-problem="framed">${FRAMED} <button type="button" class="link" data-edge="1">Sew the edge band too</button></span>`);
   else if (edge) $("pic-merged").insertAdjacentHTML("beforeend", `${state.pic.merged ? " " : ""}<span>The band round the picture's edge is sewn too. <button type="button" class="link" data-edge="0">Leave it out</button></span>`);
+  if (state.pic.folded) $("pic-merged").insertAdjacentHTML("beforeend", `${$("pic-merged").textContent ? " " : ""}<span>${flecked(state.pic.folded)}</span>`);
   ownedNote();
   const open = state.pic.swapOpen;
   $("pic-palette").innerHTML = cols.map((c) => `<button type="button" data-id="${c.id}" aria-pressed="${!state.pic.skip.includes(c.id)}" aria-expanded="${c.id === open}" aria-controls="pic-swap">
