@@ -2,6 +2,7 @@
 // Build a stitch pattern block by block (mm in, 0.1 mm out).
 import { COLOR_CHANGE, END, JUMP, STITCH, TRIM, writePES } from "./formats.js";
 import { MARGIN } from "./machines.js";
+import { LIMITS } from "./recipes.js";
 import { pyRound } from "./threads.js";
 
 // Which side of the line from p along d the points mostly lie on: 1 for the left (-d.y, d.x), -1 for the right
@@ -86,7 +87,7 @@ export class Design {
     // (`shifted`, 0.1 mm: how far, so a preview can draw it where it was made, under the pieces it came from)
     const [x0, y0, x1, y1] = this.bounds();
     this.shifted = null;
-    if (Math.max(-x0, x1, -y0, y1) > 200) {
+    if (Math.max(-x0, x1, -y0, y1) > LIMITS.recentre) {
       const cx = Math.round((x0 + x1) * 5), cy = Math.round((y0 + y1) * 5);
       this.stitches = this.stitches.map(([x, y, c]) => [x - cx, y - cy, c]);
       this.shifted = [cx, cy];
@@ -136,7 +137,7 @@ export function dedupe(st) {
 // the needle goes on to the next point. Skeleton junctions in small script (a knot of strokes 0.1-0.3 mm long, each
 // sewn out and back) gave lettering 1-4% tiny stitches. Tie-ins (7 stitches after a command) and the stitches just
 // before one (a tie-off and its stroke end) are never touched.
-export function untiny(st, min = 3) {
+export function untiny(st, min = LIMITS.tiny) {
   const n = st.length, fixed = new Uint8Array(n);
   for (let i = 0; i < n; i++) if (st[i][2] !== STITCH) {
     for (let j = i - 5; j <= i + 7; j++) if (j >= 0 && j < n) fixed[j] = 1;
@@ -160,7 +161,7 @@ export function untiny(st, min = 3) {
 // tests/pe900_check.py enforces the same). Where strokes pile up (satin junctions), drop interior stitch points:
 // two stitches become one slightly longer one. Tie-ins and tie-offs (5 points around any jump/trim/colour change)
 // are kept. The machine's grid can sit at any 0.1 mm offset from ours, so every offset is checked.
-export function relieve(st, limit = 24) {
+export function relieve(st, limit = LIMITS.hits) {
   const n = st.length, keep = new Uint8Array(n).fill(1), blk = new Int32Array(n);
   for (let i = 0, b = 0; i < n; i++) { if (st[i][2] === COLOR_CHANGE) b++; blk[i] = b; }
   const X = (i) => pyRound(st[i][0]), Y = (i) => pyRound(st[i][1]);

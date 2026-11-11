@@ -14,13 +14,28 @@ Phase 1, the base (no visible change, byte-identical batches):
   - [x] local folder fast-forwarded, `v12` tagged
   - [x] this roadmap
   - [x] scoreboard in `tests/check.sh` (`flow_lint.mjs --score`), baseline committed (`tests/fixtures/quality.json`)
-  - [x] CLAUDE.md cut to rules and a map (828 -> 130 lines); topic references in `docs/` (nothing dropped)
+  - [x] AGENTS.md cut to rules and a map (828 -> 130 lines); topic references in `docs/` (nothing dropped)
   - [x] stale test page and fixtures out. Each overlapping test is folded in by the round that works in its
     area, where it can be proven against the check it joins (perf into monkey and matrix into files_flow: F2;
     picture_history into picture_corpus: S4; starters into studio_batch: U1); dead code in shipped files goes
     with F1, which edits those files anyway (so F0 ships no code and needs no cache bump)
-- [ ] **F1 Recipes and context**: one `recipes.js`; sew context passed explicitly; one density module; shared
-  geometry and colour helpers; checker and worker errors surface
+- [ ] **F1 Recipes and context** (branch `f1-recipes`; batches byte-identical to v12 after each step, 439 of 439)
+  - [x] `js/core/recipes.js`: limits, move costs, thread-weight factors; design, geom, quality, doctor, render,
+    pieces read them
+  - [x] sew context: `sewAs(fabric, thread)` set by the editor and by `compose`; fits and collisions outside a
+    build are measured on the stitches sewn
+  - [x] a failed check is not a pass (`verdictOf`); a dead doctor worker frees its piece; unused helpers out
+  - [x] `js/core/density.js`: one every-offset count for the checker's `peak` (same answers on 450 files, 4.5x
+    faster) and the Thickness view (was offset 0 only)
+  - [ ] fabric and lettering numbers into `recipes.js` (satin widths, pull, underlay thresholds, lattice, border
+    and fill recipes), still byte-identical
+  - [ ] `relieve` and the doctor's `slide`/`crowd` onto `density.js` (their block rule differs from the checker's:
+    a pause isn't a block edge for them, so they thin more than the checker asks; changing that changes bytes, so
+    it goes with S2)
+  - [ ] shared geometry and colour helpers (point-in-polygon, marching squares, scanline fill, boxes, CIELAB,
+    luminance)
+  - [x] first part released as v13 (check.sh passed: 439 files unchanged, scoreboard unchanged, ui_sweep 330/0,
+    monkey 960 steps 0 problems, files_flow, steps_lint, entry_state, said_flow, lettering_look all 0)
 - [ ] **F2 Structure**: pieces.js, digitize.js, ui.js, app.js split; one worker job queue; one memo per `make()`
 - [ ] **F3 Atomic releases**: one release's files per load, never a mix
 
@@ -57,7 +72,7 @@ Weak at the base:
 | B5 | Four modules of 2,000-2,900 lines; ui.js is one 2,700-line closure; geometry and colour maths copied 3-20 times | code audit below | risky edits; measuring is O(n²) per keystroke (1-2 s on 15+ pieces) |
 | B6 | Errors swallowed | `verdictOf` returns "no problems" when the checker throws; a crashed doctor worker leaves Download waiting for ever | a hole in the one place that says "Checked" |
 | B7 | Releases aren't atomic: network-first files behind a 10-minute Pages cache | 2026-10-31: new ui.js with old pieces.js | a release can look broken for 10 minutes |
-| B8 | CLAUDE.md is 830 lines, loaded into every session, round logs creeping back | "Round 12/13/14" blocks | rules get buried |
+| B8 | AGENTS.md is 830 lines, loaded into every session, round logs creeping back | "Round 12/13/14" blocks | rules get buried |
 | B9 | "Better" is argued by hand each round | numbers rebuilt ad hoc | no standing scoreboard; overlapping test scripts |
 | B10 | No sew-out since 2026-11-06; PE-DESIGN reads only the block the machine doesn't sew | tester history | every stitch change since is unproven on a machine |
 

@@ -1,6 +1,6 @@
 # Threads and brands (`brands.js`, `brandcharts.js`)
 
-Reference for this part of Needleworks: the rules, the reason for each (it stops someone undoing it) and the number that proved it. Hard rules are in `CLAUDE.md`. Add a lesson where its topic is, never as a round log.
+Reference for this part of Needleworks: the rules, the reason for each (it stops someone undoing it) and the number that proved it. Hard rules are in `AGENTS.md`. Add a lesson where its topic is, never as a round log.
 
 - Brother (Artspira numbers), Isacord (numbers only), Sulky Rayon, Robison-Anton Rayon, Hemingworth, each from the
   maker's own source (file header). No Sigma or Madeira.

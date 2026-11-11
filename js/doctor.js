@@ -3,6 +3,8 @@
 // 80-120 %, drop tiny stitches, thin the densest spots). Stitch units 0.1 mm; the PES writer stays untouched.
 import { COLOR_CHANGE, END, JUMP, STITCH, STOP, TRIM, designBlockAgrees, readEmbroidery, writePES } from "./core/formats.js";
 import { Design, relieve } from "./core/design.js";
+import { density } from "./core/density.js";
+import { LIMITS, MOVES } from "./core/recipes.js";
 import { fillPolygon } from "./core/digitize.js";
 import { distanceTransform } from "./core/raster.js";
 import { contours } from "./studio/quilt.js";
@@ -12,17 +14,11 @@ import { HARD, LIMIT, MAX_BLOCKS, MAX_STITCH, endsEarly, moves, peak, satinGap, 
 // (LIMIT: 24 needle hits per mm² per colour block, the densest spot in sold designs; the counts are pe900_check.py's,
 // from quality.js, so the checkup and the download's verdict agree)
 
-// hits per 1 mm cell, the most in any one colour block: Map "cx,cy" -> count
+// the Thickness view: for each 1 mm cell, the most hits in any 1 mm window round it in one colour block
+// (Map "cx,cy" -> count; counted at every offset, as the checker counts)
 export function heat(pattern) {
-  const cells = new Map(), out = new Map();
-  let blk = 0;
-  for (const [x, y, c] of pattern.stitches) {
-    if (c === COLOR_CHANGE) { blk++; continue; }
-    if (c !== STITCH) continue;
-    const k = `${blk},${Math.floor(x / 10)},${Math.floor(y / 10)}`;
-    cells.set(k, (cells.get(k) || 0) + 1);
-  }
-  for (const [k, n] of cells) { const xy = k.slice(k.indexOf(",") + 1); if (n > (out.get(xy) || 0)) out.set(xy, n); }
+  const out = new Map();
+  for (const c of density(pattern.stitches, (hits) => hits < LIMIT / 2).cells) { const k = `${c.cx},${c.cy}`; if (c.top > (out.get(k) || 0)) out.set(k, c.top); }
   return out;
 }
 
@@ -59,7 +55,7 @@ export function blockLoads(p) {
     if (c === JUMP) { if (!from) from = last; last = [x, y]; continue; }
     if (c === STITCH) {
       b.stitches++;
-      if (from) { const d = Math.hypot(x - from[0], y - from[1]); if (d > 10 && d <= 50) b.snips++; from = null; }
+      if (from) { const d = Math.hypot(x - from[0], y - from[1]); if (d > MOVES.looseFrom * 10 && d <= MOVES.trimmed * 10) b.snips++; from = null; }
       last = [x, y];
     }
     if (c === TRIM) b.trims++;
@@ -744,7 +740,7 @@ const brother = (hex) => { const t = nearestBrotherThread(hex); return { color: 
 // to sit on it, as the machine centres it anyway. Files that fit stay where they are, byte for byte.
 // (centred on its stitches, and any jump still out there stops at their edge: the frame needn't travel further)
 function centred(d) {
-  const far = (c) => { for (const [x, y, k] of d.stitches) if ((k === STITCH || k === JUMP) && Math.max(Math.abs(x - c[0]), Math.abs(y - c[1])) > 2000) return true; return false; };
+  const far = (c) => { for (const [x, y, k] of d.stitches) if ((k === STITCH || k === JUMP) && Math.max(Math.abs(x - c[0]), Math.abs(y - c[1])) > LIMITS.recentre * 10) return true; return false; };
   if (!far([0, 0])) return d;
   let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
   for (const [x, y, c] of d.stitches) if (c === STITCH) { x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y); }

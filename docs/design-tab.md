@@ -1,6 +1,6 @@
 # Design tab (`js/studio/`)
 
-Reference for this part of Needleworks: the rules, the reason for each (it stops someone undoing it) and the number that proved it. Hard rules are in `CLAUDE.md`. Add a lesson where its topic is, never as a round log.
+Reference for this part of Needleworks: the rules, the reason for each (it stops someone undoing it) and the number that proved it. Hard rules are in `AGENTS.md`. Add a lesson where its topic is, never as a round log.
 
 ## Design tab (`js/studio/`)
 ### Compose and stages

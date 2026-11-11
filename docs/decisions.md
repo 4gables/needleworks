@@ -29,7 +29,7 @@ What was tried and rejected (don't retry without new numbers) and what is known 
   through junctions); etsy_6's green panel still sewn; etsy_7's pastel lines; etsy_4's greyish-lavender title;
   etsy_5 at 4 colours merges grass and yellow; slab-serif centre lines lose serifs; a soft shadow's core joins its
   colour at 2 threads; 0.6 mm strokes in a compressed JPEG partly sewn.
-- Open tab: Thickness overlay counts at grid offset 0 only (`heat`); trims rise after re-stitching at 70 %.
+- Open tab: trims rise after re-stitching at 70 %.
 - `pe900_check.py`'s max density reads lower than a full offset scan below the limit (pass/fail unaffected).
 - Design tab: Patch starter + Lettering lands below JD. Speed: a big carved patch refills on every change
   (1.5-4.7 s; wants a carve worker like quilting); thread/fabric change on 15-26 pieces 1.1-2 s.

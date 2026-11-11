@@ -3,7 +3,6 @@
 // A mask is { w, h, data: Uint8Array } with 1 = ink.
 import { smooth } from "./geom.js";
 
-export function makeMask(w, h) { return { w, h, data: new Uint8Array(w * h) }; }
 
 // Zhang-Suen thinning (what skimage.skeletonize does for 2-D)
 // Each sub-pass looks again only at pixels whose neighbourhood changed since it last looked (the deletions are the same

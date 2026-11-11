@@ -1,7 +1,7 @@
 /*! Needleworks (c) 2026 4Gables. All rights reserved. Proprietary, see LICENSE. https://4gables.com/needleworks/ */
 import { turnForMachine, turnPattern } from "./core/design.js";
 import { FONTS } from "./core/fonts.js";
-import { COLOR_CHANGE, STITCH, designStats, machineThreads, readEmbroidery, validatePES, writePES } from "./core/formats.js";
+import { STITCH, designStats, machineThreads, readEmbroidery, validatePES, writePES } from "./core/formats.js";
 import { DEFAULT_MACHINE, MACHINES, MARGIN, hoop as getHoop } from "./core/machines.js";
 import { DENSITY, LEARN, MOST, contentBox, lostMuch, picturePlan, pictureImage, sewSized } from "./core/digitize.js";
 import { PEC_MATCH, PEC_THREADS, hexToRgb, nearestBrotherThread, pecThread, rgbToHex } from "./core/threads.js";

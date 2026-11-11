@@ -1,4 +1,5 @@
 /*! Needleworks (c) 2026 4Gables. All rights reserved. Proprietary, see LICENSE. https://4gables.com/needleworks/ */
+import { MOVES } from "./recipes.js";
 // Polyline helpers and stitch generators (mm).
 // A path is an array of [x, y].
 
@@ -68,7 +69,7 @@ export const run = (p, length = 2.0, closed = false) => resample(p, length, clos
 
 // What a move between two runs costs, by its length (mm): up to 2 mm Design.path stitches it (nothing); over 5 mm the
 // machine trims it (a trim and two locks); 2-5 mm the PE900 leaves as a loose thread to snip by hand, which is worse.
-export const moveCost = (d) => (d <= 2 ? 0 : d <= 5 ? 1.5 : 1);
+export const moveCost = (d) => (d <= MOVES.sewn ? 0 : d <= MOVES.trimmed ? MOVES.costLoose : 1);
 
 // Closed outlines sewn without wasted motion (tests/flow_lint.mjs measures it). A closed run/zigzag/satin from
 // `resample(.., true)` stops one step short of where it began: `loop` sews that last step home, so the next pass

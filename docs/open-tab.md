@@ -1,6 +1,6 @@
 # Open tab (`formats.js`, `doctor.js`, `quality.js`)
 
-Reference for this part of Needleworks: the rules, the reason for each (it stops someone undoing it) and the number that proved it. Hard rules are in `CLAUDE.md`. Add a lesson where its topic is, never as a round log.
+Reference for this part of Needleworks: the rules, the reason for each (it stops someone undoing it) and the number that proved it. Hard rules are in `AGENTS.md`. Add a lesson where its topic is, never as a round log.
 
 - Open logic is `doctor.js` `openedFile` (shared by app.js and the fuzz): designs start with a jump to their 1st
   stitch, lose jumps to nowhere (each became a stitch where it ended) and thread changes before the 1st stitch

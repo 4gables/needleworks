@@ -58,7 +58,6 @@ export function problemsHtml(list, cls = "problems") {
   list = folded(list);
   return list.length ? `<ul class="${cls}">${list.map((p) => `<li data-problem="${esc(p.id)}" class="${p.level}">${esc(p.text)}</li>`).join("")}</ul>` : "";
 }
-export const problemsText = (list) => folded(list).map((p) => p.text).join(" ");
 // at the top of "How to stitch it" (and the sew sheet, Sew along): what's still wrong, then what's worth knowing
 export function problemsItems(list, tag = "li", cls = "after") {
   const look = list.filter((p) => p.level === LOOK), tips = list.filter((p) => p.level === TIP);

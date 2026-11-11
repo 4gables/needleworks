@@ -8,6 +8,7 @@ import { DENSITY, FILL_PATTERNS, fillPolygon } from "../core/digitize.js";
 import { APPLIQUE_FONTS, FONTS, fontOf } from "../core/fonts.js";
 import { machineThreads } from "../core/formats.js";
 import { MARGIN } from "../core/machines.js";
+import { WEIGHTS, fillFor, satinFor } from "../core/recipes.js";
 import { back, bounds, circle, edgeWalk, enter, filletPolygon, followRun, loop, moveCost, normals, rings, run, satin, zigzag } from "../core/geom.js";
 import { counterPockets, distanceTransform, order } from "../core/raster.js";
 import { strokes } from "../core/text.js";
@@ -525,7 +526,7 @@ function inkAt(rows, w, least = 0) {
 }
 function stitchLetters(parts, satinW, fab = "cotton", small = false) {
   const zz = fab === "knit" ? 1.5 : 2.5, pull = fab === "knit" ? 0.3 : 0;
-  const density = wt === "auto" ? (fab === "knit" ? 0.42 : small ? 0.34 : 0.38) : THREADS[wt].satin + (fab === "knit" ? 0.04 : 0);
+  const density = wt === "auto" ? (fab === "knit" ? 0.42 : small ? 0.34 : 0.38) : WEIGHTS[wt].letterSatin + (fab === "knit" ? 0.04 : 0);
   let gap = false, last = null, lastW = satinW;   // (a skipped stroke hands its jump on to the next one sewn)
   if (!satinW) parts = pointed(parts);
   return parts.map(([p0, mode, g, cap, taper, ends, sides, thick]) => {
@@ -999,7 +1000,7 @@ const trimIt = (what, where = "") => ({ trim: what, where });
 // (keyed on the fabric and thread weight only where they change the piece's stitches, `sewnWith`: changing fabric or
 // thread on a 15-piece design rebuilt every frame and motif, 1.5 s)
 const built = new Map();
-export function pieceStages(p, fab = "cotton") {
+export function pieceStages(p, fab = cloth) {
   const { x, y, rot, id, flip, ...shape } = p, key = JSON.stringify(shape) + sewnWith(p, fab);
   if (!built.has(key)) {
     const st = localStages(p, fab);
@@ -1964,7 +1965,7 @@ export function fitFrame(p, pieces) {
 // (a Great Vibes JMK in a scallop, after Circle -> Scallop). Left as it was when no smaller size clears.
 const cleared = new Map();
 function clearOf(p, frame, size) {
-  const { x, y, id, ...shape } = p, key = JSON.stringify([shape, x - frame.x, y - frame.y, { ...frame, x: 0, y: 0, id: 0 }, size, wt]);
+  const { x, y, id, ...shape } = p, key = JSON.stringify([shape, x - frame.x, y - frame.y, { ...frame, x: 0, y: 0, id: 0 }, size, wt, cloth]);
   if (!cleared.has(key)) {
     const edge = cloud(pieceStitches(frame));
     let s = size;
@@ -2043,13 +2044,18 @@ export const FABRICS = {
 // closer rows make the row links shorter than the PE900 check's 0.3 mm).
 export const THREADS = {
   auto: { name: "Automatic", tip: "Standard 40 wt thread (the weight is printed on the spool: a bigger number is a finer thread); small letters are sewn for 60 wt (the steps say when)." },
-  30: { name: "30 wt", satin: 0.45, tip: "30 wt is heavier and bolder: use a 90/14 topstitch needle and slow the machine down." },
-  40: { name: "40 wt", satin: 0.38, tip: "40 wt is the standard machine embroidery thread: a 75/11 embroidery needle." },
-  60: { name: "60 wt", satin: 0.34, tip: "60 wt is fine, for small letters and fine detail: a 65/9 or 70/10 needle and 60 wt bobbin thread." },
+  30: { name: "30 wt", tip: "30 wt is heavier and bolder: use a 90/14 topstitch needle and slow the machine down." },
+  40: { name: "40 wt", tip: "40 wt is the standard machine embroidery thread: a 75/11 embroidery needle." },
+  60: { name: "60 wt", tip: "60 wt is fine, for small letters and fine detail: a 65/9 or 70/10 needle and 60 wt bobbin thread." },
 };
-let wt = "auto";   // set by compose for the length of a build
-const sd = (x) => (wt === "30" ? +(x * 1.15).toFixed(3) : wt === "60" ? +(x * 0.88).toFixed(3) : x);
-const fd = (x) => (wt === "30" ? x + 0.05 : x);
+// What the design is sewn with: the thread weight and the fabric. `compose` sets both for the length of its build
+// (from its opts), and the editor sets them with `sewAs` whenever the design's change, so everything measured outside
+// a build (what touches what, the size that clears a frame, Fit to hoop) is measured on the stitches that will be
+// sewn. Until 2026-11 only `compose` set the weight and nothing set the fabric: those checks measured 40 wt stitches
+// on cotton whatever the design used (towel lettering is wider and sits on a lattice 0.3 mm wider each side).
+let wt = "auto", cloth = "cotton";
+export function sewAs(fabric, thread) { cloth = FABRICS[fabric] ? fabric : "cotton"; wt = THREADS[thread] ? String(thread) : "auto"; }
+const sd = (x) => satinFor(wt, x), fd = (x) => fillFor(wt, x);   // (the numbers: core/recipes.js WEIGHTS)
 
 // Quilting in a frame (`quilt`: stipple or echo) fills it around everything else on it, sewn right after the frame
 // (after the front fabric on an in-the-hoop frame, before what goes on it). Kept for the last few layouts: it's the
@@ -2425,9 +2431,9 @@ function trimsFor(trims, own) {
   return `Unless you laid ${cut}, take the hoop off the machine (leave the fabric in the hoop), trim ${what}, and put the hoop back. ${own || "Press Start."}`;
 }
 export function compose(pieces, hoop, opts = {}) {
-  const was = wt;
-  wt = THREADS[opts.thread] ? String(opts.thread) : "auto";
-  try { return build(pieces, hoop, opts); } finally { wt = was; }
+  const was = [cloth, wt];
+  sewAs(opts.fabric, opts.thread);
+  try { return build(pieces, hoop, opts); } finally { [cloth, wt] = was; }
 }
 function build(pieces, hoop, opts) {
   const fab = FABRICS[opts.fabric] ? opts.fabric : "cotton";

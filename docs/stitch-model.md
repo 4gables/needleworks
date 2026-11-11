@@ -1,6 +1,6 @@
 # Stitch model (`design.js`, `geom.js`)
 
-Reference for this part of Needleworks: the rules, the reason for each (it stops someone undoing it) and the number that proved it. Hard rules are in `CLAUDE.md`. Add a lesson where its topic is, never as a round log.
+Reference for this part of Needleworks: the rules, the reason for each (it stops someone undoing it) and the number that proved it. Hard rules are in `AGENTS.md`. Add a lesson where its topic is, never as a round log.
 
 - mm while designing; stitches `[x, y, cmd]` in 0.1 mm, y down. STITCH 0, JUMP 1, TRIM 2, STOP 3, END 4,
   COLOR_CHANGE 5.

@@ -306,7 +306,7 @@ const want = (exp, surface) => exp.filter((p) => SHOWS[surface].includes(p.level
 const same = (a, b) => JSON.stringify([...a].sort()) === JSON.stringify([...b].sort());
 const collapse = (xs) => xs.filter((x, i) => !i || x !== xs[i - 1]);
 
-// jargon a user shouldn't read (from CLAUDE.md's plain-words history), with the context it's allowed in
+// jargon a user shouldn't read (from AGENTS.md's plain-words history), with the context it's allowed in
 const JARGON = [
   [/\bunderlay\b/i, "underlay"], [/\bthe pile\b/i, "'the pile' (say the loops)"], [/\bPEC\b(?!,? or DST)/, "PEC"],
   [/\bjumps?\b(?! stitch not to trim)/i, "jump (say move between parts / loose thread)"],
