@@ -8,6 +8,7 @@ import { hexToRgb, nearestBrotherThread } from "./core/threads.js";
 import { DST_COLOURS, checkup, fix, openedFile, pauses, shortJumps, sortedChanges } from "./doctor.js";
 import { HARD, MAX_BLOCKS, denseWords, moves } from "./quality.js";
 import { BLOCK, LOOK, TIP } from "./words.js";
+import { jobQueue } from "./jobs.js";
 import { safeName } from "./core/typed.js";
 import { apart, lab } from "./core/brands.js";
 import { savedDesign } from "./studio/ui.js";
@@ -55,26 +56,21 @@ export async function openDesign(file) {
 // The fixes run in a worker (re-stitching star_badge.pes at 250 % froze the page for 10 s): one job at a time, only
 // the newest waiting, and a result that's no longer wanted (another size, another file) is dropped.
 // (started on the first fix, not with the page)
-let docWorker = null, docRunning = false, docNext = null, docSeq = 0, docBusy = 0;
-function docJob(msg) {
-  if (!docWorker) {
-    docWorker = new Worker(new URL("./doctor-worker.js", import.meta.url), { type: "module" });
-    docWorker.onmessage = (e) => {
-      const r = e.data;
-      docDone();
-      if (r.id !== docSeq || !state.opened) return;
-      docIdle();
-      if (!r.ok) { showError("This fix didn't work on this design: " + r.error); return; }
-      // (a size meant to fit, made smaller till the re-stitched copy did: that's the size now, and nothing bigger fits)
-      const o = state.opened;
-      if (r.scale != null && r.scale !== o.opts.scale) { o.opts.scale = r.scale; (o.fits ||= {})[fieldKey()] = r.scale; sizeUI(); }
-      showError(""); showOpened(r.pattern, r.bytes, r.check, true);
-    };
-    docWorker.onerror = (e) => { docDone(); docIdle(); if (state.mode === "open") showError("Something went wrong while fixing this design. " + (e.message || "")); };
-  }
-  if (docRunning) docNext = msg; else { docRunning = true; docWorker.postMessage(msg); }
+let docJobs = null, docSeq = 0, docBusy = 0;
+// (a fix past a minute and a half is stopped and said: nothing limited it, and "Re-stitching…" could spin for good)
+async function docJob(msg) {
+  docJobs ||= jobQueue(new URL("./doctor-worker.js", import.meta.url), { limit: 90000, slow: "it's taking too long at this size. Try a size nearer the design's own." });
+  const r = await docJobs.run(msg);
+  if (r.stale) return;
+  if (r.died) { docIdle(); if (state.mode === "open") showError("Something went wrong while fixing this design. " + r.error); return; }
+  if (r.id !== docSeq || !state.opened) return;
+  docIdle();
+  if (!r.ok) { showError("This fix didn't work on this design: " + r.error); return; }
+  // (a size meant to fit, made smaller till the re-stitched copy did: that's the size now, and nothing bigger fits)
+  const o = state.opened;
+  if (r.scale != null && r.scale !== o.opts.scale) { o.opts.scale = r.scale; (o.fits ||= {})[fieldKey()] = r.scale; sizeUI(); }
+  showError(""); showOpened(r.pattern, r.bytes, r.check, true);
 }
-function docDone() { docRunning = false; if (docNext) { const m = docNext; docNext = null; docJob(m); } }
 const docIdle = () => { clearTimeout(docBusy); busy(false); };
 // the opened file as it stands after the checkup's fixes (none: its own bytes, as they came)
 function openView() {

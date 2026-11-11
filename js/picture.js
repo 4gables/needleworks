@@ -15,33 +15,18 @@ import { $, forgetPicture, hoop, keepPicture, kept, square, state, store, turned
 import { next } from "./focus.js";
 import { nearOwn, ownedPalette, owns, threadHtml } from "./threadui.js";
 import { mmText } from "./words.js";
+import { jobQueue } from "./jobs.js";
 import { busy, escapeHtml, openDesign, setMode, setView, showError, studio, warnUI } from "./app.js";   // (used when things happen, never while this file loads: app.js loads after it)
 
 export const sizeLabel = (v) => mmText(v);
 // ---------- picture ----------
-// A picture worker: one job at a time, and only the newest waiting (three quick slider moves on a slow picture
-// computed all three). A job that runs past a minute is stopped (a photo once routed for over 5 minutes and every later
-// change queued behind it): the worker is replaced and the picture tab says what to try. `stop()` drops what's
-// waiting and running (the checks of settings that just changed).
+// A picture worker (jobs.js: one job at a time, only the newest waiting). A job that runs past a minute is stopped (a
+// photo once routed for over 5 minutes and every later change queued behind it): the worker is replaced and the
+// picture tab says what to try. `stop()` drops what's waiting and running (the checks of settings that just changed).
 function picWorker() {
-  let w = null, running = null, waiting = null, watch = 0;
-  const start = () => {
-    w = new Worker(new URL("./worker.js", import.meta.url), { type: "module" });
-    w.onmessage = (e) => finish(e.data);
-    w.onerror = (e) => finish({ ok: false, error: "Something went wrong while stitching this picture. " + (e.message || "") });
-  };
-  const finish = (r) => { clearTimeout(watch); const j = running; running = null; j?.ok(r); next(); };
-  const kill = () => { clearTimeout(watch); w.terminate(); start(); };
-  const next = () => {
-    if (running || !waiting) return;
-    running = waiting; waiting = null; w.postMessage(running.msg);
-    watch = setTimeout(() => { kill(); finish({ ok: false, code: "slow", error: "This picture is taking too long to stitch. Try fewer colours, a smaller size, or Line drawing." }); }, 60000);
-  };
-  start();
-  return {
-    run: (msg) => new Promise((ok) => { waiting?.ok({ ok: false, stale: true }); waiting = { msg, ok }; next(); }),
-    stop() { waiting?.ok({ ok: false, stale: true }); waiting = null; if (running) { kill(); const j = running; running = null; j.ok({ ok: false, stale: true }); } },
-  };
+  const q = jobQueue(new URL("./worker.js", import.meta.url), { limit: 60000, eager: true, slow: "This picture is taking too long to stitch. Try fewer colours, a smaller size, or Line drawing." });
+  // (a worker that died says so in the picture tab's words)
+  return { run: async (msg) => { const r = await q.run(msg); return r.died ? { ok: false, error: "Something went wrong while stitching this picture. " + r.error } : r; }, stop: q.stop };
 }
 // the picture's own, and one that tries the one-tap fixes for what a picture leaves out, so they're offered only if
 // they work (and the picture never waits for them)
