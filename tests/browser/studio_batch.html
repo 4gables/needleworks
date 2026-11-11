@@ -114,6 +114,11 @@ log("layout: done");
 for (const shape of Object.keys(SHAPES)) for (const quilt of ["stipple", "echo"])
   await save(`st_quilt_${shape}_${quilt}`, [P({ kind: "frame", shape, border: shape === "heart" ? "applique" : "satin", w: 100, h: 84, quilt, color: "#ed171f" }),
     P({ kind: "text", text: "Rosie", font: FONTS[1].family, size: 16 })]);
+// straight-line quilting: under a border that covers the frame line (satin, appliqué, in the hoop) and inside one that doesn't
+for (const [shape, border, quilt, text] of [["square", "satin", "crosshatch", "Rosie"], ["circle", "satin", "stripes", "Rosie"], ["heart", "applique", "crosshatch", "Rosie"],
+  ["oval", "line", "crosshatch", "Rosie"], ["square", "bold", "stripes", "Rosie"], ["circle", "ith", "crosshatch", ""], ["scallop", "satin", "crosshatch", ""]])
+  await save(`st_quilt_${shape}_${quilt}_${border}`, [P({ kind: "frame", shape, border, w: 100, h: 84, quilt, color: "#ed171f", ...(border === "ith" ? { hang: false } : {}) }),
+    ...(text ? [P({ kind: "text", text, font: FONTS[1].family, size: 16 })] : [])]);
 log("quilting: done");
 // motifs in every style, sizes from small to large; lettering with motifs either side
 const { MOTIFS } = await import("../../js/studio/motifs.js");

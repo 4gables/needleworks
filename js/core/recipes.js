@@ -111,3 +111,8 @@ export const TIE_INS = [0.7, 0.5, 0.8];
 // A patch's satin edge (BORDERS.edge: 4 mm wide, its middle 0.2 mm inside the outline) reaches 2.2 mm in; the fill
 // stops 1 mm in, so the fill's outer 1.2 mm lies under the satin. Travel within `cover` of the fill's edge is hidden.
 export const PATCH = { cover: 1.0 };
+// Straight-line quilting (studio/quilt.js `lines`): lines `stripes` mm apart, or two sets `cross` mm apart at right
+// angles, at `angle` degrees so no line runs along the weave. A hand quilter's crosshatch is 1/2 to 1 in apart on a
+// bed quilt; in a 4 to 5 in block 8 to 10 mm still reads as a pattern and holds thin batting everywhere (the stipple
+// here is 5 mm apart, the echo 4). Stitches up to `stitch` mm, as the other quilting; no stretch under `min` mm.
+export const QUILT_LINES = { stripes: 8, cross: 10, angle: 45, stitch: 2.5, min: 4 };

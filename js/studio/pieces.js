@@ -349,7 +349,7 @@ const trimIt = (what, where = "") => ({ trim: what, where });
 // text:     { kind: "text", text (up to 3 lines), font, size, style: "auto"|"satin"|"line", shape: TEXT_SHAPES key,
 //             radius, ry (arches), amp, waves (wave), bulge (bridge), align, leading, spacing, deco (a MOTIFS key) }
 // monogram: { kind: "monogram", letters, font, size, style }  (3 letters: small, BIG, small)
-// frame:    { kind: "frame", shape: SHAPES key, w, h, border: BORDERS key, fill (patch thread), quilt: "stipple"|"echo" }
+// frame:    { kind: "frame", shape: SHAPES key, w, h, border: BORDERS key, fill (patch thread), quilt: a QUILTS key }
 // letters:  { kind: "letters", text, font (APPLIQUE_FONTS), size }  (appliqué letters)
 // motif:    { kind: "motif", motif: MOTIFS key, size, style: "fill"|"outline"|"applique" }
 // file:     { kind: "file", name, blocks: [{ color, name, paths }] }  (an opened PES/DST, stitches as is)
@@ -1300,7 +1300,7 @@ const sd = (x) => satinFor(wt, x), fd = (x) => fillFor(wt, x);   // (the numbers
 // Quilting in a frame (`quilt`: stipple or echo) fills it around everything else on it, sewn right after the frame
 // (after the front fabric on an in-the-hoop frame, before what goes on it). Kept for the last few layouts: it's the
 // slowest thing in compose.
-export const QUILTED = (p) => p.kind === "frame" && (p.quilt === "stipple" || p.quilt === "echo") && p.border !== "patch";
+export const QUILTED = (p) => p.kind === "frame" && !!p.quilt && p.quilt !== "none" && own(QUILTS, p.quilt) && p.border !== "patch";
 // The nearest point to `pt` on a closed outline: [distance, segment index, point]
 export function onOutline(e, pt) {
   let best = [Infinity, 0, e[0]];
