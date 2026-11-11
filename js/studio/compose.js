@@ -191,7 +191,7 @@ function carve(p, stages, above, fab, later = null) {
   }
   let h = 0, cnt = 0;
   for (let i = 0; i < n; i++) if (hole.data[i]) { h = Math.imul(h ^ i, 16777619) | 0; cnt++; }
-  const key = JSON.stringify([shape, h, cnt, fab === "knit", sewing()[1] === "30"]);   // (all `patchFill` reads of them)
+  const key = JSON.stringify([shape, h, cnt, fab, sewing()[1] === "30"]);   // (all `patchFill` reads of them)
   if (!carved.has(key)) {
     const holes = cnt ? contours(hole).map((l) => l.map(([x, y]) => [x0 + x / R, y0 + y / R]))
       .filter((l) => l.length > 8 && Math.abs(l.reduce((s, q, i) => s + q[0] * l[(i + 1) % l.length][1] - l[(i + 1) % l.length][0] * q[1], 0)) / 2 >= 20) : [];

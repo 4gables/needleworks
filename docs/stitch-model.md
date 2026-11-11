@@ -30,3 +30,30 @@ Reference for this part of Needleworks: the rules, the reason for each (it stops
   crosses itself. Appliqué/outline edges (`edgeSatin`) use it.
 - Satin borders 2.5-4 mm (frames, patch/appliqué and in-the-hoop edges): `edgeWalk` (run 0.4 mm inside each edge,
   open, ending where the zigzag starts), zigzag, satin: Ink/Stitch contour underlay, a firm edge on felt.
+
+## Fills of drawn shapes (`fill.js` `fillPolygon`)
+- Patches, filled motifs and the motif either side of lettering. Pictures fill through `tatami` on their own
+  drawing (`docs/pictures.md`); the Open tab's re-stitching asks for `raster: true` (its outlines are traced from a
+  drawing of the file's stitches, stair-stepped already).
+- **Rows come from the outline, not a drawing of it.** Each row is the row's line cut by the outline's edges
+  (even-odd, holes too), less every stretch within `inset` of an edge (the line through each edge's capsule).
+  Read off the 8 px/mm drawing, a row end sat a mean 0.06 mm and up to 0.19 mm off the edge (p95 0.13; a pixel plus
+  the half-pixel sampling step), against the 0.25 mm by which a motif's 1.4 mm satin edge covers its fill; now 0.000.
+  The drawing is still made (`shaped`, kept by the outlines): it says which part of the shape a row lies in, and the
+  travel router works on its cells.
+- **Pull and rows by fabric** (`recipes.js` `FILLS`): each row runs past the outline by 0.20 mm (cotton, felt, denim,
+  canvas), 0.35 (knit) or 0.40 (towel, fleece) at both ends, Wilcom's published values; 0.15 everywhere before. Knit
+  takes 0.4 mm rows, the rest 0.35. Every fill's row ends lie under a satin, so the pull decides how far under: never
+  past its outer edge (a motif's is 0.7 mm out, towel rows end 0.2 mm inside the outline).
+- **Underlay:** an edge run 0.4 mm inside the (inset) outline in 2.5 mm stitches, one line round every outline and
+  hole, then rows across the fill's every 2.5 mm, also 0.4 mm inside. The edge run holds the fabric where the rows
+  pull hardest. Its points are the outline's moved along their normals; one that lands under 0.28 mm from the edge
+  (a sharp corner, a narrow neck) is left out and the run broken there.
+- **Sections in row order, each entered at its first row** (`routeFill(…, inOrder)`). Going to whichever end of the
+  first section was nearer sewed it backwards and stranded the rest behind finished rows: 275 parts against 184 over
+  164 test shapes (the old drawing-based rows: 220). Each part is a trim. Sewing small sections first was no better
+  (273). Pictures keep the nearer-end rule until measured on them.
+- A step between rows may leave the shape by the pull and 0.15 mm, no more (`away`: each pixel's distance outside);
+  further and the path is split there, as before.
+- A piece's stitch cache and a carved patch's fill are kept by the fabric's fill recipe (`sewnWith`, `carve`'s key):
+  kept by "knit or not", a towel design showed cotton's fill.
