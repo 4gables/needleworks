@@ -54,6 +54,8 @@ Phase 1, the base (no visible change, byte-identical batches):
       the worker as carved patches already go (`fillLater`), and the weight out of a fill's key where it changes
       nothing
   - [ ] perf folded into monkey's budget once the freeze is under 500 ms
+  - [x] released so far as v15 (439 batch and 117 corpus files identical to v12; monkey 960 steps 0 problems;
+    ui_sweep's one failure is the Picture-tab intermittent, which v12 has too: `docs/decisions.md`)
   - [ ] digitize.js: colour learning and styles apart
   - [ ] ui.js and app.js over one shared state; one worker job queue; matrix folded into files_flow
 - [ ] **F3 Atomic releases**: one release's files per load, never a mix
