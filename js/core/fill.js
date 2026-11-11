@@ -478,39 +478,40 @@ function edgeRuns(loops, comp, mask, res, d, stitch) {
 // side of a level holds a piece of that level's line, its ends where the distance (taken as even along a side) passes
 // the level; the pieces are joined end to end into rings. Returns rings[level] = [closed line (px), ...].
 function levelRings(dt, w, h, first, step) {
-  const segs = [];   // per level: a[], b[] edge ids and their points
-  const put = (k, ea, pa, eb, pb) => { (segs[k] ||= []).push([ea, pa, eb, pb]); };
+  const segs = [];   // per level, six numbers a piece: edge id, x, y of one end, then of the other
   for (let y = 0; y < h - 1; y++) for (let x = 0; x < w - 1; x++) {
     const i = y * w + x, a = dt[i], b = dt[i + 1], c = dt[i + w + 1], d = dt[i + w];
-    const hi = Math.max(a, b, c, d); if (hi < first) continue;
-    const lo = Math.min(a, b, c, d);
+    const hi = a > b ? (a > c ? (a > d ? a : d) : c > d ? c : d) : b > c ? (b > d ? b : d) : c > d ? c : d; if (hi < first) continue;
+    const lo = a < b ? (a < c ? (a < d ? a : d) : c < d ? c : d) : b < c ? (b < d ? b : d) : c < d ? c : d;
     for (let k = Math.max(0, Math.ceil((lo - first) / step + 1e-9)); first + k * step <= hi; k++) {
       const L = first + k * step, bits = (a >= L ? 8 : 0) | (b >= L ? 4 : 0) | (c >= L ? 2 : 0) | (d >= L ? 1 : 0);
       if (!bits || bits === 15) continue;
-      const T = () => [2 * i, [x + (L - a) / (b - a), y]], B = () => [2 * (i + w), [x + (L - d) / (c - d), y + 1]];
-      const Lf = () => [2 * i + 1, [x, y + (L - a) / (d - a)]], R = () => [2 * (i + 1) + 1, [x + 1, y + (L - b) / (c - b)]];
-      const two = (p, q) => put(k, ...p(), ...q()), mid = (a + b + c + d) / 4 >= L;
+      const g = (segs[k] ||= []);
+      // the four sides' crossings: top, bottom, left, right (worked out only where a piece uses them)
+      const T = () => g.push(2 * i, x + (L - a) / (b - a), y), B = () => g.push(2 * (i + w), x + (L - d) / (c - d), y + 1);
+      const Lf = () => g.push(2 * i + 1, x, y + (L - a) / (d - a)), R = () => g.push(2 * (i + 1) + 1, x + 1, y + (L - b) / (c - b));
+      const mid = (a + b + c + d) / 4 >= L;
       switch (bits) {
-        case 1: case 14: two(Lf, B); break; case 2: case 13: two(B, R); break; case 3: case 12: two(Lf, R); break;
-        case 4: case 11: two(T, R); break; case 6: case 9: two(T, B); break; case 7: case 8: two(T, Lf); break;
-        case 5: if (mid) { two(T, Lf); two(B, R); } else { two(T, R); two(Lf, B); } break;
-        case 10: if (mid) { two(T, R); two(Lf, B); } else { two(T, Lf); two(B, R); } break;
+        case 1: case 14: Lf(); B(); break; case 2: case 13: B(); R(); break; case 3: case 12: Lf(); R(); break;
+        case 4: case 11: T(); R(); break; case 6: case 9: T(); B(); break; case 7: case 8: T(); Lf(); break;
+        case 5: if (mid) { T(); Lf(); B(); R(); } else { T(); R(); Lf(); B(); } break;
+        case 10: if (mid) { T(); R(); Lf(); B(); } else { T(); Lf(); B(); R(); } break;
       }
     }
   }
-  return segs.map((list) => {
-    const at = new Map();
-    list.forEach((sg, n) => { for (const e of [sg[0], sg[2]]) { const v = at.get(e); if (v) v.push(n); else at.set(e, [n]); } });
-    const used = new Uint8Array(list.length), rings = [];
-    for (let n0 = 0; n0 < list.length; n0++) {
-      if (used[n0]) continue;
-      const ring = [list[n0][1]]; let n = n0, e = list[n0][2], closed = false;
-      used[n0] = 1; ring.push(list[n0][3]);
+  return segs.map((g) => {
+    const n = g.length / 6, at = new Map();   // edge id -> the pieces that end on it (one, or one + n * the other)
+    for (let m = 0; m < n; m++) for (const e of [g[6 * m], g[6 * m + 3]]) at.set(e, at.has(e) ? at.get(e) + (m + 1) * (n + 1) : m + 1);
+    const used = new Uint8Array(n), rings = [];
+    for (let m0 = 0; m0 < n; m0++) {
+      if (used[m0]) continue;
+      const ring = [[g[6 * m0 + 1], g[6 * m0 + 2]], [g[6 * m0 + 4], g[6 * m0 + 5]]]; let e = g[6 * m0 + 3], closed = false;
+      used[m0] = 1;
       for (;;) {
-        const nx = (at.get(e) || []).find((m) => !used[m]);
-        if (nx == null) { closed = e === list[n0][0]; break; }
-        used[nx] = 1; n = nx;
-        const fw = list[n][0] === e; ring.push(fw ? list[n][3] : list[n][1]); e = fw ? list[n][2] : list[n][0];
+        const v = at.get(e), m1 = (v % (n + 1)) - 1, m2 = Math.floor(v / (n + 1)) - 1, nx = m1 >= 0 && !used[m1] ? m1 : m2 >= 0 && !used[m2] ? m2 : -1;
+        if (nx < 0) { closed = e === g[6 * m0]; break; }
+        used[nx] = 1;
+        const fw = g[6 * nx] === e; ring.push(fw ? [g[6 * nx + 4], g[6 * nx + 5]] : [g[6 * nx + 1], g[6 * nx + 2]]); e = fw ? g[6 * nx + 3] : g[6 * nx];
       }
       if (closed && ring.length > 8) { ring.pop(); rings.push(ring); }
     }

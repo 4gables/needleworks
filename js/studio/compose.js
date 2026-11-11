@@ -30,9 +30,9 @@ function withQuilt(p, stages, others, dragging = false, later = null, empty = nu
   const key = JSON.stringify([p, h]), covered = true;
   if (!quilted.has(key) && !(dragging && lastQuilt.has(frame))) {
     const job = { key, kind: p.quilt, edge, obstacles, opts: { inset: p.border === "line" || p.border === "bold" ? 3 : 4.5, solids,
-      // (straight lines run to the frame line where a border covers it, else to 3 mm inside it; an appliqué's tack-down
-      // leaves the needle on the frame line a third round: they start from there)
-      ...(LINED(p.quilt) ? { cover: covered, bound: covered ? edge : inset(shapeOf(p).path(p.w, p.h), 3).map(placer(p)), from: covered && p.border === "applique" ? seamAt(edge, 1 / 3)[0] : null,
+      // (straight lines run to the frame line where a border covers it, else to 3 mm inside it; an appliqué's or an in-the-hoop
+      // front's tack-down leaves the needle on the frame line a third round: they start from there)
+      ...(LINED(p.quilt) ? { cover: covered, bound: covered ? edge : inset(shapeOf(p).path(p.w, p.h), 3).map(placer(p)), from: covered && (p.border === "applique" || p.border === "ith") ? seamAt(edge, 1 / 3)[0] : null,
         lap: p.border === "fancy" && p.trim !== "blanket" } : {}) } };
     if (later) later.push(job); else quiltDone(key, quiltOf(job));
   }

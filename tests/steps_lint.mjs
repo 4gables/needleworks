@@ -247,6 +247,24 @@ if (!only) {
   if (felt) problems.push("Add words: kept the last starter's felt");
   console.log(`add words: ${felt ? "kept the last starter's felt" : "ok"}`);
 }
+// The words of the choices a starter doesn't make (2026-11): a blanket-stitch appliqué edge, straight-line quilting
+// (it starts where the tack-down stopped: no trim, the time says so), a border with a shape to it.
+for (const [id, seg, v] of [["applique", "cover", "blanket"], ["mugrug", "quilt", "crosshatch"], ["coaster", "quilt", "stripes"], ["framed", "border", "fancy"], ["quiltblock", "quilt", "crosshatch"]]) {
+  if (only && !only.split(",").includes(id)) continue;
+  await open("#design");
+  await ev(`document.querySelector('[data-start="${id}"]').click(), 1`); await settle();
+  const set = await ev(`(async () => { for (const li of document.querySelectorAll("#st-pieces li[data-id]")) { li.querySelector(".pick")?.click() ?? li.click(); await new Promise((r) => setTimeout(r, 400));
+    const b = document.querySelector('[data-seg="${seg}"] [data-v="${v}"]'); if (b) { b.click(); return 1; } } return 0; })()`);
+  if (!set) { problems.push(`${id}: no ${seg} choice "${v}" in the editor`); continue; }
+  await settle();
+  const d = await ev(READ);
+  if (!d) { problems.push(`${id} with ${seg} ${v}: no steps`); continue; }
+  lint(`${id} (${seg}: ${v})`, d, false);
+  const text = d.steps.map((st) => `${st.you || ""} ${st.sews || ""}`).join(" ") + d.ready.join(" ");
+  if (v === "blanket" && !(/blanket stitch/.test(text) && /fusible web/.test(text) && !/satin border/.test(text))) problems.push(`${id}: a blanket-stitch edge isn't said (or satin still is)`);
+  if (seg === "quilt" && !new RegExp(`\\(${v}\\)`).test(text)) problems.push(`${id}: the quilting isn't named ${v}`);
+  console.log(`${id} (${seg}: ${v}): ${d.steps.length} steps, ${d.trims} trims, ${d.stitches} stitches`);
+}
 // Sew along: the preview one size on every step (the mug rug: its step 1 has Have ready and six actions)
 for (const id of ["mugrug", "applique"]) {
   if (only && !only.split(",").includes(id)) continue;
