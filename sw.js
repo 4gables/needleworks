@@ -2,7 +2,7 @@
 // Offline and installable: every file the page needs is cached on install; after that each request tries the
 // network first (so a new version shows up at once) and falls back to the cache. A picture or design shared to
 // the installed app arrives as a POST to ./?share and is handed to the page through a cache.
-const CACHE = "needleworks-v20", SHARED = "needleworks-shared";
+const CACHE = "needleworks-v21", SHARED = "needleworks-shared";
 const FILES = [
   "./", "index.html", "manifest.webmanifest", "css/app.css",
   "assets/icon-192.png",
@@ -59,9 +59,13 @@ const FILES = [
   "js/studio/files.js",
   "js/studio/lettering.js",
   "js/studio/pieces.js",
+  "js/studio/placing.js",
   "js/studio/shapes.js",
   "js/studio/starters.js",
   "js/studio/quilt.js",
+  "js/studio/recent.js",
+  "js/studio/threadsaid.js",
+  "js/studio/toobig.js",
   "js/studio/ui.js",
   "js/doctor-worker.js",
   "js/quilt-worker.js",

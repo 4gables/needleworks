@@ -9,7 +9,7 @@
 // Stale entries fail too. Run: node tests/sewn_lint.mjs (< 1 s, CI).
 import { readFileSync } from "fs";
 
-const FILES = ["js/studio/ui.js", "js/app.js", "js/sheet.js", "js/words.js", "js/gate.js", "js/studio/pieces.js", "js/studio/compose.js", "js/studio/names.js"];
+const FILES = ["js/studio/ui.js", "js/app.js", "js/sheet.js", "js/words.js", "js/gate.js", "js/studio/pieces.js", "js/studio/compose.js", "js/studio/names.js", "js/studio/placing.js", "js/studio/recent.js", "js/studio/threadsaid.js", "js/studio/toobig.js"];
 // (pieces.js: its measuring calls only; its builders stitch the size they're handed)
 const SIZES_IN = (f) => f !== "js/studio/pieces.js" && f !== "js/studio/compose.js";
 const MEASURE = /\b(pieceBounds|touchingAll|touching|inFrame)\(/g;
@@ -21,19 +21,19 @@ const NOT_PIECES = new Set(["advice", "pointers", "opened", "mine", "dataset", "
 // each because what it measures is already the sewn piece, or a candidate size it fits before using, or a piece no
 // frame fits
 const RAW_MEASURE = process.env.EMPTY ? [] : [
-  ["js/studio/ui.js", "patchEdge", "p is passed in as sewn (sewnAt) by its callers; f is a patch frame (never fitted)"],
+  ["js/studio/placing.js", "patchEdge", "p is passed in as sewn (sewnAt) by its callers; f is a patch frame (never fitted)"],
   ["js/studio/ui.js", "pieceProblems", "q is the piece at its fitted size (fit.get), made at the top"],
   ["js/studio/ui.js", "warnNow", "candidate sizes fitted with fittedSizes on the same line (two lines, the size fix)"],
   ["js/studio/ui.js", "roundAll", "a first frame drawn round the pieces as asked, so it shrinks none of them"],
   ["js/studio/ui.js", "landing", "frames (never fitted) and the piece at fit / f0, its fitted sizes"],
-  ["js/studio/ui.js", "twoHoopings", "lettering no frame fits (filtered by !fit.has), split at a word gap"],
+  ["js/studio/toobig.js", "twoHoopings", "lettering no frame fits (filtered by !fit.has), split at a word gap"],
   ["js/studio/ui.js", "reArch", "arched lettering: never frame-fitted"],
   ["js/studio/ui.js", "pickStarter", "q at its fitted size, made on the line before"],
-  ["js/studio/ui.js", "roughly", "a quick bound at the asked size, scaled to each candidate size"],
-  ["js/studio/ui.js", "middleOf", "a candidate size's box, fitted (sewnAt) before the spot is taken"],
-  ["js/studio/ui.js", "spotInOf", "candidate sizes, fitted (sewnAt) before a spot is taken"],
-  ["js/studio/ui.js", "freeRoom", "free space outside frames (nothing fitted there), q at fs, the in-the-hoop frame"],
-  ["js/studio/ui.js", "freeSpot", "a piece put in free space above or below: no frame fits it there"],
+  ["js/studio/placing.js", "roughly", "a quick bound at the asked size, scaled to each candidate size"],
+  ["js/studio/placing.js", "middleOf", "a candidate size's box, fitted (sewnAt) before the spot is taken"],
+  ["js/studio/placing.js", "spotInOf", "candidate sizes, fitted (sewnAt) before a spot is taken"],
+  ["js/studio/placing.js", "freeRoom", "free space outside frames (nothing fitted there), q at fs, the in-the-hoop frame"],
+  ["js/studio/placing.js", "freeSpot", "a piece put in free space above or below: no frame fits it there"],
   ["js/studio/names.js", "once", "names batch: q at `now`, its fitted size"],
   ["js/studio/pieces.js", "touching", "p as handed: its callers pass it sewn (checked here)"],
   ["js/studio/pieces.js", "fittedSizes", "works the fit out from the size asked"],
@@ -44,8 +44,8 @@ const RAW_SIZE = process.env.EMPTY ? [] : [
   ["js/app.js", "makePicture", "s is the Picture tab's settings (the Size asked), compared with the file as sewn for the size note"],
   ["js/studio/ui.js", "frameLines", "compares what the frame sews (fs, fittedSizes) with the size asked: the offer is for words shrunk under 80 % of it, tried at asked sizes down from it"],
   ["js/app.js", "keepPicture", "blob.size is the picture file's bytes (the storage cap), not a piece"],
-  ["js/studio/ui.js", "snug", "pieces no frame fits (fit.has excluded): asked = sewn; each size checked by landing()"],
-  ["js/studio/ui.js", "snugWay", "sets the asked size snug() found (unfitted piece)"],
+  ["js/studio/toobig.js", "snug", "pieces no frame fits (fit.has excluded): asked = sewn; each size checked by landing()"],
+  ["js/studio/toobig.js", "snugWay", "sets the asked size snug() found (unfitted piece)"],
   ["js/studio/ui.js", "lineRest", "the line pitch from the size the lines were sewn at (set from sewn() just before)"],
   ["js/studio/ui.js", "placeRest", "a new straight piece no frame fits yet: asked = sewn; spotIn/freeRoom measure it sewn"],
   ["js/studio/ui.js", "followed", "an arched word (never frame-fitted): asked = sewn"],
@@ -58,7 +58,7 @@ const RAW_SIZE = process.env.EMPTY ? [] : [
   ["js/studio/ui.js", "landing", "the capped test itself: change.size asked vs the size it's sewn"],
   ["js/studio/ui.js", "asLettering", "a monogram turned to lettering keeps the size asked, then fitted where it is"],
   ["js/studio/ui.js", "lineChoice", "offered only when no frame fits it (!d.fs): asked = sewn"],
-  ["js/studio/ui.js", "twoHoopings", "lettering no frame fits: asked = sewn"],
+  ["js/studio/toobig.js", "twoHoopings", "lettering no frame fits: asked = sewn"],
   ["js/studio/ui.js", "autoWords", "the words made biggest name the file: what was asked (intent), not what a frame left"],
   ["js/studio/ui.js", "main", "the words made biggest are the name the names batch swaps (intent)"],
   ["js/studio/ui.js", "pickStarter", "a starter's own sizes, fitted (fitHoop, fittedSizes) before it's shown"],
@@ -67,11 +67,11 @@ const RAW_SIZE = process.env.EMPTY ? [] : [
   ["js/studio/ui.js", "on:click", "one-tap fixes set the asked size they were checked at (landing); change() keeps the sewn size when a fit ends"],
   ["js/studio/ui.js", "change", "keeps the sewn size when a change ends the frame's fit"],
   ["js/studio/ui.js", "least", "the smallest asked size placing may try"],
-  ["js/studio/ui.js", "roughly", "scales the asked box to a candidate size"],
-  ["js/studio/ui.js", "readable", "q at a candidate size"],
-  ["js/studio/ui.js", "spotIn", "a copy keeps its original's asked size"],
-  ["js/studio/ui.js", "spotInOf", "candidate sizes from the asked one; s.size is the sewn one"],
-  ["js/studio/ui.js", "freeRoom", "candidate sizes from the asked one, fitted before one is taken"],
+  ["js/studio/placing.js", "roughly", "scales the asked box to a candidate size"],
+  ["js/studio/placing.js", "readable", "q at a candidate size"],
+  ["js/studio/placing.js", "spotIn", "a copy keeps its original's asked size"],
+  ["js/studio/placing.js", "spotInOf", "candidate sizes from the asked one; s.size is the sewn one"],
+  ["js/studio/placing.js", "freeRoom", "candidate sizes from the asked one, fitted before one is taken"],
   ["js/studio/names.js", "once", "names batch: q at a candidate size, `now` its fitted size"],
   ["js/app.js", "names-make.onclick", "m.size is a made name's sewn size (its file's)"],
   ["js/app.js", "picSettings", "the picture's Size control (sewSized makes the sewn design that size)"],
