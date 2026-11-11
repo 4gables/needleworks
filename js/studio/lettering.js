@@ -119,14 +119,16 @@ export function letters(text, family, size, style = "auto", spacing = 0, kern = 
   // chained, and none from a 2.4 mm column up, so pieces whose columns touch or overlap were trimmed apart: 45 of them
   // over the arched batch files. Now `linkReach`, and the stitch across is allowed for by `stitchLetters`.)
   const reach = linkReach(satinW);
+  // (a lone stroke under a column long, 0.9 mm in a fine line, is a dot: 1 mm of satin, 0.7 mm of line: `stitchLetters`)
+  const dots = { dot: (satinW || 0.9) / s, dotLen: (satinW ? 1 : 0.7) / s };
   const laid = warp && ((q) => { const m = warp([(q[0] - cx) * s, (q[1] - info.baseline) * s]); return [m[0] / s, m[1] / s]; });
   // (a move is loose thread up to 5 mm from the column's edge the needle leaves, half a column and pull off the
   // centre lines the starts are measured between: as print below. Two dots 4.2 mm apart were reckoned a trim.)
-  if (chain && !print && reach > 0.2) comps = order(edges, reach / s, (5.5 + (satinW ? satinW / 2 + 0.3 : 0)) / s, false, laid, Math.min(reach / 2, 0.35) / s, (satinW || 0.9) / s);
+  if (chain && !print && reach > 0.2) comps = order(edges, reach / s, (5.5 + (satinW ? satinW / 2 + 0.3 : 0)) / s, false, { at: laid, step: Math.min(reach / 2, 0.35) / s, ...dots });
   // Print letters each start where the move from the last one is either over 5 mm (trimmed; the move runs from the end
   // of one column to the start of the next, half a column and pull off the centre lines, so 0.5 mm to spare) or, where
   // no start makes it that long, the leftmost (Quicksand "Abbie dog" at 5 mm: 5 loose threads in 28 mm)
-  else if (chain && print) comps = order(edges, 0, (5.5 + (satinW ? satinW / 2 + 0.3 : 0)) / s, true, laid, 0, (satinW || 0.9) / s);
+  else if (chain && print) comps = order(edges, 0, (5.5 + (satinW ? satinW / 2 + 0.3 : 0)) / s, true, { at: laid, ...dots });
   // Strokes round a counter are narrowed so it stays open (`counterCaps`; not when satin is asked for: "Make it bold"
   // says small loops may fill). The fourth entry is that stroke's column, or 0 for the word's.
   const caps = style === "satin" || !satinW ? new Map() : notchCaps(notches, s, satinW, counterCaps(counters, s, satinW));
