@@ -16,6 +16,7 @@ import { BRANDS, apart, brotherNum, chartSpools, exampleSpools, lab, nearestSpoo
 import { COLORS as LINE_THREADS, initStudio, savedDesign } from "./studio/ui.js";
 import { $, designHoop, designTurned, forgetPicture, hoop, keepPicture, kept, shownHoop, square, state, store, toMachine, turnCut, turned, turnedFile } from "./state.js";
 import { keepFocus, keyboard, live, next } from "./focus.js";
+import "./onitem.js";   // (it sets itself up: nothing here calls into it)
 
 // the old bookmark panel's colours as saved, mapped to the exact Brother PEC colours (#1a1a1a showed as "Olive Green"),
 // for an old #bookmark link opening the Bookmark starter
@@ -38,7 +39,7 @@ function stepLook(v, i, block) {
 const typing = () => state.mode === "design" && document.activeElement?.matches?.("#controls textarea, #controls input[type=text], #controls input:not([type])");
 document.addEventListener("input", (e) => { if (typing() && e.target === document.activeElement && state.tf && !state.view?.whole) state.typeFit ??= state.tf.base.fit; }, true);
 document.addEventListener("focusout", () => setTimeout(() => { if (state.typeFit && !typing()) { state.typeFit = null; paint(); } }), true);
-function paint() {
+export function paint() {
   const v = state.view;
   if (state.typeFit && (!typing() || !v || v.whole || state.hold)) state.typeFit = null;
   $("empty").hidden = !!v || !$("error").hidden;   // (an error says what's wrong; "Nothing to stitch yet" under it misled)
@@ -234,7 +235,7 @@ function machineThreadList(v) {
 // A dialog opens at its top. Taller than the window (the download dialog on a phone, two bookmarks), its button's
 // autofocus scrolled it to the bottom: the title and the verdict were above the fold and it opened mid hooping note.
 // Then focus goes to its title instead, and Tab goes on from there.
-function modal(d) {
+export function modal(d) {
   d.showModal();
   if (d.scrollTop > 0) { d.scrollTop = 0; const h = d.querySelector("h2"); if (h) { h.tabIndex = -1; h.focus({ preventScroll: true }); } }
 }
@@ -679,55 +680,6 @@ const cutFile = (ext) => () => {
 };
 $("cut-file").onclick = cutFile("svg");
 $("cut-dxf").onclick = cutFile("dxf");
-
-// ---------- on my item ----------
-// a photo of the real bib or towel under the design at true size: two dots on something measured set the scale
-const cal = { bmp: null, a: [0.25, 0.5], b: [0.75, 0.5], drag: null };
-$("item-open").onclick = () => {
-  if (state.backdrop) { state.backdrop = null; $("item-open").textContent = "On my item"; state.zoom = 1; state.pan = [0, 0]; paint(); return; }
-  $("item-done").disabled = !cal.bmp; modal($("item")); calDraw();
-};
-$("item-file").onchange = async (e) => {
-  const f = e.target.files[0]; e.target.value = ""; if (!f) return;
-  $("item-error").hidden = true;
-  try { cal.bmp = await createImageBitmap(f, { imageOrientation: "from-image" }); }
-  catch { $("item-error").textContent = "That photo couldn't be opened. Try a JPG or PNG."; $("item-error").hidden = false; return; }
-  cal.a = [0.25, 0.5]; cal.b = [0.75, 0.5]; $("item-done").disabled = false; calDraw();
-};
-function calDraw() {
-  const c = $("item-cal"), has = !!cal.bmp;
-  c.hidden = $("item-len-row").hidden = !has; if (!has) return;
-  const W = Math.min(c.parentElement.clientWidth, 600), H = Math.round(W * Math.min(1.2, cal.bmp.height / cal.bmp.width)), dpr = devicePixelRatio || 1;
-  c.style.width = W + "px"; c.style.height = H + "px"; c.width = W * dpr; c.height = H * dpr;
-  const ctx = c.getContext("2d"); ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  const k = Math.min(W / cal.bmp.width, H / cal.bmp.height), iw = cal.bmp.width * k, ih = cal.bmp.height * k, ox = (W - iw) / 2, oy = (H - ih) / 2;
-  cal.box = [ox, oy, iw, ih];
-  ctx.drawImage(cal.bmp, ox, oy, iw, ih);
-  const P = ([u, v]) => [ox + u * iw, oy + v * ih], [ax, ay] = P(cal.a), [bx, by] = P(cal.b);
-  ctx.strokeStyle = "#fff"; ctx.lineWidth = 4; ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(bx, by); ctx.stroke();
-  ctx.strokeStyle = "#b3133a"; ctx.lineWidth = 2; ctx.stroke();
-  for (const [x, y] of [[ax, ay], [bx, by]]) { ctx.fillStyle = "#b3133a"; ctx.beginPath(); ctx.arc(x, y, 9, 0, 7); ctx.fill(); ctx.strokeStyle = "#fff"; ctx.lineWidth = 2.5; ctx.stroke(); }
-}
-const calAt = (e) => { const r = $("item-cal").getBoundingClientRect(), [ox, oy, iw, ih] = cal.box; return [Math.min(1, Math.max(0, (e.clientX - r.left - ox) / iw)), Math.min(1, Math.max(0, (e.clientY - r.top - oy) / ih))]; };
-$("item-cal").addEventListener("pointerdown", (e) => {
-  const p = calAt(e), [, , iw, ih] = cal.box, d = (q) => Math.hypot((q[0] - p[0]) * iw, (q[1] - p[1]) * ih);
-  cal.drag = d(cal.a) < d(cal.b) ? "a" : "b"; cal[cal.drag] = p; $("item-cal").setPointerCapture(e.pointerId); calDraw();
-});
-$("item-cal").addEventListener("pointermove", (e) => { if (cal.drag) { cal[cal.drag] = calAt(e); calDraw(); } });
-$("item-cal").addEventListener("pointerup", () => { cal.drag = null; });
-// keyboard: arrows move the first dot, Shift + arrows the second
-$("item-cal").addEventListener("keydown", (e) => {
-  const d = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] }[e.key]; if (!d || !cal.bmp) return;
-  e.preventDefault(); const k = e.shiftKey ? "b" : "a";
-  cal[k] = [Math.min(1, Math.max(0, cal[k][0] + d[0] * 0.005)), Math.min(1, Math.max(0, cal[k][1] + d[1] * 0.005))]; calDraw();
-});
-$("item-done").onclick = () => {
-  const mm = +$("item-len").value * +$("item-unit").value, px = Math.hypot((cal.a[0] - cal.b[0]) * cal.bmp.width, (cal.a[1] - cal.b[1]) * cal.bmp.height);
-  if (!(mm > 0) || px < 5) return;
-  // the photo's own pixels in 0.1 mm stitch units, centred under the design
-  state.backdrop = { bmp: cal.bmp, unit: (mm * 10) / px, center: [0, 0] };
-  $("item").close(); $("item-open").textContent = "Remove photo"; state.zoom = 1; state.pan = [0, 0]; paint();
-};
 
 // ---------- sew along ----------
 // one step per screen at the machine: the design as it is after the step, the thread, what to do, how long it takes;
