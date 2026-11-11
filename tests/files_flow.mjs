@@ -356,6 +356,9 @@ async function exits(tag) {
     // nothing silently dropped: every piece has stitches, or a problem is said about it
     const s = JSON.parse(localStorage.getItem("nw:studio")), fit = P.fittedSizes(s.pieces), probs = nwTest.problems() || [];
     for (const p of s.pieces) { const n = P.pieceStitches(fit.has(p.id) ? { ...p, size: fit.get(p.id) } : p).flat().length; if (!n && !probs.some((q) => q.piece === p.id)) bad(\`\${P.label(p)} has no stitches and nothing says so\`); }
+    // the keyboard's way there: Ctrl+S takes focus to Download (it was 48-67 Tabs from the Words box)
+    document.activeElement?.blur(); window.dispatchEvent(new KeyboardEvent("keydown", { key: "s", ctrlKey: true, bubbles: true, cancelable: true }));
+    if (document.activeElement !== $("download")) bad("Ctrl+S didn't take focus to Download");
     // Download: one file, named as the button says, passing the gate, fitting the hoop
     __m.got.length = 0; $("download").click(); await new Promise((r) => setTimeout(r, 300)); __m.close();
     const files = await __m.files(), want = /^Download (.+\\.(pes|zip))$/.exec(dl)?.[1] || /^Download \\d+ files/.test(dl) && null;
