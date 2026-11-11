@@ -132,3 +132,26 @@ Reference for this part of Needleworks: the rules, the reason for each (it stops
   and NFD alike, used by the editor, Download note and names batches. Per-font `min` x-height feeds `minSize` (default
   4 mm). Fonts after Meow Script are free lookalikes of embroiderydesigns.com samples (`note`). Try a font in
   `tests/browser/fonts.html?name=<word>`; reject unjoined or spurred ones (Petit Formal, Comforter, Damion).
+
+## Own fonts (`js/studio/ownfont.js`)
+- The maker picks a .ttf or .otf from their device (Font list, last entry). It is read in the page and never leaves
+  it: the browser draws it through a `FontFace` exactly as it draws the bundled fonts, so the lettering engine needs
+  nothing new. The family is `Own <name>`; the entry in `FONTS` has `own: true`, and `print: true` unless most
+  lowercase letters reach their own advance width (a script's joining strokes: Pacifico 1.0, Dancing Script 0.96;
+  Abril Fatface 0.62 and sans fonts about 0.1 are print; the line is 0.8).
+- The file's own tables give what the browser can't be asked: the name (`name`), the letters (`cmap` formats 4, 6,
+  12, registered with `glyphs.js` so `lacks` works as for bundled fonts), and the shapes (`glyf` outlines, or CFF
+  Type 2 charstrings for .otf) measured along scanlines of n o u h m e d b p l: stroke width against the x-height,
+  the thinnest strokes, and how many lines a stem is drawn with. Written from the OpenType and CFF specifications.
+- What the maker is told, under the font row: an outline or inline font (1.6 or more lines per stem: Monoton 4)
+  sews busy and thin; a bold one (stroke over 0.3 x-heights: Abril Fatface 0.39) comes out lighter, since a satin is
+  at most a fifth of the x-height; a high-contrast one loses its hairlines; and the height from which the letters
+  are satin, not a single line (0.8 mm satin). Refused in plain words: .woff/.woff2, .ttc, files that aren't fonts,
+  fonts with fewer than 40 of A-Z a-z (symbol fonts), files over 10 MB, more than 8 fonts.
+- Kept for the next visit and offline: names in localStorage (`nw.ownfonts`, read as the module loads so a saved
+  design keeps its font), files in IndexedDB (`needleworks-fonts`). Until a file is out of IndexedDB its family has
+  an unloaded stand-in face: `document.fonts.check` is true for a family the page has never heard of (Chrome), and
+  lettering would have been drawn and stitched in the fallback font. `loadFont` waits for the real one (`fontWaits`).
+- Limits: no kerning or ligatures beyond what the browser applies when it draws; a variable font sews at its
+  default weight; a design saved to a file and opened where the font isn't kept falls back to the default font.
+

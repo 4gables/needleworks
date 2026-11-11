@@ -102,7 +102,15 @@ class Out {
   set(at, v, n) { for (let i = 0; i < n; i++) this.b[at + i] = (v >> (8 * i)) & 0xff; }
 }
 
-export function writePES(pattern) {
+// The design page PE-DESIGN shows a file on (header, the two u16 after the leading 0, 0: a hoop's width and height in
+// mm, which PE-DESIGN 11 matches to its hoop list). 100 x 100 for every design a 130 x 180 field holds, as it has
+// always been written (PE-DESIGN draws such a design past its page, and the bytes of every file made so far stay as
+// they are); the 160 x 260 hoop for anything bigger. Brother machines never read it: they sew the PEC block, which
+// holds no hoop. Measured in PE-DESIGN 11 with files that differ in one field each (docs/formats-spec.md 4.3.1).
+export const PES_PAGES = [[100, 100], [160, 260]];
+export const pesPage = (W, H) => PES_PAGES[Math.min(W, H) > 1300 || Math.max(W, H) > 1800 ? 1 : 0];
+
+export function writePES(pattern, page = null) {
   const st = normalize(pattern);
   if (!st.some((e) => e[2] === STITCH)) throw new Error("There's nothing to stitch.");
   if (count(st, COLOR_CHANGE) > 250) throw new Error("Too many colour changes for a PES file (250 max).");
@@ -116,7 +124,8 @@ export function writePES(pattern) {
 
   // header
   o.ascii("#PES0060"); o.u32(0); o.u16(1); o.ascii("02"); o.fill(5);
-  for (const v of [0, 0, 0x64, 0x64, 0, 0xc8, 0xc8, 0x64, 0x64, 0x64, 0x07, 0x13, 1, 1, 0, 100, 1, 0]) o.u16(v);
+  const [pw, ph] = page || pesPage(W, H);
+  for (const v of [0, 0, pw, ph, 0, 0xc8, 0xc8, 0x64, 0x64, 0x64, 0x07, 0x13, 1, 1, 0, 100, 1, 0]) o.u16(v);
   o.u8(0);
   for (const v of [1, 0, 0, 1, 0, 0]) o.f32(v);
   o.fill(6);
@@ -128,7 +137,7 @@ export function writePES(pattern) {
     o.str(t.description != null ? t.description : t.name); o.str(t.brand); o.u8(0);
   });
 
-  // design block: CEmbOne (size and placement in a 130 x 180 mm hoop), then CSewSeg (the stitches by section,
+  // design block: CEmbOne (size, and placement about the page's centre at 1000, 1000), then CSewSeg (the stitches by section,
   // relative to the bottom-left, with their thread-list colour codes)
   o.u16(1); o.u16(0xffff); o.u16(0); o.u16(7); o.ascii("CEmbOne"); o.fill(16);
   for (const v of [1, 0, 0, 1, 350 + 650 - W / 2, 100 + H + 900 - H / 2]) o.f32(v);

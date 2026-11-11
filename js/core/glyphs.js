@@ -23,8 +23,11 @@ const RUNS = {
   "NW Josefin Sans": "0,d,13+5e,22+de,11,3,b,3+1,e+1,14+8,7,13+1,3+1,8,7+21,f+3,3+3,4,22,19,4a,a+1,2,f+5,23+4,2+6,3,2+1,9,8+1,2+2,6,3,4,5f,28,4,1ac0+5,19,2+59,11a+1,4+2,2+2,2+2,4,a,9+1,a,30,2d,2+1,2+1,2,2+2,4+1,3,4+1,2+1,59,c,4,e0,9,2+1,3,4+1,4,d,1d,18,4+1,365,d536+2",
 };
 const cache = new Map();
-// the set of code points `family` has (null for a family we don't bundle)
+// a font the maker brought (studio/ownfont.js): its letters, read from its own file
+export const registerGlyphs = (family, set) => { cache.set(family, set); };
+// the set of code points `family` has (null for a family we don't know)
 export function glyphs(family) {
+  if (cache.has(family)) return cache.get(family);
   if (!Object.hasOwn(RUNS, family)) return null;
   if (!cache.has(family)) {
     const set = new Set();

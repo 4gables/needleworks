@@ -367,7 +367,7 @@ that hold at least one stitch. JUMP, TRIM and STOP do not touch the flag.
 
 ---
 
-## 4. `writePES(pattern)`
+## 4. `writePES(pattern, page = null)`
 
 ### 4.1 Steps and errors
 
@@ -405,7 +405,7 @@ Let E = (minX, minY, maxX, maxY) be the extents of **all** entries of st, and W 
 | 12 | 2 | u16 1 |
 | 14 | 2 | ASCII `02` |
 | 16 | 5 | five empty PES strings (5 × 0x00): name, category, author, keywords, comments |
-| 21 | 36 | eighteen u16: 0, 0, 0x64, 0x64, 0, 0xC8, 0xC8, 0x64, 0x64, 0x64, 0x07, 0x13, 1, 1, 0, 100, 1, 0 |
+| 21 | 36 | eighteen u16: 0, 0, **pw, ph**, 0, 0xC8, 0xC8, 0x64, 0x64, 0x64, 0x07, 0x13, 1, 1, 0, 100, 1, 0 (pw, ph: section 4.3.1) |
 | 57 | 1 | 0x00 (an empty PES string) |
 | 58 | 24 | six f32: 1, 0, 0, 1, 0, 0 (bytes `00 00 80 3F`, `00 00 00 00`, `00 00 00 00`, `00 00 80 3F`, then 8 × 00) |
 | 82 | 6 | three u16 0 (no fills, motifs or feather patterns) |
@@ -423,6 +423,32 @@ Each thread entry:
 | description | PES string of `description`, else `name`, else missing |
 | brand | PES string of `brand` |
 | (chart name) | 0x00 (always missing) |
+
+### 4.3.1 The design page (pw, ph)
+
+The eighteen u16 begin with PE-DESIGN's Design Settings. What each does was measured in PE-DESIGN 11 (2026-11-11) by
+opening files written here that differ in one field, and reading the Design Settings dialog:
+
+| u16 (0-based) | value written | what PE-DESIGN 11 does with it |
+|---|---|---|
+| 0 | 0 | nothing seen (1 and 4 were tried) |
+| 1 | 0 | page type: 0 = "Hoop Size", any other value = "Custom Size" |
+| 2, 3 | pw, ph | the hoop's width and height in mm; matched to the hoop list (100, 100 → "100 x 100 mm"; 160, 260 → "160 x 260 mm (Color LCD)") |
+| 4 | 0 | nothing seen (1 was tried) |
+| 5, 6 | 200, 200 | the Custom Size width and height in mm (shown greyed when the page type is 0) |
+
+Brother's own 379 samples in PE-DESIGN 11 are all versions 8 to 11 (#PES0080 13, 0090 138, 0092 1, 0100 137, 0107 2,
+0110 88), none version 6. Their headers carry the same things in a longer layout: a hoop number (0 for designs up to
+100 x 100 mm, 1 up to 130 x 180, 4 = 180 x 300, others for bigger hoops), then a width and height in mm and again in
+tenths of an inch, then 200, 200. So the version 6 meaning above rests on PE-DESIGN's behaviour, not on a
+Brother-written version 6 file.
+
+**Rule.** `pesPage(W, H)`: (100, 100) when min(W, H) ≤ 1300 and max(W, H) ≤ 1800 (a design a 130 x 180 mm field holds,
+either way up); otherwise (160, 260). `writePES`'s second argument, when given, is `[pw, ph]` and replaces the rule.
+(100, 100) for a 130 x 180 design is what has always been written: PE-DESIGN draws such a design past its page, and
+every file made so far keeps its bytes. With (160, 260) a 150 x 250 mm design opens centred on the 160 x 260 page.
+
+Brother machines do not read these fields: they sew the PEC section (4.5), which names no hoop.
 
 ### 4.4 Design block (CEmbOne + CSewSeg) and the v6 trailer
 
@@ -455,8 +481,8 @@ This part starts right after the thread chart:
 | 8·K | for i = 0 … K − 1: u32 i, u32 0 |
 
 The two translation floats are computed in double precision as (350 + 650) − W/2 and ((100 + H) + 900) − H/2, which
-equal 1000 − W/2 and 1000 + H/2, and are then stored as f32. They centre the design in a 130 × 180 mm hoop (pyembroidery's
-convention). W and H are integers, so the values are exact.
+equal 1000 − W/2 and 1000 + H/2, and are then stored as f32. They put the design's centre at (1000, 1000), which PE-DESIGN
+shows as the centre of the page whatever its size (seen with the 100 x 100 and the 160 x 260 page). W and H are integers, so the values are exact.
 
 **Section format**: u16 flag (0 = stitches, 1 = jump), u16 colour code, u16 point count c, then c points, each u16 x
 then u16 y. A point (x, y) is stored relative to the design's **bottom-left**: x − minX and y − maxY. The y value is
