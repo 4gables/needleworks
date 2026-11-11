@@ -30,6 +30,16 @@ function alongSteps(v) {
     return { ...s, block: blocks.find((x) => x.index === i), minutes: v.fact?.steps[i] ?? 0 };
   });
 }
+// How to hoop, then the design's own tips (its starter's, its fabric's, its thread's, where they're about hooping or the needle: `sheet.notes` after the turned-hoop
+// note, which has its own place on the screen), then a needle when none of those named one.
+const HOOP_BARE = "Loosen the screw on the hoop's outer ring and lay that ring on a table. Lay the stabilizer over it and press the inner ring down into it, with the arrows on the two rings lined up, then tighten the screw. The stabilizer should be flat and tight like a drum: the fabric is laid on it later, when the steps say.";
+const HOOP_FABRIC = "Loosen the screw on the hoop's outer ring and lay that ring on a table. Lay the stabilizer over it, then the fabric, right side up. Press the inner ring down into the outer one, with the arrows on the two rings lined up, and tighten the screw. The fabric should lie flat and smooth with no slack, but not stretched: fabric pulled tight in the hoop puckers round the stitches when it comes out.";
+const NEEDLE = "Needle: a 75/11 embroidery needle suits most fabric with standard 40 wt thread (a ballpoint one for T-shirts and other knits). Put in a new one when stitches skip or the thread shreds.";
+export function hooping(v) {
+  // (only what's about hooping or the needle: a starter's "Felt or vinyl doesn't fray…" isn't)
+  const own = (v.sheet?.notes || []).slice(1).filter((t) => t && /needle|hoop (it|them|only)|while hooping/i.test(t));
+  return [v.bare ? HOOP_BARE : HOOP_FABRIC, ...own, ...(own.some((t) => /needle/i.test(t)) ? [] : [NEEDLE])];
+}
 function alongShow() {
   const v = state.view, steps = alongSteps(v), i = along.i, done = i >= steps.length, mt = machineThreadList(v);
   // (the hoop turned: drawn on its side, as the machine shows it, like the steps say; it was drawn upright)
@@ -42,7 +52,7 @@ function alongShow() {
     $("along-title").textContent = "Finished";
     $("along-you").innerHTML = youHtml(told(v.sheet, v.cache.blocks, mt, v.filename).after.join(" "), escapeHtml, "p");
     $("along-ready").hidden = $("along-turn").hidden = $("along-look").hidden = true;
-    $("along-sews").textContent = ""; $("along-time").textContent = ""; $("along-wrong").hidden = true;
+    $("along-sews").textContent = ""; $("along-time").textContent = ""; $("along-wrong").hidden = true; $("along-hoop").hidden = true;
   } else {
     const s = steps[i], t = mt[i];
     $("along-title").innerHTML = `<i style="background:${s.block?.color || "#999"}"></i>${s.title ? escapeHtml(s.title) + " · " : ""}${s.block ? threadHtml(s.block.color, t?.name || "") : `Brother ${escapeHtml(t?.name || "")}`}`;
@@ -57,6 +67,10 @@ function alongShow() {
     // (what to do when the wrong thread went on: nothing said, a tester stopped and started over)
     // (closed again on a new step only: a resize redraws the screen)
     $("along-wrong").hidden = false; if (along.at !== i) $("along-wrong").open = false;
+    // (how to hoop and which needle, on the first screen for whoever wants it: Sew along said "Hoop the fabric" and no
+    // more, and two testers asked for both. The design's own fabric and thread tips, as its steps panel gives them.)
+    $("along-hoop").hidden = !!i; if (along.at !== i) $("along-hoop").open = false;
+    if (!i) $("along-hoop-text").innerHTML = hooping(v).map((t) => `<p>${escapeHtml(t)}</p>`).join("");
     look = stepLook(v, i, s.block);
   }
   along.at = i;

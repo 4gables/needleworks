@@ -420,12 +420,14 @@ export function initStudio(api) {
 
   let drawnId = null;   // (the piece the editor panel was last drawn for)
   function ui() { api.keepFocus($("panel-design"), () => { list(); editor(); sewnOn(); }); api.paint?.(); }
+  // the design's one in-the-hoop project, upright (the one "Make another in the hoop" copies), or null
+  const loneProject = () => { const ith = pieces.filter((f) => f.kind === "frame" && (f.border === "ith" || f.border === "zip") && !(f.rot || 0)); return ith.length === 1 ? ith[0] : null; };
   function sewnOn() {
     sewAs(fabric, thread);   // (pieces.js measures with the design's fabric and thread)
     $("st-fabric").innerHTML = Object.entries(FABRICS).map(([k, f]) => `<button type="button" data-fab="${k}" aria-pressed="${k === fabric}">${f.name}</button>`).join("");
     // (Make another, under the starter too for a lone in-the-hoop project: in the frame's own settings only, a newcomer
     // making two bookmarks didn't find it and made one for each name instead)
-    const ith = pieces.filter((f) => f.kind === "frame" && (f.border === "ith" || f.border === "zip") && !(f.rot || 0)), lone = ith.length === 1 ? ith[0] : null;
+    const lone = loneProject();
     $("st-tip").hidden = !tip && !lone; $("st-tip").textContent = tip;
     if (lone) {
       const b = Object.assign(document.createElement("button"), { type: "button", className: "link", textContent: "Make another in the hoop" });
@@ -1427,5 +1429,5 @@ export function initStudio(api) {
     }
     showEditor(true);
   }
-  return { make, addWords, showFix, usePicture, openSaved, downloaded, empty: () => !pieces.length, starter, rename, title: () => title, autoName: () => api.safeName(autoWords(), "design"), selBox: () => { const p = current(); return p ? pieceBounds(sewnAt(p)) : null; }, relabel: () => { ui(); make(); }, start, move, end, nudge, deselect, forNames, remember, recentre: () => { remember(); recentre(); save(); ui(); make(); } };
+  return { make, addWords, showFix, usePicture, openSaved, downloaded, empty: () => !pieces.length, starter, rename, title: () => title, autoName: () => api.safeName(autoWords(), "design"), selBox: () => { const p = current(); return p ? pieceBounds(sewnAt(p)) : null; }, relabel: () => { ui(); make(); }, start, move, end, nudge, deselect, forNames, remember, another: () => !!loneProject(), twoUp: () => twoUp(loneProject()), recentre: () => { remember(); recentre(); save(); ui(); make(); } };
 }
