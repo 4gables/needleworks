@@ -18,7 +18,7 @@ Reference for this part of Needleworks: the rules, the reason for each (it stops
   pictures by `workingSize`, not `picturePlan`.
 - Headless without the extension: Chrome with `--remote-debugging-port`; import the module script over CDP as a blob
   with absolute URLs (the inline module doesn't start).
-- Persona harness (`~/.claude/plans/needleworks-user-testing.md`): one headless Chrome per tester via `node
+- Persona harness (a base prompt with the site address, the tools and the report format; one prompt per persona): one headless Chrome per tester via `node
   tests/cdp.mjs PORT CMD` (commands in its header). `start` disables timer throttling (a 300 ms debounce took 57 s)
   and keeps temp files beside the profile (TMPDIR, MAC_CHROMIUM_TMPDIR). With `nocache` app.js may not start: check
   `document.body.dataset.mode`, navigate again. Subagents hand reports back.

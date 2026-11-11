@@ -318,7 +318,7 @@ Limits typed in more than one place, to come from `recipes.js`: 24 hits (quality
 - No art engine before a look is approved; no new test scripts.
 
 ## How every round is proven
-- A worktree of `origin/main` under `.claude/worktrees/`; baseline batches built before any change.
+- A worktree of `origin/main` under `.worktrees/`; baseline batches built before any change.
 - `zsh tests/check.sh origin/main BASE`: CI tests, both batches, `pe900_check`, byte compare, the scoreboard for
   baseline and new, files_flow, ui_sweep quick, monkey; area checks by what changed. Every job time-limited.
 - Phase 1 rounds are byte-identical (exceptions listed one by one). Phase 2 rounds: the target group better, no

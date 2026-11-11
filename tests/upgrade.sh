@@ -14,7 +14,7 @@
 # Run it after changing sw.js or the registration in app.js (tests/check.sh does).
 set -u
 cd "${0:A:h}/.."; W=$PWD; PORT=${1:-8811}; CDP=${2:-9491}; T=${TMPDIR:-/tmp}/nw-upgrade; rm -rf $T; mkdir -p $T
-for r in A B C; do rsync -a --exclude .git --exclude .claude --exclude node_modules --exclude out --exclude .venv --exclude 'tests/external' $W/ $T/$r/; done
+for r in A B C; do rsync -a --exclude .git --exclude .claude --exclude .worktrees --exclude .agents --exclude node_modules --exclude out --exclude .venv --exclude 'tests/external' $W/ $T/$r/; done
 mark() {   # folder, letter, version number
   ( cd $T/$1 && sed -i '' "s#<title>[^<]*</title>#<title>release $2</title>#" index.html \
     && sed -i '' "s#^export const SCRIPT = #export const RELEASE = \"$2\";\nexport const SCRIPT = #" js/studio/starters.js \

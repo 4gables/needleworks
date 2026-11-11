@@ -3,7 +3,8 @@
 Embroidery files for Brother home machines (PE900 first). Static site, no build step, GitHub Pages from the repo
 root (https://4gables.com/needleworks/). JavaScript is the only engine; Python is test tooling only
 (`tests/pe900_check.py`, `tests/batch_server.py`, venv `.venv` from `requirements.txt`). Serving a non-technical
-user through Claude Code: `.claude/skills/embroidery/SKILL.md`.
+user through a coding agent: `.agents/skills/embroidery/SKILL.md`. This file is the one instruction file for
+any AI agent or person working here; there is no tool-specific copy.
 
 Rules, the reason for each (it stops someone undoing it), gotchas, how to test. History is in `git log`; the
 measurements behind each number are in the code's comments.
@@ -116,7 +117,7 @@ Read the topic's file before changing its code; each holds the rules, their reas
 | PES writer changes wanted, and how one ships | `docs/writer-changes.md` |
 
 ## How to work
-- Rounds follow `docs/roadmap.md`: one theme each, in a worktree under `.claude/worktrees/` on a branch from
+- Rounds follow `docs/roadmap.md`: one theme each, in a worktree under `.worktrees/` on a branch from
   `origin/main`; never in the main checkout, never `git stash` (shared by every worktree).
 - A fresh worktree needs `tests/external` linked from the main checkout (`ln -s`; it is gitignored), or 22
   batch files are missing.
