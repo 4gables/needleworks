@@ -9,7 +9,10 @@ Rules, the reason for each (it stops someone undoing it), gotchas, how to test. 
 measurements behind each number are in the code's comments.
 
 ## Repo map
-- `index.html`, `css/app.css`, `sw.js`, `manifest.webmanifest`; `js/app.js` (tabs, state, `setView`, downloads).
+- `index.html`, `css/app.css`, `sw.js`, `manifest.webmanifest`; `js/app.js` (preview, `setView`, toasts, downloads,
+  tabs, start-up) and its sections: `state.js` (shared state, `store`, hoop helpers), `picture.js` (Picture tab),
+  `opened.js` (Open tab), `along.js` (Sew along, names dialog), `threadui.js` (thread labels, brands, Threads I
+  own), `focus.js`, `onitem.js`. A section never uses app.js while it loads, only when something happens.
 - `js/core/`: `formats.js` (PES writer, readers, `validatePES`), `threads.js` (PEC palette), `recipes.js` (every
   stitch number and limit, with its reason: read here, never re-typed), `design.js` (`Design`, locks, `finish`,
   `relieve`), `density.js` (hits per mm² at every offset), `geom.js`, `colour.js`, `raster.js` (skeleton, stroke
@@ -22,7 +25,7 @@ measurements behind each number are in the code's comments.
   `THREADS` words), `files.js` (opened files as pieces), `ui.js` (editor, warnings, one-tap fixes; hands its state to its
   parts as `S`), `starters.js`, `names.js` (One for each name), `recent.js` (Recent designs),
   `placing.js` (where a piece goes), `threadsaid.js` (thread names in the editor), `toobig.js` (too big for the
-  hoop and the ways out), `fixes.js` (one-tap fixes), `stepsui.js` (steps panel), `offpage.js` (worker jobs),
+  hoop and the ways out), `problems.js` (the problems list), `editor.js` (the piece editor panel), `fixes.js` (one-tap fixes), `stepsui.js` (steps panel), `offpage.js` (worker jobs),
   `outline.js`, `quilt.js`, `motifs.js`. pieces.js still re-exports what moved out of it.
 - `js/doctor.js` + `doctor-worker.js` (Open tab fixes), `quality.js` (the checker's rules), `words.js` (problems
   list per view, stop/thread vocabulary), `gate.js` (the only exit for files: `handOut`), `sheet.js` (step text, sew

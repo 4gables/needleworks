@@ -40,14 +40,14 @@ if has '^js/(core/|studio/(pieces|compose|lettering|shapes|fabrics|files|starter
   [[ -n $BASE ]] && say "compare: changed files vs $BASE" && for f in $BASE/*.pes; do cmp -s $f $OUT/batch/${f:t} || say "  changed ${f:t}"; done | tail -40
   # (picture_corpus.sh starts and stops its own browser and its own server on the ports it's given: not ours. Given
   # our server's port its files landed in our batch folder and its own checker count came out blank)
-  has '^js/core/(digitize|palette|fill|colour)' && run picture_corpus 600 zsh tests/picture_corpus.sh $((CDP+3)) $((HP+1)) $OUT/pc
+  has '^js/core/(digitize|palette|fill|colour)|^js/(picture|worker)\.js' && run picture_corpus 600 zsh tests/picture_corpus.sh $((CDP+3)) $((HP+1)) $OUT/pc
   has '^js/core/(text|raster|fonts)|^js/studio/(pieces|lettering)' && { node tests/cdp.mjs $CDP goto "$U/tests/browser/lettering_look.html?v=$RANDOM" >/dev/null; for i in $(seq 1 120); do t=$(node tests/cdp.mjs $CDP eval document.title); [[ $t == *DONE* ]] && break; sleep 5; done; say "== lettering_look $t"; [[ $t == *" 0\""* ]] || fail=1; }
 fi
 
 run files_flow 600 node tests/files_flow.mjs $CDP $U
 has 'sheet\.js|words\.js|studio/' && run steps_lint 600 node tests/steps_lint.mjs $CDP $U
-has 'app\.js|studio/ui' && run entry_state 900 node tests/entry_state.mjs $CDP $U
-has 'words\.js|quality\.js|app\.js' && run said_flow 300 node tests/said_flow.mjs $CDP $U
+has '^js/(app|state|focus|onitem|along|threadui|picture|opened)\.js|studio/(ui|editor|problems|fixes|placing|toobig|threadsaid|stepsui|offpage|recent|names|starters)' && run entry_state 900 node tests/entry_state.mjs $CDP $U
+has 'words\.js|quality\.js|^js/(app|state|along|threadui|picture|opened)\.js' && run said_flow 300 node tests/said_flow.mjs $CDP $U
 node tests/cdp.mjs $CDP stop >/dev/null 2>&1
 run ui_sweep 1200 node tests/ui_sweep.mjs --quick --port $((CDP+2)) --url $U/ --out $OUT/sweep
 node tests/cdp.mjs $((CDP+1)) start $OUT/chrome2 >/dev/null 2>&1

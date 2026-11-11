@@ -19,7 +19,7 @@ const EXIT = [/navigator\.share\s*\(/, /\.download\s*=/, /<a\b[^>]*\sdownload\b/
   /createObjectURL\s*\(/, /window\.open\s*\(/, /location(\.href)?\s*=\s*[^=]*(blob:|data:)/, /from\s+["'][./]*zip\.js["']/];
 // (what may match, and why: not a way out)
 const ALLOWED = [
-  ["js/app.js", "thumb.src = URL.createObjectURL(blob)", "the chosen picture's thumbnail, shown on the page"],
+  ["js/picture.js", "thumb.src = URL.createObjectURL(blob)", "the chosen picture's thumbnail, shown on the page"],
 ];
 const code = (line) => line.replace(/^\s*\/\/.*$/, "").replace(/\s\/\/ .*$/, "");
 for (const f of files.filter((f) => f !== "js/gate.js")) {
@@ -31,7 +31,8 @@ for (const f of files.filter((f) => f !== "js/gate.js")) {
 // ---- 2. the exits, by name: each one calls handOut ----
 const EXITS = {
   "js/app.js": ["Share (the phone's share sheet)", "Download (one file, or a design in two hoopings as a zip)", "Save a fixed copy (one file)",
-    "Save fixed copies (the zip again)", "Cut files (fabric shapes, SVG or DXF, one handOut for both)", "One for each name (zip)"],
+    "Save fixed copies (the zip again)", "Cut files (fabric shapes, SVG or DXF, one handOut for both)"],
+  "js/along.js": ["One for each name (zip)"],
   "js/studio/ui.js": ["Save design (.needleworks.json)"],
 };
 for (const [f, want] of Object.entries(EXITS)) {

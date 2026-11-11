@@ -1,5 +1,7 @@
 /*! Needleworks (c) 2026 4Gables. All rights reserved. Proprietary, see LICENSE. https://4gables.com/needleworks/ */
 // Design tab UI: start from a card, edit pieces in a short list, drag them on the preview.
+import { editorPanel } from "./editor.js";
+import { problemsOfPieces } from "./problems.js";
 import { offPage } from "./offpage.js";
 import { stepsPanel } from "./stepsui.js";
 import { fixes } from "./fixes.js";
@@ -115,6 +117,46 @@ export function initStudio(api) {
     get relabelThreads() { return relabelThreads; },
     get threadTip() { return threadTip; },
     get editor() { return editor; },
+    get missing() { return missing; },
+    get hard() { return hard; },
+    get against() { return against; },
+    get overlapping() { return overlapping; },
+    get nextTask() { return nextTask; },
+    get runUp() { return runUp; },
+    get shown() { return shown; },
+    get frameLines() { return frameLines; },
+    get twoLines() { return twoLines; },
+    get frameOf() { return frameOf; },
+    get frameFor() { return frameFor; },
+    get display() { return display; },
+    get sizeChange() { return sizeChange; },
+    get roomIn() { return roomIn; },
+    get worseSaid() { return worseSaid; },
+    get keepWord() { return keepWord; },
+    get spotIn() { return spotIn; },
+    get moveAway() { return moveAway; },
+    get and() { return and; },
+    get grown() { return grown; },
+    get asLettering() { return asLettering; },
+    get lineChoice() { return lineChoice; },
+    get autoName() { return autoName; },
+    get moreOpen() { return moreOpen; }, set moreOpen(v) { moreOpen = v; },
+    get warnTimer() { return warnTimer; }, set warnTimer(v) { warnTimer = v; },
+    get swashOn() { return swashOn; },
+    get fontSelect() { return fontSelect; },
+    get fontRow() { return fontRow; },
+    get range() { return range; },
+    get seg() { return seg; },
+    get stitchSeg() { return stitchSeg; },
+    get pairUI() { return pairUI; },
+    get swatches() { return swatches; },
+    get threadOf() { return threadOf; },
+    get machineName() { return machineName; },
+    get sameTargets() { return sameTargets; },
+    get fileSize() { return fileSize; },
+    get allThread() { return allThread; },
+    get showPicked() { return showPicked; },
+    get warn() { return warn; },
     // (parts: more of the editor's state and helpers as they need them)
   };
   // the editor's parts (each reads the editor through S when it's used, so they can all be made here)
@@ -125,6 +167,8 @@ export function initStudio(api) {
   const { spotIn, freeRoom, freeSpot, sewnAt, noRoom, onFrame, fitsWith, ungang, spotFor, MOTIF_MIN, alike } = placing(S);
   const { stepsOf, stepsUI, firstStep, explainAll } = stepsPanel(S);
   const { resizeFile, fileSize, restitchFiles, quiltSoon } = offPage(S);
+  const { pieceProblems, swashOn, warn } = problemsOfPieces(S);
+  const { drawEditor } = editorPanel(S);
   const saved = api.store.get("studio", null);
   // (checked like an opened design: a crafted file's pieces stayed broken through a reload)
   let pieces = (Array.isArray(saved?.pieces) ? saved.pieces : []).map(cleanPiece).filter(Boolean);
@@ -373,125 +417,8 @@ export function initStudio(api) {
   $("st-edit").addEventListener("toggle", (e) => { if (e.target.matches("details.more")) moreOpen = e.target.open; }, true);
   $("st-edit").addEventListener("change", (e) => { if (e.target.type === "range") sizing = null; });
   const editor = () => api.keepFocus($("st-edit"), drawEditor);
-  function drawEditor() {
-    const p = current();
-    $("st-center").hidden = !p; $("st-drag-hint").hidden = !p;   // (no piece, nothing to drag)
-    // (no "Selected piece" heading over nothing: an empty design showed it with nothing under it)
-    const box = $("st-edit").closest("fieldset"), head = box?.querySelector("legend")?.firstChild;
-    if (box) box.hidden = !p && !pieces.length;
-    if (head?.nodeType === 3) head.textContent = p ? "Selected piece " : "No piece selected ";
-    if (!p) { $("st-edit").innerHTML = `<p class="hint">Tap a piece in the list above or on the preview to change it.</p>`; return; }
-    let h = "";
-    // (said when typing or pasting goes past the most a piece takes, `MAX_WORDS` in typed.js: a field's maxlength cut a
-    // pasted 200-letter name to 60 without a word)
-    const cutHint = `<p class="hint" data-cut-hint aria-live="polite" hidden></p>`;
-    if (p.kind === "text") {
-      const lines = p.text.split("\n").length, arc = p.shape === "up" || p.shape === "down";
-      // (a new line first: the parser drops one straight after <textarea>, so words starting on a new line lost it on
-      // every redraw)
-      h += `<label class="field"><span>Words</span><textarea data-k="text" rows="${Math.min(3, lines)}" data-max="${MAX_WORDS}" autocomplete="off" spellcheck="false">\n${api.escapeHtml(swashless(p.text))}</textarea></label>`
-        + `<p class="hint" data-lines-hint aria-live="polite" hidden>Three lines is the most: that new line became a space.</p>` + cutHint;
-      // swashes are typed (~ at either end of the words); these put them on or take them off
-      {
-        const { lead, tail } = swashOn(p.text);
-        const kind = FONTS.find((f) => f.family === p.font)?.print ? "Dash" : "Swash";
-        h += `<div class="seg swash" role="group" aria-label="${kind}es" title="Or type ~ at the start or end of the words">`
-          + `<button type="button" data-swash="lead" aria-pressed="${lead}">${kind} before</button><button type="button" data-swash="tail" aria-pressed="${tail}">${kind} after</button></div>`;
-      }
-      h += `<label class="field"><span>Font</span>${fontSelect(p)}</label>${fontRow(p)}`;
-      h += range("size", "Height", 5, 60, p.size);
-      h += `<p class="hint">About 10 mm for a pocket or cuff, 15-20 mm for a T-shirt's chest, 20-30 mm for a onesie, pillow or blanket corner, 30-50 mm for a towel.</p>`;
-      h += seg("shape", TEXT_SHAPES, p.shape);
-      h += stitchSeg(p);
-      h += `<label class="field"><span>Motif either side</span><select data-k="deco"><option value="">None</option>${Object.entries(MOTIFS).map(([k, m]) => `<option value="${k}" ${k === p.deco ? "selected" : ""}>${m.name}</option>`).join("")}</select></label>`;   // (a heart or star either side was hidden under More)
-      if (arc) {
-        h += range("radius", "Curve width", 15, 80, p.radius);
-        h += range("ry", "Curve height", 15, 80, p.ry ?? p.radius);
-        // (only when it would change something: on a scallop it was there, did nothing, and the words ran into it)
-        const ff = followFrame(p, pieces);
-        if (ff && Object.entries(ff).some(([k, v]) => Math.abs((p[k] ?? (k === "ry" ? p.radius : 0)) - v) > 0.25)) h += `<button type="button" class="link" data-follow>Follow the frame</button>`;
-      }
-      if (p.shape === "wave") { h += range("amp", "Wave height", 2, 30, p.amp ?? Math.round(p.size * 0.35)); h += range("waves", "Waves", 1, 3, p.waves ?? 1, "", 0.5); }
-      if (p.shape === "bridge") h += range("bulge", "Bulge", 10, 80, p.bulge ?? 30, "%", 5);
-      // the rarer settings, folded away
-      const print = FONTS.find((f) => f.family === p.font)?.print;
-      const more = ''
-        + (print ? range("spacing", "Letter spacing", -10, 40, p.spacing || 0, "%") + `<div data-pairs>${pairUI(p)}</div>` : "")
-        + (p.shape === "straight" ? `<p class="hint">Press Enter in Words for a new line (up to 3).</p>` : "")
-        + (p.shape === "straight" && lines > 1 ? seg("align", { left: "Left", center: "Centre", right: "Right" }, p.align || "center") + range("leading", "Line spacing", 80, 200, p.leading ?? 130, "%", 5) : "");
-      // (only when there's something in it: an arched script name opened an empty "More")
-      if (more) h += `<details class="more" ${moreOpen ? "open" : ""}><summary>More</summary>${more}</details>`;
-    } else if (p.kind === "monogram") {
-      h += `<label class="field"><span>Initials</span><input type="text" data-k="letters" value="${api.escapeHtml(p.letters)}" data-max="${MAX_INITIALS}" autocomplete="off" spellcheck="false"></label>` + cutHint;
-      // (what it does, measured: typed.js monogramHelp; kept up as the initials are typed)
-      h += `<p class="hint" data-mono-help>${api.escapeHtml(monogramHelp(p.letters))}</p>`;
-      h += `<label class="field"><span>Font</span>${fontSelect(p)}</label>${fontRow(p)}`;
-      h += range("size", "Height", 15, 90, p.size);
-      h += stitchSeg(p);
-    } else if (p.kind === "motif") {
-      h += `<div class="field"><span>Motif</span><div class="motifs" role="group" aria-label="Motif">${Object.entries(MOTIFS).map(([k, m]) => `<button type="button" data-motif="${k}" aria-pressed="${k === p.motif}" title="${m.name}"><svg viewBox="0 0 256 256" aria-hidden="true"><path d="${m.d}"/></svg></button>`).join("")}</div></div>`;
-      h += range("size", "Size", 10, 120, p.size);
-      h += seg("style", { fill: "Filled", outline: "Outline", applique: "Appliqué" }, p.style || "fill");
-      if (p.style === "applique") h += `<p class="hint">Sews an outline, pauses for you to lay fabric on and trim it, then sews satin stitch round the edges. 50 mm or bigger cuts most easily.</p>`;
-    } else if (p.kind === "letters") {
-      h += `<label class="field"><span>Letters</span><input type="text" data-k="text" value="${api.escapeHtml(p.text)}" data-max="${MAX_INITIALS}" autocomplete="off" spellcheck="false"></label>` + cutHint;
-      h += `<label class="field"><span>Font</span><select data-k="font">${APPLIQUE_FONTS.map((f) => `<option value="${f.family}" ${f.family === p.font ? "selected" : ""}>${f.name} (${f.note})</option>`).join("")}</select></label>${fontRow(p, APPLIQUE_FONTS)}`;
-      h += range("size", "Height", 20, 120, p.size);
-      h += `<p class="hint">Cut from fabric: the machine sews an outline, pauses for you to lay fabric on and trim it, then sews satin stitch round the edges. Letters 30 mm or taller cut and sew most easily.</p>`;
-    } else if (p.kind === "frame") {
-      h += seg("shape", Object.fromEntries(Object.entries(SHAPES).map(([k, s]) => [k, s.name])), p.shape);
-      h += range("w", p.shape === "circle" ? "Size" : "Width", FRAME_MIN, 170, p.w);
-      if (p.shape !== "circle") h += range("h", "Height", FRAME_MIN, 170, p.h);
-      // (a zipper across a heart's lobes or a diamond's point makes no pouch)
-      h += seg("border", Object.fromEntries(Object.entries(BORDERS).filter(([k]) => k !== "zip" || ["square", "oval", "circle"].includes(p.shape) || p.border === "zip")), p.border);
-      if (p.border === "zip") h += `<p class="hint">A lined zipper pouch made in the hoop: the zipper, the front in two folded pieces, what goes on the front (the pieces below it in the list), then the back and one seam through everything. Fabric sizes are under “How to stitch it”.</p>`;
-      if (p.border === "patch") {
-        p.fill ||= NAVY;
-        h += `<div class="field"><span>Fill thread</span><div class="swatches">${swatches(p, "fill")}</div><p class="hint"><span data-thread-of="fill">${api.escapeHtml(threadOf(p, "fill"))}</span>. The edge uses the Edge thread below.</p></div>`;
-        // (what `carve` in pieces.js does, in plain words)
-        h += `<p class="hint">Under a filled motif or big bold letters the fill is left out, so they don't sit on two layers of thread. Thinner letters sew on top of the fill.</p>`;
-        // the expert fills, folded away: a stitch texture, and a second colour fading in across the patch
-        h += `<details class="more" ${moreOpen ? "open" : ""}><summary>More</summary>${seg("pattern", Object.fromEntries(Object.entries(FILL_PATTERNS).map(([k, f]) => [k, f.name])), p.pattern || "tatami")}
-          <label class="check small"><input type="checkbox" data-blend ${p.blend ? "checked" : ""}> Blend into a second colour</label>
-          ${p.blend ? `<div class="swatches">${swatches(p, "blend")}</div><p class="hint">Fades from Brother ${machineName(p.fill)} to ${machineName(p.blend)} across the patch: one more thread change.</p>` : ""}</details>`;
-      }
-      if (p.border !== "patch") h += `<div class="field"><span>Quilting</span>${seg("quilt", QUILTS, p.quilt || "none")}</div>`
-        + (p.quilt && p.quilt !== "none" ? `<p class="hint">Fills the frame around everything on it, in the frame's thread.</p>` : "");
-      if (p.border === "ith") h += `<p class="hint">Two-sided, made in the hoop: an appliqué front, then the pieces below it in the list, then backing fabric under the hoop and a satin-stitch edge through everything. The steps are under “How to stitch it”.</p>`
-        + `<label class="check small"><input type="checkbox" data-eyelet ${p.eyelet ? "checked" : ""}> Ribbon hole at the end (a bookmark, a tag)</label>`;
-      // several of one in-the-hoop project at once: the same fabric steps, sewn together (`gang` in pieces.js)
-      if (p.border === "ith" || p.border === "zip") h += `<button type="button" class="link" data-two-up>Make another in the hoop</button> <span class="hint">Copies it and what's on it beside it: both sew in the same steps.</span>`;
-      // (made another before anything was put on the first: what's on this one copied onto the empty ones, placed alike)
-      const bare = sameTargets(p);
-      if (bare.length) h += ` <button type="button" class="link" data-same-on>Put the same on the other ${bare.length === 1 ? "one" : `${bare.length}`}</button>`;
-      if (p.border === "applique") h += `<p class="hint">Sews an outline, pauses for you to lay fabric on and trim it, then covers the edge in satin stitch. The steps are under “How to stitch it”.</p>`;
-    } else {
-      // a design file is resized as Open a design resizes it: re-stitched at the new size (`resizeFile`), so it can
-      // shrink with the words added to it (it could only be moved and turned: Fit to hoop shrank just the words)
-      const pct = Math.round((p.scale || 1) * 100);
-      h += `<label class="range"><span>Size</span><input type="range" data-file-scale min="${FILE_SCALE[0] * 100}" max="${FILE_SCALE[1] * 100}" step="1" value="${pct}"><output>${fileSize(p, pct / 100)}</output></label>`;
-      h += `<p class="hint">${api.escapeHtml(p.name)}: ${p.pending ? "re-stitching it at this size…" : pct === 100 ? "its stitches exactly as they are in the file." : `made ${pct < 100 ? "smaller" : "bigger"} from its own stitches, spaced as closely as the file had them.`}</p>`;
-    }
-    if (p.kind === "text" || p.kind === "monogram") h += `<p class="hint" data-fit hidden></p>`;
-    if (p.kind !== "frame") h += `<p class="hint warn" data-warn aria-live="polite" hidden></p>`;
-    h += range("rot", "Turn", -180, 180, p.rot || 0, "°", 5);
-    // (a patch has two: "Thread" under "Fill thread" read as the fill's own)
-    if (p.kind !== "file") h += `<div class="field"><span>${p.kind === "frame" && p.border === "patch" ? "Edge thread" : "Thread"}</span><div class="swatches">${swatches(p)}</div><p class="hint" data-thread-of="color">${api.escapeHtml(threadOf(p))}</p><p class="hint" data-all-thread hidden></p></div>`;
-    const old = drawnId === p.id && $("st-edit").querySelector("[data-warn]");
-    const was = drawnId === p.id ? $("st-edit").querySelector(".font-row")?.scrollLeft : undefined;
-    $("st-edit").innerHTML = h; drawnId = p.id; allThread(lastSteps);
-    // (the font row keeps where it was scrolled to while the font in use shows there, else brings it into the middle: a
-    // font picked from the list stayed out of sight in the row)
-    const row = $("st-edit").querySelector(".font-row");
-    if (row) { if (was != null) row.scrollLeft = was; showPicked(row); new ResizeObserver(() => showPicked(row)).observe(row); }
-    // (lettering not worked out yet, after a font change: the warnings a moment later, after the preview, the last ones
-    // kept up meanwhile; worked out here the menu held for 0.8 s)
-    const w = $("st-edit").querySelector("[data-warn]");
-    if (bulkReady(p) || !w) { warn(); return; }
-    if (old) { w.innerHTML = old.innerHTML; w.hidden = old.hidden; }
-    clearTimeout(warnTimer); warnTimer = setTimeout(warn, 300);
-  }
-  let drawnId = null;
+
+  let drawnId = null;   // (the piece the editor panel was last drawn for)
   function ui() { api.keepFocus($("panel-design"), () => { list(); editor(); sewnOn(); }); api.paint?.(); }
   function sewnOn() {
     sewAs(fabric, thread);   // (pieces.js measures with the design's fabric and thread)
@@ -539,249 +466,6 @@ export function initStudio(api) {
   // and Sew along say the same (a fleece "Lily" that closes up was said only in the editor, under a green "Checked";
   // a too-small motif, a tight arch, letters pushed together and a thin line were said only there).
   const MOTIF_LEAST = { fill: 25, outline: 30, applique: 30 };
-  function pieceProblems(p, fit = fittedSizes(pieces)) {
-    const list = [], L = label(p), add = (kind, level, text, id = `${kind}:${p.id}`) => list.push({ id, kind, level, text, piece: p.id });
-    const fs = fit.get(p.id), q = fs ? { ...p, size: fs } : p, lettering = p.kind === "text" || p.kind === "monogram";
-    const d = { fs, q, lettering, max: p.kind === "monogram" ? 90 : 60, onTowel: fabric === "towel" && lettering, m: 0, towel: 0, fills: 0, room: null, nears: [], near: null, gone: [], pushed: [], rows: 0, thin: false, cover: null, better: "" };
-    if (p.kind === "frame") return { list, d };
-    // Lettering with no words sews nothing, and lettering that draws nothing (words past the most it takes, in a crafted
-    // design) is left out of the file: both said, never a file without the words asked for.
-    const words = p.kind === "monogram" ? p.letters : p.kind === "text" ? unswashed(p.text) : p.kind === "letters" ? p.text : null;
-    if (words !== null && !/[^\s]/u.test(words || "")) {
-      add("empty", LOOK, p.kind === "monogram" ? "A monogram has no initials yet: type them, or remove it." : "A lettering piece has no words yet: type some, or remove it.");
-      return { list, d };
-    }
-    if (words !== null && !pieceStitches(q).length) add("undrawn", BLOCK, `${L} comes out as no stitches at all: use fewer or other letters.`);
-    d.m = minSize(q); d.room = archRoom(p); d.nears = touchingAll(q, pieces); d.near = d.nears[0] || null; d.fills = loopsFill(q);
-    d.gone = missing(p.text ?? p.letters ?? "", p.font); d.thin = fineLine(q);
-    d.towel = d.onTowel ? towelMin(d.m ? { ...q, size: d.m } : q) : 0;
-    d.cover = underPatch(p, pieces);
-    const base = p.kind !== "file" && underPatch(p, pieces, true), lost = !!base && hard(p.color, base.fill || base.color);
-    d.better = lost ? against(base, pieces) : "";
-    d.pushed = p.kind === "text" ? overlapping(p) : [];
-    d.rows = p.kind === "text" ? p.text.split("\n").filter((l) => l.trim()).length : 0;
-    if (p.kind === "monogram") {
-      const t = initials(p.letters), word = t.join("");
-      if (t.length > 3) add("named", LOOK, `${L} has ${t.length} letters: a monogram sews 3 initials at most.`);
-      else if (/^\p{Lu}\p{Ll}{2,}$/u.test(word)) add("named", LOOK, `${L} looks like a name: a monogram sews initials, so it won't read as “${word}”.`);
-    }
-    if (d.rows > 1 && (p.shape || "straight") !== "straight") add("lines", LOOK, `${L} is sewn on one line: ${TEXT_SHAPES[p.shape]} joins its ${d.rows} lines.`);
-    if (d.cover) add("covered", LOOK, `${L} sews before the patch that covers it.`);
-    if (lost) add("hidden", LOOK, `${L} is nearly the same thread as the patch under it, so it won't show.`);
-    if (d.pushed.length) add("pushed", LOOK, `${L} has letters pushed into each other: their stitches would pile up as a lump.`);
-    // capitals in a joined script run together: in every script font "THEO" read wrong somewhere (Yellowtail's H as an
-    // h: "ThEO" on the bib), so words mostly in capitals are said, with a print font as the fix
-    if (p.kind === "text" && !FONTS.find((f) => f.family === p.font)?.print && capsHeavy(unswashed(p.text))) add("caps", LOOK, `${L} is in capitals, which run together in a joined script font and are hard to read.`);
-    const style = p.style || "fill", least = p.kind === "motif" ? MOTIF_LEAST[style] || 0 : 0;
-    if (least && p.size < least) add("motif", LOOK, style === "fill" ? `${L} is too small to fill: the detail closes up.` : style === "outline" ? `${L} is too small as an outline: the edges run together.` : `${L} is too small for appliqué: the fabric piece is tiny and the edges run together.`);
-    if (d.gone.length) add("missing", LOOK, `The font of ${L} has no ${lackList(d.gone)}: ${d.gone.length === 1 ? "it" : "they"} would be stitched in a stand-in letter.`);
-    if (d.towel > d.max || (!d.m && d.towel > q.size * 1.04)) add("towel", LOOK, `${L} closes up on a towel or fleece.`);
-    else if (d.m) add("small", LOOK, `${L} is too small to stitch cleanly.`);
-    if (d.room?.full) add("arch", BLOCK, `${L} runs into itself round the curve.`);
-    else if (d.room || archTight(p)) add("arch", LOOK, d.room ? `${L} wraps too far round its curve.` : `${L} is too tall for its curve: the letters would bunch up.`);
-    // (a pair is one problem, said once, whichever of the two is selected)
-    for (const o of d.nears) { const [a, b] = pieces.indexOf(p) < pieces.indexOf(o) ? [p, o] : [o, p]; add("runs", LOOK, `${label(a)} runs into ${label(b)}.`, `runs:${a.id}-${b.id}`); }
-    const plain = !d.m && !d.towel && fabric !== "towel";
-    if (plain && d.thin) add("thin", TIP, `${L} sews as a thin line at this size.`);
-    if (plain && d.fills) add("loops", LOOK, `${L} has small loops that fill in at this size.`);
-    return { list, d };
-  }
-  // words mostly in capitals (3 or more, more capitals than small letters)
-  const capsHeavy = (t) => { const up = (t.match(/\p{Lu}/gu) || []).length; return up >= 3 && up > (t.match(/\p{Ll}/gu) || []).length; };
-  // the swashes the words have (`~` before the first line, after the last), as the Swash buttons show them
-  const swashOn = (text) => { const ls = text.split("\n").filter((l) => l.trim()); return { lead: swashes(ls[0] || "").lead, tail: swashes(ls[ls.length - 1] || "").tail }; };
-  // too-small lettering, said plainly (updated in place so typing keeps focus)
-  // (each new lettering its fixes need drawn in a task of its own, `pacer`: started again after each, everything before
-  // it cached; never said from a run that was stopped)
-  async function warn() {
-    for (let k = 0; k < 30; k++) {
-      pacer.on = true; pacer.hit = false; pacer.since = performance.now();
-      try { await warnNow(); } catch (err) { if (err !== PACED) throw err; } finally { pacer.on = false; }
-      if (!pacer.hit) return;
-      await nextTask();
-    }
-    await warnNow();
-  }
-  // (the pacer is on only while this runs, between its awaits: switched back on by the run itself once it's going again
-  // (`go`), and off before it ends. Switched back on as an await finished, or left on as the run ended, it was on for
-  // whatever else ran first, a redraw's focus handler or a font-load continuation, which threw "paced" uncaught)
-  async function warnNow() {
-    const on = pacer.on;
-    try {
-      const w = $("st-edit").querySelector("[data-warn]"), p = current(); if (!w || !p) return;
-      const wait = (promise) => { pacer.on = false; return promise; }, go = () => { pacer.on = on; pacer.since = performance.now(); return false; };
-      if (p.font) try { await wait(loadFont(p.font)); go(); } catch { return; }
-      // (the fixes worked out a few tasks apart, so typing is answered between them: a long line's fixes draw it on two
-      // lines and in a print font, 1.5 s in one task. A piece changed meanwhile has a newer warn coming: this one stops)
-      const was = JSON.stringify(p), apart = async () => { await wait(nextTask()); return !w.isConnected || current() !== p || JSON.stringify(p) !== was; };
-      // (new words drawn first, a task at a time, as make does: warn came before make had drawn them)
-      for (const draw of drawAhead(p)) if (draw() && ((await apart()) || go())) return;
-      const fit = $("st-edit").querySelector("[data-fit]"), fs = fittedSizes(pieces).get(p.id);
-      if (fit) {
-        // (in a tall frame, turned a quarter to run up it, as letters on a key fob do: offered when that's much bigger;
-        // three initials on the 44 × 80 mm fob were 9.5 mm across it, 18 up it)
-        const up = fs ? runUp(p, fs) : 0;
-        // (the size control says it too: it read 24 mm beside "Shrunk to 22 mm")
-        const r = $("st-edit").querySelector('input[data-k="size"]');
-        if (r) { const o = r.nextElementSibling, cut = fs && fs !== +r.value; o.textContent = cut ? `${fs} mm sewn` : shown(r.value, "mm"); o.title = cut ? `Set to ${shown(r.value, "mm")}, sewn at ${shown(fs, "mm")} to fit inside the frame` : ""; }
-        // (shrunk as far as it goes and still past the frame, said so: "Shrunk to 5 mm so it fits inside the frame" stood
-        // beside 60 letters running 127 mm past a heart and the hoop)
-        const host = fs && fitFrame(p, pieces), past = host && !inFrame({ ...p, size: fs }, host, 0);
-        // (and words shrunk a lot by their frame, on two lines: a patch's one-line words went 20 -> 5.5 mm and a quilt
-        // label's top line 7 -> 5 mm, thin, with no way back said)
-        const two = fs && !up ? frameLines(p, fs) : null;
-        const nw = two && (two.n === 3 ? "three" : "two");
-        const lines = two ? ` On ${nw} lines it can be ${two.size} mm: <button type="button" class="link" data-lines="${two.ask}" data-text="${encodeURIComponent(two.text)}"${two.fits === "turn" ? " data-turn" : ""}>Put it on ${nw} lines${two.fits === "turn" ? " and turn the hoop" : ""}</button>` : "";
-        fit.hidden = !fs; fit.innerHTML = past ? `Shrunk to ${fs} mm, the smallest it goes, and it still runs past the frame: use fewer words, or make the frame bigger.${lines}`
-          : fs ? `Shrunk to ${fs} mm so it fits inside the frame.${up ? ` Turned to run up the frame it can be ${up} mm: <button type="button" class="link" data-run-up="${up}">Turn it to run up the frame</button>` : lines}` : "";
-      }
-      if ((await apart()) || go()) return;
-      // what's wrong with it, worked out once (`pieceProblems`) as every other surface says it; here each with its fix
-      const { list, d } = pieceProblems(p), { q, m, room, nears, near, gone, fills, towel, max, lettering, onTowel } = d;
-      if ((await apart()) || go()) return;
-      const ids = (kind) => list.filter((x) => x.kind === kind).map((x) => x.id).join(" ");
-      const tag = (kind, html) => (html && ids(kind) ? `<span data-problem="${ids(kind)}">${html}</span>` : "");
-      // Every one-tap fix is checked before it's offered: it must leave nothing it could have avoided (a towel size that
-      // took the design past the hoop, a size the frame fit shrank straight back, two taps where one would do).
-      // The size the letters need: big enough to stitch cleanly and, on a towel, for the loops to stay open
-      // (within 4 % of it isn't worth a warning: the towel starter's own 32 mm asked for 33 for "The Smiths").
-      const need = towel > max ? 0 : towel && (m || towel > q.size * 1.04) ? towel : m;
-      const btn = (attrs, text, l) => `<button type="button" class="link" ${attrs}${l?.fits === "turn" ? " data-turn" : ""}>${text}${l?.fits === "turn" ? " and turn the hoop" : ""}</button>`;
-      // (only where cotton clears it: letters too small for any fabric kept their warning after "Sew it as Cotton")
-      const cotton = onTowel && !m ? ` A flat-weave tea towel (no loops) can be sewn as Cotton: ${btn(`data-fab-set="cotton"`, "Sew it as Cotton")}` : "";
-      let size = "";
-      if (towel > max) size = `On a towel or fleece the stitches are made wide so they sit on top of the loops, and that closes these letters up even at the biggest size. Try a bolder font, like Yellowtail or Satisfy.${cotton}`;
-      else if (need) {
-        const what = m ? `These letters are too small to stitch cleanly${need > m ? ` (on a towel or fleece they need to be ${need} mm, so the wide stitches that sit on top of the loops leave the letters open)` : ""}.` : `On a towel or fleece the stitches are made wide so they sit on top of the loops, and at this size that closes the letters up: ${need} mm or more keeps them open.`;
-        if (fs) {   // (the frame fit sets the size: a bigger size would be shrunk straight back, the "Make it 10 mm" loop)
-          // two lines, at the biggest size (up to the one asked for) that fits the frame and clears everything else
-          const two = twoLines(p);
-          let at2 = 0;
-          for (let t = p.size; two && t >= 5 && !at2; t -= 0.5) {
-            const r = { ...p, text: two, size: t }, ps2 = pieces.map((o) => (o.id === p.id ? r : o)), s2 = fittedSizes(ps2).get(p.id) ?? t;
-            if (minSize({ ...r, size: s2 }) || (onTowel && towelMin({ ...r, size: s2 }) > s2 * 1.04)) break;
-            if (!touching({ ...r, size: s2 }, ps2)) at2 = t;
-          }
-          // or the frame made bigger by as much, where that lands (a towel monogram's R filled in, with no way out but
-          // "make the frame bigger")
-          const host = !at2 && frameOf(p), grow = host ? frameFor(p, host, need) : null;
-          const bigger = grow ? btn(`data-frame-grow="${host.id}:${grow.w}:${grow.h}:${need}"`, `Make the frame ${grow.w} mm`, grow) : "";
-          size = `Shrunk to fit inside the frame, ${what[0].toLowerCase() + what.slice(1)} ${at2 ? `${btn(`data-lines="${at2}"`, "Put it on two lines")} or make the frame bigger.`
-            : bigger ? `${bigger}${p.kind === "monogram" ? "" : ", or use fewer words"}.` : host?.most ? `${p.kind === "monogram" ? "Use a bolder font" : "Use fewer words"}: the frame is as big as ${display(host)} takes.`
-            : p.kind === "monogram" ? "Make the frame bigger, or use a bolder font." : "Use fewer words, or make the frame bigger."}`;
-        } else if (need > max) size = `${what} Use fewer or shorter words, or a bolder font.`;
-        else {
-          const l = landing(p, sizeChange(p, need));
-          size = l.fits ? `${what} ${btn(`data-size="${need}"`, `Make it ${need} mm`, l)}`
-            : l.capped ? `${what} ${roomIn(p, l, need)}`
-            : l.hit ? `${what} At ${need} mm it would ${l.out ? "go outside" : "run into"} ${api.escapeHtml(label(l.hit))}: give it more room first.`
-            : l.worse ? `${what} At ${need} mm it would ${worseSaid(l.worse)}.`
-            : `${what} At ${need} mm it would be ${mmText([l.w, l.h])}, too big for the hoop even turned. Use fewer or shorter lines${onTowel ? ", or a bolder font (Yellowtail, Satisfy)." + cotton : "."}`;
-        }
-      }
-      if ((await apart()) || go()) return;
-      // an arch too tight or wrapped too far round: a wider curve, or smaller letters, whichever lands in the hoop
-      let arc = "";
-      if (ids("arch")) {
-        const widen = keepWord(p, { ...(room || {}), ...(archFit({ ...p, ...(room || {}) }) || {}) }), wl = Object.keys(widen).length ? landing(p, widen) : null;
-        const sh = archShrink(p), sl = sh ? landing(p, { size: sh }) : null;
-        const fixes = [wl?.fits ? btn("data-room", "Widen the curve", wl) : "", sl?.fits ? btn(`data-size="${sh}"`, `Make the letters ${sh} mm`, sl) : ""].filter(Boolean);
-        arc = (room ? `The words wrap too far round the curve${room.full ? " and run into themselves" : ""}.` : "The curve is too tight for letters this tall: they'd bunch up.")
-          + (fixes.length ? " " + fixes.map((f, i) => (i ? f.replace(">Make", ">make") : f)).join(" or ")
-            : wl?.hit ? ` A curve wide enough would ${wl.out ? "go outside" : "run into"} ${api.escapeHtml(label(wl.hit))}: use fewer words.`
-            : wl?.worse ? ` A curve wide enough would ${worseSaid(wl.worse)}: use fewer words.`
-            : wl ? ` A curve wide enough would be ${mmText([wl.w, wl.h])}, too big for the hoop: use fewer words.` : " Use fewer words.");
-      }
-      // run into another piece: the size that clears it (lettering centred in a frame isn't dragged apart, it's made smaller)
-      let hit = "";
-      if (near) {
-        // (the frame it's on: the nearest earlier one whose box holds its middle)
-        const host = pieces.slice(0, pieces.indexOf(p)).reverse().find((f) => f.kind === "frame" && Math.abs(p.x - f.x) < f.w / 2 && Math.abs(p.y - f.y) < (f.shape === "circle" ? f.w : f.h) / 2);
-        const inside = host && host.id === near.id, frameName = host && api.escapeHtml(label(host).toLowerCase());
-        // (checked like every other fix: clear of the frame at 19 mm, a monogram ran into the R beside it instead)
-        const cs = ((c) => (c && landing(p, { size: c }).fits === "fits" && !touchingAll({ ...q, size: fittedSizes(pieces.map((o) => (o.id === p.id ? { ...p, size: c } : o))).get(p.id) ?? c }, pieces).length ? c : 0))(lettering || p.kind === "motif" ? clearSize(p, pieces, near) : 0);
-        // (no size clears it: a spot in the frame that does, at a size that fits there, else no advice that can't work;
-        // "Make it smaller." with no button sat under a monogram across a pouch's zipper)
-        const to = host && !cs ? spotIn(p, true) : null, zip = host?.border === "zip";
-        const move = to ? btn("data-move", `Move it ${zip ? "below the zipper" : `to the free space in the ${frameName}`}${to.size !== (d.fs ?? p.size) ? `, ${to.size} mm` : ""}`) : "";
-        const full = host ? `There's no free space for it in the ${frameName}: make the frame bigger, or take something out.` : "";
-        // (or, at the size it is, to free room beside what it runs into: a motif made bigger over the name under it had
-        // only "Drag it apart", as did a design file)
-        const away = !inside && !to ? moveAway(p, near) : null;
-        const go = away ? btn(`data-move-to="${away.x},${away.y}"`, `Move it ${away.where}`, away.l) : "";
-        hit = inside ? `This runs into the ${frameName} around it${zip ? " (the zipper and its stitching are across the top)" : ""}. ${cs ? btn(`data-size="${cs}"`, `Make it ${cs} mm`) : move || full}`
-          : `This runs into ${api.escapeHtml(and(nears.map((o) => label(o))))}. ${cs || go ? `${[cs ? btn(`data-size="${cs}"`, `Make it ${cs} mm`) : "", go].filter(Boolean).map((b, i) => (i ? b.replace(">Move", ">move") : b)).join(", ")} or drag it apart.` : move ? `${move}, or drag it apart.` : full || "Drag it apart."}`;
-      }
-      // a motif too small for its style: filled, the detail closes up under 25 mm; as an outline or appliqué the satin
-      // edges run together under 30 mm (a 15 mm butterfly's antennae merged, a house's window filled in, and the
-      // appliqué fabric piece was 7 mm across). Outline was offered as the way out for a small filled one: it's worse.
-      let small = "";
-      if (ids("motif")) {
-        const style = p.style || "fill", least = MOTIF_LEAST[style], l = landing(p, { size: least });
-        small = `${style === "fill" ? "Filled this small, the detail closes up." : style === "outline" ? "As an outline this small, the edges run together and the detail fills in." : "As appliqué this small, the fabric piece is tiny to cut and the edges run together."} `
-          + (l.fits ? btn(`data-size="${least}"`, `Make it ${least} mm`, l) : `Move it where there's room, then make it ${least} mm or more.`);
-      }
-      // (a bigger size for loops that fill in is offered only when it lands, like every other fix)
-      const fillsAt = ids("loops") && fills <= 3 * q.size ? landing(p, sizeChange(p, fills)) : null;
-      // (shrunk back by its frame: a frame big enough, else the motifs either side left out, where that lands)
-      const plain = fillsAt?.capped && p.deco && !fillsAt.host?.deco ? landing(p, { deco: "", ...sizeChange(p, fills) }) : null;
-      // (the motifs left out first where that holds: Motif either side shrank a 17 mm name to 15 and offered only "make
-      // the frame 135 mm and turn the hoop", Kitchen sign)
-      const growBtn = fillsAt?.capped ? grown(p, fillsAt.host, fills) : "";
-      const fillsGrow = !fillsAt?.capped ? "" : [plain?.fits ? btn(`data-size="${fills}" data-no-deco`, `Make it ${fills} mm without the ${api.escapeHtml((MOTIFS[p.deco]?.name || "motif").toLowerCase())}s`, plain) : "",
-        growBtn ? `${growBtn} for ${fills} mm letters` : ""].filter(Boolean).map((b, i) => (i ? b.replace(">Make", ">make") : b)).join(", or ");
-      // a name typed as initials ("Max" sewed as a first/LAST/middle monogram, "MaX" with a big a): as lettering instead
-      let named = "";
-      if (ids("named")) {
-        const t = initials(p.letters), word = t.join("");
-        named = (t.length > 3 ? `A monogram has 3 initials at most, so only “${api.escapeHtml(t.slice(0, 3).join(""))}” would be sewn.`
-          : `“${api.escapeHtml(word)}” looks like a name: a monogram sews initials (first, LAST, middle) with the middle one biggest, so it wouldn't read as “${api.escapeHtml(word)}”.`)
-          + ((l) => (l.fits ? ` ${btn("data-as-text", `Sew “${api.escapeHtml(p.letters.trim())}” as lettering`, l)}`
-            : ` Sewn as lettering it would ${l.out ? "go outside" : l.hit ? `run into ${api.escapeHtml(label(l.hit))}` : l.worse ? worseSaid(l.worse) : "be too big for the hoop"}${l.worse ? "." : ": make it smaller first."}`))(landing(p, asLettering(p)));
-      }
-      // under a patch that sews after it (hidden), or sewn on a patch in nearly the same thread (it won't show)
-      const under = d.cover ? `The ${api.escapeHtml(label(d.cover).toLowerCase())} patch sews after this and would cover it. <button type="button" class="link" data-after="${d.cover.id}">Sew it after the patch</button>` : "";
-      const same = `This is nearly the same thread as the patch under it, so it wouldn't show.${d.better ? ` <button type="button" class="link" data-color-set="${d.better}">Use ${api.escapeHtml(nearestBrotherThread(d.better).name)}</button>` : " Pick a thread that stands out from it."}`;
-      // letter pairs pushed into each other
-      const kerned = d.pushed.length ? `The letters ${d.pushed.map((i) => `“${api.escapeHtml(p.text[i] + p.text[i + 1])}”`).join(", ")} are pushed into each other: their stitches would pile up as a lump. ${d.pushed.map((i) => `<button type="button" class="link" data-kern-off="${i}">Space ${api.escapeHtml(p.text[i] + p.text[i + 1])} as the font does</button>`).join(" ")}` : "";
-      // lines typed into a curved shape (they're joined into one line: a 3-line text on a wave came out 203 mm long
-      // with nothing said)
-      // (offered where the lines then land: straight, "Lily / Rose" on two lines ran into the "Emma" under it)
-      const straight = ids("lines") ? landing(p, { shape: "straight" }) : null;
-      const oneLine = straight ? `${TEXT_SHAPES[p.shape]} sews the words on one line, so the ${d.rows} lines are joined into one. ${straight.fits ? `${btn(`data-seg-set="shape:straight"`, "Make it straight", straight)} to keep the lines.` : `Straight, the lines would ${straight.out ? "go outside" : straight.hit ? `run into ${api.escapeHtml(label(straight.hit))}` : straight.worse ? worseSaid(straight.worse) : "be too big for the hoop"}: give it more room first.`}` : "";
-      // (a style change is checked too: bold is wider, and "Make it bold" ran “Emma” into the “Emma” beside it)
-      const no = (l) => `${l.out ? "go outside" : l.hit ? `run into ${api.escapeHtml(label(l.hit))}` : l.worse ? worseSaid(l.worse) : "be too big for the hoop"}`;
-      const bold = ids("thin") ? landing(p, { style: "satin" }) : null, line = ids("loops") ? landing(p, { style: "line" }) : null;
-      // (one piece of advice per size: where bold would fill the loops, "Make it bold" isn't offered, as bold there says
-      // "Thin line keeps them open": a birth announcement's name flipped between the two at 14.5 and 20.5 mm)
-      // (the size it sews bold with its loops open, found by trying: loops scale with the satin's width, which doesn't
-      // grow with the size: measured at 12 mm the bold loops wanted 19, at 19 they wanted 24)
-      let boldFills = bold ? loopsFill({ ...q, style: "satin" }) : 0;
-      for (let i = 0; i < 4 && boldFills > q.size && boldFills <= 60; i++) { const r = { ...p, size: boldFills }, n = fineLine(r) ? boldFills + 1 : loopsFill(r); if (!n || n <= boldFills) break; boldFills = n; }
-      const boldAt = boldFills > q.size && boldFills <= 60 && !fineLine({ ...p, size: boldFills }) && !(loopsFill({ ...p, size: boldFills }) > boldFills) ? landing(p, sizeChange(p, boldFills)) : null;
-      // (too small, thin, or loops filling on one long line, as Fit to hoop leaves a long name: two lines may be much
-      // bigger; said with the problem it fixes)
-      const lines = !d.fs && (m || fills || (d.thin && fabric !== "towel")) ? ((c) => (c ? ` On ${c.n === 2 ? "two" : "three"} lines${c.turn ? " with the hoop turned" : ""} it can be ${c.size} mm. ${btn(`data-lines="${c.size}" data-text="${encodeURIComponent(c.text)}"`, `Put it on ${c.n === 2 ? "two" : "three"} lines`, { fits: c.turn ? "turn" : "fits" })}` : ""))(lineChoice(p)) : "";
-      const withLines = ["small", "towel", "loops", "thin"].find((k) => ids(k));
-      // (said plainly, with a one-tap fix where there is one; each item names the problem it's about, `data-problem`)
-      if ((await apart()) || go()) return;
-      const print = ids("caps") ? landing(p, { font: ROUND }) : null;
-      const caps = print ? `Capitals in a joined script run together (an H can read as h). ${print.fits ? `${btn(`data-font="${ROUND}"`, "Sew it in Quicksand (print)", print)}, or type it in small letters.` : "Type it in small letters, or pick a print font."}` : "";
-      const said = { named, lines: oneLine, caps, covered: under, hidden: same, pushed: kerned, motif: small,
-        missing: gone.length ? `This font has no ${api.escapeHtml(lackList(gone))}: ${gone.length === 1 ? "it" : "they"} would be stitched in a stand-in letter. Take ${gone.length === 1 ? "it" : "them"} out or try another font.` : "",
-        small: size, towel: size, arch: arc, runs: hit,
-        empty: p.kind === "monogram" ? "No initials yet: type them above, or remove this piece." : "No words yet: type some above, or remove this piece.",
-        undrawn: "These words come out as no stitches at all: use fewer or other letters.",
-        thin: bold && (boldFills > q.size ? `At this size it sews as a thin line, which keeps the small loops open: bold, they'd fill in.${boldAt?.fits ? ` From ${boldFills} mm it sews bold with them open: ${btn(`data-size="${boldFills}"`, `Make it ${boldFills} mm`, boldAt)}.` : ""}`
-          : `At this size it sews as a thin line.${bold.fits ? ` ${btn(`data-seg-set="style:satin"`, "Make it bold", bold)} (small loops may fill in).` : ` Bold, it would ${no(bold)}.`}`),
-        loops: line && `At this size the small loops (the holes in letters like b and e) fill in.${line.fits ? ` ${btn(`data-seg-set="style:line"`, "Thin line", line)} keeps them open` : ""}${fillsAt?.fits ? `${line.fits ? ", or" : ""} ${btn(`data-size="${fills}"`, `${line.fits ? "make" : "Make"} it ${fills} mm`, fillsAt)}` : ""}${fillsGrow ? `${line.fits ? ", or" : ""} ${line.fits ? fillsGrow.replace(">Make", ">make") : fillsGrow}` : ""}${line.fits || fillsAt?.fits || fillsGrow ? "." : ""}` };
-      if (pacer.hit) return;   // (a run stopped on the way: said by the next)
-      w.innerHTML = isolate([...new Set(list.map((x) => x.kind))].map((k) => tag(k, said[k] + (k === withLines ? lines : ""))).filter(Boolean).join(" <br>"));   // (a space too: read aloud or copied, "lines.On two lines")
-      w.hidden = !w.innerHTML;
-      const auto = $("st-edit").querySelector('[data-seg="style"] [data-v="auto"]');
-      if (auto) auto.textContent = autoName(p);
-    } finally { pacer.on = false; }
-  }
 
   // (`keep`: a change that doesn't set a size or a place, such as the font, keeps a fitted design fitted)
   function change(fn, now = false, keep = false) {
