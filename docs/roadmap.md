@@ -14,7 +14,7 @@ Phase 1, the base (no visible change, byte-identical batches):
   - [x] local folder fast-forwarded, `v12` tagged
   - [x] this roadmap
   - [x] scoreboard in `tests/check.sh` (`flow_lint.mjs --score`), baseline committed (`tests/fixtures/quality.json`)
-  - [ ] CLAUDE.md cut to rules and a map; topic references in `docs/`
+  - [x] CLAUDE.md cut to rules and a map (828 -> 130 lines); topic references in `docs/` (nothing dropped)
   - [ ] overlapping tests folded in (perf, starters, picture_history, matrix); dead code and stale fixtures out
 - [ ] **F1 Recipes and context**: one `recipes.js`; sew context passed explicitly; one density module; shared
   geometry and colour helpers; checker and worker errors surface
