@@ -28,3 +28,10 @@ Reference for this part of Needleworks: the rules, the reason for each (it stops
   steps are whole-minute shares adding up to it. Hoops are named only as machines.js names them.
 - Unlisted brands (Madeira): Threads I own matches by colour (`nearestSpools`, 8 nearest). Picture threads can be
   swapped (`state.pic.swap`, applied in worker.js after `toPalette`); violet -> Brother Magenta (#913697) is right.
+- Pictures, colour family of the thread chosen (measured 2026-11 on the 9 sample and held-out pictures at 2, 4, 6
+  and 8 colours, 113 colour/thread pairs): 9 hued colours (chroma 5 or more) got a thread under chroma 8, 2 a
+  thread over 45° of hue away. Seven of the nine have no Brother thread of their hue nearer than ΔE00 12-19 (sage,
+  olive-grey, a merged outline-and-grass colour that is mostly black). The other three are one peach skin tone
+  (etsy_6, C 16-21) on Warm Gray at ΔE 9-10 with Flesh Pink at 11. Left: any weight that moves the two clear ones
+  (6 and 8 colours) to Flesh Pink moves the 4-colour one, a merged tan, to Khaki (tried: the grey penalty x1.15-1.5
+  for colours of L 80 and over). The machine's name for a thread is unchanged by any of this.
