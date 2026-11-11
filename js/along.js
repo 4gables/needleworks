@@ -112,7 +112,7 @@ function renameNote() {
   if (cut) el.value = el.value.slice(0, 60);
   const t = tidy(el.value).trim(), as = safeName(t, "");
   $("rename-auto").hidden = !studio.title();
-  $("rename-note").textContent = (cut ? "60 letters and spaces is the most: the rest was left out. " : "") + (!t ? `Empty, it's named from the design: ${studio.autoName()}.pes.`
+  $("rename-note").textContent = (cut ? "60 letters and spaces is the most: the rest was left out. " : "") + (!t ? `Left empty, the file is named after the biggest words in the design, so the name follows what you type there: ${studio.autoName()}.pes now. A name typed here stays.`
     : !as ? "Use some letters or numbers: the machine shows only those." : `The file will be ${as}.pes${as !== t.replace(/\s+/g, "_") ? " (the machine's screen shows plain letters, numbers, - and _)" : ""}. Saved designs, ZIPs and cutter files take this name too.`);
 }
 $("rename-name").addEventListener("input", renameNote);

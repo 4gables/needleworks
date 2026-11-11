@@ -864,6 +864,8 @@ body { overflow-wrap: break-word; }
   .zoom { flex-direction: column; }
   .facts { max-width: calc(100% - 68px); flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; padding-bottom: 2px; }
   .facts span { flex: none; }
+  /* (the row slides sideways: its right-hand end fades, so the chips past the edge are seen to be there) */
+  .facts { -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent); mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent); padding-right: 28px; }
 }
 #done-sew .link { font-size: inherit; text-decoration: underline; min-height: 0; padding: 0; }   /* (a link in a sentence: no 44 px line) */
 .names .row { flex-wrap: wrap; }

@@ -495,6 +495,9 @@ export function initStudio(api) {
 
   const nextTask = () => new Promise((r) => setTimeout(r));
   let waitSaid = false, madeOnce = false;   // ("Getting the lettering ready…" is up; a design has been made)
+  const plain = (ps) => JSON.stringify(ps.map(({ id, ...q }) => q));
+  let sample0 = null;
+  const untouched = () => plain(pieces) === (sample0 ??= plain(STARTERS.find((q) => q.id === "framed").make()));
   async function make(dragging = false) {
     try { return await build(dragging); } finally { madeOnce = true; if (waitSaid) { waitSaid = false; api.busy(false); } }
   }
@@ -536,6 +539,9 @@ export function initStudio(api) {
         const fill = unquilted?.find((j) => j.kind === "patch"); if (fill) quiltSoon(fill);
         // fitted with Fit to hoop and since grown by a font or style change: fitted again (it came out 1 mm over)
         if (fitted && !dragging && !refitted) { refitted = true; fitHoop(); return; }
+        // (the opening sample, untouched, is fitted to a smaller hoop when one is picked: a newcomer chose her 4x4
+        // first and met a red "Too big for this hoop" on a design she hadn't made)
+        if (!dragging && !refitted && untouched()) { refitted = true; fitHoop(); toast(`The sample is made smaller to fit the ${api.hoop().name}.`); return; }
         split(err, dragging); return;
       }
       if (s !== seq) return;
@@ -672,7 +678,9 @@ export function initStudio(api) {
     // (words with letters in them before a date: the ring-bearer pillow's bigger "06.20.27" named it 06_20_27.pes, not
     // after "Sam & Alex")
     const big = (ps) => ps.reduce((a, p) => (!a || p.size > a.size ? p : a), null), lettered = (p) => /\p{L}/u.test(p.text ?? p.letters ?? "");
-    const pick = (ok) => big(pieces.filter((p) => ok(p) && p.kind === "text" && (p.shape || "straight") === "straight")) || big(pieces.filter((p) => ok(p) && p.kind === "monogram"))
+    // (appliqué letters count with straight words: a bib's 60 mm appliqué M was M.pes until a small "Est. 2026" was
+    // typed under it, then Est_2026.pes)
+    const pick = (ok) => big(pieces.filter((p) => ok(p) && ((p.kind === "text" && (p.shape || "straight") === "straight") || p.kind === "letters"))) || big(pieces.filter((p) => ok(p) && p.kind === "monogram"))
       || big(pieces.filter((p) => ok(p) && (p.kind === "text" || p.kind === "monogram" || p.kind === "letters")));
     // (only words a file name can carry: empty lettering named it after the starter, spaces alone design.pes)
     const said = (p) => (p.kind === "monogram" ? p.letters : unswashed(p.text)), named = (p) => !!api.safeName(said(p), "");
@@ -1169,7 +1177,15 @@ export function initStudio(api) {
   function center() { change((p) => { p.x = 0; p.y = 0; }, true); }
   $("st-center").onclick = center;
   // shrink (or grow) everything together so the whole design fills the hoop, less a little room
-  $("st-fit").onclick = () => { remember(); fitHoop(); };
+  // (said, with the way back: it made an opened design 156 % of its size and the only word of it was in the piece's
+  // editor, once the piece was picked)
+  $("st-fit").onclick = () => {
+    const size = () => { const bs = sewnBoxes(pieces); return bs.length ? [Math.max(...bs.map((b) => b[2])) - Math.min(...bs.map((b) => b[0])), Math.max(...bs.map((b) => b[3])) - Math.min(...bs.map((b) => b[1]))] : null; };
+    const was = size(); remember(); fitHoop(); const now = size();
+    if (!was || !now) return;
+    const k = Math.max(now[0], now[1]) / Math.max(was[0], was[1]);
+    if (Math.abs(k - 1) >= 0.03) toast(`Fit to hoop made the whole design ${k > 1 ? "bigger" : "smaller"}, to fill the ${api.hoop().name}: ${Math.round(k * 100)} % of the size it was.`, { label: "Undo", run: undo });
+  };
   // how much bigger the design may be made: never a frame past the size its project is made for (`most`: the birth
   // announcement's 6 in display hoop)
   const mostScale = () => Math.min(...pieces.filter((p) => p.kind === "frame" && p.most).map((p) => p.most / Math.max(p.w, p.shape === "circle" ? p.w : p.h)));

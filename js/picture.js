@@ -2,6 +2,7 @@
 // The Picture tab: a picture to stitches. The picture's worker jobs (newest kept, restarted when too slow), its
 // settings and sizes, the palette and thread swaps, what was left out and the fixes that bring it back, the sample
 // and the picture kept from the last visit. (Part of app.js until 2026-11.)
+import { turnPattern } from "./core/design.js";
 import { designStats, machineThreads, readEmbroidery } from "./core/formats.js";
 import { DENSITY, LEARN, MOST, contentBox, lostMuch, picturePlan, pictureImage, sewSized } from "./core/digitize.js";
 import { PEC_MATCH, hexToRgb, nearestBrotherThread, pecThread } from "./core/threads.js";
@@ -16,7 +17,7 @@ import { next } from "./focus.js";
 import { nearOwn, ownedPalette, owns, threadHtml } from "./threadui.js";
 import { mmText } from "./words.js";
 import { jobQueue } from "./jobs.js";
-import { busy, escapeHtml, openDesign, setMode, setView, showError, studio, warnUI } from "./app.js";   // (used when things happen, never while this file loads: app.js loads after it)
+import { busy, escapeHtml, openDesign, paint, setMode, setView, showError, studio, warnUI } from "./app.js";   // (used when things happen, never while this file loads: app.js loads after it)
 
 export const sizeLabel = (v) => mmText(v);
 // ---------- picture ----------
@@ -111,6 +112,9 @@ export async function makePicture() {
     $("pic-size-note").hidden = !off;
     $("pic-size-note").textContent = off ? `It sews ${got} mm long, not ${want}: ${s.style === "cross" ? `cross-stitch grows ${s.cross} mm at a time, and parts too small for a cross drop out` : "parts too small to sew at this Size drop out"}, so the nearest it can be is ${got} mm.` : "";
   }
+  // (a busy picture: how many separate pieces the machine cuts the thread between, counted on the file)
+  { let cuts = 0, was = 0; for (const [, , c] of r.pattern.stitches) { if ((c === 1 || c === 2) && was === 0) cuts++; was = c === 1 || c === 2 ? 1 : 0; }
+    p.busy = s.style === "fill" && cuts >= BUSY ? { cuts, stitches: r.pattern.stitches.filter((q) => q[2] === 0).length } : null; }
   p.fine = { ...r.fine, tries: r.tries }; p.checking = false;
   fineUI(r.fine);
   const base = safeName((state.pic.file?.name || "picture").replace(/\.[^.]+$/, ""), "picture");
@@ -145,20 +149,63 @@ $("pic-merged").onclick = (e) => {
 const FRAMED = "The band of one colour round the picture's edge looks like a frame round it, so it isn't sewn.";
 // (a fleck alone is a cut thread and two knots, or a hole in the colour round it: core/digitize.js `foldFlecks`)
 // (each piece left out would have been a start of its own: a cut thread and two knots for a few stitches)
-const leftOut = (n) => `${n} small ${n === 1 ? "piece is" : "pieces are"} left out, so ${n === 1 ? "it isn't" : "each isn't"} a knot and a cut thread for a few stitches. <button type="button" class="link" data-details="all">Keep ${n === 1 ? "it" : "them all"}</button>`;
-const FLECKS = 5, flecked = (n) => `${n} small flecks of colour inside bigger areas are sewn in the colour round them, so each isn't a knot and a cut thread of its own.`;
+// What the Small details choice did, said beside it, a sentence each (the words sat in one grey paragraph under the
+// Threads list, run together with the edge band's link, and a newcomer couldn't tell what the choice had changed):
+// - specks left out, with where they are ("Show them" rings each on the preview) and the way back;
+// - none to leave out, so the two choices sew the same and say so;
+// - specks kept;
+// - dots of colour inside a bigger area sewn in that colour, whichever is chosen ("Keep all" over "84 flecks are sewn
+//   in the colour round them" read as the choice ignored: one word for each thing, speck and dot).
+const leftOut = (n) => `${n} ${n === 1 ? "speck is" : "specks are"} left out: ${n === 1 ? "it" : "each"} would be a knot and a cut thread for a few stitches. <button type="button" class="link" data-show-left>Show ${n === 1 ? "it" : "them"}</button> <button type="button" class="link" data-details="all">Keep ${n === 1 ? "it" : "them"}</button>`;
+const FLECKS = 5, flecked = (n) => `${n} dots of colour inside a bigger area are too small to sew on their own, so with either choice they are sewn in the colour round them.`;
+function detailsNote() {
+  const p = state.pic, el = $("pic-details-note"), all = detailsOf(p) === "all";
+  const said = [p.left ? leftOut(p.left) : all ? "Every speck is sewn: each small piece on its own is a knot and a cut thread." : "This picture has no specks to leave out.",
+    p.folded ? flecked(p.folded) : ""].filter(Boolean);
+  el.hidden = p.style !== "fill"; el.innerHTML = said.map((t) => `<span>${t}</span>`).join("<br>");
+}
+// "Show them": the specks left out, ringed on the preview for a few seconds. The picture is sewn once more with them
+// kept (off the page), and what that has where this has nothing within about ¾ mm is a speck.
+let showing = 0;
+async function showLeft(btn) {
+  const p = state.pic, v = state.views.picture, req = p.req; if (!v || showing) return;
+  showing = 1; btn.disabled = true; btn.textContent = "Finding them…";
+  try {
+    const r = await sewPicture({ ...picSettings(), details: "all" }, picChecks, () => req !== p.req);
+    if (r.stale || !r.ok || req !== p.req || state.view !== v) return;
+    const turn = (q) => (turned() ? turnPattern(q, false) : q), A = v.shown.stitches, B = turn(readEmbroidery(r.bytes, "x.pes")).stitches;
+    const mid = (st) => { let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity; for (const [x, y, c] of st) if (c === 0) { x0 = Math.min(x0, x); y0 = Math.min(y0, y); x1 = Math.max(x1, x); y1 = Math.max(y1, y); } return [(x0 + x1) / 2, (y0 + y1) / 2]; };
+    const cell = (x, y) => Math.round(x / 5) * 8192 + Math.round(y / 5), have = new Set();
+    for (const [x, y, c] of A) if (c === 0) for (let i = -1; i <= 1; i++) for (let j = -1; j <= 1; j++) have.add(cell(x + i * 5, y + j * 5));
+    // (each file is centred on its own stitches: with a speck at the edge left out the two differ by that shift)
+    const ma = mid(A), mb = mid(B), extra = (dx, dy) => B.filter(([x, y, c]) => c === 0 && !have.has(cell(x + dx, y + dy))).map(([x, y]) => [x + dx, y + dy]);
+    let pts = extra(0, 0); const moved = extra(ma[0] - mb[0], ma[1] - mb[1]); if (moved.length < pts.length) pts = moved;
+    // (stitches within 2 mm of each other are one speck)
+    const groups = [];
+    for (const q of pts) { const g = groups.find((h) => h.some((o) => Math.abs(o[0] - q[0]) <= 20 && Math.abs(o[1] - q[1]) <= 20)); if (g) g.push(q); else groups.push([q]); }
+    const marks = groups.filter((g) => g.length > 1).map((g) => { const xs = g.map((o) => o[0]), ys = g.map((o) => o[1]), x = (Math.min(...xs) + Math.max(...xs)) / 2, y = (Math.min(...ys) + Math.max(...ys)) / 2; return [x, y, Math.max(Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys)) / 2]; });
+    if (!marks.length) { btn.textContent = "They're too small to show"; return; }
+    v.marks = marks; paint(); btn.textContent = `Ringed on the preview (${marks.length})`;
+    clearTimeout(showing); showing = setTimeout(() => { showing = 0; if (v.marks === marks) { v.marks = null; if (state.view === v) paint(); } detailsNote(); }, 8000);
+    return;
+  } finally { if (showing === 1) { showing = 0; } }
+}
+$("pic-details-note").onclick = (e) => {
+  const d = e.target.closest("[data-details]");
+  if (d) { state.pic.details = d.dataset.details; detailsUI(); makePicture(); $("pic-details").querySelector('[aria-pressed="true"]')?.focus(); return; }
+  const b = e.target.closest("[data-show-left]"); if (b) showLeft(b);
+};
 export function paletteUI() {
   const cols = state.pic.colorsInfo.filter((c) => !c.background && c.area > 0);
   const edge = state.pic.edge && state.pic.edgeSeen;
-  $("pic-merged").hidden = !state.pic.merged && !state.pic.framed && !edge && !state.pic.folded && !state.pic.left;
+  $("pic-merged").hidden = !state.pic.merged && !state.pic.framed && !edge;
   // (said as what happened, not as a fault: "3 colours were too close" beside a slider at 6 read like an error)
   const asked = state.pic.colors;
   $("pic-merged").textContent = state.pic.merged ? `${asked} asked for, ${cols.length} used: this picture has only ${cols.length} ${cols.length === 1 ? "colour" : "colours"} different enough to need ${cols.length === 1 ? "a thread of its own" : "threads of their own"} (the rest are shades of ${cols.length === 1 ? "it" : "these"} or of the fabric).` : "";
   // (a guess: the band may be the drawing's own, so it can be sewn, and left out again)
   if (state.pic.framed) $("pic-merged").insertAdjacentHTML("beforeend", `${state.pic.merged ? " " : ""}<span data-problem="framed">${FRAMED} <button type="button" class="link" data-edge="1">Sew the edge band too</button></span>`);
   else if (edge) $("pic-merged").insertAdjacentHTML("beforeend", `${state.pic.merged ? " " : ""}<span>The band round the picture's edge is sewn too. <button type="button" class="link" data-edge="0">Leave it out</button></span>`);
-  if (state.pic.folded) $("pic-merged").insertAdjacentHTML("beforeend", `${$("pic-merged").textContent ? " " : ""}<span>${flecked(state.pic.folded)}</span>`);
-  if (state.pic.left) $("pic-merged").insertAdjacentHTML("beforeend", `${$("pic-merged").textContent ? " " : ""}<span>${leftOut(state.pic.left)}</span>`);
+  detailsNote();
   ownedNote();
   const open = state.pic.swapOpen;
   $("pic-palette").innerHTML = cols.map((c) => `<button type="button" data-id="${c.id}" aria-pressed="${!state.pic.skip.includes(c.id)}" aria-expanded="${c.id === open}" aria-controls="pic-swap">
@@ -243,6 +290,11 @@ bindRange("pic-cross", "cross", (v) => `${v} mm`);
 // (and a line too thin to keep at all, a logo's 1 px rule, over 5% of the picture across: left out without a word before)
 // (and the parts of the picture no stitch reaches, in any style (keptParts, lostMuch): etsy_7's doodles at 60 mm,
 // a drawing's sun rays in cross-stitch, its 1.5 mm eye, all left out while the dialog said "Checked")
+// A busy picture is said, with its numbers and the way out: a rose print came out 17,000 stitches in 180 pieces, 50
+// minutes of sewing, under no more than the page's "Photos won't stitch well". (From 150 cuts: the sample drawings
+// that sew well have up to 130.)
+const BUSY = 150;
+const busyText = (b) => `This is a busy picture for embroidery: ${b.stitches.toLocaleString()} stitches in about ${Math.round(b.cuts / 10) * 10} separate pieces, and the machine stops to cut the thread after each one. It will sew, slowly, and leave many thread ends on the back.`;
 function fineUI(fine) {
   const p = state.pic, gaps = fine?.narrowMm2 >= Math.max(2, 0.015 * (fine.inkMm2 || 0)), k = fine?.kept, lost = lostMuch(k);
   let hair = fine?.lost >= 0.05;
@@ -260,18 +312,23 @@ function fineUI(fine) {
   if (lost) hair = false;
   markThumb(lost ? k.spots : null);
   const ringed = lost && k.spots?.length ? (k.lost > k.spots.length ? " (the biggest are ringed in your picture above)" : " (ringed in your picture above)") : "";
-  p.fineProblems = [gaps && { id: "gaps", level: LOOK, text: gap }, hair && { id: "hairline", level: LOOK, text: line }, lost && { id: "lost", level: LOOK, text: gone }].filter(Boolean);
-  $("pic-fine").hidden = !gaps && !hair && !lost;
+  const busyNow = p.busy && p.style === "fill" ? p.busy : null, fewer = busyNow && p.colors > 2 ? Math.max(2, Math.min(p.colors - 2, 4)) : 0;
+  p.fineProblems = [gaps && { id: "gaps", level: LOOK, text: gap }, hair && { id: "hairline", level: LOOK, text: line }, lost && { id: "lost", level: LOOK, text: gone },
+    busyNow && { id: "busy", level: TIP, text: busyText(busyNow) }].filter(Boolean);
+  $("pic-fine").hidden = !gaps && !hair && !lost && !busyNow;
   // (each fix was sewn first and keeps them: checkLost)
   const fixes = (p.fixes || []).map((f, i) => `<button type="button" class="link" data-fix="${i}">${escapeHtml(f.label)}</button>`).join(" ");
   $("pic-fine").innerHTML = isolate([
     gaps ? `<span data-problem="gaps">${gap} ${p.size < (p.max || 0) ? "A bigger Size keeps more of them open." : "This is as big as the hoop allows."}</span>` : "",
     hair ? `<span data-problem="hairline">${line} Draw it thicker in the picture to have it sewn.</span>` : "",
+    busyNow ? `<span data-problem="busy">${busyText(busyNow)} ${fewer ? `<button type="button" class="link" data-fewer="${fewer}">Try ${fewer} thread colours</button>, or a` : "A"} simpler picture, sews cleaner.</span>` : "",
     lost ? `<span data-problem="lost">${escapeHtml(gone.replace(/\.$/, ringed + "."))} ${fixes || (p.checking ? "" : k.lost === 1 ? "Draw it bigger or bolder in the picture to have it sewn." : "Draw them bigger or bolder in the picture to have them sewn.")}</span>` : "",
   ].filter(Boolean).join(" "));
   if (state.view && state.view === state.views.picture) warnUI(state.view);
 }
 $("pic-fine").onclick = (e) => {
+  const few = e.target.closest("[data-fewer]");
+  if (few) { const p = state.pic, n = +few.dataset.fewer; p.colors = n; p.skip = []; p.swap = {}; $("pic-colors").value = n; $("pic-colors-out").textContent = String(n); makePicture(); $("pic-colors").focus(); return; }
   const b = e.target.closest("[data-fix]"), f = b && state.pic.fixes?.[+b.dataset.fix]; if (!f) return;
   const p = state.pic, o = f.over;
   if (o.style) { p.style = o.style; styleUI(); }
@@ -302,7 +359,7 @@ async function checkLost(s, req) {
   // the Small details choice, when keeping them all sews those parts (it is why they're out; no bigger Size needed)
   if (s.style === "fill" && s.details !== "all" && p.fine.left) {
     const q = await keeps({ details: "all" }); if (!q) return;
-    if (q.kept) offer("Keep all the small details", { details: "all" });
+    if (q.kept) offer("Keep the specks", { details: "all" });
   }
   // the smallest Size, in 5 mm steps, that keeps them (with no note left, when the biggest that fits manages that)
   if (s.size < p.max) {
@@ -412,6 +469,9 @@ export async function loadPicture(file, sample = false, again = false) {
   try {
     const bitmap = await createImageBitmap(file);
     if (!sample && !again) keepPicture(file, file.name);
+    // (the Small details choice is about one picture: a new one starts with specks left out, as the panel shows.
+    // "Keep" taken for the last picture stayed on for the next with nothing said.)
+    if (!again && state.pic.details === "all") { state.pic.details = "most"; detailsUI(); }
     Object.assign(state.pic, { file, bitmap, sample, box: null, key: state.pic.key + 1, skip: [], swap: {}, edge: false, edgeSeen: false, models: new Map(), autoLine: "" });
     setThumb(file); $("pic-rotate").hidden = false;
     $("pic-drop").querySelector(".drop-text").innerHTML = sample ? "<b>Choose your own picture</b> or drop it here." : `${again ? "Your last picture, " : ""}<b>${escapeHtml(file.name)}</b> · choose another`;

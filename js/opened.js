@@ -365,7 +365,16 @@ $("open-info").addEventListener("click", (e) => { if (e.target.id === "doc-large
 // the opened design, as it stands here (resized or fixed), into Design your own with a line of words under it
 $("open-words").onclick = () => {
   const o = state.opened, v = state.views.open; if (!o || !v) return;
-  studio.addWords(v.bytes && v.verifyAgainst ? readEmbroidery(v.bytes, "x.pes") : o.d, o.base);
+  // (a copy written here names its threads as the machine does: the file's own names go with it, block for block,
+  // so an appliqué file's "Placement Line", "Tackdown" and "Cutting Line" still say what to do with the fabric in the
+  // steps. gnome.pes fixed, then words added: 18 steps of "Sews gnome (colour 1)…" and no word on the fabric.)
+  let d = o.d;
+  if (v.bytes && v.verifyAgainst) {
+    d = readEmbroidery(v.bytes, "x.pes");
+    const own = (o.fixBase || o.d).threads;
+    if (!o.opts.sort && own.length === d.threads.length) d = { ...d, threads: d.threads.map((t, i) => (own[i]?.name ? { ...t, name: own[i].name } : t)) };
+  }
+  studio.addWords(d, o.base);
 };
 // the picture's stitches, as the file has them (upright when the hoop is turned), into Design your own: added to the
 // design there, or a new design of it alone. A newcomer downloaded her logo, went to Design your own, picked the Tote

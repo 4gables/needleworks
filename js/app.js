@@ -80,7 +80,7 @@ export function paint() {
     cache: v.cache, fabric: v.fabric, ...look,
     heat: state.heat ? (v.heat ||= heat(v.shown)) : null, backdrop: state.backdrop,
     ...field, zoom: state.zoom, pan: state.pan, showNeedle: state.upto != null,
-    real: state.real, boxes: v.hoopings, ...room,
+    real: state.real, boxes: v.hoopings, marks: v.marks, ...room,
     // (the selected piece, boxed on every screen size: on a phone the editor is far below and nothing showed which)
     sel: state.mode === "design" && !block && state.upto == null && !v.hoopings ? selBox() : null,
   });
@@ -138,6 +138,8 @@ export function setView(v) {
     `<span>${v.fact.size}</span>`,
     orient === "turned" ? `<span${tip(`The size across × down with the hoop turned sideways, as shown here. The machine's screen shows it on its side: ${v.fact.machineSize}.`)}>Hoop turned</span>`
       : orient ? `<span${tip("The size across × down with the hoop upright, as the machine's screen shows it. A design made with the hoop turned reads the other way round here.")}>As the machine shows it</span>` : "",
+    // (what there is to do after sewing comes second: last in the row, a phone's one line of chips cut it off)
+    snips ? `<span${tip("Short threads the machine leaves between two parts instead of cutting them. They're locked at both ends, so snip them after stitching. (The machine only cuts moves longer than its “jump stitch not to trim” setting, 5 mm at the lowest.)")}>${v.fact.snips}</span>` : "",
     `<span>${v.fact.stitches}</span>`,
     // (thread changes and pauses in the same thread, in the same words on every tab: the Design tab said "1 pause" for
     // the stop the Open tab called "1 thread change"; two hoopings count the stops in both files)
@@ -146,7 +148,6 @@ export function setView(v) {
     // (the Design and Picture tabs never said it fits, as the Open tab's file card does)
     v.split ? `<span>${v.split.length} hoopings</span>` : fits ? (state.mode !== "open" ? `<span>Fits ${escapeHtml(h.name.replace(/ hoop$/, ""))}</span>` : "") : `<span class="bad">Too big for the ${h.name}</span>`,
     offCentre(v, fits) ? `<span class="note">Off centre here: the machine centres it <button type="button" class="link" id="recentre">Centre it</button></span>` : "",
-    snips ? `<span${tip("Short threads the machine leaves between two parts instead of cutting them. They're locked at both ends, so snip them after stitching. (The machine only cuts moves longer than its “jump stitch not to trim” setting, 5 mm at the lowest.)")}>${v.fact.snips}</span>` : "",
   ].join("");
   // One chip per thread, in the order each is first put on, with how many times it's put on: a chip per colour block
   // (Black, Red, Black) named one thread twice, each with its own note, and the row grew over the preview. Blocks in a
@@ -742,7 +743,16 @@ export function fillMachines() {
 }
 function hoopChanged() { if (state.mode !== "picture") state.pic.req++; for (const m of ["picture", "design"]) if (m !== state.mode) state.views[m] = null; fillMachines(); refresh(); }
 // (on the Design tab a hoop change is an Undo step, as a turn is: Undo puts a design back in the hoop it was in)
-$("machine").onchange = (e) => { if (state.mode === "design") studio.remember(); state.machine = e.target.value; state.hoopId = null; store.set("machine", state.machine); hoopChanged(); };
+// (a machine with the same hoop changes nothing in the design: no Undo step for it (Undo lit up and nothing else
+// showed the choice was taken), the hoop picked stays, and a quiet line says what the choice does)
+$("machine").onchange = (e) => {
+  const was = hoop(), to = MACHINES[e.target.value], keep = to?.hoops[was.id], same = !!keep && keep.w === was.w && keep.h === was.h;
+  if (state.mode === "design" && !same) studio.remember();
+  state.machine = e.target.value; if (!keep) state.hoopId = null; store.set("machine", state.machine); hoopChanged();
+  const now = hoop();
+  toast(same ? `Set for the ${now.machineName}: the same ${now.name}, so the design is as it was. Files are checked for this machine.`
+    : `Set for the ${now.machineName} and its ${now.name}. Files are checked for this machine.`);
+};
 $("hoop").onchange = (e) => { if (state.mode === "design") studio.remember(); state.hoopId = e.target.value; store.set("hoop", state.hoopId); hoopChanged(); };
 function refresh() { if (state.mode === "picture") makePicture(); else if (state.mode === "design") studio.make(); else if (state.view) setView(state.view); }
 
