@@ -9,9 +9,9 @@
 // Stale entries fail too. Run: node tests/sewn_lint.mjs (< 1 s, CI).
 import { readFileSync } from "fs";
 
-const FILES = ["js/studio/ui.js", "js/app.js", "js/sheet.js", "js/words.js", "js/gate.js", "js/studio/pieces.js"];
+const FILES = ["js/studio/ui.js", "js/app.js", "js/sheet.js", "js/words.js", "js/gate.js", "js/studio/pieces.js", "js/studio/compose.js"];
 // (pieces.js: its measuring calls only; its builders stitch the size they're handed)
-const SIZES_IN = (f) => f !== "js/studio/pieces.js";
+const SIZES_IN = (f) => f !== "js/studio/pieces.js" && f !== "js/studio/compose.js";
 const MEASURE = /\b(pieceBounds|touchingAll|touching|inFrame)\(/g;
 // a piece's size read: <name>.size, except Maps/Sets and the like
 const SIZE = /\b([a-zA-Z_]\w*)(?:\[[^\]]*\])?\.size\b/g;
