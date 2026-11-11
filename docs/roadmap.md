@@ -112,12 +112,30 @@ Phase 1, the base (no visible change, byte-identical batches):
 
 Phase 2, stitch quality (measured against the scoreboard, VM-checked):
 - [ ] **S1 One sequencer** (entry, exit, hidden travel, trim or loose, locks in cover: shared by every builder)
+  - [x] v26: script pieces chained by the moves as sewn (after the arch, wave or bridge bend) and sewn in one go
+    where their columns touch (`recipes.js` `LINK`). Arcs and ovals: wasted moves 52 -> 13, trims 513 -> 444;
+    bookmark names 4 -> 1. The 13 left are 1.5-2.3 mm gaps between columns: a stitch there would show.
+  - [ ] the planner itself (entries chosen from sewn geometry with look-ahead in `compose`); frames, appliqué,
+    quilting; print letters (small print 33 wasted, 27 loose: unchanged; caption starters 24 -> 13, target
+    under 5); a shorter tie-in in `Design.path` when the next point is 0.7 mm on (the last zero ties)
 - [ ] **S2 Density at the source** (crossings, towel lattice)
 - [ ] **S3 Vector fills** (exact edges, edge-run underlay, pull and density by fabric, contour fill)
+  - [x] v26: rows worked out from the outline (row-end error 0.06 mean / 0.19 worst -> 0), edge-run underlay,
+    pull by fabric (`recipes.js` `FILLS`), sections sewn in row order. 41 files: trims 182 -> 140, loose 22 -> 13,
+    wasted 36 -> 17; 12 test fills 420 -> 237 ms
+  - [ ] contour (spiral) fill; batch files for motifs on knit and towel and for 30/60 wt fills
 - [ ] **S4 Pictures** (shapes made sewable first; no tiny stitches, zero ties or exposed locks)
+  - [x] v26, Filled: flecks take the colour round them, travel along the shape's own edge, no tiny row links,
+    locks under their own rows. 12 samples: trims 1464 -> 1162, loose 153 -> 67, tiny 336 -> 0, zero ties
+    164 -> 5, exposed locks 173 -> 90; corpus trims 791 -> 538, loose 73 -> 9. Digitizing about 25 % slower
+  - [ ] a Details choice (the trims left are separate pieces of one colour 5-30 mm apart: fewer means dropping
+    pieces, which the user must choose); exposed locks at shape tips and dots; Line drawing's ring moves;
+    picture_history folded into picture_corpus
 
 Phase 3, friction and features:
 - [ ] **U1** open tester findings, then a fresh three-tester round on the live site
+  - [x] v26: the findings that are UI only (see `docs/app-ui.md`)
+  - [ ] appliqué 6 pauses -> 3 and pastel/pink thread matching (stitch and thread code); the tester round
 - [ ] **N1** layout tools (mirror, circle repeat, wreath, corner set, monogram layouts)
 - [ ] **N2** borders and quilting (blanket stitch, triple and motif runs, crosshatch, stripe, shaded fill)
 - [ ] **N3** use your own font file

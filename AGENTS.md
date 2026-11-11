@@ -113,6 +113,11 @@ Read the topic's file before changing its code; each holds the rules, their reas
 ## How to work
 - Rounds follow `docs/roadmap.md`: one theme each, in a worktree under `.claude/worktrees/` on a branch from
   `origin/main`; never in the main checkout, never `git stash` (shared by every worktree).
+- A fresh worktree needs `tests/external` linked from the main checkout (`ln -s`; it is gitignored), or 22
+  batch files are missing.
+- Rounds may run in parallel, each in its own worktree and branch with its own ports and a list of the files it
+  owns; they push only their branch. One release branch merges them (`--no-ff` each), then gets the full check,
+  the VM check and the speed check alone on a quiet machine: two slowdowns (2026-11-11) showed only there.
 - Save as you go: push the round's branch to origin after each finished step and tick the roadmap's Progress list
   in the same commit. A release is one merge commit pushed `<branch>:main`, tagged `vN` (the cache number), so a
   round is undone with `git revert -m 1`.
