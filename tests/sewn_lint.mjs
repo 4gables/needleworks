@@ -9,7 +9,7 @@
 // Stale entries fail too. Run: node tests/sewn_lint.mjs (< 1 s, CI).
 import { readFileSync } from "fs";
 
-const FILES = ["js/studio/ui.js", "js/app.js", "js/sheet.js", "js/words.js", "js/gate.js", "js/studio/pieces.js", "js/studio/compose.js", "js/studio/names.js", "js/studio/placing.js", "js/studio/recent.js", "js/studio/threadsaid.js", "js/studio/toobig.js", "js/studio/fixes.js", "js/studio/stepsui.js", "js/studio/offpage.js"];
+const FILES = ["js/studio/ui.js", "js/app.js", "js/sheet.js", "js/words.js", "js/gate.js", "js/studio/pieces.js", "js/studio/compose.js", "js/studio/names.js", "js/studio/placing.js", "js/studio/recent.js", "js/studio/threadsaid.js", "js/studio/toobig.js", "js/studio/fixes.js", "js/studio/stepsui.js", "js/studio/offpage.js", "js/studio/problems.js"];
 // (pieces.js: its measuring calls only; its builders stitch the size they're handed)
 const SIZES_IN = (f) => f !== "js/studio/pieces.js" && f !== "js/studio/compose.js";
 const MEASURE = /\b(pieceBounds|touchingAll|touching|inFrame)\(/g;
@@ -22,8 +22,8 @@ const NOT_PIECES = new Set(["advice", "pointers", "opened", "mine", "dataset", "
 // frame fits
 const RAW_MEASURE = process.env.EMPTY ? [] : [
   ["js/studio/placing.js", "patchEdge", "p is passed in as sewn (sewnAt) by its callers; f is a patch frame (never fitted)"],
-  ["js/studio/ui.js", "pieceProblems", "q is the piece at its fitted size (fit.get), made at the top"],
-  ["js/studio/ui.js", "warnNow", "candidate sizes fitted with fittedSizes on the same line (two lines, the size fix)"],
+  ["js/studio/problems.js", "pieceProblems", "q is the piece at its fitted size (fit.get), made at the top"],
+  ["js/studio/problems.js", "warnNow", "candidate sizes fitted with fittedSizes on the same line (two lines, the size fix)"],
   ["js/studio/fixes.js", "roundAll", "a first frame drawn round the pieces as asked, so it shrinks none of them"],
   ["js/studio/fixes.js", "landing", "frames (never fitted) and the piece at fit / f0, its fitted sizes"],
   ["js/studio/toobig.js", "twoHoopings", "lettering no frame fits (filtered by !fit.has), split at a word gap"],
@@ -50,8 +50,8 @@ const RAW_SIZE = process.env.EMPTY ? [] : [
   ["js/studio/ui.js", "placeRest", "a new straight piece no frame fits yet: asked = sewn; spotIn/freeRoom measure it sewn"],
   ["js/studio/ui.js", "followed", "an arched word (never frame-fitted): asked = sewn"],
   ["js/studio/ui.js", "drawEditor", "the controls show the size asked; warn() says the sewn one beside it (\"N mm sewn\")"],
-  ["js/studio/ui.js", "pieceProblems", "q.size is the fitted size; motifs are never fitted"],
-  ["js/studio/ui.js", "warnNow", "fixes and notes compare the asked size with d.fs, the sewn one; each fix is checked by landing()"],
+  ["js/studio/problems.js", "pieceProblems", "q.size is the fitted size; motifs are never fitted"],
+  ["js/studio/problems.js", "warnNow", "fixes and notes compare the asked size with d.fs, the sewn one; each fix is checked by landing()"],
   ["js/studio/fixes.js", "runUp", "the most to try; each size measured sewn"],
   ["js/studio/fixes.js", "frameFor", "the asked size kept as the frame grows; fitted after"],
   ["js/studio/fixes.js", "moveAway", "freeRoom's answer at the same size (sameSize), for an unfitted piece"],
