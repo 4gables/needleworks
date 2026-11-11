@@ -2,7 +2,7 @@
 // Where a piece goes: what's on a frame, the spot in a frame for a new piece, the nearest free room in the hoop,
 // and what is offered when there is none. One path for add, duplicate, paste and files (place() in S.ui.js calls
 // these). The editor hands in its state and helpers as S. (Part of S.ui.js until 2026-11.)
-import { pieceBounds, minSize, towelMin, inFrame, frontPanel, sewn, fittedSizes, touching, layoutSize, sewnBox, label, FILE_SCALE, sewnBoxes } from "./S.pieces.js";
+import { pieceBounds, minSize, towelMin, inFrame, frontPanel, sewn, fittedSizes, touching, layoutSize, sewnBox, label, FILE_SCALE, sewnBoxes } from "./pieces.js";
 
 export function placing(S) {
   const { api } = S;
