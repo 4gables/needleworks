@@ -44,7 +44,12 @@ export const fillFor = (wt, rows) => rows + (WEIGHTS[wt] || WEIGHTS.auto).fill;
 //   gap:        same-edge satin gap on Automatic; `small` (x-height under 6 mm, sewn for 60 wt) closer to cover
 //   open:       added to a chosen thread weight's gap
 export const LETTERS = {
-  cotton: { zigzagFrom: 2.5, pull: 0, gap: 0.38, small: 0.34, open: 0 },
+  // (2.0 from S2, 2.5 before: the usual practice is a centre run under narrow columns and an edge run or zigzag from
+  // about 2 mm, so the column's edges are held as well as its middle; a digitizer testing v27 asked for one under
+  // Allura's 2.2 mm columns. A big script's column, which follows the ink's thick and thin, has it too now, as wide
+  // as the column is there less 0.8: `stitchLetters`.)
+  cotton: { zigzagFrom: 2.0, pull: 0, gap: 0.38, small: 0.34, open: 0 },
+  towel: { zigzagFrom: 2.5, pull: 0, gap: 0.38, small: 0.34, open: 0 },   // (as it was: the lattice is its underlay)
   knit: { zigzagFrom: 1.5, pull: 0.3, gap: 0.42, small: 0.42, open: 0.04 },
 };
 export function letterRecipe(fabric, wt, small) {
@@ -84,7 +89,11 @@ export const PICTURES = { fleck: 3, enclosed: 0.8, eyes: 6, start: 4, edge: 0.75
 // the last one's column (`under` past its half width). A link that short reads as the pen not lifting; a trim there
 // is two locks and two thread ends on a hairline. A fine line: `line` (1.5 until S1, reckoned before an arch
 // opened the gap: a Cookie "Sunday" 1.51 mm from its S once arched began 21 mm away).
-export const LINK = { gap: 0.5, pull: 0.3, most: 2.2, under: 0.3, line: 1.8 };
+// `far`, `open`: where the columns' own widths at the two points are known (`order` col), the centre lines may be half
+// of each and `pull` and `open` apart, up to `far`: a wide script's hairlines keep `most`, its thick strokes don't.
+// `open` is more than `gap` since a column's end is sewn out to the ink, past its centre line's (an Allura T at
+// 20 mm: stem end to bar 3.08 mm by the centre lines, 0.63 mm between the stitches, and trimmed apart until S2).
+export const LINK = { gap: 0.5, pull: 0.3, most: 2.2, under: 0.3, line: 1.8, far: 3.6, open: 0.9 };
 
 // Fills by fabric. `pull`: how far each row runs past the outline at both ends, since the stitches draw the fabric in
 // along their length and the row ends up short (Wilcom's published pull compensation: 0.20 mm on cotton and drill,
@@ -106,3 +115,33 @@ export const fillRecipe = (fabric) => FILLS[fabric] || FILLS.cotton;
 // A tie-in's length (mm), first that keeps clear of the run's own next points: 0.7 is the middle of what sold
 // designs use (0.5-0.8; shorter can pull out before the bobbin thread catches), 0.5 and 0.8 its ends.
 export const TIE_INS = [0.7, 0.5, 0.8];
+
+// --- S2: density at the source ---
+// A piece's stitches give way where the thread already sewn in this colour is thick, as they are built (`Design`),
+// so the limit is kept by where the needle goes and not by taking stitches out afterwards (`relieve`, now the guard).
+//   cap:    the most hits a 1 mm window may hold once a stitch that can give way is added. Under LIMITS.hits by a
+//           lock's four, which are added after and never moved.
+//   back:   a satin's end stops this far (mm) short of its edge, first that fits, and never more than `deep` of
+//           the way across (a digitizer's short stitches on the inside of a turn and where columns meet: the outer
+//           edge keeps every stitch). From 0.8: nearer, the hit is still in the windows that were full. Taken in
+//           turn through a fan (`fan`): with two lengths a 4 mm border's corner filled both and the rest of the
+//           fan was left out, a slit beside the pivot.
+//   show:   the widest gap (mm) a short stitch may leave between its neighbours: under a thread's width (0.4)
+//   slack:  in a fan a stitch goes whole, or short, up to this many over `cap` before one is left out: 23, one
+//           under the limit (a lock on that spot is then thinned by `relieve`)
+//   merge:  two stitches of a run or an underlay become one up to this long (mm), where the point between them lies
+//           within `stray` mm of the straight line (a curve keeps its points)
+//   least:  no stitch made shorter than this (mm)
+//   most:   nor longer (mm) by leaving points out of a satin
+//   fan:    from this many of a run's own turns within a 1 mm window, which of them come short is spread evenly
+//   hair:   a point nearer than this (mm) to the last one kept is left out (the checker's tiny stitch is 0.3)
+//   cut:    a corner, or one of two points a hair apart, is left out where the stitch past it runs within this (mm)
+//           of where it was
+// 19: a tie-off's four hits after it still leave the window under the limit (20 left 92 files at 24 exactly).
+export const EASE = { cap: 19, back: [0.8, 1.5, 2.2, 3], deep: 0.65, show: 0.3, slack: 4, merge: 3, stray: 0.15, least: 0.5, most: 4, cut: 0.6, hair: 0.35, fan: 6 };
+
+// A lock's one hit aside (0.35 mm, toward the stitches it locks) needs stitches to lie under: where the points it
+// would lie beside are all within `line` mm of one line, a single thread, it goes on that line instead, `past` mm
+// beyond the lock's own far hit (0.45: no stitch of the lock is then under 0.4 mm; halfway between its two hits made
+// two of 0.35, which the file rounds to the checker's tiny 0.3).
+export const LOCKS = { line: 0.25, past: 0.45 };

@@ -120,6 +120,16 @@ const { MOTIFS } = await import("../../js/studio/motifs.js");
 for (const [k, i] of Object.keys(MOTIFS).map((k, i) => [k, i]))
   await save(`st_motif_${k}`, [P({ kind: "motif", motif: k, size: [20, 45, 80][i % 3], style: ["fill", "outline", "applique"][i % 3], color: "#ed171f" })]);
 await save("st_motif_small_fill", [P({ kind: "motif", motif: "cat", size: 12, style: "fill" }), P({ kind: "motif", motif: "paw", size: 10, style: "fill", x: 20 })]);
+// marks above the letters, in every script font (the ë of "Zoë" read as an ē in v27: its two dots, under 2 mm apart,
+// were stitched across), and a T whose bar and stem the font leaves a hair apart (Allura, on an arc: trimmed apart)
+for (const f of FONTS.filter((x) => !x.print)) {
+  const tag = f.family.slice(3).replace(/ /g, "");
+  await save(`st_marks_${tag}`, [P({ kind: "text", text: "Zoë Anaïs\nJürgen ijá", font: f.family, size: 19 })]);
+}
+await save("st_marks_small", [P({ kind: "frame", shape: "oval", border: "satin", w: 110, h: 70 }), P({ kind: "text", text: "Zoë", font: FONTS[0].family, size: 12 })]);
+await save("st_arc_Tabitha", [P({ kind: "frame", shape: "circle", border: "line", w: 90, h: 90 }), P({ kind: "text", text: "Tabitha", font: FONTS.find((x) => /Allura/.test(x.family)).family, size: 20, shape: "up", radius: 34 })]);
+await save("st_arc_Tabitha_wide", [P({ kind: "text", text: "Tabitha", font: FONTS.find((x) => /Allura/.test(x.family)).family, size: 20, shape: "up", radius: 70 })]);
+await save("st_lines_Tabitha", [P({ kind: "text", text: "Tabitha", font: FONTS.find((x) => /Allura/.test(x.family)).family, size: 20 })]);
 for (const f of [FONTS[0], FONTS.find((x) => x.print)]) await save(`st_deco_${f.family.slice(3).replace(/ /g, "")}`, [P({ kind: "text", text: "Emma", font: f.family, size: 14, deco: "heart" })]);
 log("motifs: done");
 // bigger than the hoop: two hoopings, each with the alignment crosses
