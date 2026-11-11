@@ -3,7 +3,8 @@
 // `fillPolygon` for a shape given as outlines. Pictures (digitize.js), patches and motifs (studio/pieces.js) and the
 // Open tab's re-stitching (doctor.js) all fill through here. (Part of digitize.js until 2026-11.)
 import { distanceTransform, label } from "./raster.js";
-import { ROWS } from "./recipes.js";
+import { resample } from "./geom.js";
+import { FILLS, ROWS } from "./recipes.js";
 
 // the fill angle (degrees) and working pixels per mm when nothing else is asked (8: 5 lost the narrow notches of
 // small lettering, e.g. an M)
@@ -13,6 +14,7 @@ export const FILL = { angle: 45, res: 8 };
 // own fill against a trim, two locks and often a loose thread to snip (2 mm until 2026-10-30: 3 mm took 5-15% of the
 // trims and a third of the loose threads off the batch pictures)
 export const SEWN = 3;
+const SCRAP = 3;
 
 // Fill patterns: where each row's needle points fall, as a fraction of the stitch length by row number. Tatami's
 // quarter steps hide the points; the others line them up into a texture you can see (programmable fills).
@@ -52,6 +54,21 @@ export function tatami(mask, comp, res, { angle, spacing, stitch, inset = 0, pul
     rows.push({ v, r, ivs: ivs.filter(([a, b]) => b - a >= 0.6 * res) });
     v += sp / k;
   }
+  // the step from one row's end to the next row's start runs along the edge; where the edge curves in (the S's
+  // counter) that step would cross open fabric, so the path is split there and the needle jumps instead
+  const leaves = (p, q) => {
+    const n = Math.ceil(Math.hypot(q[0] - p[0], q[1] - p[1]) / (0.2 * res));
+    for (let i = 1; i < n; i++) {
+      const x = p[0] + ((q[0] - p[0]) * i) / n, y = p[1] + ((q[1] - p[1]) * i) / n;
+      if (!inside(x, y) && !inside(x + 1, y) && !inside(x - 1, y) && !inside(x, y + 1) && !inside(x, y - 1)) return true;
+    }
+    return false;
+  };
+  return sewRows(rows, U, V, res, L, pattern, leaves);
+}
+// Rows into paths: each run of rows that can be sewn back and forth without leaving the shape, split where the step
+// to the next row would cross open fabric (`leaves`).
+function sewRows(rows, U, V, res, L, pattern, leaves) {
   // group intervals into regions that can be sewn back-and-forth without leaving the shape
   const regions = [];
   let prev = [];
@@ -70,16 +87,6 @@ export function tatami(mask, comp, res, { angle, spacing, stitch, inset = 0, pul
     prev = cur;
   }
   const toXY = (u, v) => [u * U[0] + v * V[0], u * U[1] + v * V[1]];
-  // the step from one row's end to the next row's start runs along the edge; where the edge curves in (the S's
-  // counter) that step would cross open fabric, so the path is split there and the needle jumps instead
-  const leaves = (p, q) => {
-    const n = Math.ceil(Math.hypot(q[0] - p[0], q[1] - p[1]) / (0.2 * res));
-    for (let i = 1; i < n; i++) {
-      const x = p[0] + ((q[0] - p[0]) * i) / n, y = p[1] + ((q[1] - p[1]) * i) / n;
-      if (!inside(x, y) && !inside(x + 1, y) && !inside(x - 1, y) && !inside(x, y + 1) && !inside(x, y - 1)) return true;
-    }
-    return false;
-  };
   return regions.flatMap((reg) => {
     const paths = [[]];
     reg.rows.forEach((row, k) => {
@@ -274,14 +281,20 @@ export function makeRouter(mask, res, cell, hop = null, budget = routeBudget(), 
 // Sew a fill's sections in one go: between sections the needle travels inside the shape, through rows not sewn
 // yet, so the fill covers the travel. It only jumps (and trims) when every way would lie on top of finished rows for
 // more than SEWN mm. groups: [underlay paths, fill paths] in px; the underlay is covered by the fill, so travel over it is
-// hidden too.
+// hidden too. inOrder: the next section is always entered at its first row (a drawn shape's fill, `fillPolygon`).
+// spare: sections of the first so many groups are left out when only a jump would reach them (a bit of edge run
+// isn't worth a trim). With inOrder, a fill section under SCRAP mm of thread (a row or two in a corner, which rows
+// read off a drawing never saw; every such fill's edge lies under a satin) is sewn only where the needle already is:
+// going to one stranded the next real section behind finished rows (the snowflake motif at 20 mm, 3 parts -> 4).
 // edge (mm, pictures): travel may also run along the shape's own edge, this far inside it, over rows already sewn
 // (Ink/Stitch's fill travels along the border when it can't travel inside): there it lies beside the row ends in
 // the same thread. A section stranded behind finished rows was a trim, two locks and a restart inside one shape:
 // 282 of the 1,402 trims in the 12 sample pictures. Not over `edgeMax` mm in one go.
-export function routeFill(groups, comp, mask, res, budget = routeBudget(), worn = Infinity, edge = 0, edgeMax = 30) {
-  const { w } = mask, R = makeRouter(mask, res, (x, y) => (comp.labels[y * w + x] !== comp.id ? 0 : edge && comp.dt[y * w + x] <= edge * res ? 2 : 1), null, budget, worn);
+export function routeFill(groups, comp, mask, res, budget = routeBudget(), worn = Infinity, inOrder = false, spare = 0, cell = null, edge = 0, edgeMax = 30) {
+  const { w } = mask, R = makeRouter(mask, res, cell || ((x, y) => (comp.labels[y * w + x] !== comp.id ? 0 : edge && comp.dt[y * w + x] <= edge * res ? 2 : 1)), null, budget, worn);
   const out = [];
+  // (under SCRAP mm of thread in all: a row or two in a corner)
+  const short = (p) => { let t = 0; for (let i = 1; i < p.length && t < SCRAP * res; i++) t += Math.hypot(p[i][0] - p[i - 1][0], p[i][1] - p[i - 1][1]); return t < SCRAP * res; };
   let cur = null;
   groups.forEach((paths, gi) => {
     // sections in the fill's own row order (top to bottom of the sweep): each next one begins beside rows still to
@@ -291,8 +304,10 @@ export function routeFill(groups, comp, mask, res, budget = routeBudget(), worn 
     while (left.length) {
       // (a section can also be sewn from its last row back, entering from its far side)
       let k = 0, r = null, rev = false;
-      if (cur) {
-        const way = R.reach(cur, SEWN, [left[0][0], left[0][left[0].length - 1]]);
+      const q0 = left[0][0], straight = inOrder && cur && Math.hypot(q0[0] - cur[0], q0[1] - cur[1]) > res ? R.route(cur, q0, SEWN) : null;
+      if (straight && straight.sewnMm <= SEWN) r = straight;   // (one search toward it; the flood below only when that fails)
+      else if (cur) {
+        const way = R.reach(cur, SEWN, inOrder ? [left[0][0]] : [left[0][0], left[0][left[0].length - 1]]);
         search: for (let i = 0; i < left.length; i++) for (const back of [false, true]) {
           const q = back ? left[i][left[i].length - 1] : left[i][0];
           if (Math.hypot(q[0] - cur[0], q[1] - cur[1]) <= res) { k = i; r = null; rev = back; break search; }
@@ -302,6 +317,7 @@ export function routeFill(groups, comp, mask, res, budget = routeBudget(), worn 
       }
       let p = left.splice(k, 1)[0]; if (rev) p = p.slice().reverse();
       const d = cur ? Math.hypot(p[0][0] - cur[0], p[0][1] - cur[1]) : Infinity;
+      if (cur && d > res && ((!r && gi < spare) || (inOrder && gi === groups.length - 1 && short(p)))) continue;
       // within 1 mm: sew straight on (skipping a first point that would make a stitch under 0.4 mm)
       if (cur && d <= res) out[out.length - 1].push(...(d < 0.4 * res ? p.slice(1) : p));
       else if (r && r.sewnMm <= SEWN) out[out.length - 1].push(...R.stitches(r), ...p);
@@ -318,6 +334,9 @@ export function routeFill(groups, comp, mask, res, budget = routeBudget(), worn 
 // poly: one closed outline, or several (holes too, even-odd); `inset` mm keeps the rows off the edge (a satin covers it)
 // opts.pattern: a FILL_PATTERNS key; opts.share: this layer's part of the density across the shape (see tatami);
 // opts.underlay: false for a second layer
+// Under the fill: an edge run 0.4 mm inside the outline in 2.5 mm stitches, then rows across the fill's own every
+// 2.5 mm in 3 mm stitches, kept 0.4 mm inside too (the fill's row ends cover both)
+const UNDER = { inset: 0.4, run: 2.5, rows: 2.5, stitch: 3 };
 // A shape drawn and measured for filling: its mask (inset), its separate parts and each pixel's distance to the edge.
 // None of it depends on how the shape is filled, so it's kept by the outlines, the inset and the scale: a change of
 // row spacing (30 wt thread, knit) drew and measured every filled shape again, two distance transforms and a labelling
@@ -341,23 +360,168 @@ function shaped(loops, inset, res) {
     for (let k = 0; k + 1 < cut.length; k += 2)
       for (let x = Math.max(0, Math.ceil((cut[k] - x0) * res - 0.5)); x < Math.min(w, Math.floor((cut[k + 1] - x0) * res - 0.5) + 1); x++) mask.data[y * w + x] = 1;
   }
+  const whole = inset ? mask.data.slice() : mask.data;   // (the shape before the inset comes off)
   if (inset) { const e = distanceTransform(mask); for (let i = 0; i < w * h; i++) if (e[i] <= inset * res) mask.data[i] = 0; }
-  const { labels, count } = label(mask), dt = distanceTransform(mask), parts = Array.from({ length: count + 1 }, () => []);
+  const { labels, count } = label(mask), parts = Array.from({ length: count + 1 }, () => []);
   for (let i = 0; i < w * h; i++) if (labels[i]) parts[labels[i]].push(i);
-  const v = { x0, y0, mask, labels, count, dt, parts };
+  // (each pixel's distance to the edge: only rows read off the drawing ask for it)
+  let dt = null;
+  const v = { x0, y0, mask, whole, labels, count, parts, get dt() { return (dt ||= distanceTransform(mask)); } };
   drawn.set(key, v); if (drawn.size > 6) drawn.delete(drawn.keys().next().value);
   return v;
 }
-export function fillPolygon(poly, { angle = FILL.angle, density = ROWS.solid, res = FILL.res, inset = 0, pattern = "tatami", share = null, underlay = true } = {}) {
+// A row's stretches inside drawn outlines, worked out from the outlines themselves: where the row's line crosses
+// their edges (even-odd), less every stretch within `d` of an edge (the line through each edge's capsule: one
+// stretch, since a capsule is convex). Exact, where a row read off the 8 px/mm drawing ended up to 0.19 mm off the
+// edge (a pixel's 0.125 mm and the half-pixel sampling step): a motif's 1.4 mm satin edge covers its fill's row ends
+// by 0.25 mm. Edges are met in order of v (rows are asked for from the lowest up), so a row looks only at the edges
+// near it. loops in px, U and V the row's directions.
+function outlineRows(loops, U, V, d) {
+  const E = [];
+  let v0 = Infinity, v1 = -Infinity;
+  for (const l of loops) for (let i = 0; i < l.length; i++) {
+    const p = l[i], q = l[(i + 1) % l.length];
+    const au = p[0] * U[0] + p[1] * U[1], av = p[0] * V[0] + p[1] * V[1], bu = q[0] * U[0] + q[1] * U[1], bv = q[0] * V[0] + q[1] * V[1];
+    if (av < v0) v0 = av; if (av > v1) v1 = av;
+    if (au !== bu || av !== bv) E.push([au, av, bu, bv, Math.min(av, bv) - d, Math.max(av, bv) + d]);
+  }
+  E.sort((a, b) => a[4] - b[4]);
+  let next = 0, live = [];
+  const at = (v) => {
+    while (next < E.length && E[next][4] <= v) live.push(E[next++]);
+    live = live.filter((e) => e[5] >= v);
+    const cut = [], off = [];
+    for (const [au, av, bu, bv] of live) {
+      if ((av <= v) !== (bv <= v)) cut.push(au + ((v - av) * (bu - au)) / (bv - av));
+      if (!d) continue;
+      let lo = Infinity, hi = -Infinity;
+      for (const [cu, cv] of [[au, av], [bu, bv]]) {
+        const k = v - cv;
+        if (Math.abs(k) < d) { const r = Math.sqrt(d * d - k * k); if (cu - r < lo) lo = cu - r; if (cu + r > hi) hi = cu + r; }
+      }
+      // (the edge's own band: along it t in 0..1, across it within d)
+      const dx = bu - au, dy = bv - av, L = Math.hypot(dx, dy), k = v - av;
+      let a = -Infinity, b = Infinity;
+      if (Math.abs(dx) > 1e-9) { const m = (-k * dy) / dx, n = (L * L - k * dy) / dx; a = Math.max(a, Math.min(m, n)); b = Math.min(b, Math.max(m, n)); }
+      else if (k * dy < 0 || k * dy > L * L) a = Infinity;
+      if (Math.abs(dy) > 1e-9) { const m = (k * dx - d * L) / dy, n = (k * dx + d * L) / dy; a = Math.max(a, Math.min(m, n)); b = Math.min(b, Math.max(m, n)); }
+      else if (Math.abs(k) > d) a = Infinity;
+      if (a < b) { if (au + a < lo) lo = au + a; if (au + b > hi) hi = au + b; }
+      if (lo < hi) off.push([lo, hi]);
+    }
+    cut.sort((a, b) => a - b); off.sort((a, b) => a[0] - b[0]);
+    const out = [];
+    for (let i = 0; i + 1 < cut.length; i += 2) {
+      let a = cut[i];
+      const b = cut[i + 1];
+      for (const [lo, hi] of off) { if (hi <= a) continue; if (lo >= b) break; if (lo > a) out.push([a, lo]); a = hi; if (a >= b) break; }
+      if (a < b) out.push([a, b]);
+    }
+    return out;
+  };
+  return { v0: v0 + d, v1: v1 - d, at };
+}
+// The rows of a drawn shape at an angle (see `tatami` for spacing, pull and share): each stretch pulled out by `pull`
+// at both ends (two that meet are one) and marked with the part of the shape it lies in (`shape.labels`).
+function exactRows(loops, shape, res, { angle, spacing, inset = 0, pull, share = null }) {
+  const th = (angle * Math.PI) / 180, U = [Math.cos(th), Math.sin(th)], V = [-Math.sin(th), Math.cos(th)];
+  const { v0, v1, at } = outlineRows(loops, U, V, inset * res), { w, h } = shape.mask, sp = spacing * res, P = pull * res, rows = [];
+  const part = (u, v) => { const X = Math.round(u * U[0] + v * V[0]), Y = Math.round(u * U[1] + v * V[1]); return X >= 0 && Y >= 0 && X < w && Y < h ? shape.labels[Y * w + X] : 0; };
+  for (let v = v0 + sp / 2, r = 0; v <= v1; r++) {
+    const k = share ? share((v - v0) / Math.max(v1 - v0, 1e-9)) : 1;
+    if (k < 0.15) { v += sp; continue; }
+    const ivs = [];
+    for (const [a, b] of at(v)) {
+      let id = 0;
+      for (const f of [0.5, 0.25, 0.75, 0.1, 0.9]) if ((id = part(a + (b - a) * f, v))) break;
+      const last = ivs[ivs.length - 1];
+      if (last && a - P <= last[1]) last[1] = b + P; else ivs.push(Object.assign([a - P, b + P], { part: id }));
+    }
+    rows.push({ v, r, ivs: ivs.filter((iv) => iv.part && iv[1] - iv[0] >= 0.6 * res) });
+    v += sp / k;
+  }
+  return { rows, U, V };
+}
+// An edge run: one line of stitches `d` px inside each outline of a part, sewn before anything else. It holds the
+// fabric to the stabilizer along the edge, where the rows pull hardest (the usual underlay of a tatami fill: edge
+// run, then a lattice across). Each outline point is moved `d` along its normal to the side that is inside; points
+// that land nearer the edge than 0.7 d (inside a sharp corner, a neck narrower than 2 d: looked for at eight places
+// round the point) are left out and the run broken there.
+function edgeRuns(loops, comp, mask, res, d, stitch) {
+  const { w, h } = mask, out = [];
+  const at = (x, y) => { const X = Math.round(x), Y = Math.round(y); return X >= 0 && Y >= 0 && X < w && Y < h && comp.labels[Y * w + X] === comp.id; };
+  const k = 0.7 * d, ok = ([x, y]) => at(x, y) && at(x + k, y) && at(x - k, y) && at(x, y + k) && at(x, y - k) && at(x + 0.7 * k, y + 0.7 * k) && at(x - 0.7 * k, y + 0.7 * k) && at(x + 0.7 * k, y - 0.7 * k) && at(x - 0.7 * k, y - 0.7 * k);
+  for (const l of loops) {
+    const q = resample(l, 0.5 * res, true), n = q.length, pieces = [[]];
+    if (n < 6) continue;
+    for (let i = 0; i < n; i++) {
+      const a = q[(i + n - 1) % n], b = q[(i + 1) % n], len = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1, nx = -(b[1] - a[1]) / len, ny = (b[0] - a[0]) / len;
+      const c = [[q[i][0] + nx * d, q[i][1] + ny * d], [q[i][0] - nx * d, q[i][1] - ny * d]].find(ok), cur = pieces[pieces.length - 1], last = cur[cur.length - 1];
+      if (!c || (last && Math.hypot(c[0] - last[0], c[1] - last[1]) > 1.5 * res)) { if (cur.length) pieces.push([]); if (!c) continue; }
+      pieces[pieces.length - 1].push(c);
+    }
+    // (a run that goes all the way round closes on itself; one broken only at the outline's start is joined up)
+    if (pieces.length === 1 && pieces[0].length === n) pieces[0].push(pieces[0][0]);
+    else if (pieces.length > 1 && pieces[0].length && pieces[pieces.length - 1].length && Math.hypot(pieces[0][0][0] - pieces[pieces.length - 1].at(-1)[0], pieces[0][0][1] - pieces[pieces.length - 1].at(-1)[1]) <= 1.5 * res) pieces[0] = [...pieces.pop(), ...pieces[0]];
+    for (const p of pieces) {
+      let len = 0;
+      for (let i = 1; i < p.length; i++) len += Math.hypot(p[i][0] - p[i - 1][0], p[i][1] - p[i - 1][1]);
+      if (len >= 4 * res) out.push(resample(p, stitch * res));
+    }
+  }
+  return out;
+}
+// opts.pull: how far each row runs past the outline at both ends (mm; the fabric's, core/recipes.js FILLS)
+// opts.raster: rows read off the 8 px/mm drawing, as every fill was until 2026-11 (the Open tab's re-stitching: its
+// outlines are traced from a drawing of the file's stitches already, stair-stepped)
+export function fillPolygon(poly, { angle = FILL.angle, density = ROWS.solid, res = FILL.res, inset = 0, pattern = "tatami", share = null, underlay = true, pull = FILLS.cotton.pull, raster = false } = {}) {
   const loops = Array.isArray(poly[0][0]) ? poly : [poly];
-  const { x0, y0, mask, labels, count, dt, parts } = shaped(loops, inset, res), paths = [];
+  const shape = shaped(loops, inset, res), { x0, y0, mask, labels, count, parts } = shape, paths = [];
   const toMm = (p) => p.map(([x, y]) => [x0 + (x + 0.5) / res, y0 + (y + 0.5) / res]);
+  if (raster) {
+    for (let id = 1; id <= count; id++) {
+      const comp = { id, labels, dt: shape.dt, pixels: parts[id] };
+      if (comp.pixels.length < 1.5 * res * res) continue;
+      const under = underlay ? tatami(mask, comp, res, { angle: angle + 90, spacing: 2.5, stitch: 3, inset: 0.4, pull: 0 }) : [];
+      const fill = tatami(mask, comp, res, { angle, spacing: density, stitch: 3.5, pull: 0.15, pattern, share });
+      paths.push(...routeFill([under, fill], comp, mask, res).map(toMm));
+    }
+    return paths;
+  }
+  const px = loops.map((l) => l.map(([x, y]) => [(x - x0) * res - 0.5, (y - y0) * res - 0.5]));
+  // a step between rows may leave the shape by the pull and a little, no more: a point further out than that (the
+  // drawing has nothing within that distance of it, looked for at eight places round it) splits the path, as in `tatami`
+  const on = (x, y) => { const X = Math.round(x), Y = Math.round(y); return X >= 0 && Y >= 0 && X < mask.w && Y < mask.h && mask.data[Y * mask.w + X] === 1; };
+  const far = (pull + 0.15) * res, RING = [[1, 0], [-1, 0], [0, 1], [0, -1], [0.7, 0.7], [0.7, -0.7], [-0.7, 0.7], [-0.7, -0.7]];
+  const leaves = (p, q) => {
+    const n = Math.ceil(Math.hypot(q[0] - p[0], q[1] - p[1]) / (0.2 * res));
+    for (let i = 1; i < n; i++) {
+      const x = p[0] + ((q[0] - p[0]) * i) / n, y = p[1] + ((q[1] - p[1]) * i) / n;
+      if (!on(x, y) && !RING.some(([dx, dy]) => on(x + dx * far, y + dy * far) || on(x + dx * far * 0.5, y + dy * far * 0.5))) return true;
+    }
+    return false;
+  };
+  const across = underlay ? exactRows(px, shape, res, { angle: angle + 90, spacing: UNDER.rows, inset: inset + UNDER.inset, pull: 0 }) : null;
+  const along = exactRows(px, shape, res, { angle, spacing: density, inset, pull, share });
+  const of = (R, id, stitch, pat) => sewRows(R.rows.map((row) => ({ ...row, ivs: row.ivs.filter((iv) => iv.part === id) })), R.U, R.V, res, stitch * res, pat, leaves);
   for (let id = 1; id <= count; id++) {
-    const comp = { id, labels, dt, pixels: parts[id] };
+    const comp = { id, labels, pixels: parts[id] };
     if (comp.pixels.length < 1.5 * res * res) continue;
-    const under = underlay ? tatami(mask, comp, res, { angle: angle + 90, spacing: 2.5, stitch: 3, inset: 0.4, pull: 0 }) : [];
-    const fill = tatami(mask, comp, res, { angle, spacing: density, stitch: 3.5, pull: 0.15, pattern, share });
-    paths.push(...routeFill([under, fill], comp, mask, res).map(toMm));
+    const edge = underlay ? edgeRuns(px, comp, mask, res, UNDER.inset * res, UNDER.run) : [];
+    // (sections taken strictly in row order, each from its first row: going to whichever end of the first was nearer
+    // sewed it backwards and stranded the rest behind it, 275 parts against 184 over 164 test shapes; each part is a
+    // trim. Where that still leaves parts, the sweep from the far side is tried too and the fewer kept: 30 motifs at
+    // 20 mm, 56 parts -> 49)
+    // (travel may use the inset band too: the satin the inset is there for covers it. A 20 mm snowflake's arms are
+    // 1 mm wide once inset, too thin for the router's 0.5 mm cells to join up)
+    const cell = inset ? (x, y) => (labels[y * mask.w + x] === id ? 1 : shape.whole[y * mask.w + x] ? 2 : 0) : null;
+    const groups = [edge, across ? of(across, id, UNDER.stitch, "tatami") : [], of(along, id, 3.5, pattern)];
+    let best = routeFill(groups, comp, mask, res, undefined, undefined, true, 1, cell);
+    if (best.length > 1) {
+      const other = routeFill([edge, groups[1], groups[2].map((p) => p.slice().reverse()).reverse()], comp, mask, res, undefined, undefined, true, 1, cell);
+      if (other.length < best.length) best = other;
+    }
+    paths.push(...best.map(toMm));
   }
   return paths;
 }

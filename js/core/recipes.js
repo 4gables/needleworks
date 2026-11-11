@@ -80,3 +80,19 @@ export const PICTURES = { fleck: 3, enclosed: 0.8, eyes: 6, start: 4, edge: 0.75
 // is two locks and two thread ends on a hairline. A fine line: `line` (1.5 until S1, reckoned before an arch
 // opened the gap: a Cookie "Sunday" 1.51 mm from its S once arched began 21 mm away).
 export const LINK = { gap: 0.5, pull: 0.3, most: 2.2, under: 0.3, line: 1.8 };
+
+// Fills by fabric. `pull`: how far each row runs past the outline at both ends, since the stitches draw the fabric in
+// along their length and the row ends up short (Wilcom's published pull compensation: 0.20 mm on cotton and drill,
+// 0.35 on T-shirt knit, 0.40 on fleece; 0.15 everywhere until 2026-11). `rows`: knit takes the standard spacing (a
+// dense fill puckers jersey and piqué). Every fill's row ends lie under a satin (a patch's or motif's edge, the
+// lettering sewn on it), so the pull decides how far under. A patch takes felt's pull whatever the design is sewn on
+// (it is sewn on its own fabric); only its rows follow the design's fabric.
+export const FILLS = {
+  cotton: { pull: 0.2, rows: ROWS.solid },
+  felt: { pull: 0.2, rows: ROWS.solid },
+  denim: { pull: 0.2, rows: ROWS.solid },
+  canvas: { pull: 0.2, rows: ROWS.solid },
+  knit: { pull: 0.35, rows: ROWS.standard },
+  towel: { pull: 0.4, rows: ROWS.solid },
+};
+export const fillRecipe = (fabric) => FILLS[fabric] || FILLS.cotton;

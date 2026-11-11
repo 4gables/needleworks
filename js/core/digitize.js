@@ -365,7 +365,7 @@ function build(img, analysis, opts) {
       const under = tatami(mask, comp, res, { angle: angle + 90, spacing: 2.5, stitch: 3, inset: 0.4, pull: 0 });
       // pull compensation widens a fill past its edge; on thin letters that closes the gaps between them
       const fill = tatami(mask, comp, res, { angle, spacing: o.density, stitch: 3.5, pull: widthMm < 2 ? 0.05 : 0.15 });
-      blocks.push({ centre, paths: routeFill([under, fill], comp, mask, res, budget, WORN, PICTURES.edge).map(toMm), kind: "fill" });
+      blocks.push({ centre, paths: routeFill([under, fill], comp, mask, res, budget, WORN, false, 0, null, PICTURES.edge).map(toMm), kind: "fill" });
       filled[comp.id] = 1;
     }
     if (anyThin) {

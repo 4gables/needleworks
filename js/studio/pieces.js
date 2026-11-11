@@ -8,7 +8,7 @@ import { FILL_PATTERNS, fillPolygon } from "../core/fill.js";
 import { APPLIQUE_FONTS, FONTS, fontOf } from "../core/fonts.js";
 import { machineThreads } from "../core/formats.js";
 import { MARGIN } from "../core/machines.js";
-import { BORDERS as EDGES, ROWS, fillFor, letterRecipe, satinFor } from "../core/recipes.js";
+import { BORDERS as EDGES, fillFor, fillRecipe, letterRecipe, satinFor } from "../core/recipes.js";
 import { back, bounds, circle, edgeWalk, enter, filletPolygon, followRun, loop, moveCost, normals, rings, run, satin, within, zigzag } from "../core/geom.js";
 import { counterPockets, distanceTransform, order } from "../core/raster.js";
 import { strokes } from "../core/text.js";
@@ -372,11 +372,13 @@ export function pieceStages(p, fab = cloth) {
   const place = placer(p);
   return recent(built, key).map((st) => placed(st, place));
 }
-// what else a piece's stitches depend on: the fabric only for lettering (towel, knit) and a patch's fill (knit); the
+// what else a piece's stitches depend on: the fabric only for lettering (towel, knit) and a fill (its recipe); the
 // thread weight for lettering (Automatic sews small letters for 60 wt), else only 30 and 60 (`sd`, `fd`: Automatic is 40)
 function sewnWith(p, fab) {
   const lettering = p.kind === "text" || p.kind === "monogram";
-  const f = lettering ? (fab === "towel" || fab === "knit" ? fab : "") : p.kind === "frame" && p.border === "patch" && fab === "knit" ? fab : "";
+  // (a fill's recipe, core/recipes.js FILLS: a patch's, a filled motif's, the motif either side of lettering)
+  const rec = fillRecipe(fab), fill = p.kind === "frame" && p.border === "patch" ? rec.rows : p.kind === "motif" || (lettering && p.deco) ? rec.pull + "/" + rec.rows : "";
+  const f = (lettering ? (fab === "towel" || fab === "knit" ? fab : "") : "") + fill;
   return "\n" + f + "\n" + (lettering || wt === "30" || wt === "60" ? wt : "");
 }
 // a stage moved into place: its stitches, its cut outlines and the filled area it covers (`solid`: closed loops,
@@ -554,7 +556,7 @@ function localStages(p, fab = "cotton") {
       const [x0, y0, x1, y1] = bounds(paths.flat()), s = Math.max(6, Math.min(p.size * 0.75, 30)), gap = s * 0.35;
       // (a motif that faces one way is mirrored on one side, so both face the words: two bunnies looked the same way)
       const face = FACING[p.deco] || 0;
-      const side = (dx, f) => motifStitches(motifOutlines(MOTIFS[p.deco].d, s), "fill").map((q) => q.map(([x, y]) => [f * x + dx, y + (y0 + y1) / 2]));
+      const side = (dx, f) => motifStitches(motifOutlines(MOTIFS[p.deco].d, s), "fill", fab).map((q) => q.map(([x, y]) => [f * x + dx, y + (y0 + y1) / 2]));
       paths = [...side(x0 - gap - s / 2, face < 0 ? -1 : 1), ...paths, ...side(x1 + gap + s / 2, face > 0 ? -1 : 1)];
     }
     const words = unswashed(p.text).replace(/\s*\n\s*/g, " / ").trim();
@@ -660,7 +662,7 @@ function localStages(p, fab = "cotton") {
     // (named as a motif: "Sews the baby." for the onesie drawing)
     const m = MOTIFS[p.motif] || MOTIFS.heart, loops = motifOutlines(m.d, p.size), name = m.name.toLowerCase();
     if (p.style === "applique") stages = appliqued(loops, p.color, `the ${name} motif`, `the ${name} motif`, "around it (and inside any holes)");
-    else if (loops.length) stages = [{ color: p.color, paths: motifStitches(loops, p.style), sews: `Sews the ${name} motif${p.style === "outline" ? " as an outline" : ""}.`, ...(p.style === "outline" ? {} : { solid: loops }) }];
+    else if (loops.length) stages = [{ color: p.color, paths: motifStitches(loops, p.style, fab), sews: `Sews the ${name} motif${p.style === "outline" ? " as an outline" : ""}.`, ...(p.style === "outline" ? {} : { solid: loops }) }];
   } else if (p.kind === "file") {
     // (each block keeps the thread name the file gives it: all named after the piece, a combined gnome.pes listed
     // "gnome" for every thread)
@@ -697,7 +699,9 @@ function filled(loops, opts) {
 // thinning out as the second fills in (row spacing changes gradually in each), the second with no underlay of its
 // own (Hatch's colour blend, on one needle)
 export function patchFill(p, loops, fab, name = shapeOf(p).name.toLowerCase()) {
-  const base = { density: fd(fab === "knit" ? ROWS.standard : ROWS.solid), pattern: p.pattern || "tatami" }, color = p.fill || p.color;
+  // (the rows follow what the patch goes on, lighter on knit; the pull is the patch's own fabric's, felt or twill,
+  // whatever it's sewn on later: a towel design's patch is cotton's, and a change to Towel fills nothing again)
+  const base = { density: fd(fillRecipe(fab).rows), pull: fillRecipe("felt").pull, pattern: p.pattern || "tatami" }, color = p.fill || p.color;
   const st = !p.blend || p.blend === color ? [{ color, paths: filled(loops, base), sews: `Fills the ${name} patch.`, patchFill: true }]
     : [{ color, paths: fillPolygon(loops, { ...base, share: (f) => 1 - f }), sews: `Fills the ${name} patch, fading out.`, patchFill: true },
       { color: p.blend, paths: fillPolygon(loops, { ...base, underlay: false, share: (f) => f }), sews: `Blends the second colour in across the patch.`, patchFill: true }];
@@ -708,9 +712,9 @@ export function patchFill(p, loops, fab, name = shapeOf(p).name.toLowerCase()) {
 
 // a motif filled (tatami inside, then a narrow satin edge over the row ends) or as a satin outline
 // (outline and holes nearest first, each from where the needle is: `rings`)
-function motifStitches(loops, style) {
+function motifStitches(loops, style, fab = cloth) {
   if (style === "outline") return rings(loops, (l) => edgeSatin(l, 2.2));
-  const fill = filled(loops, { inset: 0.6, density: fd(ROWS.solid) }), end = fill[fill.length - 1];
+  const rec = fillRecipe(fab), fill = filled(loops, { inset: 0.6, density: fd(rec.rows), pull: rec.pull }), end = fill[fill.length - 1];
   return [...fill, ...rings(loops, (l) => [loop(run(l, 2.0, true)), loop(satin(l, 1.4, sd(0.4), 0.2, true))], end && end[end.length - 1])];
 }
 
