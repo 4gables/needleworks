@@ -103,7 +103,12 @@ Phase 1, the base (no visible change, byte-identical batches):
     app.js when things happen but never while it loads (app.js loads after its sections)
   - Left for a housekeeping pass (no user-visible gain, so behind F3 and the stitch rounds): one worker job queue
     (four hand-written ones today, one with a time limit); matrix into files_flow; bounding-box copies
-- [ ] **F3 Atomic releases**: one release's files per load, never a mix
+- [x] **F3 Atomic releases** (v25): sw.js lists every file with its SHA-256 and installs a release only when every
+  file fetched is its copy; the page's files come from that one set; a new release waits for the page's Reload or for
+  every tab to close; the cache's name carries a fingerprint of the set. `tests/upgrade.sh` proves it in a browser
+  (whole on A; B waits and is offered; Reload gives all B; a half-published C is refused); `sw.test` (CI) keeps the
+  hashes current. The name check stays a scratchpad tool (it needs TypeScript fetched): `sw.test`'s import check is
+  the in-repo guard for moved code
 
 Phase 2, stitch quality (measured against the scoreboard, VM-checked):
 - [ ] **S1 One sequencer** (entry, exit, hidden travel, trim or loose, locks in cover: shared by every builder)

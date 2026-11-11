@@ -1,11 +1,37 @@
-// sw.js precaches every file the page can need offline: every module, font and image in the repo.
-import { readFileSync, readdirSync } from "fs";
+// sw.js precaches every file the page can need offline: every module, font and image in the repo, each with the
+// SHA-256 of this release's copy (the service worker installs a release only when every file it fetched is that copy).
+// `node tests/sw.test.mjs --write` fills the hashes in after files change; without it a stale hash fails here (CI),
+// since a release with one would never install.
+import { createHash } from "crypto";
+import { readFileSync, readdirSync, writeFileSync } from "fs";
 const sw = readFileSync("sw.js", "utf8"), listed = new Set([...sw.matchAll(/"([^"]+\.(?:js|woff2|png|css|html|webmanifest))"/g)].map((m) => m[1]));
 const want = [["js", /\.js$/], ["js/core", /\.js$/], ["js/studio", /\.js$/], ["fonts", /\.woff2$/], ["assets", /\.png$/]]
   .flatMap(([d, re]) => readdirSync(d).filter((f) => re.test(f)).map((f) => `${d}/${f}`));
 const missing = want.filter((f) => !listed.has(f)), gone = [...listed].filter((f) => f.includes("/") && !want.includes(f) && f !== "css/app.css");
 if (missing.length || gone.length) { console.error("sw.js FILES out of date. Missing:", missing, "no longer exist:", gone); process.exit(1); }
 console.log(`sw: ${want.length} files listed`);
+
+const sha = (f) => createHash("sha256").update(readFileSync(f)).digest("hex");
+const entries = [...sw.matchAll(/^  "([^"]+)": "([0-9a-f]*)",$/gm)].map((m) => ({ file: m[1], hash: m[2], line: m[0] }));
+if (entries.length !== listed.size) { console.error(`sw.js FILES: ${entries.length} entries with a hash, ${listed.size} files named: one line each, "path": "hash",`); process.exit(1); }
+const stale = entries.filter((e) => e.hash !== sha(e.file));
+if (stale.length && process.argv.includes("--write")) {
+  let out = sw;
+  for (const e of stale) out = out.replace(e.line, `  "${e.file}": "${sha(e.file)}",`);
+  writeFileSync("sw.js", out);
+  console.log(`sw: ${stale.length} hashes written (${stale.map((e) => e.file).join(", ").slice(0, 200)})`);
+} else if (stale.length) {
+  console.error(`sw.js hashes are stale for ${stale.length} files (run node tests/sw.test.mjs --write, and bump CACHE for a release):\n  ` + stale.map((e) => e.file).join("\n  "));
+  process.exit(1);
+} else console.log(`sw: ${entries.length} hashes match`);
+// the fingerprint of the set in the cache's name
+{
+  const now = readFileSync("sw.js", "utf8"), set = createHash("sha256").update([...now.matchAll(/^  "([^"]+)": "([0-9a-f]*)",$/gm)].map((m) => m[1] + m[2]).join("\n")).digest("hex").slice(0, 12);
+  const has = (now.match(/^const SET = "([0-9a-f]*)";$/m) || [])[1];
+  if (has === undefined || !/const CACHE = `needleworks-v\d+-\$\{SET\}`/.test(now)) { console.error("sw.js: CACHE must be `needleworks-vN-${SET}` with a const SET line"); process.exit(1); }
+  if (has !== set && process.argv.includes("--write")) { writeFileSync("sw.js", now.replace(/^const SET = "[0-9a-f]*";$/m, `const SET = "${set}";`)); console.log(`sw: set ${set}`); }
+  else if (has !== set) { console.error("sw.js SET is stale (run node tests/sw.test.mjs --write)"); process.exit(1); }
+}
 
 // Every module's imports resolve: the file exists, is in the offline list, and exports each name asked for (through
 // `export { x } from` too). A mistyped path or a name left behind when code moved to another file stops the whole

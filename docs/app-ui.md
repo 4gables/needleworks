@@ -71,6 +71,11 @@ Reference for this part of Needleworks: the rules, the reason for each (it stops
 - Sew along (`#along`): a step per screen, minutes = stitches / 550, own Have ready, Screen Wake Lock (retaken on
   visibilitychange). Share text carries the steps (`shareText`). On my item (`#item`): a measured photo under the
   design at true size (`state.backdrop`), never uploaded or saved.
-- Offline (`sw.js`, `needleworks-vN`, bumped each release): precaches `FILES`, network first, cache after 3 s; add every new file to
-  `FILES`. https only. Share target: POST `./?share` -> `needleworks-shared` cache -> `./?shared` -> `route()`.
+- Offline and one release at a time (`sw.js`, cache `needleworks-vN-<set>`): `FILES` lists every file with its
+  SHA-256 (`node tests/sw.test.mjs --write`); add every new file there. Install fetches each past the browser's own
+  cache and keeps the release only if every file is its copy; the page's own files are then served from that set
+  alone (anything else, a test page, from the network); Google's text fonts are network first, the cached copy after
+  3 s. A new release waits: app.js offers "A new version of Needleworks is ready. Reload", and the worker takes over
+  on that (`activate` message) or when every tab is closed. https only (`?sw` on 127.0.0.1 for tests/upgrade.sh).
+  Share target: POST `./?share` -> `needleworks-shared` cache -> `./?shared` -> `route()`.
 - A hoop change drops other tabs' designs. Min/max over stitches uses loops (`Math.min(...pts)` overflows past ~110k).

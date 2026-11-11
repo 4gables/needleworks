@@ -800,7 +800,21 @@ selBox = studio.selBox;
 setMode((location.hash || "#design").slice(1), false);
 
 // installable and offline (sw.js); a picture or design shared to the installed app opens straight away
-if ("serviceWorker" in navigator && location.protocol === "https:") navigator.serviceWorker.register("sw.js").catch(() => {});
+// A new release installs beside the one that's running and waits: the page offers it, and reloads into it when it has
+// taken over (sw.js: a page never runs one release's files beside another's). Its design is kept in the browser, so
+// nothing is lost by the reload. (`?sw` on this computer: tests/ only; the page is otherwise https.)
+if ("serviceWorker" in navigator && (location.protocol === "https:" || (location.hostname === "127.0.0.1" && new URLSearchParams(location.search).has("sw")))) {
+  let reloading = false;
+  const offer = (reg) => toast("A new version of Needleworks is ready.", { label: "Reload", run: () => { reloading = true; reg.waiting?.postMessage("activate"); } });
+  navigator.serviceWorker.addEventListener("controllerchange", () => { if (reloading) location.reload(); });
+  navigator.serviceWorker.register("sw.js").then((reg) => {
+    if (reg.waiting && navigator.serviceWorker.controller) offer(reg);
+    reg.addEventListener("updatefound", () => {
+      const w = reg.installing;
+      w?.addEventListener("statechange", () => { if (w.state === "installed" && navigator.serviceWorker.controller) offer(reg); });
+    });
+  }).catch(() => {});
+}
 if (new URLSearchParams(location.search).has("shared")) (async () => {
   try {
     const c = await caches.open("needleworks-shared"), r = await c.match("shared");

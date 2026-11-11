@@ -48,7 +48,12 @@ Automated checks that each guard a bug class (add a line with every new guard):
   download, the Brother diff after writer changes.
 - App verdict = checker: `quality.js` agrees with `pe900_check.py` on every batch and sample file.
 - Doctor fixes give valid, passing files at every size (`doctor.test.mjs`).
-- Offline completeness: every module, font, icon in `FILES` (`sw.test.mjs`).
+- Offline completeness: every module, font, icon in `FILES` (`sw.test.mjs`). It also checks every import resolves to a file of the app that exports the
+  name (a mistyped path stops the page loading; nothing else in Node sees it) and that sw.js's hashes and set
+  fingerprint are current.
+- One release at a time, never a mix: `zsh tests/upgrade.sh` (~1.5 min; three copies of the site served one after
+  another: stays whole on the running release, offers the new one, refuses a half-published one). `check.sh` runs it
+  when sw.js or app.js's registration changes.
 - Each check below would have caught the past bugs of its class; run the browser ones after touching their area.
   Browser checks need `batch_server.py` and `node tests/cdp.mjs PORT start DIR`.
   - Known problems shown on every surface, one vocabulary, jargon lint: `node tests/surfaces.mjs CDP http://127.0.0.1:HP
