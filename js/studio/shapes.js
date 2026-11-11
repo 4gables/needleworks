@@ -102,7 +102,7 @@ export function frontPanel(f) {
   const [, top, , bot] = bounds(shapeOf(f).path(f.w, f.h));
   return f.border === "zip" ? [f.y + zipY(f, top) + 7, f.y + bot] : hasEye(f) && !eyeWide(f) ? [f.y + eyeAt(f)[1] + EYE_CLEAR, f.y + bot] : [f.y + top, f.y + bot];
 }
-export const BORDERS = { line: "Thin line", bold: "Bold line", satin: "Satin border", patch: "Filled patch", applique: "Appliqué", ith: "In the hoop (two-sided)", zip: "Zipper pouch (in the hoop)" };
+export const BORDERS = { line: "Thin line", bold: "Bold line", fancy: "Decorative line", satin: "Satin border", patch: "Filled patch", applique: "Appliqué", ith: "In the hoop (two-sided)", zip: "Zipper pouch (in the hoop)" };
 // (as small as Fit to hoop makes things, so a saved design opens as it was: a fitted 6.5 mm monogram reopened at 10;
 // the editor warns about sizes too small to stitch)
 export const MIN = 0.5;

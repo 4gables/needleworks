@@ -145,3 +145,24 @@ export const EASE = { cap: 19, back: [0.8, 1.5, 2.2, 3], deep: 0.65, show: 0.3, 
 // beyond the lock's own far hit (0.45: no stitch of the lock is then under 0.4 mm; halfway between its two hits made
 // two of 0.35, which the file rounds to the checker's tiny 0.3).
 export const LOCKS = { line: 0.25, past: 0.45 };
+
+// --- N2: fills, borders and quilting ---
+// A patch's satin edge (BORDERS.edge: 4 mm wide, its middle 0.2 mm inside the outline) reaches 2.2 mm in; the fill
+// stops 1 mm in, so the fill's outer 1.2 mm lies under the satin. Travel within `cover` of the fill's edge is hidden.
+export const PATCH = { cover: 1.0 };
+// Straight-line quilting (studio/quilt.js `lines`): lines `stripes` mm apart, or two sets `cross` mm apart at right
+// angles, at `angle` degrees so no line runs along the weave. A hand quilter's crosshatch is 1/2 to 1 in apart on a
+// bed quilt; in a 4 to 5 in block 8 to 10 mm still reads as a pattern and holds thin batting everywhere (the stipple
+// here is 5 mm apart, the echo 4). Stitches up to `stitch` mm, as the other quilting; no stretch under `min` mm,
+// and none that stays within `sliver` mm of the frame line all its way (it read as a second, crooked border).
+export const QUILT_LINES = { stripes: 8, cross: 10, angle: 45, stitch: 2.5, min: 4, sliver: 3 };
+// A fill in rings (core/fill.js `ringFill`): the first ring `first` mm inside the outline (half a thread: the
+// stitches lie along the edge, so nothing pulls short and there is no pull to add), the rest a row's spacing apart;
+// stitches up to `stitch` mm, shorter wherever a stitch would leave the ring's line by `off` mm (a third of a
+// thread: corners and small rings keep their shape); each ring sewn `lap` mm past its
+// start; no ring under `least` mm round (the middle: a ring that small is three hits in one spot).
+export const CONTOUR = { first: 0.2, stitch: 3, lap: 1.5, least: 4, off: 0.12 };
+// Borders with a shape to them (studio/borders.js). blanket: a home machine's blanket stitch for appliqué is 2.5 to
+// 3.5 mm long and wide (Brother's and Bernina's appliqué guides): 3 and 3. scallop: 7 mm each, 2.2 high, six stitches
+// to a scallop (1.4 to 1.6 mm: round, none short). diamond: 5 mm each, 1.6 either side of the line (stitches 3 mm).
+export const BORDER_RUNS = { blanket: { step: 3, bite: 3 }, scallop: { unit: 7, rise: 2.2, per: 6 }, diamond: { unit: 5, half: 1.6 } };

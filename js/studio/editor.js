@@ -3,6 +3,7 @@
 // motif settings), drawn from the piece as it is. The editor hands in its state and helpers as S.
 // (Part of ui.js until 2026-11.)
 import { QUILTS } from "./quilt.js";
+import { COVERS, TRIMS } from "./borders.js";
 import { FILL_PATTERNS } from "../core/fill.js";
 import { NAVY } from "./starters.js";
 import { MOTIFS } from "./motifs.js";
@@ -71,6 +72,8 @@ export function editorPanel(S) {
       h += `<div class="field"><span>Motif</span><div class="motifs" role="group" aria-label="Motif">${Object.entries(MOTIFS).map(([k, m]) => `<button type="button" data-motif="${k}" aria-pressed="${k === p.motif}" title="${m.name}"><svg viewBox="0 0 256 256" aria-hidden="true"><path d="${m.d}"/></svg></button>`).join("")}</div></div>`;
       h += S.range("size", "Size", 10, 120, p.size);
       h += S.seg("style", { fill: "Filled", outline: "Outline", applique: "Appliqué" }, p.style || "fill");
+      // (rows one way across it, or rings that follow its outline)
+      if ((p.style || "fill") === "fill") h += `<div class="field"><span>Fill</span>${S.seg("pattern", { tatami: "Rows", contour: "Rings" }, p.pattern || "tatami")}</div>`;
       if (p.style === "applique") h += `<p class="hint">Sews an outline, pauses for you to lay fabric on and trim it, then sews satin stitch round the edges. 50 mm or bigger cuts most easily.</p>`;
     } else if (p.kind === "letters") {
       h += `<label class="field"><span>Letters</span><input type="text" data-k="text" value="${api.escapeHtml(p.text)}" data-max="${MAX_INITIALS}" autocomplete="off" spellcheck="false"></label>` + cutHint;
@@ -83,6 +86,9 @@ export function editorPanel(S) {
       if (p.shape !== "circle") h += S.range("h", "Height", S.FRAME_MIN, 170, p.h);
       // (a zipper across a heart's lobes or a diamond's point makes no pouch)
       h += S.seg("border", Object.fromEntries(Object.entries(BORDERS).filter(([k]) => k !== "zip" || ["square", "oval", "circle"].includes(p.shape) || p.border === "zip")), p.border);
+      if (p.border === "fancy") h += `<div class="field"><span>Line</span>${S.seg("trim", TRIMS, p.trim || "scallop")}</div>`;
+      if (p.border === "applique") h += `<div class="field"><span>Edge</span>${S.seg("cover", COVERS, p.cover || "satin")}</div>`
+        + (p.cover === "blanket" ? `<p class="hint">A blanket stitch leaves the fabric's cut edge in sight: use felt, or cotton with fusible web ironed on its back, so it doesn't fray.</p>` : "");
       if (p.border === "zip") h += `<p class="hint">A lined zipper pouch made in the hoop: the zipper, the front in two folded pieces, what goes on the front (the pieces below it in the list), then the back and one seam through everything. Fabric sizes are under “How to stitch it”.</p>`;
       if (p.border === "patch") {
         p.fill ||= NAVY;
@@ -103,7 +109,7 @@ export function editorPanel(S) {
       // (made another before anything was put on the first: what's on this one copied onto the empty ones, placed alike)
       const bare = S.sameTargets(p);
       if (bare.length) h += ` <button type="button" class="link" data-same-on>Put the same on the other ${bare.length === 1 ? "one" : `${bare.length}`}</button>`;
-      if (p.border === "applique") h += `<p class="hint">Sews an outline, pauses for you to lay fabric on and trim it, then covers the edge in satin stitch. The steps are under “How to stitch it”.</p>`;
+      if (p.border === "applique") h += `<p class="hint">Sews an outline, pauses for you to lay fabric on and trim it, then ${p.cover === "blanket" ? "sews a blanket stitch round the edge" : "covers the edge in satin stitch"}. The steps are under “How to stitch it”.</p>`;
     } else {
       // a design file is resized as Open a design resizes it: re-stitched at the new size (`resizeFile`), so it can
       // shrink with the words added to it (it could only be moved and turned: Fit to hoop shrank just the words)

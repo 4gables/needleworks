@@ -450,7 +450,7 @@ export function initStudio(api) {
     const f = pieces.filter((p) => p.kind === "frame");
     if (f.some((p) => p.border === "patch")) return "A patch is sewn on its own felt or twill (see Have ready)";
     if (f.some((p) => p.border === "ith" || p.border === "zip")) return "An in-the-hoop project is sewn on the fabric in its Have ready list";
-    if (f.some((p) => p.quilt === "stipple" || p.quilt === "echo")) return "Quilting is sewn through a quilt sandwich (see Have ready)";
+    if (f.some((p) => p.quilt && p.quilt !== "none")) return "Quilting is sewn through a quilt sandwich (see Have ready)";
     return "";
   }
   function lettered() { return pieces.some((p) => p.kind === "text" || p.kind === "monogram"); }

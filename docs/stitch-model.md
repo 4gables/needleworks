@@ -119,3 +119,21 @@ Reference for this part of Needleworks: the rules, the reason for each (it stops
   Only where the line goes on as far as the lock reaches (1.15 mm): on a dot it made a fine-line i's dot a bar.
 - **Left:** pictures build without easing (8 of 28 batch pictures still peak at 24: `digitize.js`); towel names in
   the widest scripts still reach 24 at one or two turns; a border's sharp corner is a fan, not a mitre.
+
+- **Travel under a patch's edge** (`cover`, `recipes.js` `PATCH`): the satin edge reaches 1.2 mm over a patch's fill,
+  so travel within 1 mm of the fill's outline is hidden whatever is sewn already (those router cells are never
+  counted as finished). A section stranded behind finished rows is reached round the edge: heart patch with a name 2
+  trims -> 1, scallop patch 4 -> 1 (the one left is a letter's counter, a separate island). Tried and dropped:
+  entering sections at either end when a fill is still in parts (no file gained).
+- **Rings** (`pattern: "contour"`, `ringFill`, `recipes.js` `CONTOUR`): the levels of the distance from the edge,
+  the first 0.2 mm in and then a row apart, read off the drawing by marching squares (each square of four pixel
+  centres a level passes through holds a piece of its line), evened over 0.6 mm. Stitches up to 3 mm, shorter
+  wherever one would leave the ring's line by 0.12 mm: even 3 mm stitches cut every corner (a bare line along a
+  square's diagonals). Sewn outside in, each ring from the point nearest the needle and 1.5 mm past its start (the
+  starts drift round, no seam); where the shape pinches into separate middles all but the biggest is sewn from its
+  centre out, reached through cloth its own rings then cover; a hole's rings are sewn from where they meet the
+  outline's back to the hole. Where rings from two sides meet they are up to two rows apart: the stretches of the
+  half-way level with no ring within 0.8 of a row are sewn as open lines (bare cloth along a heart's cleft and round
+  a hole, a row wide, before). No ring under 4 mm round (the middle). No pull is added: the stitches lie along the
+  edge. A blend's layers stay rows. 60 mm circle: 1 path, 3,370 stitches, ~155 ms against ~30 for rows (kept by
+  `filled` and, carved, worked out in the worker). Known: a crest stretch that only a jump reaches is left bare.
