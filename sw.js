@@ -39,6 +39,7 @@ const FILES = [
   "js/core/geom.js",
   "js/core/colour.js",
   "js/core/density.js",
+  "js/core/fill.js",
   "js/core/machines.js",
   "js/core/recipes.js",
   "js/core/raster.js",

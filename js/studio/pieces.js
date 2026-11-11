@@ -4,11 +4,11 @@
 // Uses the shared lettering and stitch engines and returns a Design; the PES file is written by the locked
 // writer in js/core/formats.js, which nothing here touches.
 import { Design } from "../core/design.js";
-import { DENSITY, FILL_PATTERNS, fillPolygon } from "../core/digitize.js";
+import { FILL_PATTERNS, fillPolygon } from "../core/fill.js";
 import { APPLIQUE_FONTS, FONTS, fontOf } from "../core/fonts.js";
 import { machineThreads } from "../core/formats.js";
 import { MARGIN } from "../core/machines.js";
-import { BORDERS as EDGES, fillFor, letterRecipe, satinFor } from "../core/recipes.js";
+import { BORDERS as EDGES, ROWS, fillFor, letterRecipe, satinFor } from "../core/recipes.js";
 import { back, bounds, circle, edgeWalk, enter, filletPolygon, followRun, loop, moveCost, normals, rings, run, satin, within, zigzag } from "../core/geom.js";
 import { counterPockets, distanceTransform, order } from "../core/raster.js";
 import { strokes } from "../core/text.js";
@@ -1326,7 +1326,7 @@ function localStages(p, fab = "cotton") {
 // thinning out as the second fills in (row spacing changes gradually in each), the second with no underlay of its
 // own (Hatch's colour blend, on one needle)
 function patchFill(p, loops, fab, name = shapeOf(p).name.toLowerCase()) {
-  const base = { density: fd(fab === "knit" ? DENSITY.standard : DENSITY.solid), pattern: p.pattern || "tatami" }, color = p.fill || p.color;
+  const base = { density: fd(fab === "knit" ? ROWS.standard : ROWS.solid), pattern: p.pattern || "tatami" }, color = p.fill || p.color;
   const st = !p.blend || p.blend === color ? [{ color, paths: fillPolygon(loops, base), sews: `Fills the ${name} patch.`, patchFill: true }]
     : [{ color, paths: fillPolygon(loops, { ...base, share: (f) => 1 - f }), sews: `Fills the ${name} patch, fading out.`, patchFill: true },
       { color: p.blend, paths: fillPolygon(loops, { ...base, underlay: false, share: (f) => f }), sews: `Blends the second colour in across the patch.`, patchFill: true }];
@@ -1339,7 +1339,7 @@ function patchFill(p, loops, fab, name = shapeOf(p).name.toLowerCase()) {
 // (outline and holes nearest first, each from where the needle is: `rings`)
 function motifStitches(loops, style) {
   if (style === "outline") return rings(loops, (l) => edgeSatin(l, 2.2));
-  const fill = fillPolygon(loops, { inset: 0.6, density: fd(DENSITY.solid) }), end = fill[fill.length - 1];
+  const fill = fillPolygon(loops, { inset: 0.6, density: fd(ROWS.solid) }), end = fill[fill.length - 1];
   return [...fill, ...rings(loops, (l) => [loop(run(l, 2.0, true)), loop(satin(l, 1.4, sd(0.4), 0.2, true))], end && end[end.length - 1])];
 }
 

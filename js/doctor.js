@@ -5,7 +5,7 @@ import { COLOR_CHANGE, END, JUMP, STITCH, STOP, TRIM, designBlockAgrees, readEmb
 import { Design, relieve } from "./core/design.js";
 import { density } from "./core/density.js";
 import { LIMITS, MOVES } from "./core/recipes.js";
-import { fillPolygon } from "./core/digitize.js";
+import { fillPolygon } from "./core/fill.js";
 import { distanceTransform } from "./core/raster.js";
 import { contours } from "./studio/quilt.js";
 import { nearestBrotherThread, pecThread, pyRound } from "./core/threads.js";
