@@ -183,8 +183,8 @@ export function placing(S) {
       // out by trying, a tenth at a time down to 60 %. "+ Motif" on the coaster, full of its monogram, said only "Make
       // what's there smaller", and how much smaller was left to find by hand)
       // (from the size it's sewn at: its frame may have shrunk it already)
-      const fit = fittedSizes(S.pieces), sewnSize = (o) => fit.get(o.id) ?? o.size;
-      const on = onFrame(ith).filter((o) => o.size != null && !(o.rot || 0)).sort((a, b) => sewnSize(b) - sewnSize(a))[0];
+      const fit = fittedSizes(S.pieces), sewnSize = (o) => sewn(o, S.pieces, fit).size;
+      const on = onFrame(ith).filter((o) => sewnSize(o) != null && !(o.rot || 0)).sort((a, b) => sewnSize(b) - sewnSize(a))[0];
       const keep = S.pieces;
       for (let k = 0.9; on && k >= 0.6 - 1e-9; k -= 0.1) {
         const size = Math.round(sewnSize(on) * k * 2) / 2; if (size < S.least(on)) break;

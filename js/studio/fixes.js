@@ -240,7 +240,9 @@ export function fixes(S) {
   // frame was offered Fit to hoop alone, 26 -> 11 mm, where two lines kept it at 26: only a frame's shrink offered them.)
   function hoopLines(k) {
     const hp = api.hoop(), fw = hp.w - 5, fh = hp.h - 5, wide = (q) => { const b = pieceBounds(q); return b ? b[2] - b[0] : 0; };
-    const p = S.pieces.filter((q) => twoLines(q) && !(q.rot || 0) && !frameOf(q)).sort((a, b) => wide(b) - wide(a))[0];
+    // (lettering no frame fits: its size asked is the size sewn)
+    const fit = fittedSizes(S.pieces);
+    const p = S.pieces.filter((q) => twoLines(q) && !(q.rot || 0) && !fit.has(q.id)).sort((a, b) => wide(b) - wide(a))[0];
     if (!p) return null;
     let best = null;
     for (const [n, text] of [[2, twoLines(p)], [3, threeLines(p)]]) {
