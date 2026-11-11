@@ -27,8 +27,8 @@ Phase 1, the base (no visible change, byte-identical batches):
   - [x] a failed check is not a pass (`verdictOf`); a dead doctor worker frees its piece; unused helpers out
   - [x] `js/core/density.js`: one every-offset count for the checker's `peak` (same answers on 450 files, 4.5x
     faster) and the Thickness view (was offset 0 only)
-  - [ ] fabric and lettering numbers into `recipes.js` (satin widths, pull, underlay thresholds, lattice, border
-    and fill recipes), still byte-identical
+  - [x] lettering satins by fabric, satin border recipes and fill rows in `recipes.js` (439 of 439 identical).
+    Still inline, to move as S1-S3 rework their builders: satin width rule, towel lattice, underlay shapes
   - [ ] `relieve` and the doctor's `slide`/`crowd` onto `density.js` (their block rule differs from the checker's:
     a pause isn't a block edge for them, so they thin more than the checker asks; changing that changes bytes, so
     it goes with S2)
