@@ -45,6 +45,8 @@ if has '^js/(core/|studio/(pieces|compose|lettering|shapes|fabrics|files|starter
 fi
 
 run files_flow 600 node tests/files_flow.mjs $CDP $U
+# one release at a time (its own server and browser)
+has '^sw\.js|^js/app\.js' && run upgrade 400 zsh tests/upgrade.sh $((HP+2)) $((CDP+4))
 # speed on a busy design (15 pieces + appliqué letters): no everyday action may hold the page over 600 ms (they sit at
 # 380-455 ms; the target is 500, and runs vary by about a tenth)
 has '^js/(core/|studio/)' && run perf 900 node tests/perf.mjs $CDP $HP --start fifteen,fifteen-letters --budget 600

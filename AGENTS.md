@@ -134,8 +134,14 @@ Read the topic's file before changing its code; each holds the rules, their reas
 - Details, the VM check and what each check guards: `docs/testing.md`.
 
 ## Hosting
-- After a push, GitHub Pages serves files with `max-age=600`: for up to 10 minutes a browser can run new and old
-  modules together (2026-10-31: new ui.js with old pieces.js drew the bookmark squashed, its hole on top). Say so when
-  asking someone to look; Cmd+Shift+R clears it. Bump `CACHE` in sw.js with each release.
+- One release at a time (`sw.js`): every file is listed with its SHA-256, a release installs only when every file
+  fetched is its own copy, the page's files come from that one set (never the network), and a new release waits
+  for the page's "Reload" or for every tab to close. Reason: GitHub Pages serves files with `max-age=600`, and for
+  up to 10 minutes after a push a browser ran new and old modules together (2026-10-31: a new ui.js with the last
+  pieces.js drew the bookmark squashed). Guard: `zsh tests/upgrade.sh`.
+- To release: bump the number in `CACHE` (`needleworks-vN-${SET}`), then `node tests/sw.test.mjs --write` as the
+  last change (it writes the hashes and `SET`; CI fails on a stale one, since that release would never install),
+  merge as one commit, tag `vN`. After pushing, wait until the live sw.js shows vN. A visitor already on the site
+  gets the release at their next visit or by the Reload note; a first visit or Cmd+Shift+R gets it at once.
 - 4gables.com is the `4gables/website` repo's custom domain (a project site). Other repos appear under
   4gables.com/<repo>/ only if the org site repo is `4gables.github.io` with the custom domain.
