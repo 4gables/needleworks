@@ -37,7 +37,7 @@ Phase 1, the base (no visible change, byte-identical batches):
   - Moved on, with the reason: `relieve` and the doctor's `slide`/`crowd` onto `density.js` goes with S2 (their
     block rule differs from the checker's, so aligning it changes bytes); the marching-squares and scanline-fill
     copies go with S3 (it rewrites fills; merging them now risks vertex order); bounding-box copies with F2
-- [ ] **F2 Structure** (branch `f2-structure`; byte-identical after each step)
+- [x] **F2 Structure** (released v15-v24; batches byte-identical to v12 throughout)
   - [x] `js/core/fill.js`: the fill engine out of digitize.js (439 of 439 identical)
   - [x] pieces.js, first seams: `shapes.js`, `fabrics.js`, `files.js` (439 of 439 identical). Lettering, stages,
     fit and compose share the sew context and five caches: lift those into one module first, then split
@@ -101,7 +101,8 @@ Phase 1, the base (no visible change, byte-identical batches):
     `along.js` (Sew along, the names dialog), `threadui.js`, `picture.js` (the Picture tab), `opened.js` (the Open
     tab); app.js is 814 lines, from 2,276 (preview, toasts, download, tabs, start-up). A section may call into
     app.js when things happen but never while it loads (app.js loads after its sections)
-  - [ ] one worker job queue (four hand-written ones today, one with a time limit); matrix into files_flow
+  - Left for a housekeeping pass (no user-visible gain, so behind F3 and the stitch rounds): one worker job queue
+    (four hand-written ones today, one with a time limit); matrix into files_flow; bounding-box copies
 - [ ] **F3 Atomic releases**: one release's files per load, never a mix
 
 Phase 2, stitch quality (measured against the scoreboard, VM-checked):
