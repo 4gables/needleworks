@@ -102,14 +102,24 @@ Reference for this part of Needleworks: the rules, the reason for each (it stops
   - The first design's lettering font is asked for by a line of script in the page (the saved design's fonts, or
     the first starter's), not when the scripts are in. The offline copy (sw.js) and the other fonts start after
     the first preview: both took the line from it.
-  - Measured (local server with gzip and HTTP/2, three runs): first paint 4.0 -> 1.6 s; first preview 17.7 ->
-    16.3-16.5 s; desktop unchanged (0.9 s). What is left before the preview: scripts 376 KB, Great Vibes 158 KB,
-    the page's own fonts from Google 109 KB, Sacramento (the wordmark) 31 KB.
+  - The page's own text faces (Google Fonts, 109 KB) come after the first design on a first visit (owner's
+    choice, 2026-11-11): index.html's `nwFonts` adds their stylesheet when app.js `uiFonts` asks, alone for up to
+    5 s (the font list's 17 lettering fonts and the starters' wait for them: ui.js `facesOn`; behind those the
+    text changed face at 31 s, now 16.8 s). A visit that has had them (`nw:uifonts`) writes the stylesheet into
+    the page as before, so later visits and offline ones never show the stand-ins. Until they arrive the text is
+    in css/app.css's stand-in faces (`NW Body A/R`, `NW Display A/R`, `NW Mono`: Arial or Roboto set to the final
+    face's width with `size-adjust`, and to its line with the ascent and descent overrides). The swap measured:
+    layout shift 0.0000 at 390 px and 0.0002 at 1413 px; of 157 elements none moved up or down or changed height,
+    the widest sideways move 7 px bar one link at a line's end. Lettering is never drawn or stitched from a
+    stand-in: only `--body`, `--display` and `--mono` have them. `ui_sweep --standin` sweeps the page in that state.
+  - Measured (local server with gzip and HTTP/2, three runs each): first paint 4.0 -> 1.8 s; first preview 17.7 ->
+    14.1-14.2 s; the text changes face once at 16.8 s. Desktop, first visit: preview at 0.4-0.5 s, the faces at
+    1.1-1.4 s; later visits as before. What is left before the preview: scripts 376 KB, Great Vibes 158 KB,
+    Sacramento (the wordmark) 31 KB.
   - Not done, each the owner's call: the scripts without their comments (a third of their gzipped bytes, 2.7 s:
-    a release step, and the site has none); the page's Google fonts after the first preview (2.2 s: the page's
-    text would change face once the design is up); a lighter font for the first starter (Great Vibes is the
-    heaviest script font; it changes the starters). Small and left: brandcharts.js (16 KB) only for a chosen
-    brand, doctor.js's fixes (13 KB) apart from its counts.
+    a release step, and the site has none); a lighter font for the first starter (Great Vibes is the heaviest
+    script font; it changes the starters). Small and left: brandcharts.js (16 KB) only for a chosen brand,
+    doctor.js's fixes (13 KB) apart from its counts.
 - "Make another in the hoop" is also among the preview's links (`#another-open`, a lone upright in-the-hoop
   project): on a phone the one under the starters is 1,475 px down.
 - A long line too big for the hoop is offered on two or three lines beside Fit to hoop (`hoopLines`: at its own size
