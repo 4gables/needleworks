@@ -61,6 +61,8 @@ Phase 1, the base (no visible change, byte-identical batches):
     ui_sweep's one failure is the Picture-tab intermittent, which v12 has too: `docs/decisions.md`)
   - [x] that intermittent found and fixed: a picture with nothing to stitch was kept and reopened at the next
     visit with its error (`docs/pictures.md`); ui_sweep `picture-after-blank` fails without the fix
+  - [x] released as v16 with the fill cache (check.sh passed: 439 files unchanged, ui_sweep 340/0, monkey 960
+    steps 0 problems)
   - [ ] digitize.js: colour learning and styles apart
   - [ ] ui.js and app.js over one shared state; one worker job queue; matrix folded into files_flow
 - [ ] **F3 Atomic releases**: one release's files per load, never a mix
