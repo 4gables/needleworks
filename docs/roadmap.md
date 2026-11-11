@@ -115,9 +115,13 @@ Phase 2, stitch quality (measured against the scoreboard, VM-checked):
   - [x] v26: script pieces chained by the moves as sewn (after the arch, wave or bridge bend) and sewn in one go
     where their columns touch (`recipes.js` `LINK`). Arcs and ovals: wasted moves 52 -> 13, trims 513 -> 444;
     bookmark names 4 -> 1. The 13 left are 1.5-2.3 mm gaps between columns: a stitch there would show.
-  - [ ] the planner itself (entries chosen from sewn geometry with look-ahead in `compose`); frames, appliqué,
-    quilting; print letters (small print 33 wasted, 27 loose: unchanged; caption starters 24 -> 13, target
-    under 5); a shorter tie-in in `Design.path` when the next point is 0.7 mm on (the last zero ties)
+  - [x] v27: print letters start partway along a plain stroke and, where reading order leaves loose threads,
+    every second or third letter is sewn first (small print loose 27 -> 0, wasted 33 -> 5; caption starters
+    12 -> 2 and 13 -> 3; travel about doubles); tie-ins 0.7 mm, or 0.5 where the next point is 0.7 on (zero ties
+    73 -> 0 in every group); appliqués in one thread sewn stage by stage together (two take 3 stops, not 6)
+  - [ ] the planner itself (entries chosen from sewn geometry with look-ahead in `compose`); frames, appliqué
+    routes, quilting; `st_lines_JosefinSans` (wasted 1 -> 2 in v27, not traced); Zoë's ë dots (a 2.7 mm loose
+    thread). flow_lint's "loop" on print letters sewn as read is the cost of the no-connector rule
 - [ ] **S2 Density at the source** (crossings, towel lattice)
 - [ ] **S3 Vector fills** (exact edges, edge-run underlay, pull and density by fabric, contour fill)
   - [x] v26: rows worked out from the outline (row-end error 0.06 mean / 0.19 worst -> 0), edge-run underlay,
@@ -128,18 +132,29 @@ Phase 2, stitch quality (measured against the scoreboard, VM-checked):
   - [x] v26, Filled: flecks take the colour round them, travel along the shape's own edge, no tiny row links,
     locks under their own rows. 12 samples: trims 1464 -> 1162, loose 153 -> 67, tiny 336 -> 0, zero ties
     164 -> 5, exposed locks 173 -> 90; corpus trims 791 -> 538, loose 73 -> 9. Digitizing about 25 % slower
-  - [ ] a Details choice (the trims left are separate pieces of one colour 5-30 mm apart: fewer means dropping
-    pieces, which the user must choose); exposed locks at shape tips and dots; Line drawing's ring moves;
+  - [x] v27: Small details, "Leave out specks" (default) or "Keep all" (v26's bytes); digitizing back to v25's
+    time. 12 samples: trims 1162 -> 1119, loose 67 -> 51, wasted 39 -> 31. A third, bolder level was built
+    four ways and dropped (`docs/pictures.md`): what is left of a picture's trims is whole sprigs, stems and
+    letters
+  - [ ] exposed locks (90: mostly dots that are their own lock; flow_lint should not count a lock-only run);
+    thread matching (9 of 113 hued colours on a grey thread: measured, left); Line drawing's ring moves;
     picture_history folded into picture_corpus
 
 Phase 3, friction and features:
 - [ ] **U1** open tester findings, then a fresh three-tester round on the live site
   - [x] v26: the findings that are UI only (see `docs/app-ui.md`)
-  - [ ] appliqué 6 pauses -> 3 and pastel/pink thread matching (stitch and thread code); the tester round
+  - [x] v27: Picture and Open code loads after the first design is up; the page's own fonts after the first
+    preview, over stand-in faces of the same width (slow phone: first paint 4.0 -> 1.8 s, first preview
+    17.7 -> 14.1 s; desktop first visit 0.8 -> 0.45 s). The rest is bytes: scripts 376 KB, Great Vibes 158 KB
+  - [ ] the tester round; first load further only with the owner's say (scripts shipped without comments needs
+    a release step; a lighter first starter font changes the starters)
 - [ ] **N1** layout tools (mirror, circle repeat, wreath, corner set, monogram layouts)
 - [ ] **N2** borders and quilting (blanket stitch, triple and motif runs, crosshatch, stripe, shaded fill)
 - [ ] **N3** use your own font file
 - [ ] **N4** more Brother machines and hoops
+  - [x] v27: "My machine" choice; Brother SE2000 (5x7, 4x4) added
+  - [ ] 6x10 machines wait for writer change W1 (`docs/writer-changes.md`); 4x4-only models (SE700, PE545)
+    wait for a published fact: whether they cut jump stitches
 
 Ask the owner first: other formats out (DST, JEF, EXP, VP3), photo stitch, free-standing lace, 3D puff.
 Not planned: wireless send, FCM cut files, BX fonts, an AI helper.
