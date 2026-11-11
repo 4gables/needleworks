@@ -1,5 +1,6 @@
 /*! Needleworks (c) 2026 4Gables. All rights reserved. Proprietary, see LICENSE. https://4gables.com/needleworks/ */
 // Design tab UI: start from a card, edit pieces in a short list, drag them on the preview.
+import { recentDesigns } from "./recent.js";
 import { luminance, rgbOf } from "../core/colour.js";
 import { APPLIQUE_FONTS, FONTS, fontOf, loadFont } from "../core/fonts.js";
 import { MAX_INITIALS, MAX_WORDS, initials, monogramHelp, lackList, lacks, reswashed, swashes, swashless, tidy, tidyField, unswashed, withSwash } from "../core/typed.js";
@@ -40,6 +41,31 @@ export function savedDesign(bytes) {
 //        threadLine(hex, machine name), threadHtml(hex, machine name) (app.js `threadLabel`: one thread label everywhere) }
 export function initStudio(api) {
   const $ = (id) => document.getElementById(id);
+  // The editor's state and helpers as they are when read, for the parts of the editor that live in their own files
+  // (names.js, recent.js...): a part takes what it uses from here.
+  const S = {
+    api, $,
+    get main() { return main; },
+    get pieces() { return pieces; }, set pieces(v) { pieces = v; },
+    get fabric() { return fabric; }, set fabric(v) { fabric = v; },
+    get baste() { return baste; }, set baste(v) { baste = v; },
+    get thread() { return thread; }, set thread(v) { thread = v; },
+    get title() { return title; }, set title(v) { title = v; },
+    get from() { return from; }, set from(v) { from = v; },
+    get fitted() { return fitted; }, set fitted(v) { fitted = v; },
+    get two() { return two; }, set two(v) { two = v; },
+    get tip() { return tip; }, set tip(v) { tip = v; },
+    get edited() { return edited; }, set edited(v) { edited = v; },
+    get sent() { return sent; }, set sent(v) { sent = v; },
+    get firstWords() { return firstWords; },
+    get idle() { return idle; },
+    get fontsIn() { return fontsIn; },
+    get openDesign() { return openDesign; },
+    get toast() { return toast; },
+    get save() { return save; },
+    get undo() { return undo; },
+    // (parts: more of the editor's state and helpers as they need them)
+  };
   const saved = api.store.get("studio", null);
   // (checked like an opened design: a crafted file's pieces stayed broken through a reload)
   let pieces = (Array.isArray(saved?.pieces) ? saved.pieces : []).map(cleanPiece).filter(Boolean);
@@ -1163,69 +1189,8 @@ export function initStudio(api) {
     edited = false; sent = false; recentUI();
     return kept;
   }
-  // Recent designs: the last designs another one replaced (a starter, Open saved, a picture or file as a new design,
-  // Add words), kept in this browser as Save design writes them and opened as Open saved opens them (cleanPieces). A
-  // newcomer's downloaded design went with the next starter, back only by Undo and gone after a reload (rounds 9, 11).
-  // Whole designs, not undo history. A starter or picture as it came, unchanged and not downloaded, isn't kept. Kept
-  // to `RECENT` and about 1.5 MB of the browser's ~5 MB (the design itself must still fit): oldest dropped first, and
-  // with no storage (private mode, full) there's simply no list.
-  const RECENT = 8, RECENT_CHARS = 1.5e6;
-  const designKey = (d) => JSON.stringify([d.pieces.map(({ id, ...p }) => p), d.fabric, !!d.baste, d.thread, !!d.two, d.title || "", d.hoop, !!d.turned]);
-  let recents = (() => { const r = api.store.get("studio.recent", []); return Array.isArray(r) ? r.filter((d) => d && Array.isArray(d.pieces) && d.pieces.length) : []; })();
-  const thisDesign = () => ({ needleworks: 1, pieces, fabric, baste, thread, fitted, two, title, hoop: api.hoopId(), turned: api.turned(), from, tip });
-  function keep() {
-    if (!pieces.length || (!edited && !sent && (!from || STARTERS.some((s) => s.name === from)))) return null;
-    const d = JSON.parse(JSON.stringify({ ...thisDesign(), name: firstWords(), at: Date.now(), sent })), k = designKey(d);
-    recents = [d, ...recents.filter((r) => designKey(r) !== k)].slice(0, RECENT);
-    putRecents();
-    return recents[0] === d ? d : null;
-  }
-  function putRecents() {
-    while (recents.length && (JSON.stringify(recents).length > RECENT_CHARS || !api.store.set("studio.recent", recents))) recents.pop();
-    if (!recents.length) api.store.del("studio.recent");
-    recentUI();
-  }
-  const keptSaid = (d) => (d ? ` “${d.name}”${d.sent ? ", which you downloaded," : ""} is kept under Recent designs.` : "");
-  const when = (t) => { const d = new Date(t); return d.toDateString() === new Date().toDateString() ? d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) : d.toLocaleDateString([], { month: "short", day: "numeric" }); };
-  // the list, without the design on screen (after Undo it's the first one); thumbnails drawn while it's open
-  let recentShown = [];
-  function recentUI() {
-    const now = designKey(thisDesign());
-    recentShown = recents.filter((d) => designKey(d) !== now);
-    $("st-recent-box").hidden = !recentShown.length;
-    $("st-recent-count").textContent = recentShown.length ? `· ${recentShown.length}` : "";
-    $("st-recent").innerHTML = recentShown.map((d, i) => `<button type="button" data-recent="${i}" aria-label="Open ${api.escapeHtml(d.name || "design")} again (from ${when(d.at)})"><canvas aria-hidden="true"></canvas><b>${api.escapeHtml(d.name || "Design")}</b><small>${when(d.at)}${d.sent ? " · downloaded" : ""}</small></button>`).join("");
-    recentThumbs();
-  }
-  async function recentThumbs() {
-    if (!$("st-recent-box").open) return;
-    for (const c of $("st-recent").querySelectorAll("canvas")) {
-      const d = recentShown[+c.parentNode.dataset.recent];
-      await idle();
-      if (!c.isConnected) return;
-      try {
-        // (its fonts loaded first, after the design's own: drawn before, a thumbnail's lettering was the fallback font
-        // and the canvas asked for its fonts ahead of the design's)
-        const ps = cleanPieces(d.pieces).pieces;
-        await fontsIn;
-        await Promise.allSettled([...new Set(ps.filter((p) => p.font).map((p) => p.font))].map(loadFont));
-        if (!c.isConnected) return;
-        const { design, steps } = compose(ps, { w: 1000, h: 1000, name: "" }, { fabric: d.fabric, thread: d.thread });
-        const look = previewLook(steps);
-        draw(c, design.pattern(), { pad: 4, ...look, fabric: look.fabric || "white" });
-      } catch { c.remove(); }
-    }
-  }
-  $("st-recent-box").addEventListener("toggle", recentThumbs);
-  $("st-recent").onclick = (e) => {
-    const b = e.target.closest("[data-recent]"), d = b && recentShown[+b.dataset.recent]; if (!d) return;
-    recents = recents.filter((r) => r !== d);
-    let kept = null; try { kept = openDesign(d, { from: d.from || "", tip: d.tip || "" }); } catch (err) { console.error(err); }
-    if (!kept) { putRecents(); toast("That design couldn't be opened again."); return; }
-    edited = true; sent = !!d.sent; save();
-    putRecents();
-    if (!kept.toasted) toast(`Opened “${d.name || "your design"}” again.${keptSaid(kept.kept)}`, { label: "Undo", run: undo });
-  };
+  const { recentUI, keptSaid, keep } = recentDesigns(S);
+
   // A design file (+ Design file, or the Picture tab's stitches: "Add it to my design") as a piece of this design, in
   // free space, above what's there (or below, if only that fits), not on top of it: centred, a bought design landed on
   // the lettering. It sews first, after any frames, so lettering added under it sews on top. (where there's room, as
@@ -2626,13 +2591,6 @@ export function initStudio(api) {
   $("st-guide").hidden = !!api.store.get("studio.guideSeen", false);
   $("st-guide-close").onclick = () => { $("st-guide").hidden = true; api.store.set("studio.guideSeen", true); };
 
-  // The editor's state (as it is when read) and helpers, for the parts of the editor that live in their own files.
-  // A part takes what it uses from here; add to it as more parts move out.
-  const S = {
-    api, main,
-    get pieces() { return pieces; }, get fabric() { return fabric; }, get baste() { return baste; }, get thread() { return thread; },
-    get title() { return title; }, get from() { return from; },
-  };
   const forNames = () => namesFor(S);
 
   cards(); ui(); recentUI();
