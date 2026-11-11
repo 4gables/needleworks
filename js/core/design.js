@@ -164,7 +164,11 @@ export function untiny(st, min = LIMITS.tiny) {
 export function relieve(st, limit = LIMITS.hits) {
   const n = st.length, keep = new Uint8Array(n).fill(1), blk = new Int32Array(n);
   for (let i = 0, b = 0; i < n; i++) { if (st[i][2] === COLOR_CHANGE) b++; blk[i] = b; }
-  const X = (i) => pyRound(st[i][0]), Y = (i) => pyRound(st[i][1]);
+  // (each point's place as the file rounds it, worked out once: asked for again at every window, the rounding alone
+  // was a fifth of the time)
+  const XR = new Int32Array(n), YR = new Int32Array(n);
+  for (let i = 0; i < n; i++) { XR[i] = pyRound(st[i][0]); YR[i] = pyRound(st[i][1]); }
+  const X = (i) => XR[i], Y = (i) => YR[i];
   const removable = (i) => { for (let j = i - 5; j <= i + 5; j++) if (j < 0 || j >= n || st[j][2] !== STITCH) return false; return true; };
   const near = (i, d) => { let j = i + d; while (j >= 0 && j < n && !keep[j]) j += d; return j; };
   const cells = new Map(), key = (b, cx, cy) => `${b},${cx},${cy}`;
@@ -177,12 +181,24 @@ export function relieve(st, limit = LIMITS.hits) {
   // neighbours are corners too
   const corners = new Set();
   for (const k of cells.keys()) { const [b, cx, cy] = k.split(",").map(Number); for (const i of [0, 1]) for (const j of [0, 1]) corners.add(key(b, cx - i, cy - j)); }
+  const sums = new Uint16Array(21 * 21);
   for (const k of corners) {
     const [b, cx, cy] = k.split(",").map(Number);
     const pts = [cells.get(k), cells.get(key(b, cx + 1, cy)), cells.get(key(b, cx, cy + 1)), cells.get(key(b, cx + 1, cy + 1))].flatMap((c) => c || []);
     if (pts.length <= limit) continue;
+    // the kept hits at each 0.1 mm point of these four cells, summed from the top left: a window's count is four
+    // reads, and only a window over the limit is looked at point by point (most aren't; the same windows are thinned,
+    // in the same order, as when each one's points were picked out: a busy design's thinning took 0.5 s of a change)
+    const count = () => {
+      sums.fill(0);
+      for (const i of pts) if (keep[i]) sums[(YR[i] - cy * 10 + 1) * 21 + XR[i] - cx * 10 + 1]++;
+      for (let y = 1; y < 21; y++) for (let x = 1; x < 21; x++) sums[y * 21 + x] += sums[y * 21 + x - 1] + sums[(y - 1) * 21 + x] - sums[(y - 1) * 21 + x - 1];
+    };
+    count();
     for (let ox = 0; ox < 10; ox++) for (let oy = 0; oy < 10; oy++) {
+      if (sums[(oy + 10) * 21 + ox + 10] - sums[oy * 21 + ox + 10] - sums[(oy + 10) * 21 + ox] + sums[oy * 21 + ox] <= limit) continue;
       const x0 = cx * 10 + ox, y0 = cy * 10 + oy;
+      let dropped = false;
       const inside = pts.filter((i) => keep[i] && X(i) >= x0 && X(i) < x0 + 10 && Y(i) >= y0 && Y(i) < y0 + 10);
       for (let cap = 40; inside.length > limit && cap <= 70; cap += 30) while (inside.length > limit) {
         // merged stitch stays under 4 mm (fill stitches are 3.5); where that isn't enough (travel through one spot),
@@ -205,7 +221,9 @@ export function relieve(st, limit = LIMITS.hits) {
         if (best < 0 && pair < 0) break;
         const drop = best >= 0 ? [best] : [pair, near(pair, 1)];
         for (const i of drop) { keep[i] = 0; const at = inside.indexOf(i); if (at >= 0) inside.splice(at, 1); }
+        dropped = true;
       }
+      if (dropped) count();
     }
   }
   return st.filter((_, i) => keep[i]);

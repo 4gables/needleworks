@@ -39,8 +39,17 @@ Phase 1, the base (no visible change, byte-identical batches):
     copies go with S3 (it rewrites fills; merging them now risks vertex order); bounding-box copies with F2
 - [ ] **F2 Structure** (branch `f2-structure`; byte-identical after each step)
   - [x] `js/core/fill.js`: the fill engine out of digitize.js (439 of 439 identical)
-  - [ ] pieces.js split (shapes, clean, fit, lettering, stages, compose)
-  - [ ] one memo per `make()` for placed stitches, boxes and clouds; perf folded into monkey's budget
+  - [x] pieces.js, first seams: `shapes.js`, `fabrics.js`, `files.js` (439 of 439 identical). Lettering, stages,
+    fit and compose share the sew context and five caches: lift those into one module first, then split
+  - [ ] speed on a busy design (`tests/perf.mjs`, 15 pieces + appliqué letters: 6-9 of 23 actions over 500 ms,
+    worst 745-830 ms, run to run). Measured, not guessed:
+    - a per-piece memo for collision measuring changed nothing (clouds and `near` are ~57 ms of a towel change):
+      reverted. The audit's O(n²) reading was right about the shape of the code, wrong about the cost
+    - `relieve` was ~560 ms of a towel change's work; it now sums each window's hits instead of picking its
+      points out (the same points dropped on 441 runs at limits 24, 16 and 10; 1.7x faster)
+    - the longest single freeze didn't move, so it is one phase of `make()`, not the total: profile by phase
+      (drawing lettering, stitching, compose, write + read back, preview) before changing anything else
+  - [ ] perf folded into monkey's budget once the freeze is under 500 ms
   - [ ] digitize.js: colour learning and styles apart
   - [ ] ui.js and app.js over one shared state; one worker job queue; matrix folded into files_flow
 - [ ] **F3 Atomic releases**: one release's files per load, never a mix
