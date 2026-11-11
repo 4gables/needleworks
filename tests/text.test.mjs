@@ -17,6 +17,8 @@ import { glyphs } from "../js/core/glyphs.js";
 import { APPLIQUE_FONTS, FONTS } from "../js/core/fonts.js";
 import { MAX_INITIALS, MAX_WORDS, graphemes, initials, lacks, latin, reswashed, safeName, swashes, swashless, tidy, uniqueName, unswashed } from "../js/core/typed.js";
 import { cleanPiece, label } from "../js/studio/pieces.js";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
+import { fontNotes, readFont } from "../js/studio/ownfont.js";
 import { VARIANTS, corpus } from "./text_corpus.mjs";
 
 const ALL = corpus(400, 9);
@@ -142,6 +144,32 @@ for (const s0 of ALL) {
   check("Words box: retyped, swashes kept", swashes(reswashed("Emma", ends)).lead === ends.lead && swashes(reswashed("Emma", ends)).tail === ends.tail, show(s));
 }
 check("Words box: a ~ typed still puts one on", reswashed("~Emma", { lead: false, tail: false }) === "~Emma" && reswashed("Emma~", { lead: true, tail: false }) === "~Emma~", "typed ~");
+
+// ---- a maker's own font file (studio/ownfont.js): what can't be used is refused in plain words, what can is read
+// for its name, its letters and its shapes. The bundled .woff2 files and licence texts stand in for "the wrong file";
+// real .ttf/.otf fonts are in tests/external/fonts when that folder is there (untracked: other people's fonts).
+{
+  const refused = (bytes) => { try { readFont(bytes); return ""; } catch (e) { return e.said ? e.message : "threw: " + e.message; } };
+  for (const f of readdirSync("fonts")) {
+    const why = refused(new Uint8Array(readFileSync("fonts/" + f)));
+    check("own font: a web font or a text file is refused, in words", /web font|isn't a font file|cut short/.test(why), `${f}: ${why || "taken"}`);
+  }
+  check("own font: an empty file is refused", /empty|cut short/.test(refused(new Uint8Array(4))), "4 bytes");
+  check("own font: a cut-off font is refused", /cut short|missing parts|isn't a font/.test(refused(new Uint8Array([0, 1, 0, 0, 0, 9, 0, 0, 0, 0, 0, 0, 1, 2, 3]))), "15 bytes");
+  const dir = "tests/external/fonts", want = { "Pacifico-Regular.ttf": ["Pacifico", (s) => s.joined > 0.8 && s.stem > 0.15 && s.stem < 0.35 && s.lines < 1.6],
+    "AbrilFatface-Regular.ttf": ["Abril Fatface", (s) => s.stem > 0.3 && s.joined < 0.8], "Monoton-Regular.ttf": ["Monoton", (s) => s.lines >= 1.6],
+    "PoiretOne-Regular.ttf": ["Poiret One", (s) => s.stem < 0.1 && s.joined < 0.5], "SourceSans3-Regular.otf": ["Source Sans 3", (s) => s.stem > 0.12 && s.stem < 0.22 && s.joined < 0.5 && s.lines < 1.2] };
+  if (existsSync(dir)) for (const f of readdirSync(dir).filter((x) => /\.(ttf|otf)$/i.test(x))) {
+    let info = null, why = "";
+    try { info = readFont(new Uint8Array(readFileSync(`${dir}/${f}`))); } catch (e) { why = e.message; }
+    check("own font: a real font is read", !!info && !!info.shape && info.name.length > 2, `${f}: ${why}`);
+    if (!info) continue;
+    check("own font: its letters are found", [..."AZazéß09&"].every((c) => info.has.has(c.codePointAt(0))), f);
+    check("own font: x-height and stroke measured", info.shape.xh > 0.25 && info.shape.xh < 0.8 && info.shape.stem > 0.02 && info.shape.stem < 0.6, `${f}: ${JSON.stringify(info.shape)}`);
+    if (want[f]) check("own font: named and judged as it looks", info.name === want[f][0] && want[f][1](info.shape), `${f}: ${info.name} ${JSON.stringify(info.shape)}`);
+    check("own font: notes are plain sentences", fontNotes(info.shape, 5).every((n) => /^[A-Z].*\.$/.test(n) && n.length < 260), f);
+  }
+}
 
 console.log(`text: ${ALL.length} strings, ${FAMILIES.length} fonts, ${checks} checks, ${fails} failed`);
 for (const [k, v] of failed) console.log(`  FAIL ${k}: ${v.join(" | ")}`);

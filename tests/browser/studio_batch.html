@@ -159,6 +159,16 @@ try {
     P({ kind: "file", name: "ursula", blocks: fileBlocks(d), x: 0, y: -5, rot: 10 }),
     P({ kind: "text", text: "Ursula", font: FONTS[1].family, size: 12, y: 40, color: "#ed171f" })]);
 } catch (e) { log(`skip file combo: ${e.message}`); }
+// a maker's own font file (studio/ownfont.js), when the untracked sample fonts are there: read, drawn by the browser
+// and sewn like a bundled font, script and print
+try {
+  const { addOwnFont } = await import("../../js/studio/ownfont.js");
+  for (const [file, tag] of [["Pacifico-Regular.ttf", "Pacifico"], ["SourceSans3-Regular.otf", "SourceSans"]]) {
+    const r = await fetch(`../external/fonts/${file}`); if (!r.ok) throw new Error("no sample fonts");
+    const got = await addOwnFont(new File([await r.arrayBuffer()], file));
+    await save(`st_ownfont_${tag}`, [P({ kind: "text", text: "Ashley Rose", font: got.family, size: 12 })]);
+  }
+} catch (e) { log(`skip own fonts: ${e.message}`); }
 // the 6" x 10" field (Brother NQ1700E): designs no 5x7 holds, written with the 160 x 260 page (pe900_check judges
 // files named *6x10* on that field)
 {

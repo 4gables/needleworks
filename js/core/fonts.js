@@ -34,7 +34,12 @@ export const APPLIQUE_FONTS = [
 // fetched again from the same file as a second copy, which is what's drawn from then on. Still failing: a plain error
 // (`font: true`) to show, and the next use tries again.
 const again = new Map();   // family -> the FontFace added after a failure
+// A font that comes from somewhere else first (the maker's own font out of IndexedDB, studio/ownfont.js): `loadFont`
+// waits for this, and fails with its error.
+const waits = new Map();
+export const fontWaits = (family, promise) => { promise.catch(() => {}); waits.set(family, promise); };
 export async function loadFont(family) {
+  if (waits.has(family)) { await waits.get(family); return; }
   if (typeof document === "undefined" || again.get(family)?.status === "loaded") return;
   try { await document.fonts.load(`40px "${family}"`); return; }
   catch {

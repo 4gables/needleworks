@@ -11,6 +11,7 @@ import { placing } from "./placing.js";
 import { recentDesigns } from "./recent.js";
 import { luminance, rgbOf } from "../core/colour.js";
 import { APPLIQUE_FONTS, FONTS, fontOf, loadFont } from "../core/fonts.js";
+import { ownFontNote, ownFontOption } from "./ownfont.js";
 import { MAX_INITIALS, MAX_WORDS, initials, monogramHelp, lackList, lacks, reswashed, swashes, swashless, tidy, tidyField, unswashed, withSwash } from "../core/typed.js";
 import { nearestBrotherThread } from "../core/threads.js";
 import { designStats, machineThreads, readEmbroidery } from "../core/formats.js";
@@ -340,13 +341,13 @@ export function initStudio(api) {
   const swatches = (p, k = "color") => COLORS.map((c) => `<button type="button" data-${k}="${c}" style="background:${c}" aria-pressed="${c === p[k]}" title="${api.escapeHtml(swatchTip(c, p[k], "", p))}"></button>`).join("")
     + `<span class="custom"><input type="color" data-${k}-any value="${p[k]}" aria-label="Any colour"></span>`
     + ((own) => own.length ? `<span class="own-swatches" role="group" aria-label="Your threads"><span class="hint">Yours:</span>${own.map((s) => `<button type="button" data-${k}="${s.hex}" style="background:${s.hex}" aria-pressed="${s.hex === p[k]}" title="${api.escapeHtml(swatchTip(s.hex, p[k], s.label, p))}" aria-label="Your ${api.escapeHtml(s.label)}"></button>`).join("")}</span>` : "")(api.ownedSpools?.() || []);
-  const fontSelect = (p) => `<select data-k="font">${FONTS.map((f) => `<option value="${f.family}" ${f.family === p.font ? "selected" : ""}>${f.name}${f.print ? " (print)" : ""}</option>`).join("")}</select>`;
+  const fontSelect = (p) => `<select data-k="font">${FONTS.map((f) => `<option value="${f.family}" ${f.family === p.font ? "selected" : ""}>${f.name}${f.print ? " (print)" : ""}</option>`).join("")}${ownFontOption()}</select>`;   // (the maker's own font file: studio/ownfont.js)
   // every font's name in its own lettering, in a row under the list to tap (names alone said nothing of the look); the
   // list stays the keyboard's and a screen reader's way to pick one
   // (each in its own lettering once the design's own fonts are in, `faces`: a row drawn in all of them asked for all 16 fonts
   // at once, and on a slow connection the preview waited ~31 s for the one font the design uses)
   let faces = false;
-  const fontRow = (p, list = FONTS) => `<div class="font-row" role="group" aria-label="Fonts as they look">${list.map((f) => `<button type="button" tabindex="-1" data-font="${f.family}" aria-pressed="${f.family === p.font}"${faces || f.family === p.font ? ` style="font-family:'${f.family}',cursive"` : ""}>${f.name}</button>`).join("")}</div>`;
+  const fontRow = (p, list = FONTS) => `<div class="font-row" role="group" aria-label="Fonts as they look">${list.map((f) => `<button type="button" tabindex="-1" data-font="${f.family}" aria-pressed="${f.family === p.font}"${faces || f.family === p.font ? ` style="font-family:'${f.family}',cursive"` : ""}>${f.name}</button>`).join("")}</div>${list === FONTS ? ownFontNote(p) : ""}`;
   // (`fontsIn`: settles once the design's own fonts are in, for anything else that draws lettering)
   let fontsDone; const fontsIn = new Promise((r) => (fontsDone = r));
   let facesIn = false;
