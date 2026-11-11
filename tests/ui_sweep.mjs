@@ -98,6 +98,8 @@ const STATES = [
   { id: "picture", hash: "picture", seed: {}, wait: "!document.getElementById('download').disabled", keys: true },
   { id: "picture-mine", hash: "picture", seed: { "nw:brand": "isacord" }, setup: async (p) => { await p.upload("#pic-file", path.join(FILES, "badge.png")); }, wait: "!document.getElementById('download').disabled && !document.getElementById('pic-thumb').hidden" },
   { id: "picture-error", hash: "picture", seed: {}, setup: async (p) => { await p.upload("#pic-file", path.join(FILES, "blank.png")); }, wait: "!document.getElementById('error').hidden" },
+  // (a picture with nothing to stitch isn't brought back at the next visit: the tab opened on its error, not the sample)
+  { id: "picture-after-blank", hash: "picture", seed: {}, setup: async (p) => { await p.upload("#pic-file", path.join(FILES, "blank.png")); for (let i = 0; i < 100 && !(await p.eval("!document.getElementById('error').hidden")); i++) await sleep(200); await sleep(500); await p.eval("location.reload()"); await sleep(1500); }, wait: "!document.getElementById('download').disabled && !document.getElementById('pic-sample-note').hidden" },
   { id: "picture-swap", hash: "picture", seed: {}, setup: async (p) => { await p.upload("#pic-file", path.join(FILES, "badge.png")); for (let i = 0; i < 100 && !(await p.eval("!!document.querySelector('#pic-palette button')")); i++) await sleep(200); await p.eval("document.querySelector('#pic-palette button').click()"); }, wait: "!document.getElementById('pic-swap').hidden", keys: true },
   { id: "open", hash: "open", seed: {} },
   { id: "open-picture", hash: "open", seed: {}, setup: async (p) => { await p.upload("#open-file", path.join(FILES, "picture.pes")); }, wait: "!!document.querySelector('#error button')" },

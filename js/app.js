@@ -52,6 +52,10 @@ const kept = {
   async set(k, v) { try { await this.run("readwrite", (o) => o.put(v, k)); } catch { /* not kept: the next visit starts with the sample */ } },
 };
 const keepPicture = (blob, name) => { if (blob.size <= PIC_KEEP) kept.set("picture", { blob, name }); };
+// A picture with nothing in it to stitch isn't brought back: kept like any other, a blank picture opened the tab on
+// its own error at every visit after, in place of the sample (and it was the Picture tab "never ready" in 1-2 of a
+// full ui_sweep's runs: whichever tab had the blank-picture state before the plain one).
+const forgetPicture = () => kept.set("picture", null);
 
 // the old bookmark panel's colours as saved, mapped to the exact Brother PEC colours (#1a1a1a showed as "Olive Green"),
 // for an old #bookmark link opening the Bookmark starter
@@ -1463,6 +1467,7 @@ async function makePicture() {
   if (r.stale || req !== p.req) return;
   busy(false);
   if (r.plan) sizeRange(r.plan.max);
+  if (!r.ok && r.code === "empty" && !p.sample) forgetPicture();
   if (!r.ok) { state.views.picture = null; $("pic-use").hidden = $("pic-size-note").hidden = true; if (state.mode === "picture") { setView(null); pictureError(r); } return; }
   showError("");
   // (in the order they're sewn, then any left out)

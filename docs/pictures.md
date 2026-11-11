@@ -57,3 +57,7 @@ Reference for this part of Needleworks: the rules, the reason for each (it stops
   nothing touches it.
 - `fine` (`narrowGaps`: gaps under 0.5 mm, at least 2 mm² and 1.5 % of the area) warns; notches under ~0.5 mm can't
   be kept by thread. Errors carry `code` (small, cross, skipped, empty); only followable advice is offered.
+- A picture with nothing in it to stitch (`code: "empty"`: all one colour) is not kept for the next visit
+  (`forgetPicture` in app.js). Kept like any other, a blank picture opened the tab on its own error every visit after,
+  in place of the sample. It showed as ui_sweep's Picture state "never ready" in 1-2 of 330 cases, at v12 too:
+  whichever tab had run the blank-picture state before the plain one. Guard: ui_sweep `picture-after-blank`.
