@@ -45,6 +45,9 @@ if has '^js/(core/|studio/(pieces|compose|lettering|shapes|fabrics|files|starter
 fi
 
 run files_flow 600 node tests/files_flow.mjs $CDP $U
+# speed on a busy design (15 pieces + appliqué letters): no everyday action may hold the page over 600 ms (they sit at
+# 380-455 ms; the target is 500, and runs vary by about a tenth)
+has '^js/(core/|studio/)' && run perf 900 node tests/perf.mjs $CDP $HP --start fifteen,fifteen-letters --budget 600
 has 'sheet\.js|words\.js|studio/' && run steps_lint 600 node tests/steps_lint.mjs $CDP $U
 has '^js/(app|state|focus|onitem|along|threadui|picture|opened)\.js|studio/(ui|editor|problems|fixes|placing|toobig|threadsaid|stepsui|offpage|recent|names|starters)' && run entry_state 900 node tests/entry_state.mjs $CDP $U
 has 'words\.js|quality\.js|^js/(app|state|along|threadui|picture|opened)\.js' && run said_flow 300 node tests/said_flow.mjs $CDP $U

@@ -69,7 +69,9 @@ Phase 1, the base (no visible change, byte-identical batches):
     - a shape drawn and measured for filling is kept (`shaped` in fill.js: the mask, its parts, the distance
       transform don't depend on row spacing): 107 fills identical to v23's; 30 wt 541 -> 440 ms, knit 531 -> 441.
       `tests/perf.mjs`: 0 of 23 over 500 ms, worst 455 ms (the margin is thin: runs vary by ~10 %)
-  - [ ] perf folded into monkey's budget once the freeze is under 500 ms
+  - [x] the speed guard is routine: `check.sh` runs `tests/perf.mjs` (budget 600 ms) whenever core or studio code
+    changes. Kept as its own script rather than folded into monkey: it times named everyday actions by the longest
+    freeze, which monkey's random steps and 1000 ms budget don't
   - [x] released so far as v15 (439 batch and 117 corpus files identical to v12; monkey 960 steps 0 problems;
     ui_sweep's one failure is the Picture-tab intermittent, which v12 has too: `docs/decisions.md`)
   - [x] that intermittent found and fixed: a picture with nothing to stitch was kept and reopened at the next
@@ -99,7 +101,7 @@ Phase 1, the base (no visible change, byte-identical batches):
     `along.js` (Sew along, the names dialog), `threadui.js`, `picture.js` (the Picture tab), `opened.js` (the Open
     tab); app.js is 814 lines, from 2,276 (preview, toasts, download, tabs, start-up). A section may call into
     app.js when things happen but never while it loads (app.js loads after its sections)
-  - [ ] one worker job queue; perf into monkey; matrix into files_flow; speed target
+  - [ ] one worker job queue (four hand-written ones today, one with a time limit); matrix into files_flow
 - [ ] **F3 Atomic releases**: one release's files per load, never a mix
 
 Phase 2, stitch quality (measured against the scoreboard, VM-checked):

@@ -39,7 +39,7 @@ Reference for this part of Needleworks: the rules, the reason for each (it stops
   batches + pe900_check + byte compare when stitch code changed (then the VM); steps_lint / entry_state / said_flow /
   picture_corpus / lettering_look only when their area changed. ~25 min; every check has a time limit (no `timeout` on
   macOS: perl alarm; a hung surfaces run sat at 0 % CPU).
-- On demand only: surfaces (21 min, overlaps sweep + monkey), matrix, perf, starters, picture_history, text_fuzz,
+- On demand only: surfaces (21 min, overlaps sweep + monkey), matrix, starters, picture_history, text_fuzz,
   engine_fuzz, flow_lint on batches. A new guard replaces or extends one of the routine checks; add a new script only
   for a class nothing routine can reach, and retire one it overlaps.
 ### Category checks
