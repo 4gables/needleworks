@@ -16,7 +16,8 @@ measurements behind each number are in the code's comments.
   graph), `text.js` (`renderWord`), `fonts.js`, `glyphs.js`, `fill.js` (tatami, travel router, `fillPolygon`),
   `digitize.js` (pictures: colours, styles, `contentBox`/`pictureImage`/`LEARN`), `brands.js`/`brandcharts.js`,
   `machines.js`, `typed.js` (all typed text: `tidy`, `lacks`, `safeName`, `uniqueName`, `initials`).
-- `js/studio/`: `pieces.js` (each piece's stitches, fitting, the sew context `sewAs`), `compose.js` (`compose`,
+- `js/studio/`: `pieces.js` (each piece's stitches, fitting, the sew context `sewAs`), `lettering.js` (a word drawn to strokes, counters,
+  arches, `stitchLetters`), `compose.js` (`compose`,
   quilting and carving stages, `gang`, two hoopings), `shapes.js` (frame shapes), `fabrics.js` (`FABRICS`,
   `THREADS` words), `files.js` (opened files as pieces), `ui.js` (editor, starters, warnings, one-tap fixes),
   `outline.js`, `quilt.js`, `motifs.js`. pieces.js still re-exports what moved out of it.
