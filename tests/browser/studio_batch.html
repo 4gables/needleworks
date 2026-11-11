@@ -17,7 +17,9 @@ import { turnForMachine } from "../../js/core/design.js";
 const log = (s) => (document.getElementById("log").textContent += s + "\n");
 let n = 0, bad = 0, id = 1;
 for (const f of [...FONTS, ...APPLIQUE_FONTS]) await document.fonts.load(`40px "${f.family}"`);
+const only = new URLSearchParams(location.search).get("only");   // (?only=regex: just those files, while working on one kind)
 async function save(name, pieces, hoopId = "5x7", expectTooBig = false, opts = {}) {
+  if (only && !new RegExp(only).test(name)) return;
   const hoop = getHoop("brother-pe900", hoopId);
   let pattern;
   // (a starter laid out with the hoop turned, the bookmark: in the sideways field, then turned into the machine's way)

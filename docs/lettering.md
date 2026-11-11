@@ -7,9 +7,19 @@ Reference for this part of Needleworks: the rules, the reason for each (it stops
   stroke a centre run out and a satin back, every forward run satined exactly once, no jumps inside a connected word.
   Each walk ends where it began, so moves between print letters are trims whatever the order. Script pieces are
   chained by `order(edges, near, loose)`: a walk may start at any node or mid-stroke, a DP picks the starts with the
-  fewest costed moves; print letters and pictures keep the leftmost start; bent text keeps the chaining
-  only if it costs no more once bent (`unbent`). Satin columns carry `reach` (half width + 0.1 mm) so `Design.path`
+  fewest costed moves; print letters and pictures keep the leftmost start. Moves are measured where they are sewn:
+  bent text (arch, wave, bridge) hands `letters` its bend (`warp`), and `order(..., at)` reckons each start there
+  (reckoned flat and kept only if no dearer once bent, arched script left a piece far from the next one it passed).
+  Satin columns carry `reach` (half width + 0.1 mm) so `Design.path`
   stitches to a start under the column instead of jumping (knit's 2.05 mm half-width: 8 trims round one junction).
+- Script pieces are sewn in one go when their columns are at most 0.5 mm apart (`linkReach`, numbers in recipes.js
+  `LINK`: centre lines within column + 0.3 pull + 0.5, at most 2.2 mm, or the next start under the last column), and
+  `stitchLetters` gives the next piece's first run the `reach` to be stitched to from the last column's edge (a towel's
+  lattice takes it over). Before, half the column was taken off 1.5 mm: only centre lines within 0.2-0.8 mm were
+  chained and none from 2.4 mm columns up, so touching pieces were trimmed apart (arcs and ovals: 513 -> 477 trims,
+  52 -> 32 wasted moves; what flow_lint still calls a loop there is a gap of 1.5-2.3 mm between columns, which
+  would be a thread you can see: left trimmed). Print letters never link (`gap`). A fine line links up to 1.5 mm
+  as laid out, so a bent i no longer drags a stitch to its dot when the bend opens the gap.
   Strokes count as at least half the x-height when sizing (a whole x-height for marks alone: "." was sized
   5.9e12 mm). Punctuation drawn into a letter is moved clear (`apart` in text.js: up/sideways above the letters,
   sideways among them, else shaved if most survives); swashes never leave from a mark. Lettering drawn before

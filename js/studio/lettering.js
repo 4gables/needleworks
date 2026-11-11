@@ -4,7 +4,7 @@
 // sewn as centre runs and satin columns (stitchLetters). Laying lettering out and placing it is pieces.js.
 // (Part of pieces.js until 2026-11.)
 import { fontOf } from "../core/fonts.js";
-import { letterRecipe } from "../core/recipes.js";
+import { LINK, letterRecipe } from "../core/recipes.js";
 import { back, bounds, followRun, run, satin, zigzag } from "../core/geom.js";
 import { counterPockets, distanceTransform, order } from "../core/raster.js";
 import { strokes } from "../core/text.js";
@@ -66,13 +66,18 @@ export function letterStrokes(text, family, spacing = 0, kern = null, lead = fal
   }
   return out;
 }
+// How far apart (mm, centre line to centre line) two pieces of script may be and still be sewn in one go, the needle
+// stitching from the end of one to the start of the next (core/recipes.js LINK)
+export const linkReach = (satinW) => (satinW ? Math.max(Math.min(satinW + LINK.pull + LINK.gap, LINK.most), satinW / 2 + LINK.under) : LINK.line);
 // the widest lettering satin, mm: wider stitches lie loose and snag, and the writer cuts any over 7 mm in two
 const WIDE = 5;
 // Letters as [pts, "run"|"satin"] in mm: `size` is the height of the lettering, baseline at y = 0, centred across.
 // `kern`: room after each letter (fractions of the size), for the text as given (one line, already trimmed)
 // `~` at the start or end of the words is a swash there (`swashes` in typed.js; kern entries for the `~`s are dropped
 // with them)
-export function letters(text, family, size, style = "auto", spacing = 0, kern = null, chain = true) {
+// `warp`: where a point of these letters (mm) goes when they are bent (an arch, a wave, a bridge): the pieces are
+// chained by the moves as they will be sewn (`order` at)
+export function letters(text, family, size, style = "auto", spacing = 0, kern = null, chain = true, warp = null) {
   text = (text || "").replace(/\s*\n\s*/g, " ").trim();
   const sw = swashes(text);
   if (kern && (sw.cut[0] || sw.cut[1])) kern = kern.slice(sw.cut[0], kern.length - sw.cut[1]);
@@ -109,13 +114,19 @@ export function letters(text, family, size, style = "auto", spacing = 0, kern = 
   // enough to stitch across rather than trim: each walk ends where it began, its last satin up to half a column (and
   // pull) off its centre line, and Design.path stitches moves up to 2 mm (`order` near; print letters always jump),
   // with half a mm to spare (a quarter left two 2.0-2.2 mm loose threads in 167 files). (Arches and waves stretch the
-  // gaps afterwards: `unbent` checks those.)
-  const reach = 1.5 - (satinW ? satinW / 2 + 0.3 : 0);
-  if (chain && !print && reach > 0.2) comps = order(edges, reach / s, 5 / s);
+  // gaps: `laid` is where each point is sewn.)
+  // (Until S1 the column's half width was taken off that: only pieces whose centre lines came within 0.2-0.8 mm were
+  // chained, and none from a 2.4 mm column up, so pieces whose columns touch or overlap were trimmed apart: 45 of them
+  // over the arched batch files. Now `linkReach`, and the stitch across is allowed for by `stitchLetters`.)
+  const reach = linkReach(satinW);
+  const laid = warp && ((q) => { const m = warp([(q[0] - cx) * s, (q[1] - info.baseline) * s]); return [m[0] / s, m[1] / s]; });
+  // (a move is loose thread up to 5 mm from the column's edge the needle leaves, half a column and pull off the
+  // centre lines the starts are measured between: as print below. Two dots 4.2 mm apart were reckoned a trim.)
+  if (chain && !print && reach > 0.2) comps = order(edges, reach / s, (5.5 + (satinW ? satinW / 2 + 0.3 : 0)) / s, false, laid, Math.min(reach / 2, 0.35) / s, (satinW || 0.9) / s);
   // Print letters each start where the move from the last one is either over 5 mm (trimmed; the move runs from the end
   // of one column to the start of the next, half a column and pull off the centre lines, so 0.5 mm to spare) or, where
   // no start makes it that long, the leftmost (Quicksand "Abbie dog" at 5 mm: 5 loose threads in 28 mm)
-  else if (chain && print) comps = order(edges, 0, (5.5 + (satinW ? satinW / 2 + 0.3 : 0)) / s, true);
+  else if (chain && print) comps = order(edges, 0, (5.5 + (satinW ? satinW / 2 + 0.3 : 0)) / s, true, laid, 0, (satinW || 0.9) / s);
   // Strokes round a counter are narrowed so it stays open (`counterCaps`; not when satin is asked for: "Make it bold"
   // says small loops may fill). The fourth entry is that stroke's column, or 0 for the word's.
   const caps = style === "satin" || !satinW ? new Map() : notchCaps(notches, s, satinW, counterCaps(counters, s, satinW));
@@ -227,6 +238,11 @@ export const letterMetrics = (text, family, size, style) => { const { parts, ...
 // reads over the top, letters pointing out; "down" reads along the bottom, letters pointing in. Both keep the
 // baseline on the curve, and letters are spaced by arc length so they keep their width on an oval.
 export function bend(parts, shape, a, b = a) {
+  const f = bender(shape, a, b);
+  return parts.map(([p, ...r]) => [densify(p, 1).map(f), ...r]);
+}
+// (where one point goes)
+export function bender(shape, a, b = a) {
   const n = 720, pts = [], len = [0];
   for (let i = 0; i <= n; i++) { const t = (i / n) * Math.PI * 2; pts.push([a * Math.sin(t), -b * Math.cos(t), t]); }
   for (let i = 1; i <= n; i++) len.push(len[i - 1] + Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]));
@@ -240,10 +256,9 @@ export function bend(parts, shape, a, b = a) {
     const nx = b * Math.sin(t), ny = -a * Math.cos(t), k = Math.hypot(nx, ny);
     return [a * Math.sin(t), -b * Math.cos(t), nx / k, ny / k];
   };
-  const f = shape === "up"
+  return shape === "up"
     ? ([x, y]) => { const [px, py, nx, ny] = at(x); return [px - y * nx, py - y * ny]; }
     : ([x, y]) => { const [px, py, nx, ny] = at(half - x); return [px + y * nx, py + y * ny]; };
-  return parts.map(([p, ...r]) => [densify(p, 1).map(f), ...r]);
 }
 // extra points so long straight runs follow the curve
 export function densify(p, step) {
@@ -279,6 +294,7 @@ function inkAt(rows, w, least = 0) {
 export function stitchLetters(parts, satinW, fab = "cotton", small = false, weight = "auto") {
   const { zigzagFrom: zz, pull, gap: density } = letterRecipe(fab, weight, small);   // (core/recipes.js LETTERS)
   let gap = false, last = null, lastW = satinW;   // (a skipped stroke hands its jump on to the next one sewn)
+  let linked = null;   // (where the last piece ended, while the next waits for its first stitches: `linkReach`)
   if (!satinW) parts = pointed(parts);
   return parts.map(([p0, mode, g, cap, taper, ends, sides, thick]) => {
     // (a corner is narrowed to the ink, and stops where that's under the narrowest column: not on a towel, which
@@ -307,6 +323,17 @@ export function stitchLetters(parts, satinW, fab = "cotton", small = false, weig
     const on = satinW && r.length && !r.gap && from && Math.hypot(p0[0][0] - from[0], p0[0][1] - from[1]) < 1e-6;
     if (mode === "run" && on) r.reach = (fromW + 0.3 + pull) / 2 + 0.1;
     else if (on && r.reach) r.reach = Math.max(r.reach, (fromW + 0.3 + pull) / 2 + 0.1);
+    // (a script piece that starts within `linkReach` of where the last one ended is stitched to: the needle is on
+    // that column's edge, up to half of it further off than the centre lines are. Handed on past a part that sews
+    // nothing, a dot's run, like `gap`; measured to where the stitches start, a dot's being its own end.)
+    // (0.3 mm to spare over what `order` reckoned between centre lines: a start it chained and this refused would be
+    // a 2 mm loose thread)
+    if (from && Math.hypot(p0[0][0] - from[0], p0[0][1] - from[1]) > 1e-6) linked = g ? null : from;
+    if (r.length) {
+      const d = linked && !r.gap ? Math.hypot(r[0][0] - linked[0], r[0][1] - linked[1]) : Infinity;
+      if (d <= linkReach(satinW) + 0.3) r.reach = Math.max(r.reach || 0, d + (satinW ? (fromW + 0.3 + pull) / 2 : 0) + 0.1);
+      linked = null;
+    }
     return r;
   });
   function sewPart(p, mode, satinW, wAt = null, self = p, en = null, base = satinW, ink = false) {
