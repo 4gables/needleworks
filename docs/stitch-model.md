@@ -74,26 +74,47 @@ Reference for this part of Needleworks: the rules, the reason for each (it stops
 - A piece's stitch cache is kept by what its fill reads of the fabric (`sewnWith`): a patch's rows, a motif's pull and
   rows.
 
-## Density at the source (S2: in progress, not released)
-- **Measured on v27** (points `relieve` took out of the file as made, 439 files): towel 790 in 15 of 19 files
-  (GreatVibes 165, MeowScript 109, MsMadi 92, Allura 85), arcs and ovals 323 in 14 of 59 (Allura and Yellowtail
-  ovals 22-67), caption starters 256 in 9 of 12 (kitchen 111 each), frames/fills/in-the-hoop 206 in 60 of 136 (51 of
-  those files lose exactly 3: the starter name's own h junction), pictures 38, other lettering 25, small print 0,
-  bookmark names 0 in the last pass (2-56 in the pass before the quarter turn). About 1,640 in all.
-- **Where:** nearly all at a script's junctions, where several strokes' columns end on one node (each stroke's run
-  out, satin back, the next stroke's start), and on the inside of tight turns of wide columns (a towel's 2.5 mm).
-  Not at fills under borders, not in the borders themselves, not in the lattice alone.
-- **Built so far** (`Design` with `{ ease: true }`, set by `compose`; `density.js` `Hits`; `recipes.js` `EASE`): each
-  path gives way as it is handed to `Design.path`, against the hits already sewn in the colour block: a satin end
-  that doesn't fit comes part of the way back across its column (short stitches), else it and its neighbour on
-  the same edge are left out; a point on a straight run is merged away. A path's first and last point always stay.
-- **On eight sample files** (drops by `relieve`, v27 -> cap 20 -> cap 17): towel GreatVibes 165 -> 15 -> 12, towel
-  Allura 85 -> 0 -> 0, kitchen 111 -> 2 -> 0, oval Allura 67 -> 9 -> 6, arc GreatVibes 23 -> 1 -> 1, tag 3 -> 0,
-  heart patch 4 -> 2 -> 0. Peaks at cap 17: tag 21, appliqué 20, heart patch 23; the script files still reach 24.
-- **Left over:** what still goes over is path end points on a shared node (47 on the towel name), paths of four
-  points or fewer (dots, lock steps: 10) and corners (14). The next step is at the node itself: strokes that meet
-  should not each put their first and last hit on it (start a column one station in; let a run end short of a
-  node another stroke already covers).
-- **Not yet done:** no full batch has been run with easing on; no contact sheet or zoom looked at; timings not
-  taken; `relieve` and the doctor's counters not moved onto `density.js`; the rule for a block differs still
-  (`relieve`: colour change; `density`: colour change or stop).
+## Density at the source (S2)
+- **The rule.** The 24 hits per mm² limit is kept by where the needle goes as a design is built, not by taking
+  stitches out afterwards. `Design` with `{ ease: true }` (set by `compose`: the Design tab) counts every hit as it
+  is made (`density.js` `Hits`, per thread: a colour change starts again, a pause doesn't) and each run handed to
+  `Design.path` gives way where the count is at `EASE.cap` (19: a tie-off's four hits still fit under the limit).
+  `relieve` still runs in `finish` as the guard; over the batch it now takes about nothing. Pictures and the Open
+  tab's fixes build without it and sew as they did.
+- **What was there** (v27, points `relieve` took out, 439 files): about 1,640. Towel 790 in 15 of 19 files, arcs and
+  ovals 323, caption starters 256, frames/fills/in-the-hoop 206 (51 files lost exactly 3 at the starter name's dot),
+  pictures 38. Nearly all at a script's junctions, where several strokes' columns end on one node, and on the inside
+  of tight turns of wide columns. 136 of the Design tab's 411 files peaked at exactly 24.
+- **How a run gives way** (`Design.eased`, numbers in `recipes.js` `EASE`):
+  - A first point that doesn't fit is left out when the needle is stitching (not jumping) to the run: strokes that
+    meet at a node each began on it. The last point likewise, where the stitch not sewn is short. `Design.cur`
+    stays the run's end as drawn (the next run's jump-or-stitch is reckoned from it, so nothing stitched to becomes
+    a jump); `Design.at` is where the needle is, and locks go there.
+  - A satin's end (the stitch in and the one out double back) that doesn't fit stops short of its edge by 0.8, 1.5,
+    2.2 or 3 mm, never over 65 % of the way across: a digitizer's short stitches. Where no short one fits it and
+    the next point on its edge are left out (never a stitch over 4 mm).
+  - A point on a straight stretch of a run, a corner or one of two points a hair apart is merged away where the
+    stitch past it runs within 0.6 mm of it. No stitch is made under 0.5 mm, and a point within 0.35 mm of the last
+    one kept is never a stitch of its own.
+- **Fans** (`Design.fan`): where a run's own turns crowd one spot (a border's corner, the inside of a tight bend),
+  which come short is settled before any is sewn, spread evenly, the lengths taken in turn. Only the turns on the
+  pivot itself (four or more within a quarter mm) come short; the turns beside it keep the column's inner edge.
+  A short stitch is allowed only where the gap it leaves between its neighbours is under 0.3 mm (`show`), and in a
+  fan cover comes before the cap: a stitch goes whole up to 23 before one is left out. Lessons, each seen on a
+  heart patch's tip: taken as they came, the first stitches of the fan went whole and the rest all came short, a
+  bare wedge; with two short lengths both filled and the rest were left out, a slit; shortened beside the pivot,
+  the inner edge drew back and the fill showed. Where columns of one word meet (not a fan) the other columns cover
+  what a short stitch leaves, so there any length that fits is taken.
+- **One rule for a block** while stitches can still move: `density.js` `threadBlocks` (a colour change only), used
+  by `relieve` and the doctor's `slide`, and the same as `Hits`. The checker's `density` starts a block at a pause
+  too, as pyembroidery reads the file, so the builders are never laxer than the checker. The doctor's `crowd` (a
+  quarter-mm grid it re-spaces columns on) is still its own.
+- **Cost:** about 1 microsecond a point more to build (12,000 stitches of borders and crossing columns: 26 ms
+  before, 37 ms now in Node); the window count answers from a half mm grid of plain counts first.
+- **Locks on a single line of thread** (`recipes.js` `LOCKS`): a lock's one hit aside needs stitches to hide in.
+  Where the points it would lie beside are within 0.25 mm of one line (a fine-line letter, a line border, a
+  picture's run, a fill's row) it goes on that line, 0.45 mm past the lock's far hit. Beside it, it stood 0.4 mm
+  off the stroke, a nub (and most of the pictures' "locks outside cover": 90 -> 16 on the 12 Filled samples).
+  Halfway between the lock's hits made two 0.35 mm stitches, which the file rounds to the checker's tiny 0.3.
+- **Left:** pictures build without easing (8 of 28 batch pictures still peak at 24: `digitize.js`); towel names in
+  the widest scripts still reach 24 at one or two turns; a border's sharp corner is a fan, not a mitre.

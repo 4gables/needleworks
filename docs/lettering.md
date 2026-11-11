@@ -20,6 +20,30 @@ Reference for this part of Needleworks: the rules, the reason for each (it stops
   pieces were trimmed apart. Arcs and ovals: 513 -> 442 trims, 52 -> 13 wasted moves, 7 -> 3 loose threads; bookmark
   names 641 -> 625 trims. What flow_lint still calls a loop there is a gap of 1.5-2.3 mm between columns, a thread
   you would see: left trimmed. Print letters never link (`gap`).
+- Where the columns' own widths at the two points are known (`order` col: a script's column, which follows the
+  ink once it is 2 mm wide), two pieces are stitched across when their centre lines are no further apart than half
+  of each column, 0.3 pull and 0.9 (`LINK.open`), up to 3.6 mm (`far`). `order` marks the piece (`link`, the ninth
+  entry of a part) and `stitchLetters` gives it the reach, so the two never disagree. An Allura T at 20 mm, its
+  stem's end 0.63 mm from its bar by the stitches but 3.08 mm by the centre lines (a column is sewn out to the
+  ink's end, past its centre line's), was trimmed apart: a 16 mm move inside one letter (a digitizer on v27).
+- Marks (`order`: a piece shorter than two and a half dots, clear of every other piece by three quarters of a
+  column, and wholly above the letters: an ë's dots, an accent) are never stitched one to the next: the dots of
+  "Zoë" in Great Vibes at 19 mm, under 2 mm apart, were sewn across and read as "Zoē" (tester, v27). A jump under
+  5 mm between them would lie there as the same bar (the machine doesn't cut it), so a mark is sewn a little
+  earlier or later, or last, wherever that makes every move long enough to be cut; only where that leaves fewer
+  loose threads. A dot is still stitched to from its own letter where near enough, and a full stop from the
+  word's last stroke: jumped to as well, every i in a small word cost a trim and two locks on a 1 mm dot (arcs and
+  ovals went 444 -> 468 trims that way). Batch cases: `st_marks_<font>` (every script font), `st_marks_small`.
+- Underlay under a script column: a centre run below `LETTERS.zigzagFrom` (cotton 2.0 mm, knit 1.5), a zigzag 0.4 mm
+  inside each edge from there. A big script's column, as wide as the ink, has the zigzag too, as wide as the column
+  is there less 0.8 (a centre line through its hairlines). Until S2 it was 2.5 mm on cotton and a centre run only
+  under any column that follows the ink (Allura at 20 mm: 2.2 mm columns on a centre run).
+- Print letters on a knit or a towel are sewn as read (`letters` asRead), whatever loose threads that leaves: the
+  skip order sews the letters between ones already sewn, and on a fabric that gives under the needle the second
+  pass can sit off the first's baseline. On stable fabrics the skip order stays (no loose threads to snip).
+- Known, not done: lines of one piece are each sized to the first line's x-height, and a line of digits or capitals
+  counts their full height as its x-height, so "2026" under "Made with love" comes out a third smaller (and at 9 mm
+  as a fine line under satin lines).
 - Print letters (`order(..., { whole, skip })`): each move between letters is a trim (over 5.5 mm + half a column
   between starts) or a loose thread to snip, never a stitch. Two things keep them trims: a letter may begin partway
   along a plain stroke (every half mm or tenth of the x-height; a stroke with a taper, a shaped end or sides is only
