@@ -811,7 +811,7 @@ function showStep(i) {
   state.step = i; document.dispatchEvent(new CustomEvent("nw:step", { detail: i })); paint();
 }
 export const studio = initStudio({
-  hoop: designHoop, machineHoop: hoop, turned: designTurned, fit: () => { state.zoom = 1; state.pan = [0, 0]; }, store, showError, busy, safeName, escapeHtml, handOut, keepFocus, showStep, step: () => state.step, paint: () => state.mode === "design" && paint(), setMode, toast, hideToast, keyboard: () => keyboard, threadLine, threadHtml, ownSpool, threadList, ownedSpools,
+  hoop: designHoop, machineHoop: hoop, turned: designTurned, pageFaces: uiFonts, fit: () => { state.zoom = 1; state.pan = [0, 0]; }, store, showError, busy, safeName, escapeHtml, handOut, keepFocus, showStep, step: () => state.step, paint: () => state.mode === "design" && paint(), setMode, toast, hideToast, keyboard: () => keyboard, threadLine, threadHtml, ownSpool, threadList, ownedSpools,
   // (undo, redo and Open saved put the hoop's turn back as it was; the caller rebuilds)
   setTurn: (on) => { state.turn.design = !!on; store.set("turn", state.turn); $("turn").setAttribute("aria-pressed", designTurned()); },
   hoopId: () => hoop().id,
@@ -840,14 +840,28 @@ selBox = studio.selBox;
 setMode((location.hash || "#design").slice(1), false);
 
 // Once the first design is on screen (or after 6 s without one: an empty Design tab), and the page is still: the
-// other tabs' code, then the offline copy. Not before: both are downloads, and on a slow connection they took the
-// line from the lettering font the first preview was waiting for.
+// page's own text faces, the other tabs' code, then the offline copy. Not before: all are downloads, and on a slow
+// connection they took the line from the lettering font the first preview was waiting for. (The font list's and
+// the starters' lettering fonts wait for the page's faces too: ui.js `facesOn`.)
 let shownOnce = false;
 function firstShown() {
   if (shownOnce) return;
   shownOnce = true;
   const still = (f) => ("requestIdleCallback" in window ? requestIdleCallback(f, { timeout: 3000 }) : setTimeout(f, 800));
-  still(() => tabCode().then(offline, offline));
+  // (the faces first and alone, for 5 s at most: they are what the visitor sees change)
+  still(() => uiFonts().then(() => tabCode().then(offline, offline)));
+}
+// The page's own text faces (index.html `nwFonts`). A visit that has had them asks for them at once from then on.
+let uiFontsAsked = null;
+function uiFonts() { return (uiFontsAsked ||= askUiFonts()); }
+function askUiFonts() {
+  globalThis.nwFonts?.();
+  const sheet = document.querySelector('link[rel="stylesheet"][href*="fonts.googleapis.com"]');
+  if (!sheet) return Promise.resolve();
+  const faces = ['400 17px "Atkinson Hyperlegible"', '700 17px "Atkinson Hyperlegible"', '500 17px "Bricolage Grotesque"', '700 17px "Bricolage Grotesque"', '500 14px "IBM Plex Mono"'];
+  const got = () => Promise.all(faces.map((f) => document.fonts.load(f))).then((f) => { if (f[0].length) store.set("uifonts", true); }, () => {});
+  const here = sheet.sheet ? got() : new Promise((r) => { sheet.addEventListener("load", () => got().then(r)); sheet.addEventListener("error", r); });
+  return Promise.race([here, new Promise((r) => setTimeout(r, 5000))]);
 }
 setTimeout(firstShown, 6000);
 

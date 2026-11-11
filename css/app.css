@@ -1,6 +1,22 @@
 /*! Needleworks (c) 2026 4Gables. All rights reserved. Proprietary, see LICENSE. https://4gables.com/needleworks/ */
 /* Needleworks — crisp white workroom, cranberry thread, script wordmark.
    Layout: header, segmented tabs, then controls (left) beside a large live preview (right); stacks on phones. */
+/* The page's own text faces (Atkinson Hyperlegible, Bricolage Grotesque, IBM Plex Mono: Google Fonts) come after the
+   first design is on screen on a first visit (index.html `nwFonts`: 109 KB that the first preview waited 2 s for on
+   a slow phone). Until then the text is in a font the device has, set to the same width and line as the face that
+   replaces it, so nothing re-wraps or moves when it does: `size-adjust` = the page's own words measured in both
+   (2,550 characters, 2026-11), ascent and descent the final face's over that. A = Arial (Mac, Windows, iOS),
+   R = Roboto (Android); a device with neither falls through to the next family. These are for the page's text
+   only: lettering is drawn and stitched from the NW fonts below, never from a stand-in. */
+@font-face { font-family: "NW Body A"; font-weight: 400; src: local("Arial"), local("ArialMT"); size-adjust: 98.7%; ascent-override: 96.3%; descent-override: 29.4%; line-gap-override: 0%; }
+@font-face { font-family: "NW Body A"; font-weight: 700; src: local("Arial Bold"), local("Arial-BoldMT"); size-adjust: 100%; ascent-override: 95%; descent-override: 29%; line-gap-override: 0%; }
+@font-face { font-family: "NW Body R"; font-weight: 400; src: local("Roboto"), local("Roboto-Regular"); size-adjust: 99.7%; ascent-override: 95.3%; descent-override: 29.1%; line-gap-override: 0%; }
+@font-face { font-family: "NW Body R"; font-weight: 700; src: local("Roboto Bold"), local("Roboto-Bold"); size-adjust: 106.3%; ascent-override: 89.4%; descent-override: 27.3%; line-gap-override: 0%; }
+@font-face { font-family: "NW Display A"; font-weight: 500; src: local("Arial"), local("ArialMT"); size-adjust: 93.9%; ascent-override: 99%; descent-override: 28.8%; line-gap-override: 0%; }
+@font-face { font-family: "NW Display A"; font-weight: 700; src: local("Arial Bold"), local("Arial-BoldMT"); size-adjust: 90.4%; ascent-override: 102.9%; descent-override: 29.9%; line-gap-override: 0%; }
+@font-face { font-family: "NW Display R"; font-weight: 500; src: local("Roboto Medium"), local("Roboto-Medium"); size-adjust: 94%; ascent-override: 98.9%; descent-override: 28.7%; line-gap-override: 0%; }
+@font-face { font-family: "NW Display R"; font-weight: 700; src: local("Roboto Bold"), local("Roboto-Bold"); size-adjust: 96.1%; ascent-override: 96.8%; descent-override: 28.1%; line-gap-override: 0%; }
+@font-face { font-family: "NW Mono"; src: local("Menlo"), local("Menlo-Regular"), local("Courier New"), local("CourierNewPSMT"); ascent-override: 102%; descent-override: 27%; line-gap-override: 0%; }
 @font-face { font-family: "NW Sacramento"; src: url("../fonts/Sacramento-Regular.woff2") format("woff2"); font-display: block; }
 @font-face { font-family: "NW Allura"; src: url("../fonts/Allura-Regular.woff2") format("woff2"); font-display: block; }
 @font-face { font-family: "NW Parisienne"; src: url("../fonts/Parisienne-Regular.woff2") format("woff2"); font-display: block; }
@@ -34,9 +50,9 @@
   --stage: #f3eeec;
   --focus: #1d5fd1;
   --danger: #9a1b1b; --warn: #a5521a; --good: #2a7043; --danger-line: #f3c2c2;
-  --display: "Bricolage Grotesque", "Avenir Next", system-ui, sans-serif;
-  --body: "Atkinson Hyperlegible", "Helvetica Neue", Arial, sans-serif;
-  --mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+  --display: "Bricolage Grotesque", "NW Display A", "NW Display R", "Avenir Next", system-ui, sans-serif;
+  --body: "Atkinson Hyperlegible", "NW Body A", "NW Body R", "Helvetica Neue", Arial, sans-serif;
+  --mono: "IBM Plex Mono", "NW Mono", ui-monospace, Menlo, monospace;
   --script: "NW Sacramento", cursive;
   --radius: 12px;
   color-scheme: light;
