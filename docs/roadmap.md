@@ -14,7 +14,7 @@ Phase 1, the base (no visible change, byte-identical batches):
   - [x] local folder fast-forwarded, `v12` tagged
   - [x] this roadmap
   - [x] scoreboard in `tests/check.sh` (`flow_lint.mjs --score`), baseline committed (`tests/fixtures/quality.json`)
-  - [x] CLAUDE.md cut to rules and a map (828 -> 130 lines); topic references in `docs/` (nothing dropped)
+  - [x] AGENTS.md cut to rules and a map (828 -> 130 lines); topic references in `docs/` (nothing dropped)
   - [x] stale test page and fixtures out. Each overlapping test is folded in by the round that works in its
     area, where it can be proven against the check it joins (perf into monkey and matrix into files_flow: F2;
     picture_history into picture_corpus: S4; starters into studio_batch: U1); dead code in shipped files goes
@@ -71,7 +71,7 @@ Weak at the base:
 | B5 | Four modules of 2,000-2,900 lines; ui.js is one 2,700-line closure; geometry and colour maths copied 3-20 times | code audit below | risky edits; measuring is O(n²) per keystroke (1-2 s on 15+ pieces) |
 | B6 | Errors swallowed | `verdictOf` returns "no problems" when the checker throws; a crashed doctor worker leaves Download waiting for ever | a hole in the one place that says "Checked" |
 | B7 | Releases aren't atomic: network-first files behind a 10-minute Pages cache | 2026-10-31: new ui.js with old pieces.js | a release can look broken for 10 minutes |
-| B8 | CLAUDE.md is 830 lines, loaded into every session, round logs creeping back | "Round 12/13/14" blocks | rules get buried |
+| B8 | AGENTS.md is 830 lines, loaded into every session, round logs creeping back | "Round 12/13/14" blocks | rules get buried |
 | B9 | "Better" is argued by hand each round | numbers rebuilt ad hoc | no standing scoreboard; overlapping test scripts |
 | B10 | No sew-out since 2026-11-06; PE-DESIGN reads only the block the machine doesn't sew | tester history | every stitch change since is unproven on a machine |
 

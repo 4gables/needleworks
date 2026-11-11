@@ -1,6 +1,6 @@
 # Testing and verification
 
-Reference for this part of Needleworks: the rules, the reason for each (it stops someone undoing it) and the number that proved it. Hard rules are in `CLAUDE.md`. Add a lesson where its topic is, never as a round log.
+Reference for this part of Needleworks: the rules, the reason for each (it stops someone undoing it) and the number that proved it. Hard rules are in `AGENTS.md`. Add a lesson where its topic is, never as a round log.
 
 - CI: `node tests/formats.test.mjs` (golden bytes; identical to `tests/fixtures/ashley_v3.pes`/`multi.pes` less the 4
   box bytes, fixtures by `tests/make_fixture.py` from `*_commands.json`; re-encoded samples, 300 fuzz designs, 50 byte
