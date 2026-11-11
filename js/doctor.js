@@ -3,6 +3,7 @@
 // 80-120 %, drop tiny stitches, thin the densest spots). Stitch units 0.1 mm; the PES writer stays untouched.
 import { COLOR_CHANGE, END, JUMP, STITCH, STOP, TRIM, designBlockAgrees, readEmbroidery, writePES } from "./core/formats.js";
 import { Design, relieve } from "./core/design.js";
+import { density } from "./core/density.js";
 import { LIMITS, MOVES } from "./core/recipes.js";
 import { fillPolygon } from "./core/digitize.js";
 import { distanceTransform } from "./core/raster.js";
@@ -13,17 +14,11 @@ import { HARD, LIMIT, MAX_BLOCKS, MAX_STITCH, endsEarly, moves, peak, satinGap, 
 // (LIMIT: 24 needle hits per mm² per colour block, the densest spot in sold designs; the counts are pe900_check.py's,
 // from quality.js, so the checkup and the download's verdict agree)
 
-// hits per 1 mm cell, the most in any one colour block: Map "cx,cy" -> count
+// the Thickness view: for each 1 mm cell, the most hits in any 1 mm window round it in one colour block
+// (Map "cx,cy" -> count; counted at every offset, as the checker counts)
 export function heat(pattern) {
-  const cells = new Map(), out = new Map();
-  let blk = 0;
-  for (const [x, y, c] of pattern.stitches) {
-    if (c === COLOR_CHANGE) { blk++; continue; }
-    if (c !== STITCH) continue;
-    const k = `${blk},${Math.floor(x / 10)},${Math.floor(y / 10)}`;
-    cells.set(k, (cells.get(k) || 0) + 1);
-  }
-  for (const [k, n] of cells) { const xy = k.slice(k.indexOf(",") + 1); if (n > (out.get(xy) || 0)) out.set(xy, n); }
+  const out = new Map();
+  for (const c of density(pattern.stitches, (hits) => hits < LIMIT / 2).cells) { const k = `${c.cx},${c.cy}`; if (c.top > (out.get(k) || 0)) out.set(k, c.top); }
   return out;
 }
 

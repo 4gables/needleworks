@@ -6,6 +6,7 @@
 import { stopWords } from "./words.js";
 import { COLOR_CHANGE, JUMP, STITCH, STOP, TRIM, designBlockAgrees, readEmbroidery } from "./core/formats.js";
 
+import { density } from "./core/density.js";
 import { LIMITS } from "./core/recipes.js";
 
 // (core/recipes.js holds the numbers; pe900_check has MAX_PER_MM2, MAX_STITCH, MAX_BLOCKS)
@@ -21,28 +22,8 @@ const TINY_SHARE = 0.02, SAME_SHARE = 0.01, SPARSE = 0.6;
 // limit (or over the most found so far) are scanned. A STOP starts a block too (a pause between two blocks of one
 // thread: pyembroidery reads it so).
 export function peak(pattern) {
-  const cells = new Map();
-  let blk = 0;
-  for (const [x, y, c] of pattern.stitches) {
-    if (c === COLOR_CHANGE || c === STOP) { blk++; continue; }
-    if (c !== STITCH) continue;
-    const X = Math.round(x), Y = Math.round(y), k = `${blk},${Math.floor(X / 10)},${Math.floor(Y / 10)}`;
-    if (!cells.has(k)) cells.set(k, []); cells.get(k).push([X, Y]);
-  }
-  let max = 0; const hot = new Set(), corners = new Set();
-  for (const [k, v] of cells) { max = Math.max(max, v.length); const [b, cx, cy] = k.split(",").map(Number); for (const i of [0, 1]) for (const j of [0, 1]) corners.add(`${b},${cx - i},${cy - j}`); }
-  for (const k of corners) {
-    const [b, cx, cy] = k.split(",").map(Number), group = [[0, 0], [1, 0], [0, 1], [1, 1]].map(([i, j]) => `${b},${cx + i},${cy + j}`);
-    const pts = group.flatMap((g) => cells.get(g) || []);
-    if (pts.length <= LIMIT && pts.length <= max) continue;
-    for (let ox = 0; ox < 10; ox++) for (let oy = 0; oy < 10; oy++) {
-      const x0 = cx * 10 + ox, y0 = cy * 10 + oy;
-      let n = 0; for (const [X, Y] of pts) if (X >= x0 && X < x0 + 10 && Y >= y0 && Y < y0 + 10) n++;
-      if (n > max) max = n;
-      if (n > LIMIT) for (const g of group) if (cells.has(g)) hot.add(g);
-    }
-  }
-  return { max, hot: hot.size };
+  const { max, cells } = density(pattern.stitches, (hits, most) => hits <= LIMIT && hits <= most);
+  return { max, hot: cells.filter((c) => c.top > LIMIT).length };
 }
 
 // satin coverage as pe900_check measures it: in long zigzags (stitches 1.2-6 mm, each turning back on the last), the
