@@ -73,3 +73,27 @@ Reference for this part of Needleworks: the rules, the reason for each (it stops
   against 351 ms for the old rows on the same machine.
 - A piece's stitch cache is kept by what its fill reads of the fabric (`sewnWith`): a patch's rows, a motif's pull and
   rows.
+
+## Density at the source (S2: in progress, not released)
+- **Measured on v27** (points `relieve` took out of the file as made, 439 files): towel 790 in 15 of 19 files
+  (GreatVibes 165, MeowScript 109, MsMadi 92, Allura 85), arcs and ovals 323 in 14 of 59 (Allura and Yellowtail
+  ovals 22-67), caption starters 256 in 9 of 12 (kitchen 111 each), frames/fills/in-the-hoop 206 in 60 of 136 (51 of
+  those files lose exactly 3: the starter name's own h junction), pictures 38, other lettering 25, small print 0,
+  bookmark names 0 in the last pass (2-56 in the pass before the quarter turn). About 1,640 in all.
+- **Where:** nearly all at a script's junctions, where several strokes' columns end on one node (each stroke's run
+  out, satin back, the next stroke's start), and on the inside of tight turns of wide columns (a towel's 2.5 mm).
+  Not at fills under borders, not in the borders themselves, not in the lattice alone.
+- **Built so far** (`Design` with `{ ease: true }`, set by `compose`; `density.js` `Hits`; `recipes.js` `EASE`): each
+  path gives way as it is handed to `Design.path`, against the hits already sewn in the colour block: a satin end
+  that doesn't fit comes part of the way back across its column (short stitches), else it and its neighbour on
+  the same edge are left out; a point on a straight run is merged away. A path's first and last point always stay.
+- **On eight sample files** (drops by `relieve`, v27 -> cap 20 -> cap 17): towel GreatVibes 165 -> 15 -> 12, towel
+  Allura 85 -> 0 -> 0, kitchen 111 -> 2 -> 0, oval Allura 67 -> 9 -> 6, arc GreatVibes 23 -> 1 -> 1, tag 3 -> 0,
+  heart patch 4 -> 2 -> 0. Peaks at cap 17: tag 21, appliqué 20, heart patch 23; the script files still reach 24.
+- **Left over:** what still goes over is path end points on a shared node (47 on the towel name), paths of four
+  points or fewer (dots, lock steps: 10) and corners (14). The next step is at the node itself: strokes that meet
+  should not each put their first and last hit on it (start a column one station in; let a run end short of a
+  node another stroke already covers).
+- **Not yet done:** no full batch has been run with easing on; no contact sheet or zoom looked at; timings not
+  taken; `relieve` and the doctor's counters not moved onto `density.js`; the rule for a block differs still
+  (`relieve`: colour change; `density`: colour change or stop).

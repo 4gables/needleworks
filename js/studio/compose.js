@@ -472,7 +472,7 @@ function build(pieces, hoop, opts) {
     const sides = rect.slice(1).flatMap((q, i) => run([rect[i], q], 4).slice(i ? 1 : 0));
     order[0] = { ...order[0], paths: [sides, ...order[0].paths], sews: Array.isArray(order[0].sews) ? ["Sews a basting box to hold everything flat.", ...order[0].sews] : "Sews a basting box to hold everything flat. " + order[0].sews };
   }
-  const d = new Design(hoop), steps = [], after = [], before = [];
+  const d = new Design(hoop, { ease: true }), steps = [], after = [], before = [];
   // where the next part of the same block starts, past closed rings (a ring the needle has to jump to anyway starts
   // there instead, so the move after it is a stitch; rings after it are entered where it ends: `enter`)
   const items = [];

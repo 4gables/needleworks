@@ -106,3 +106,16 @@ export const fillRecipe = (fabric) => FILLS[fabric] || FILLS.cotton;
 // A tie-in's length (mm), first that keeps clear of the run's own next points: 0.7 is the middle of what sold
 // designs use (0.5-0.8; shorter can pull out before the bobbin thread catches), 0.5 and 0.8 its ends.
 export const TIE_INS = [0.7, 0.5, 0.8];
+
+// --- S2: density at the source ---
+// A piece's stitches give way where the thread already sewn in this colour is thick, as they are built (`Design`),
+// so the limit is kept by where the needle goes and not by taking stitches out afterwards (`relieve`, now the guard).
+//   cap:    the most hits a 1 mm window may hold once a stitch that can give way is added. Under LIMITS.hits by a
+//           lock's four, which are added after and never moved.
+//   short:  a satin's end comes this share of the way back across its column, first that fits (a digitizer's short
+//           stitches on the inside of a turn and where columns meet: the outer edge keeps every stitch)
+//   merge:  two stitches of a run or an underlay become one up to this long (mm), where the point between them lies
+//           within `stray` mm of the straight line (a curve keeps its points)
+//   least:  no stitch made shorter than this (mm)
+//   most:   nor longer (mm) by leaving points out of a satin
+export const EASE = { cap: 20, short: [0.72, 0.5], merge: 3, stray: 0.15, least: 0.5, most: 4 };

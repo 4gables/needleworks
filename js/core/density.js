@@ -49,3 +49,36 @@ export function density(stitches, skip = () => false) {
   }
   return { max, cells: [...cells.values()] };
 }
+
+// The same count kept while a design is built (`Design`, where a piece's stitches give way before they pile up:
+// recipes.js `EASE`). add(X, Y): a hit, in 0.1 mm as the file rounds it. top(X, Y): the most hits any 1 mm window
+// holding that point would have with one more hit there (an upper bound while that is clearly few: the hits of the
+// cells round it; counted window by window only where it is close).
+export class Hits {
+  constructor() { this.cells = new Map(); this.grid = new Uint16Array(20 * 20); }
+  key(cx, cy) { return (cx + 4096) * 8192 + cy + 4096; }
+  add(X, Y) {
+    const k = this.key(Math.floor(X / 10), Math.floor(Y / 10));
+    let c = this.cells.get(k);
+    if (!c) this.cells.set(k, (c = []));
+    c.push(X, Y);
+  }
+  top(X, Y, under = Infinity) {
+    const x0 = Math.floor((X - 9) / 10), x1 = Math.floor((X + 9) / 10), y0 = Math.floor((Y - 9) / 10), y1 = Math.floor((Y + 9) / 10);
+    const near = [];
+    let n = 1;
+    for (let cx = x0; cx <= x1; cx++) for (let cy = y0; cy <= y1; cy++) { const c = this.cells.get(this.key(cx, cy)); if (c) { near.push(c); n += c.length / 2; } }
+    if (n <= under) return n;
+    // every window holding (X, Y): its corner 0-9 back from the point each way; the hits within 9 of it, summed
+    // from the top left, then four reads a window
+    const g = this.grid; g.fill(0);
+    for (const c of near) for (let i = 0; i < c.length; i += 2) { const dx = c[i] - X, dy = c[i + 1] - Y; if (dx >= -9 && dx <= 9 && dy >= -9 && dy <= 9) g[(dy + 10) * 20 + dx + 10]++; }
+    for (let y = 1; y < 20; y++) for (let x = 1; x < 20; x++) g[y * 20 + x] += g[y * 20 + x - 1] + g[(y - 1) * 20 + x] - g[(y - 1) * 20 + x - 1];
+    let top = 0;
+    for (let oy = 0; oy < 10; oy++) for (let ox = 0; ox < 10; ox++) {
+      const m = g[(oy + 10) * 20 + ox + 10] - g[oy * 20 + ox + 10] - g[(oy + 10) * 20 + ox] + g[oy * 20 + ox];
+      if (m > top) top = m;
+    }
+    return top + 1;
+  }
+}
