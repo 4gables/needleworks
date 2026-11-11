@@ -37,7 +37,27 @@ Phase 1, the base (no visible change, byte-identical batches):
   - Moved on, with the reason: `relieve` and the doctor's `slide`/`crowd` onto `density.js` goes with S2 (their
     block rule differs from the checker's, so aligning it changes bytes); the marching-squares and scanline-fill
     copies go with S3 (it rewrites fills; merging them now risks vertex order); bounding-box copies with F2
-- [ ] **F2 Structure**: pieces.js, digitize.js, ui.js, app.js split; one worker job queue; one memo per `make()`
+- [ ] **F2 Structure** (branch `f2-structure`; byte-identical after each step)
+  - [x] `js/core/fill.js`: the fill engine out of digitize.js (439 of 439 identical)
+  - [x] pieces.js, first seams: `shapes.js`, `fabrics.js`, `files.js` (439 of 439 identical). Lettering, stages,
+    fit and compose share the sew context and five caches: lift those into one module first, then split
+  - [ ] speed on a busy design (`tests/perf.mjs`, 15 pieces + appliqué letters: 6-9 of 23 actions over 500 ms,
+    worst 745-830 ms, run to run). Measured, not guessed:
+    - a per-piece memo for collision measuring changed nothing (clouds and `near` are ~57 ms of a towel change):
+      reverted. The audit's O(n²) reading was right about the shape of the code, wrong about the cost
+    - `relieve` was ~560 ms of a towel change's work; it now sums each window's hits instead of picking its
+      points out and keys its cells by number (the same points dropped as v14's on 879 runs at limits 24, 16 and
+      10; 4.6x faster). Towel change 745 -> 509 ms
+    - what is left of a thread or fabric change's freeze (~550 ms) is fills made on the page: `fillPolygon`,
+      `distanceTransform` and `tatami` are ~500 ms of a thread change on this design (motif and appliqué fills
+      re-made because the weight is in their cache key, though 60 wt doesn't change a fill). Next: fills through
+      the worker as carved patches already go (`fillLater`), and the weight out of a fill's key where it changes
+      nothing
+  - [ ] perf folded into monkey's budget once the freeze is under 500 ms
+  - [x] released so far as v15 (439 batch and 117 corpus files identical to v12; monkey 960 steps 0 problems;
+    ui_sweep's one failure is the Picture-tab intermittent, which v12 has too: `docs/decisions.md`)
+  - [ ] digitize.js: colour learning and styles apart
+  - [ ] ui.js and app.js over one shared state; one worker job queue; matrix folded into files_flow
 - [ ] **F3 Atomic releases**: one release's files per load, never a mix
 
 Phase 2, stitch quality (measured against the scoreboard, VM-checked):
