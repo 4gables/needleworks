@@ -281,7 +281,9 @@ export function makeRouter(mask, res, cell, hop = null, budget = routeBudget(), 
 // yet, so the fill covers the travel. It only jumps (and trims) when every way would lie on top of finished rows for
 // more than SEWN mm. groups: [underlay paths, fill paths] in px; the underlay is covered by the fill, so travel over it is
 // hidden too. inOrder: the next section is always entered at its first row (a drawn shape's fill, `fillPolygon`).
-export function routeFill(groups, comp, mask, res, budget = routeBudget(), worn = Infinity, inOrder = false) {
+// spare: sections of the first so many groups are left out when only a jump would reach them (a bit of edge run
+// isn't worth a trim).
+export function routeFill(groups, comp, mask, res, budget = routeBudget(), worn = Infinity, inOrder = false, spare = 0) {
   const { w } = mask, R = makeRouter(mask, res, (x, y) => (comp.labels[y * w + x] === comp.id ? 1 : 0), null, budget, worn);
   const out = [];
   let cur = null;
@@ -293,7 +295,9 @@ export function routeFill(groups, comp, mask, res, budget = routeBudget(), worn 
     while (left.length) {
       // (a section can also be sewn from its last row back, entering from its far side)
       let k = 0, r = null, rev = false;
-      if (cur) {
+      const q0 = left[0][0], straight = inOrder && cur && Math.hypot(q0[0] - cur[0], q0[1] - cur[1]) > res ? R.route(cur, q0, SEWN) : null;
+      if (straight && straight.sewnMm <= SEWN) r = straight;   // (one search toward it; the flood below only when that fails)
+      else if (cur) {
         const way = R.reach(cur, SEWN, inOrder ? [left[0][0]] : [left[0][0], left[0][left[0].length - 1]]);
         search: for (let i = 0; i < left.length; i++) for (const back of [false, true]) {
           const q = back ? left[i][left[i].length - 1] : left[i][0];
@@ -304,6 +308,7 @@ export function routeFill(groups, comp, mask, res, budget = routeBudget(), worn 
       }
       let p = left.splice(k, 1)[0]; if (rev) p = p.slice().reverse();
       const d = cur ? Math.hypot(p[0][0] - cur[0], p[0][1] - cur[1]) : Infinity;
+      if (gi < spare && cur && d > res && !r) continue;
       // within 1 mm: sew straight on (skipping a first point that would make a stitch under 0.4 mm)
       if (cur && d <= res) out[out.length - 1].push(...(d < 0.4 * res ? p.slice(1) : p));
       else if (r && r.sewnMm <= SEWN) out[out.length - 1].push(...R.stitches(r), ...p);
@@ -347,9 +352,11 @@ function shaped(loops, inset, res) {
       for (let x = Math.max(0, Math.ceil((cut[k] - x0) * res - 0.5)); x < Math.min(w, Math.floor((cut[k + 1] - x0) * res - 0.5) + 1); x++) mask.data[y * w + x] = 1;
   }
   if (inset) { const e = distanceTransform(mask); for (let i = 0; i < w * h; i++) if (e[i] <= inset * res) mask.data[i] = 0; }
-  const { labels, count } = label(mask), dt = distanceTransform(mask), parts = Array.from({ length: count + 1 }, () => []);
+  const { labels, count } = label(mask), parts = Array.from({ length: count + 1 }, () => []);
   for (let i = 0; i < w * h; i++) if (labels[i]) parts[labels[i]].push(i);
-  const v = { x0, y0, mask, labels, count, dt, parts };
+  // (each pixel's distance to the edge: only rows read off the drawing ask for it)
+  let dt = null;
+  const v = { x0, y0, mask, labels, count, parts, get dt() { return (dt ||= distanceTransform(mask)); } };
   drawn.set(key, v); if (drawn.size > 6) drawn.delete(drawn.keys().next().value);
   return v;
 }
@@ -428,11 +435,12 @@ function exactRows(loops, shape, res, { angle, spacing, inset = 0, pull, share =
 // An edge run: one line of stitches `d` px inside each outline of a part, sewn before anything else. It holds the
 // fabric to the stabilizer along the edge, where the rows pull hardest (the usual underlay of a tatami fill: edge
 // run, then a lattice across). Each outline point is moved `d` along its normal to the side that is inside; points
-// that land nearer the edge than 0.7 d (inside a sharp corner, a neck narrower than 2 d) are left out and the run
-// broken there.
+// that land nearer the edge than 0.7 d (inside a sharp corner, a neck narrower than 2 d: looked for at eight places
+// round the point) are left out and the run broken there.
 function edgeRuns(loops, comp, mask, res, d, stitch) {
   const { w, h } = mask, out = [];
-  const ok = ([x, y]) => { const X = Math.round(x), Y = Math.round(y); return X >= 0 && Y >= 0 && X < w && Y < h && comp.labels[Y * w + X] === comp.id && comp.dt[Y * w + X] >= 0.7 * d; };
+  const at = (x, y) => { const X = Math.round(x), Y = Math.round(y); return X >= 0 && Y >= 0 && X < w && Y < h && comp.labels[Y * w + X] === comp.id; };
+  const k = 0.7 * d, ok = ([x, y]) => at(x, y) && at(x + k, y) && at(x - k, y) && at(x, y + k) && at(x, y - k) && at(x + 0.7 * k, y + 0.7 * k) && at(x - 0.7 * k, y + 0.7 * k) && at(x + 0.7 * k, y - 0.7 * k) && at(x - 0.7 * k, y - 0.7 * k);
   for (const l of loops) {
     const q = resample(l, 0.5 * res, true), n = q.length, pieces = [[]];
     if (n < 6) continue;
@@ -458,11 +466,11 @@ function edgeRuns(loops, comp, mask, res, d, stitch) {
 // outlines are traced from a drawing of the file's stitches already, stair-stepped)
 export function fillPolygon(poly, { angle = FILL.angle, density = ROWS.solid, res = FILL.res, inset = 0, pattern = "tatami", share = null, underlay = true, pull = FILLS.cotton.pull, raster = false } = {}) {
   const loops = Array.isArray(poly[0][0]) ? poly : [poly];
-  const shape = shaped(loops, inset, res), { x0, y0, mask, labels, count, dt, parts } = shape, paths = [];
+  const shape = shaped(loops, inset, res), { x0, y0, mask, labels, count, parts } = shape, paths = [];
   const toMm = (p) => p.map(([x, y]) => [x0 + (x + 0.5) / res, y0 + (y + 0.5) / res]);
   if (raster) {
     for (let id = 1; id <= count; id++) {
-      const comp = { id, labels, dt, pixels: parts[id] };
+      const comp = { id, labels, dt: shape.dt, pixels: parts[id] };
       if (comp.pixels.length < 1.5 * res * res) continue;
       const under = underlay ? tatami(mask, comp, res, { angle: angle + 90, spacing: 2.5, stitch: 3, inset: 0.4, pull: 0 }) : [];
       const fill = tatami(mask, comp, res, { angle, spacing: density, stitch: 3.5, pull: 0.15, pattern, share });
@@ -471,13 +479,15 @@ export function fillPolygon(poly, { angle = FILL.angle, density = ROWS.solid, re
     return paths;
   }
   const px = loops.map((l) => l.map(([x, y]) => [(x - x0) * res - 0.5, (y - y0) * res - 0.5]));
-  // (how far outside the shape each pixel is: a step between rows may leave it by the pull and a little, no more)
-  const away = (shape.away ||= distanceTransform({ w: mask.w, h: mask.h, data: mask.data.map((v) => 1 - v) }));
+  // a step between rows may leave the shape by the pull and a little, no more: a point further out than that (the
+  // drawing has nothing within that distance of it, looked for at eight places round it) splits the path, as in `tatami`
+  const on = (x, y) => { const X = Math.round(x), Y = Math.round(y); return X >= 0 && Y >= 0 && X < mask.w && Y < mask.h && mask.data[Y * mask.w + X] === 1; };
+  const far = (pull + 0.15) * res, RING = [[1, 0], [-1, 0], [0, 1], [0, -1], [0.7, 0.7], [0.7, -0.7], [-0.7, 0.7], [-0.7, -0.7]];
   const leaves = (p, q) => {
     const n = Math.ceil(Math.hypot(q[0] - p[0], q[1] - p[1]) / (0.2 * res));
     for (let i = 1; i < n; i++) {
-      const X = Math.round(p[0] + ((q[0] - p[0]) * i) / n), Y = Math.round(p[1] + ((q[1] - p[1]) * i) / n);
-      if (X < 0 || Y < 0 || X >= mask.w || Y >= mask.h || away[Y * mask.w + X] > (pull + 0.15) * res) return true;
+      const x = p[0] + ((q[0] - p[0]) * i) / n, y = p[1] + ((q[1] - p[1]) * i) / n;
+      if (!on(x, y) && !RING.some(([dx, dy]) => on(x + dx * far, y + dy * far) || on(x + dx * far * 0.5, y + dy * far * 0.5))) return true;
     }
     return false;
   };
@@ -485,12 +495,12 @@ export function fillPolygon(poly, { angle = FILL.angle, density = ROWS.solid, re
   const along = exactRows(px, shape, res, { angle, spacing: density, inset, pull, share });
   const of = (R, id, stitch, pat) => sewRows(R.rows.map((row) => ({ ...row, ivs: row.ivs.filter((iv) => iv.part === id) })), R.U, R.V, res, stitch * res, pat, leaves);
   for (let id = 1; id <= count; id++) {
-    const comp = { id, labels, dt, pixels: parts[id] };
+    const comp = { id, labels, pixels: parts[id] };
     if (comp.pixels.length < 1.5 * res * res) continue;
     const edge = underlay ? edgeRuns(px, comp, mask, res, UNDER.inset * res, UNDER.run) : [];
     // (sections taken strictly in row order, each from its first row: going to whichever end of the first was nearer
     // sewed it backwards and stranded the rest behind it, 275 parts against 184 over 164 test shapes; each part is a trim)
-    paths.push(...routeFill([edge, across ? of(across, id, UNDER.stitch, "tatami") : [], of(along, id, 3.5, pattern)], comp, mask, res, undefined, undefined, true).map(toMm));
+    paths.push(...routeFill([edge, across ? of(across, id, UNDER.stitch, "tatami") : [], of(along, id, 3.5, pattern)], comp, mask, res, undefined, undefined, true, 1).map(toMm));
   }
   return paths;
 }

@@ -53,7 +53,10 @@ Reference for this part of Needleworks: the rules, the reason for each (it stops
   first section was nearer sewed it backwards and stranded the rest behind finished rows: 275 parts against 184 over
   164 test shapes (the old drawing-based rows: 220). Each part is a trim. Sewing small sections first was no better
   (273). Pictures keep the nearer-end rule until measured on them.
-- A step between rows may leave the shape by the pull and 0.15 mm, no more (`away`: each pixel's distance outside);
-  further and the path is split there, as before.
+- A step between rows may leave the shape by the pull and 0.15 mm, no more; further and the path is split there, as
+  before. A bit of edge run that only a jump would reach is left out (`spare`): it isn't worth a trim.
+- Speed: no distance transform for a shape without an inset (the edge-run and row-step tests look at eight places
+  round a point instead), and one search straight to the next section before any flood: 12 test fills in 237 ms
+  against 420 ms for the old rows on the same machine.
 - A piece's stitch cache and a carved patch's fill are kept by the fabric's fill recipe (`sewnWith`, `carve`'s key):
   kept by "knit or not", a towel design showed cotton's fill.
