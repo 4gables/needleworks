@@ -17,7 +17,7 @@ import { glyphs } from "../js/core/glyphs.js";
 import { APPLIQUE_FONTS, FONTS } from "../js/core/fonts.js";
 import { MAX_INITIALS, MAX_WORDS, graphemes, initials, lacks, latin, reswashed, safeName, swashes, swashless, tidy, uniqueName, unswashed } from "../js/core/typed.js";
 import { cleanPiece, label } from "../js/studio/pieces.js";
-import { FIXED, VARIANTS, corpus } from "./text_corpus.mjs";
+import { VARIANTS, corpus } from "./text_corpus.mjs";
 
 const ALL = corpus(400, 9);
 const FAMILIES = [...FONTS, ...APPLIQUE_FONTS].map((f) => f.family);

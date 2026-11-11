@@ -10,12 +10,15 @@ Tick a step in the same commit that finishes it. A round in progress lives on it
 is undone with `git revert -m 1 <merge>` and a cache bump.
 
 Phase 1, the base (no visible change, byte-identical batches):
-- [ ] **F0 Ground** (branch `f0-ground`)
+- [x] **F0 Ground**
   - [x] local folder fast-forwarded, `v12` tagged
   - [x] this roadmap
   - [x] scoreboard in `tests/check.sh` (`flow_lint.mjs --score`), baseline committed (`tests/fixtures/quality.json`)
   - [x] CLAUDE.md cut to rules and a map (828 -> 130 lines); topic references in `docs/` (nothing dropped)
-  - [ ] overlapping tests folded in (perf, starters, picture_history, matrix); dead code and stale fixtures out
+  - [x] stale test page and fixtures out. Each overlapping test is folded in by the round that works in its
+    area, where it can be proven against the check it joins (perf into monkey and matrix into files_flow: F2;
+    picture_history into picture_corpus: S4; starters into studio_batch: U1); dead code in shipped files goes
+    with F1, which edits those files anyway (so F0 ships no code and needs no cache bump)
 - [ ] **F1 Recipes and context**: one `recipes.js`; sew context passed explicitly; one density module; shared
   geometry and colour helpers; checker and worker errors surface
 - [ ] **F2 Structure**: pieces.js, digitize.js, ui.js, app.js split; one worker job queue; one memo per `make()`
