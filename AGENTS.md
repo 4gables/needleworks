@@ -53,8 +53,10 @@ measurements behind each number are in the code's comments.
     (Phosphor), `brandcharts.js` (Embroidermodder).
 - **The PES writer is locked.** `writePES` output is frozen byte for byte by `tests/fixtures/golden/*.pes` (CI);
   browser and Node write identical bytes. Features hand stitch patterns to `writePES` and never touch
-  `js/core/formats.js`. Change it only to fix a proven machine problem, then redo the Brother checks before
-  regenerating the golden files.
+  `js/core/formats.js`. It changes only on purpose: to fix a proven machine problem, or for a change listed in
+  `docs/writer-changes.md` (owner, 2026-11-11: writer changes that push what the files can do are allowed), one
+  at a time, with the Brother checks redone before the golden files are regenerated. A round stopped by the writer
+  adds a row there.
 - **PEC design box.** Brother machines read the two 16-bit fields after `0x1E0, 0x1B0` in the PEC stitch block as
   the design box's top-left (big-endian `0x9000 | -minX`, `0x9000 | -minY`) and decode stitches after them.
   pyembroidery writes its opening jump there: a real PE900 showed the design shifted and clipped to half. We write
@@ -110,6 +112,7 @@ Read the topic's file before changing its code; each holds the rules, their reas
 | Tests, batches, the VM, the Brother diff, what each check guards | `docs/testing.md` |
 | Tried and rejected; known and not done | `docs/decisions.md` |
 | PES/PEC/DST byte layouts (the clean-room spec) | `docs/formats-spec.md` |
+| PES writer changes wanted, and how one ships | `docs/writer-changes.md` |
 
 ## How to work
 - Rounds follow `docs/roadmap.md`: one theme each, in a worktree under `.claude/worktrees/` on a branch from
