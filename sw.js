@@ -37,6 +37,7 @@ const FILES = [
   "js/core/glyphs.js",
   "js/core/formats.js",
   "js/core/geom.js",
+  "js/core/colour.js",
   "js/core/density.js",
   "js/core/machines.js",
   "js/core/recipes.js",

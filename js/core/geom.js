@@ -112,6 +112,14 @@ export function enter(q, at, near = 2.0) {
 }
 
 // [x0, y0, x1, y1] of points (a loop: Math.min(...pts) overflows the stack on big designs)
+// whether a point lies inside closed loops, even-odd over all of them (a hole's loop takes its inside out)
+export function within(loops, [x, y]) {
+  let k = false;
+  for (const l of loops) for (let i = 0, j = l.length - 1; i < l.length; j = i++)
+    if ((l[i][1] > y) !== (l[j][1] > y) && x < ((l[j][0] - l[i][0]) * (y - l[i][1])) / (l[j][1] - l[i][1]) + l[i][0]) k = !k;
+  return k;
+}
+
 export function bounds(pts) {
   let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
   for (const [x, y] of pts) { if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }

@@ -9,7 +9,7 @@ import { APPLIQUE_FONTS, FONTS, fontOf } from "../core/fonts.js";
 import { machineThreads } from "../core/formats.js";
 import { MARGIN } from "../core/machines.js";
 import { BORDERS as EDGES, fillFor, letterRecipe, satinFor } from "../core/recipes.js";
-import { back, bounds, circle, edgeWalk, enter, filletPolygon, followRun, loop, moveCost, normals, rings, run, satin, zigzag } from "../core/geom.js";
+import { back, bounds, circle, edgeWalk, enter, filletPolygon, followRun, loop, moveCost, normals, rings, run, satin, within, zigzag } from "../core/geom.js";
 import { counterPockets, distanceTransform, order } from "../core/raster.js";
 import { strokes } from "../core/text.js";
 import { MAX_INITIALS, MAX_WORDS, brief, initials, latin, swashes, tidy, unswashed } from "../core/typed.js";
@@ -1356,12 +1356,7 @@ const edgeWidth = (l, max, min) => { const [x0, y0, x1, y1] = bounds(l); return 
 function edgeTop(l, max, min = 1.2) { const w = edgeWidth(l, max, min); return loop(satin(l, w, sd(0.4), w > 2 ? 0.3 : 0.2, true, true)); }
 
 // a point inside closed loops (even-odd)
-function insideLoops(loops, [x, y]) {
-  let k = false;
-  for (const l of loops) for (let i = 0, j = l.length - 1; i < l.length; j = i++)
-    if ((l[i][1] > y) !== (l[j][1] > y) && x < ((l[j][0] - l[i][0]) * (y - l[i][1])) / (l[j][1] - l[i][1]) + l[i][0]) k = !k;
-  return k;
-}
+const insideLoops = within;   // (core/geom.js)
 
 // every loop moved d mm away from the inside of the shape (even-odd over all the loops, so holes move into the hole)
 function outward(loops, d) {
@@ -1474,12 +1469,7 @@ function applRoutes(loops) {
     return picked;
   };
   // the holes of the piece an outline belongs to come first (the placement line links them across the letter)
-  const contains = (l, [x, y]) => {
-    let k = false;
-    for (let i = 0, j = l.length - 1; i < l.length; j = i++)
-      if ((l[i][1] > y) !== (l[j][1] > y) && x < ((l[j][0] - l[i][0]) * (y - l[i][1])) / (l[j][1] - l[i][1]) + l[i][0]) k = !k;
-    return k;
-  };
+  const contains = (l, q) => within([l], q);
   const host = loops.map((l, i) => {
     const around = loops.map((m, j) => j).filter((j) => j !== i && contains(loops[j], l[0]));
     if (around.length % 2 === 0) return i;
@@ -1740,14 +1730,7 @@ export function underPatch(p, pieces, before = false) {
   return null;
 }
 // point in polygon (even-odd)
-function inside([x, y], poly) {
-  let c = false;
-  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
-    const [xi, yi] = poly[i], [xj, yj] = poly[j];
-    if ((yi > y) !== (yj > y) && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) c = !c;
-  }
-  return c;
-}
+const inside = (q, poly) => within([poly], q);
 
 // A piece as the page names it, long words `brief` (`whole`: all of them, for the thread name in the file, which a
 // design's saved bytes carry). One with no words yet is named for what it is: the list showed an empty “” (round 13).

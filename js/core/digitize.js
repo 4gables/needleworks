@@ -2,6 +2,7 @@
 // Picture -> embroidery. Reduce to a few thread colours, then stitch each shape by its width:
 // hairlines get a double running stitch along their centre; every shape with width gets a solid tatami fill.
 // Other styles: line drawing (`lineArt`) and cross-stitch (`crossStitch`).
+import { labOf } from "./colour.js";
 import { Design } from "./design.js";
 import { arclen, followRun } from "./geom.js";
 import { MARGIN } from "./machines.js";
@@ -53,14 +54,7 @@ function narrowGaps(mask, res, open) {
 }
 
 // ---------- colour ----------
-function srgbToLab(r, g, b) {
-  const f = (c) => { c /= 255; return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4; };
-  const R = f(r), G = f(g), B = f(b);
-  const X = (0.4124 * R + 0.3576 * G + 0.1805 * B) / 0.95047, Y = 0.2126 * R + 0.7152 * G + 0.0722 * B,
-    Z = (0.0193 * R + 0.1192 * G + 0.9505 * B) / 1.08883;
-  const h = (t) => (t > 0.008856 ? Math.cbrt(t) : 7.787 * t + 16 / 116);
-  return [116 * h(Y) - 16, 500 * (h(X) - h(Y)), 200 * (h(Y) - h(Z))];
-}
+const srgbToLab = labOf;   // (core/colour.js)
 
 // CIEDE2000 colour difference of two Lab colours (Sharma, Wu & Dalal 2005). Plain Lab distance overweights chroma:
 // it sent an olive green to Russet Brown and a teal to Pewter.

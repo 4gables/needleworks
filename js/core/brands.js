@@ -1,6 +1,7 @@
 /*! Needleworks (c) 2026 4Gables. All rights reserved. Proprietary, see LICENSE. https://4gables.com/needleworks/ */
 // Spool numbers in the thread brand people actually own: the nearest spool to a colour, overall or among the ones
 // they've listed. Labels only; the PES file always carries Brother PEC colours.
+import { lab } from "./colour.js";
 import { BRAND_CHARTS as OTHERS } from "./brandcharts.js";
 import { PEC_THREADS, hexToRgb, rgbToHex } from "./threads.js";
 
@@ -22,13 +23,7 @@ const BRAND_CHARTS = { brother: { name: "Brother", rows: PEC_THREADS.slice(1, 62
 
 // CIELAB (D65): the brand charts' approximate darks are told apart by eye, not by the red-mean distance the machine
 // uses (that called black "Ivy", a dark green, in Robison-Anton)
-export function lab([r, g, b]) {
-  const f = (c) => { c /= 255; return c > 0.04045 ? ((c + 0.055) / 1.055) ** 2.4 : c / 12.92; };
-  const [R, G, B] = [f(r), f(g), f(b)];
-  const x = (0.4124 * R + 0.3576 * G + 0.1805 * B) / 0.95047, y = 0.2126 * R + 0.7152 * G + 0.0722 * B, z = (0.0193 * R + 0.1192 * G + 0.9505 * B) / 1.08883;
-  const t = (v) => (v > 0.008856 ? Math.cbrt(v) : 7.787 * v + 16 / 116);
-  return [116 * t(y) - 16, 500 * (t(x) - t(y)), 200 * (t(y) - t(z))];
-}
+export { lab };   // (core/colour.js)
 
 const charts = {};
 function chart(brand) {

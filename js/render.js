@@ -1,6 +1,7 @@
 /*! Needleworks (c) 2026 4Gables. All rights reserved. Proprietary, see LICENSE. https://4gables.com/needleworks/ */
 // Draw a stitch pattern ({ stitches: [[x, y, cmd]] in 0.1 mm, threads }) like real thread on fabric.
 import { COLOR_CHANGE, JUMP, STITCH, TRIM } from "./core/formats.js";
+import { lab as labRgb, luminance, rgbOf } from "./core/colour.js";
 import { LIMITS } from "./core/recipes.js";
 
 export function colorBlocks(design) {
@@ -29,20 +30,10 @@ function shade(hex, f) {
 }
 
 // relative luminance (WCAG) of "#rrggbb" or "rgb(r, g, b)"
-function lum(c) {
-  const v = c[0] === "#" ? [1, 3, 5].map((i) => parseInt(c.slice(i, i + 2), 16)) : (c.match(/[\d.]+/g) || [255, 255, 255]).slice(0, 3).map(Number);
-  const [r, g, b] = v.map((x) => { x /= 255; return x <= 0.03928 ? x / 12.92 : ((x + 0.055) / 1.055) ** 2.4; });
-  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
-}
+const lum = (c) => luminance(rgbOf(c));
 // CIELAB (D65) of a colour as lum() reads it: thread and ground a few ΔE apart vanish into each other even when their
 // luminance differs a little (pink thread on pink gingham's stripes)
-function lab(c) {
-  const v = c[0] === "#" ? [1, 3, 5].map((i) => parseInt(c.slice(i, i + 2), 16)) : (c.match(/[\d.]+/g) || [255, 255, 255]).slice(0, 3).map(Number);
-  const [r, g, b] = v.map((x) => { x /= 255; return x <= 0.04045 ? x / 12.92 : ((x + 0.055) / 1.055) ** 2.4; });
-  const f = (t) => (t > 0.008856 ? Math.cbrt(t) : 7.787 * t + 16 / 116);
-  const X = f((0.4124 * r + 0.3576 * g + 0.1805 * b) / 0.95047), Y = f(0.2126 * r + 0.7152 * g + 0.0722 * b), Z = f((0.0193 * r + 0.1192 * g + 0.9505 * b) / 1.08883);
-  return [116 * Y - 16, 500 * (X - Y), 200 * (Y - Z)];
-}
+const lab = (c) => labRgb(rgbOf(c));
 // the colours of a gingham as the eye sees them: the base, a stripe over it, the crossing
 function mix(a, b, t) {
   const p = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16)), x = p(a), y = p(b);
