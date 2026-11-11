@@ -3,7 +3,7 @@
 // motif settings), drawn from the piece as it is. The editor hands in its state and helpers as S.
 // (Part of ui.js until 2026-11.)
 import { QUILTS } from "./quilt.js";
-import { FILL_PATTERNS } from "../core/digitize.js";
+import { FILL_PATTERNS } from "../core/fill.js";
 import { NAVY } from "./starters.js";
 import { MOTIFS } from "./motifs.js";
 import { TEXT_SHAPES, followFrame, SHAPES, BORDERS, FILE_SCALE, bulkReady } from "./pieces.js";

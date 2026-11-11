@@ -11,12 +11,29 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=IBM+Plex+Mono:wght@500&display=swap">
-<!-- the module graph is three deep; fetch it all at once -->
-<link rel="modulepreload" href="js/app.js"><link rel="modulepreload" href="js/studio/ui.js"><link rel="modulepreload" href="js/studio/pieces.js">
-<link rel="modulepreload" href="js/core/formats.js"><link rel="modulepreload" href="js/core/digitize.js"><link rel="modulepreload" href="js/core/text.js"><link rel="modulepreload" href="js/core/typed.js">
-<link rel="modulepreload" href="js/core/raster.js"><link rel="modulepreload" href="js/core/geom.js"><link rel="modulepreload" href="js/core/design.js">
-<link rel="modulepreload" href="js/render.js"><link rel="modulepreload" href="js/core/brandcharts.js">
 <link rel="stylesheet" href="css/app.css">
+<!-- the lettering font the first design is drawn in, asked for now and not when the scripts are in (a slow first
+     visit waited 4 s more for it): the saved design's, or the first starter's (tests/sw.test.mjs: starters.js SCRIPT) -->
+<script>try { var d = localStorage.getItem("nw:studio"), f = d ? (d.match(/"font":"NW [^"]+"/g) || []).map(function (m) { return m.slice(8, -1); }) : ["NW Great Vibes"]; if (!/^#(picture|open)/.test(location.hash)) f.slice(0, 3).forEach(function (n) { document.fonts.load('40px "' + n + '"'); }); } catch (e) {}</script>
+<!-- every module the first screen runs, asked for at once (the graph is six deep: one round trip each on a slow
+     connection). Written by `node tests/sw.test.mjs --write`, which also fails when the list and js/app.js's
+     imports disagree: a module that isn't needed here (the Picture and Open tabs' code comes later) is a download
+     the first preview waits for. -->
+<!-- first screen: start -->
+<link rel="modulepreload" href="js/along.js" fetchpriority="low"><link rel="modulepreload" href="js/app.js" fetchpriority="low"><link rel="modulepreload" href="js/core/brandcharts.js" fetchpriority="low"><link rel="modulepreload" href="js/core/brands.js" fetchpriority="low">
+<link rel="modulepreload" href="js/core/colour.js" fetchpriority="low"><link rel="modulepreload" href="js/core/density.js" fetchpriority="low"><link rel="modulepreload" href="js/core/design.js" fetchpriority="low"><link rel="modulepreload" href="js/core/fill.js" fetchpriority="low">
+<link rel="modulepreload" href="js/core/fonts.js" fetchpriority="low"><link rel="modulepreload" href="js/core/formats.js" fetchpriority="low"><link rel="modulepreload" href="js/core/geom.js" fetchpriority="low"><link rel="modulepreload" href="js/core/glyphs.js" fetchpriority="low">
+<link rel="modulepreload" href="js/core/machines.js" fetchpriority="low"><link rel="modulepreload" href="js/core/raster.js" fetchpriority="low"><link rel="modulepreload" href="js/core/recipes.js" fetchpriority="low"><link rel="modulepreload" href="js/core/text.js" fetchpriority="low">
+<link rel="modulepreload" href="js/core/threads.js" fetchpriority="low"><link rel="modulepreload" href="js/core/typed.js" fetchpriority="low"><link rel="modulepreload" href="js/doctor.js" fetchpriority="low"><link rel="modulepreload" href="js/focus.js" fetchpriority="low">
+<link rel="modulepreload" href="js/gate.js" fetchpriority="low"><link rel="modulepreload" href="js/jobs.js" fetchpriority="low"><link rel="modulepreload" href="js/onitem.js" fetchpriority="low"><link rel="modulepreload" href="js/quality.js" fetchpriority="low">
+<link rel="modulepreload" href="js/render.js" fetchpriority="low"><link rel="modulepreload" href="js/sheet.js" fetchpriority="low"><link rel="modulepreload" href="js/state.js" fetchpriority="low"><link rel="modulepreload" href="js/studio/compose.js" fetchpriority="low">
+<link rel="modulepreload" href="js/studio/editor.js" fetchpriority="low"><link rel="modulepreload" href="js/studio/fabrics.js" fetchpriority="low"><link rel="modulepreload" href="js/studio/files.js" fetchpriority="low"><link rel="modulepreload" href="js/studio/fixes.js" fetchpriority="low">
+<link rel="modulepreload" href="js/studio/lettering.js" fetchpriority="low"><link rel="modulepreload" href="js/studio/motifs.js" fetchpriority="low"><link rel="modulepreload" href="js/studio/names.js" fetchpriority="low"><link rel="modulepreload" href="js/studio/offpage.js" fetchpriority="low">
+<link rel="modulepreload" href="js/studio/outline.js" fetchpriority="low"><link rel="modulepreload" href="js/studio/pieces.js" fetchpriority="low"><link rel="modulepreload" href="js/studio/placing.js" fetchpriority="low"><link rel="modulepreload" href="js/studio/problems.js" fetchpriority="low">
+<link rel="modulepreload" href="js/studio/quilt.js" fetchpriority="low"><link rel="modulepreload" href="js/studio/recent.js" fetchpriority="low"><link rel="modulepreload" href="js/studio/shapes.js" fetchpriority="low"><link rel="modulepreload" href="js/studio/starters.js" fetchpriority="low">
+<link rel="modulepreload" href="js/studio/stepsui.js" fetchpriority="low"><link rel="modulepreload" href="js/studio/threadsaid.js" fetchpriority="low"><link rel="modulepreload" href="js/studio/toobig.js" fetchpriority="low"><link rel="modulepreload" href="js/studio/ui.js" fetchpriority="low">
+<link rel="modulepreload" href="js/threadui.js" fetchpriority="low"><link rel="modulepreload" href="js/words.js" fetchpriority="low"><link rel="modulepreload" href="js/zip.js" fetchpriority="low">
+<!-- first screen: end -->
 <link rel="manifest" href="manifest.webmanifest">
 <meta name="copyright" content="(c) 2026 4Gables. All rights reserved.">
 <link rel="license" href="https://github.com/4gables/needleworks/blob/main/LICENSE">

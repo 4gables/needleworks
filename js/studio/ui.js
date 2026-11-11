@@ -15,7 +15,7 @@ import { MAX_INITIALS, MAX_WORDS, initials, monogramHelp, lackList, lacks, reswa
 import { nearestBrotherThread } from "../core/threads.js";
 import { designStats, machineThreads, readEmbroidery } from "../core/formats.js";
 import { BLOCK, LOOK, TIP, explained, inchFirst, isolate, mmText, problemsItems, shownOn, stopWords } from "../words.js";
-import { FILL_PATTERNS } from "../core/digitize.js";
+import { FILL_PATTERNS } from "../core/fill.js";
 import { MARGIN } from "../core/machines.js";
 import { draw } from "../render.js";
 import { THREADING, TURN_PIC, pickIt, snipsSaid, turnedNote, youHtml } from "../sheet.js";
