@@ -579,7 +579,19 @@ function ringFill(px, shape, comp, res, { spacing, edge, across, cell }) {
   for (const r of order) {
     // (an open stretch: from whichever end is nearer)
     const p = r.open && cur && Math.hypot(r.p.at(-1)[0] - cur[0], r.p.at(-1)[1] - cur[1]) < Math.hypot(r.p[0][0] - cur[0], r.p[0][1] - cur[1]) ? r.p.slice().reverse() : r.p;
-    const n = p.length, [d, i0] = r.open ? [cur ? Math.hypot(p[0][0] - cur[0], p[0][1] - cur[1]) : Infinity, 0] : cur ? near(p, cur) : [Infinity, 0];
+    const n = p.length;
+    let [d, i0] = r.open ? [cur ? Math.hypot(p[0][0] - cur[0], p[0][1] - cur[1]) : Infinity, 0] : cur ? near(p, cur) : [Infinity, 0];
+    // how the needle gets there: straight on (the ring next door), by a hidden way, or not at all (a trim)
+    let how = cur && d <= 2 * step + 0.2 * res ? "on" : "", way = null;
+    if (!how && cur) { way = R.route(cur, p[i0], SEWN); if (way && way.sewnMm <= SEWN) how = "way"; }
+    if (!how && r.open && cur) continue;   // (a stretch along a crest that only a jump reaches isn't worth a trim)
+    // (a jump of 5 mm or less is never cut, a loose thread to snip: the ring starts further round instead, or, too
+    // small for that, the needle sews straight across)
+    if (!how && cur && d <= 5.6 * res) {
+      let bj = -1, bd = Infinity;
+      for (let j = 0; j < n; j++) { const dd = Math.hypot(p[j][0] - cur[0], p[j][1] - cur[1]); if (dd > 5.6 * res && dd < bd) { bd = dd; bj = j; } }
+      if (bj >= 0) i0 = bj; else how = "across";
+    }
     // round the ring from the point nearest the needle, in whole stitches, home, and `lap` further (so the rings'
     // starts don't line up into a seam)
     // (stitches up to CONTOUR.stitch long, shorter where a longer one would leave the ring's line by `off` mm: a
@@ -598,13 +610,10 @@ function ringFill(px, shape, comp, res, { spacing, edge, across, cell }) {
       if (j >= end && ring.length && Math.hypot(at(end)[0] - at(a)[0], at(end)[1] - at(a)[1]) < 0.6 * res) break;
       ring.push(at(j)); a = j;
     }
-    if (cur && d <= 2 * step + 0.2 * res) path.push(...ring);   // (the ring next door: the first stitch slants across to it)
-    else {
-      const way = cur && R.route(cur, p[i0], SEWN);
-      if (way && way.sewnMm <= SEWN) path.push(...R.stitches(way), p[i0], ...ring);
-      else if (r.open && cur) continue;   // (a stretch along a crest that only a jump reaches isn't worth a trim)
-      else out.push((path = [p[i0], ...ring]));
-    }
+    if (how === "on") path.push(...ring);   // (the first stitch slants across to it)
+    else if (how === "way") path.push(...R.stitches(way), p[i0], ...ring);
+    else if (how === "across") path.push(p[i0], ...ring);
+    else out.push((path = [p[i0], ...ring]));
     R.markSewn([p[i0], ...ring]);
     cur = path[path.length - 1];
   }

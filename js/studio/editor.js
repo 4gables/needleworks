@@ -109,7 +109,7 @@ export function editorPanel(S) {
       // (made another before anything was put on the first: what's on this one copied onto the empty ones, placed alike)
       const bare = S.sameTargets(p);
       if (bare.length) h += ` <button type="button" class="link" data-same-on>Put the same on the other ${bare.length === 1 ? "one" : `${bare.length}`}</button>`;
-      if (p.border === "applique") h += `<p class="hint">Sews an outline, pauses for you to lay fabric on and trim it, then covers the edge in satin stitch. The steps are under “How to stitch it”.</p>`;
+      if (p.border === "applique") h += `<p class="hint">Sews an outline, pauses for you to lay fabric on and trim it, then ${p.cover === "blanket" ? "sews a blanket stitch round the edge" : "covers the edge in satin stitch"}. The steps are under “How to stitch it”.</p>`;
     } else {
       // a design file is resized as Open a design resizes it: re-stitched at the new size (`resizeFile`), so it can
       // shrink with the words added to it (it could only be moved and turned: Fit to hoop shrank just the words)

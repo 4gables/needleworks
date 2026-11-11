@@ -124,6 +124,8 @@ log("quilting: done");
 for (const shape of ["circle", "heart", "scallop"]) await save(`st_rings_${shape}_patch`, [P({ kind: "frame", shape, border: "patch", w: 70, h: 64, fill: "#c70156", color: "#770176", pattern: "contour" }),
   P({ kind: "text", text: "Rosie", font: FONTS[1].family, size: 12, color: "#ffffff" })], "5x7", false, shape === "scallop" ? { fabric: "knit" } : {});
 await save("st_rings_carved_patch", [P({ kind: "frame", shape: "circle", border: "patch", w: 80, h: 80, fill: "#0e1f7c", color: "#ed171f", pattern: "contour" }), P({ kind: "motif", motif: "star", size: 40, style: "fill", color: "#ffd900" })]);
+// (a ring fill carved round a monogram: its parts lie close together, and a hop of 5 mm or less is a loose thread)
+await save("st_rings_carved_mono", [P({ kind: "frame", shape: "circle", border: "patch", w: 76, h: 76, fill: "#0e1f7c", color: "#ed171f", pattern: "contour" }), P({ kind: "monogram", letters: "JD", font: FONTS.find((f) => f.print)?.family || FONTS[0].family, size: 34, color: "#ffffff" })]);
 for (const m of ["heart", "star", "butterfly", "leaf"]) await save(`st_rings_motif_${m}`, [P({ kind: "motif", motif: m, size: 44, style: "fill", pattern: "contour", color: "#ed171f" })]);
 await save("st_rings_motif_small", [P({ kind: "motif", motif: "heart", size: 14, style: "fill", pattern: "contour", color: "#ed171f" })]);
 for (const [shape, trim] of [["circle", "scallop"], ["heart", "diamond"], ["square", "blanket"], ["oval", "scallop"], ["bookmark", "diamond"]])
