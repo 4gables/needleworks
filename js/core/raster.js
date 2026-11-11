@@ -639,7 +639,7 @@ function walk(edges, adj, used, start, id = (i) => i) {
 // no further apart than half of each one's column and `pad` (never over `far`), as well as within `near`: a wide
 // script's T, its bar a hair from its stem (Allura at 20 mm: columns 0.6 mm apart, centre lines 2.8), was trimmed
 // apart, a 16 mm move, since `near` stops at 2.2 for the hairlines such a script also has.
-function chained(edges, near, loose, nodesOnly = false, { at = null, step = near / 2, dot = 0, dotLen = 0, whole = null, skip = false, col = null, pad = 0, far = 0 } = {}) {
+function chained(edges, near, loose, nodesOnly = false, { at = null, step = near / 2, dot = 0, dotLen = 0, whole = null, skip = false, col = null, pad = 0, far = 0, apart = 0, above = Infinity } = {}) {
   const adj = adjacency(edges), seen = new Array(edges.length).fill(false), pieces = [];
   const xOf = (e) => Math.min(e[2][0][0], e[2][e[2].length - 1][0]);
   for (let i = 0; i < edges.length; i++) {
@@ -680,14 +680,25 @@ function chained(edges, near, loose, nodesOnly = false, { at = null, step = near
     if (at) laid = laid.map(at);
     // (a mark: a dot, or a few strokes no longer than two and a half of them: an accent, a thinned dot's little star)
     const total = list.reduce((L, j) => L + edges[j][2].reduce((M, v, k, q) => (k ? M + Math.hypot(v[0] - q[k - 1][0], v[1] - q[k - 1][1]) : 0), 0), 0);
-    pieces.push({ bi, x: xOf(edges[bi]), cands, laid, half: col ? cands.map((c) => col(c[0]) / 2) : null, into: lone ? [laid[1], laid[0]] : laid, mark: dot > 0 && total < 2.5 * dot });
+    pieces.push({ bi, x: xOf(edges[bi]), cands, laid, half: col ? cands.map((c) => col(c[0]) / 2) : null, into: lone ? [laid[1], laid[0]] : laid, mark: dot > 0 && total < 2.5 * dot, list });
+  }
+  // (a mark stands clear of every other piece, `apart` or more between the centre lines: a short stroke that
+  // crosses or touches another, a t's bar the font draws apart, is part of the letter and stitched to as before)
+  for (const pc of pieces) {
+    if (!pc.mark || pieces.length < 2) continue;
+    const mine = pc.list.flatMap((j) => edges[j][2]);
+    // (and it is over the letters, all of it higher than `above`: a full stop on the baseline is stitched to from
+    // the word's last stroke as it always was, a tick of the pen, where a trim is two locks beside a 1 mm dot)
+    if (!mine.every((r) => r[1] < above)) { pc.mark = false; continue; }
+    pc.mark = !pieces.some((o) => o !== pc && o.list.some((j) => edges[j][2].some((q) => mine.some((r) => Math.abs(q[0] - r[0]) < apart && Math.abs(q[1] - r[1]) < apart && Math.hypot(q[0] - r[0], q[1] - r[1]) < apart))));
   }
   pieces.sort((u, v) => u.x - v.x || u.bi - v.bi);
   if (!pieces.length) return [];
   // how far apart piece a's start m (where it ends) and piece b's start n may be and still be stitched across
-  // (never to a mark or from one: the two dots of an ë, under 2 mm apart, were sewn across and read as an ē, an
-  // i's dot to its stem as an l)
-  const reach = (a, m, b, n) => (a.mark || b.mark ? -1 : a.half && near > 0 ? Math.max(near, Math.min(a.half[m] + b.half[n] + pad, far)) : near);
+  // (never from one mark to another: the two dots of an ë, under 2 mm apart, were sewn across and read as an ē. A
+  // dot is still stitched to from its own letter where that is near enough, as it always was: jumped to as well,
+  // every i in a small word cost a trim and two locks on a 1 mm dot.)
+  const reach = (a, m, b, n) => (a.mark && b.mark ? -1 : a.half && near > 0 ? Math.max(near, Math.min(a.half[m] + b.half[n] + pad, far)) : near);
   // the cheapest starts for the pieces sewn in this order: [cost, each piece's start]
   const plan = (seq) => {
     let prev = null;

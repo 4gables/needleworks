@@ -3,7 +3,7 @@
 // 80-120 %, drop tiny stitches, thin the densest spots). Stitch units 0.1 mm; the PES writer stays untouched.
 import { COLOR_CHANGE, END, JUMP, STITCH, STOP, TRIM, designBlockAgrees, readEmbroidery, writePES } from "./core/formats.js";
 import { Design, relieve } from "./core/design.js";
-import { density } from "./core/density.js";
+import { density, threadBlocks } from "./core/density.js";
 import { LIMITS, MOVES } from "./core/recipes.js";
 import { fillPolygon } from "./core/fill.js";
 import { distanceTransform } from "./core/raster.js";
@@ -405,8 +405,7 @@ function split(a, b, k) {
 // running line) slides along that line, so the thread lies exactly as before, to where the windows round it are
 // thinnest, keeping both stitches 1-6.8 mm. Locks (5 points round any command) stay. Stitch units 0.1 mm.
 export function slide(st, limit = LIMIT) {
-  const n = st.length, blk = new Int32Array(n), cells = new Map();
-  for (let i = 0, b = 0; i < n; i++) { if (st[i][2] === COLOR_CHANGE) b++; blk[i] = b; }
+  const n = st.length, blk = threadBlocks(st), cells = new Map();   // (density.js: as `relieve`)
   const R = pyRound, key = (b, cx, cy) => b + "," + cx + "," + cy;
   const place = (i, v) => {
     const k = key(blk[i], Math.floor(R(st[i][0]) / 10), Math.floor(R(st[i][1]) / 10));

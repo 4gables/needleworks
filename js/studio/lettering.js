@@ -99,7 +99,7 @@ export function letters(text, family, size, style = "auto", spacing = 0, kern = 
   const [x0, y0, x1, y1] = bounds(sized), s = size / Math.max(y1 - y0, (/[\p{L}\p{N}]/u.test(text) ? 0.5 : 1) * info.mid), cx = sized === info.sized ? (x0 + x1) / 2 : (() => { const b = bounds(info.sized); return (b[0] + b[2]) / 2; })();
   // (print letters: the third entry marks the first stroke of each separate piece after the first, so the needle jumps
   // to it and never stitches across, however close: an i's stem reaching up to its dot was sewn to it. In a script,
-  // the pieces before and after a mark, a dot or an accent: `order`.)
+  // a mark sewn straight after another, an ë's second dot: `order`.)
   const print = !!fontOf(family).print;
   // A satin column as wide as the font's own stroke but at least 15% of the x-height up to 1.2 mm, and 12% beyond
   // (thin scripts and monoline fonts get a satin sized to the letters; 15% on big letters doubled thin scripts like
@@ -123,7 +123,8 @@ export function letters(text, family, size, style = "auto", spacing = 0, kern = 
   // over the arched batch files. Now `linkReach`, and the stitch across is allowed for by `stitchLetters`.)
   const reach = linkReach(satinW);
   // (a lone stroke under a column long, 0.9 mm in a fine line, is a dot: 1 mm of satin, 0.7 mm of line: `stitchLetters`)
-  const dots = { dot: (satinW || 0.9) / s, dotLen: (satinW ? 1 : 0.7) / s };
+  // (apart: a mark's centre line is at least this far from every other piece's, its column clear of theirs: `order`)
+  const dots = { dot: (satinW || 0.9) / s, dotLen: (satinW ? 1 : 0.7) / s, apart: (satinW ? satinW * 0.75 : 0.4) / s, above: info.baseline - 0.3 * info.mid };
   // Strokes round a counter are narrowed so it stays open (`counterCaps`; not when satin is asked for: "Make it bold"
   // says small loops may fill). The fourth entry is that stroke's column, or 0 for the word's.
   const caps = style === "satin" || !satinW ? new Map() : notchCaps(notches, s, satinW, counterCaps(counters, s, satinW));
@@ -200,7 +201,7 @@ export function letters(text, family, size, style = "auto", spacing = 0, kern = 
     const L = d[d.length - 1] || 1, rows = p.map(([x, y], i) => { const v = at.get(x + "," + y); return [d[i] / L, v == null ? null : Math.min(hi, Math.max(lo, v * s))]; });
     return rows.some((r) => r[1] !== null) ? rows : null;
   };
-  const parts = comps.flatMap((c, k) => c.map(([p, mode, e], j) => [p.map(([x, y]) => [(x - cx) * s, (y - info.baseline) * s]), mode, k > 0 && j === 0 && (print || !!c.mark || !!comps[k - 1].mark), caps.get(e) || 0, taperOf(p, e), endsOf(p, e), sidesOf(p, e), thickOf(p, e), j === 0 && !!c.link]));
+  const parts = comps.flatMap((c, k) => c.map(([p, mode, e], j) => [p.map(([x, y]) => [(x - cx) * s, (y - info.baseline) * s]), mode, k > 0 && j === 0 && (print || (!!c.mark && !!comps[k - 1].mark)), caps.get(e) || 0, taperOf(p, e), endsOf(p, e), sidesOf(p, e), thickOf(p, e), j === 0 && !!c.link]));
   const open = Math.min(satinW || Infinity, ...caps.values());
   const pockets = counters.map((c) => ({ peak: c.peak * s, saddle: c.saddle * s }));
   return { parts, satinW, xh, stroke, open, pockets, top: (y0 - info.baseline) * s, bottom: (y1 - info.baseline) * s };

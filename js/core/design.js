@@ -3,7 +3,7 @@
 import { COLOR_CHANGE, END, JUMP, STITCH, TRIM, writePES } from "./formats.js";
 import { MARGIN } from "./machines.js";
 import { EASE, LIMITS, LOCKS, TIE_INS } from "./recipes.js";
-import { Hits } from "./density.js";
+import { Hits, threadBlocks } from "./density.js";
 import { pyRound } from "./threads.js";
 
 // Which side of the line from p along d the points mostly lie on: 1 for the left (-d.y, d.x), -1 for the right
@@ -24,14 +24,14 @@ function bare(p, d, pts) {
 export class Design {
   // ease: stitches give way where this colour is already thick (the Design tab's pieces; pictures and the Open tab's
   // fixes sew as they always have)
-  constructor(hoop, { ease = false } = {}) { this.hoop = hoop; this.stitches = []; this.threads = []; this.cur = null; this.started = false; this.hits = ease ? new Hits() : null; }
+  constructor(hoop, { ease = false } = {}) { this.hoop = hoop; this.stitches = []; this.threads = []; this.cur = null; this.started = false; this.hits = ease ? new Hits(hoop) : null; }
 
   color(hex, description = "") {
     this.tieOff();
     if (this.started) this.stitches.push([0, 0, COLOR_CHANGE]);
     this.threads.push({ color: hex, description, brand: "" });
     this.cur = this.at = null;
-    if (this.hits) this.hits = new Hits();   // (the limit is per colour block)
+    if (this.hits) this.hits.clear();   // (the limit is per colour block)
   }
 
   st(cmd, [x, y], counted = false) {
@@ -70,7 +70,7 @@ export class Design {
       if (!i && n > 1 && first && from && !fits(b) && D(from, pts[1]) <= EASE.most && D(from, pts[1]) > EASE.least) continue;
       // (a hair from the last point kept: never a stitch of its own. With the run's end left out, such a pair was
       // the last stitch before a lock: the pouch's one tiny stitch)
-      if (i && out.length > (i === n - 1 ? 1 : 0) && D(out[out.length - 1], b) < EASE.hair) continue;
+      if (i && out.length > (i === n - 1 ? 1 : 0)) { const q = out[out.length - 1], dx = b[0] - q[0], dy = b[1] - q[1]; if (dx * dx + dy * dy < EASE.hair * EASE.hair) continue; }
       // (the last point too, where the run is already two points long and the stitch not sewn is a short one: the
       // needle stops a stitch short of a node other strokes end on. `path` still reckons the next run from the end
       // as drawn, so nothing that was stitched to becomes a jump.)
@@ -78,6 +78,8 @@ export class Design {
       if (i < 1 || i > n - 2) { keep(b, i > 0 || first); skipped = false; continue; }
       if (!out.length) { keep(b); continue; }   // (the first point was left out: this one starts the run)
 
+      const fan = thin ? thin[i] : 0;
+      if (!skipped && fan !== 1 && fits(b)) { keep(b); continue; }   // (nearly every point: nothing more to reckon)
       const a = out[out.length - 1], c = pts[i + 1], d1 = D(a, b), d2 = D(b, c);
       // (beside the last point kept, after one was left out: the same edge of a satin again)
       if (skipped && d1 < EASE.least && D(a, c) <= EASE.most && D(a, c) > EASE.least) continue;
@@ -90,7 +92,6 @@ export class Design {
       const near = out.length > 1 ? 2 * D(out[out.length - 2], b) : 0;
       const short = (backs, more = 0, seen = true) => d1 >= 0.8 && d2 >= 0.8 && backs.filter((k) => k <= EASE.deep * h && (!seen || (k * wide + (h - k) * near) / h <= EASE.show))
         .map((k) => [b[0] + ((m[0] - b[0]) * k) / h, b[1] + ((m[1] - b[1]) * k) / h]).find((q) => D(a, q) > EASE.least && D(q, c) > EASE.least && fits(q, more));
-      const fan = thin ? thin[i] : 0;
       if (fan === 1) {
         const k = alt++ % EASE.back.length, s = short([...EASE.back.slice(k), ...EASE.back.slice(0, k)]);
         if (s) { keep(s); skipped = false; continue; }
@@ -122,25 +123,39 @@ export class Design {
   // Which of a run's turns (a satin's ends) come short: 1 for each, where the turns within half a mm of it either way
   // and the hits already there are more than `EASE.cap`, less the share that still fits, spread evenly (`eased`).
   fan(pts) {
-    const n = pts.length, turn = new Uint8Array(n), cells = new Map(), K = (gx, gy) => (gx + 32768) * 65536 + gy + 32768, key = (x, y) => K(Math.floor(x * 2), Math.floor(y * 2));
-    let any = false;
+    const n = pts.length, turn = new Uint8Array(n), K = (gx, gy) => (gx + 32768) * 65536 + gy + 32768;
+    // (only round turns that come a quarter mm or less from the next but one, the next on their own edge: a fan's
+    // pivot, the inside of a tight bend. A straight column's are the satin's spacing apart, and looking round every
+    // one of them was a tenth of a busy design's build.)
+    let hot = null, lx = 0, ly = 0;
     for (let i = 1; i < n - 1; i++) {
       const a = pts[i - 1], b = pts[i], c = pts[i + 1], ux = b[0] - a[0], uy = b[1] - a[1], vx = c[0] - b[0], vy = c[1] - b[1];
-      const d1 = Math.hypot(ux, uy), d2 = Math.hypot(vx, vy);
-      if (d1 < 0.8 || d2 < 0.8 || (ux * vx + uy * vy) / (d1 * d2) >= -0.5) continue;
-      turn[i] = 1; any = true;
-      const k = key(b[0], b[1]);
+      const q1 = ux * ux + uy * uy, q2 = vx * vx + vy * vy, dot = ux * vx + uy * vy;
+      if (q1 < 0.64 || q2 < 0.64 || dot >= 0 || dot * dot < 0.25 * q1 * q2) continue;   // (both stitches 0.8 mm or more, doubling back)
+      turn[i] = 1;
+      if (i < 3 || !turn[i - 2] || Math.abs(b[0] - pts[i - 2][0]) > 0.25 || Math.abs(b[1] - pts[i - 2][1]) > 0.25) continue;
+      const gx = Math.floor(b[0] * 2), gy = Math.floor(b[1] * 2);
+      if (hot && gx === lx && gy === ly) continue;   // (the square the last one was in)
+      hot ||= new Set(); lx = gx; ly = gy;
+      for (let x = gx - 2; x <= gx + 2; x++) for (let y = gy - 2; y <= gy + 2; y++) hot.add(K(x, y));
+    }
+    if (!hot) return null;
+    const cells = new Map();
+    for (let i = 1; i < n - 1; i++) {
+      if (!turn[i]) continue;
+      const k = K(Math.floor(pts[i][0] * 2), Math.floor(pts[i][1] * 2));
+      if (!hot.has(k)) { turn[i] = 0; continue; }
       let cell = cells.get(k);
       if (!cell) cells.set(k, (cell = []));
       cell.push(i);
     }
-    if (!any) return null;
     const thin = new Uint8Array(n);
     let acc = 0, some = false;
     for (let i = 1; i < n - 1; i++) {
       if (!turn[i]) continue;
       const b = pts[i], gx = Math.floor(b[0] * 2), gy = Math.floor(b[1] * 2);
-      // (own: this run's turns within the window; on: those on the pivot itself, within a quarter mm (four or more: along a straight edge they are a third of a mm apart). Only these come
+      // (own: this run's turns within the window; on: those on the pivot itself, within a quarter mm (four or
+      // more: along a straight edge they are a third of a mm apart). Only these come
       // short: the turns beside a corner, a few tenths along the edge from it, keep the column's inner edge where
       // it is, and room is left for them. Shortened with the rest, they let the fill show beside a heart's tip.)
       // (wide: within 1 mm, as far as a window holding this turn reaches)
@@ -317,8 +332,7 @@ export function untiny(st, min = LIMITS.tiny) {
 // two stitches become one slightly longer one. Tie-ins and tie-offs (5 points around any jump/trim/colour change)
 // are kept. The machine's grid can sit at any 0.1 mm offset from ours, so every offset is checked.
 export function relieve(st, limit = LIMITS.hits) {
-  const n = st.length, keep = new Uint8Array(n).fill(1), blk = new Int32Array(n);
-  for (let i = 0, b = 0; i < n; i++) { if (st[i][2] === COLOR_CHANGE) b++; blk[i] = b; }
+  const n = st.length, keep = new Uint8Array(n).fill(1), blk = threadBlocks(st);   // (density.js: the one rule for a block here)
   // (each point's place as the file rounds it, worked out once: asked for again at every window, the rounding alone
   // was a fifth of the time)
   const XR = new Int32Array(n), YR = new Int32Array(n);
