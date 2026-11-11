@@ -52,6 +52,7 @@ const RAW_SIZE = process.env.EMPTY ? [] : [
   ["js/studio/ui.js", "followed", "an arched word (never frame-fitted): asked = sewn"],
   ["js/studio/editor.js", "drawEditor", "the controls show the size asked; warn() says the sewn one beside it (\"N mm sewn\")"],
   ["js/studio/problems.js", "pieceProblems", "q.size is the fitted size; motifs are never fitted"],
+  ["js/studio/problems.js", "sewsThin", "judges the piece handed in at the size it carries, as lettering.js fineLine does: every caller hands it the sewn piece (sewn(p, pieces), the fitted q) or a size being tried"],
   ["js/studio/problems.js", "warnNow", "fixes and notes compare the asked size with d.fs, the sewn one; each fix is checked by landing()"],
   ["js/studio/fixes.js", "runUp", "the most to try; each size measured sewn"],
   ["js/studio/fixes.js", "frameFor", "the asked size kept as the frame grows; fitted after"],
