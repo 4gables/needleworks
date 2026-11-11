@@ -53,6 +53,7 @@ const FILES = [
   "js/studio/motifs.js",
   "js/studio/outline.js",
   "js/studio/pieces.js",
+  "js/studio/shapes.js",
   "js/studio/quilt.js",
   "js/studio/ui.js",
   "js/doctor-worker.js",
