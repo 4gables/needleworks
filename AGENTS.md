@@ -9,7 +9,10 @@ Rules, the reason for each (it stops someone undoing it), gotchas, how to test. 
 measurements behind each number are in the code's comments.
 
 ## Repo map
-- `index.html`, `css/app.css`, `sw.js`, `manifest.webmanifest`; `js/app.js` (tabs, state, `setView`, downloads).
+- `index.html`, `css/app.css`, `sw.js`, `manifest.webmanifest`; `js/app.js` (preview, `setView`, toasts, downloads,
+  tabs, start-up) and its sections: `state.js` (shared state, `store`, hoop helpers), `picture.js` (Picture tab),
+  `opened.js` (Open tab), `along.js` (Sew along, names dialog), `threadui.js` (thread labels, brands, Threads I
+  own), `focus.js`, `onitem.js`. A section never uses app.js while it loads, only when something happens.
 - `js/core/`: `formats.js` (PES writer, readers, `validatePES`), `threads.js` (PEC palette), `recipes.js` (every
   stitch number and limit, with its reason: read here, never re-typed), `design.js` (`Design`, locks, `finish`,
   `relieve`), `density.js` (hits per mm² at every offset), `geom.js`, `colour.js`, `raster.js` (skeleton, stroke
