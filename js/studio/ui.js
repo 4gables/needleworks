@@ -15,7 +15,7 @@ import { MAX_INITIALS, MAX_WORDS, initials, monogramHelp, lackList, lacks, reswa
 import { nearestBrotherThread } from "../core/threads.js";
 import { designStats, machineThreads, readEmbroidery } from "../core/formats.js";
 import { BLOCK, LOOK, TIP, explained, inchFirst, isolate, mmText, problemsItems, shownOn, stopWords } from "../words.js";
-import { FILL_PATTERNS } from "../core/digitize.js";
+import { FILL_PATTERNS } from "../core/fill.js";
 import { MARGIN } from "../core/machines.js";
 import { draw } from "../render.js";
 import { THREADING, TURN_PIC, pickIt, snipsSaid, turnedNote, youHtml } from "../sheet.js";
@@ -349,10 +349,13 @@ export function initStudio(api) {
   const fontRow = (p, list = FONTS) => `<div class="font-row" role="group" aria-label="Fonts as they look">${list.map((f) => `<button type="button" tabindex="-1" data-font="${f.family}" aria-pressed="${f.family === p.font}"${faces || f.family === p.font ? ` style="font-family:'${f.family}',cursive"` : ""}>${f.name}</button>`).join("")}</div>`;
   // (`fontsIn`: settles once the design's own fonts are in, for anything else that draws lettering)
   let fontsDone; const fontsIn = new Promise((r) => (fontsDone = r));
+  let facesIn = false;
   function facesOn() {
     if (faces) return;
-    faces = true; fontsDone(); for (const b of document.querySelectorAll(".font-row [data-font]")) b.style.fontFamily = `'${b.dataset.font}',cursive`;
-    thumbs();
+    faces = true; fontsDone();
+    // (after the page's own text faces, app.js `uiFonts`: these are 17 fonts, 740 KB, and on a slow first visit the
+    // page's text waited 17 s behind them in its stand-in face)
+    (api.pageFaces?.() || Promise.resolve()).then(() => { facesIn = true; for (const b of document.querySelectorAll(".font-row [data-font]")) b.style.fontFamily = `'${b.dataset.font}',cursive`; thumbs(); });
   }
   // the font in use brought into the middle of its row when it's out of sight there (drawn while the tab was hidden, or
   // the chips grown as their fonts came in, it was off the end of the row)
@@ -496,7 +499,7 @@ export function initStudio(api) {
     try { return await build(dragging); } finally { madeOnce = true; if (waitSaid) { waitSaid = false; api.busy(false); } }
   }
   async function build(dragging) {
-    if (faces) thumbs();   // (the starters' fonts after the design's own: `facesOn`)
+    if (facesIn) thumbs();   // (the starters' fonts after the design's own and the page's: `facesOn`)
     const s = ++seq;
     api.showError(""); $("st-big").hidden = true;
     try {

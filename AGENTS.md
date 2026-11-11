@@ -12,7 +12,8 @@ measurements behind each number are in the code's comments.
 - `index.html`, `css/app.css`, `sw.js`, `manifest.webmanifest`; `js/app.js` (preview, `setView`, toasts, downloads,
   tabs, start-up) and its sections: `state.js` (shared state, `store`, hoop helpers), `picture.js` (Picture tab),
   `opened.js` (Open tab), `along.js` (Sew along, names dialog), `threadui.js` (thread labels, brands, Threads I
-  own), `focus.js`, `onitem.js`. A section never uses app.js while it loads, only when something happens.
+  own), `focus.js`, `onitem.js`. A section never uses app.js while it loads, only when something happens. Picture and Open code is
+  loaded after the first design is up, or at once when its tab or a dropped file needs it (app.js `tabCode`).
 - `js/core/`: `formats.js` (PES writer, readers, `validatePES`), `threads.js` (PEC palette), `recipes.js` (every
   stitch number and limit, with its reason: read here, never re-typed), `design.js` (`Design`, locks, `finish`,
   `relieve`), `density.js` (hits per mm² at every offset), `geom.js`, `colour.js`, `raster.js` (skeleton, stroke
@@ -151,7 +152,7 @@ Read the topic's file before changing its code; each holds the rules, their reas
 - To release: bump the number in `CACHE` (`needleworks-vN-${SET}`), then `node tests/sw.test.mjs --write` as the
   last change (it writes the hashes and `SET`; CI fails on a stale one on main and tags, since that release would never
   install, and only reports it on a round's branch),
-  merge as one commit, tag `vN`. After pushing, wait until the live sw.js shows vN. A visitor already on the site
+  merge as one commit, tag `vN`. (`--write` also writes index.html's preload list, before the hashes.) After pushing, wait until the live sw.js shows vN. A visitor already on the site
   gets the release at their next visit or by the Reload note; a first visit or Cmd+Shift+R gets it at once.
 - 4gables.com is the `4gables/website` repo's custom domain (a project site). Other repos appear under
   4gables.com/<repo>/ only if the org site repo is `4gables.github.io` with the custom domain.

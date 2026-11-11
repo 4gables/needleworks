@@ -14,9 +14,8 @@ import { apart, lab } from "./core/brands.js";
 import { savedDesign } from "./studio/ui.js";
 import { $, hoop, square, state, turned } from "./state.js";
 import { keepFocus } from "./focus.js";
-import { brandUI } from "./threadui.js";
 import { loadPicture } from "./picture.js";
-import { busy, escapeHtml, fillMachines, fixedName, setMode, setView, showError, studio, studioLoad, up, warnUI } from "./app.js";
+import { busy, escapeHtml, fixedName, setMode, setView, showError, studio, studioLoad, up, warnUI } from "./app.js";
 
 // ---------- open a design ----------
 function pesVersion(v) {
@@ -383,20 +382,4 @@ for (const id of ["pic-drop", "open-drop"]) {
   el.addEventListener("dragover", (e) => { e.preventDefault(); el.classList.add("over"); });
   el.addEventListener("dragleave", () => el.classList.remove("over"));
 }
-document.addEventListener("dragover", (e) => e.preventDefault());
-document.addEventListener("drop", (e) => {
-  e.preventDefault();
-  document.querySelectorAll(".drop.over").forEach((d) => d.classList.remove("over"));
-  route(e.dataTransfer.files[0]);
-});
-document.addEventListener("paste", (e) => {
-  const f = [...(e.clipboardData?.files || [])][0];
-  if (f) { e.preventDefault(); route(f); }
-});
-
-// skip links move focus without changing the address (its #hash is the tab)
-for (const a of document.querySelectorAll(".skip")) a.onclick = (e) => { e.preventDefault(); const t = $(a.hash.slice(1)); t.focus({ preventScroll: true }); t.scrollIntoView({ block: "start" }); };
-
-// ---------- start ----------
-fillMachines();
-brandUI();
+// (a file dropped or pasted anywhere on the page, and the skip links: app.js, which is there from the start)

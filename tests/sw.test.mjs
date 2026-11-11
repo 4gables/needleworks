@@ -14,6 +14,27 @@ const missing = want.filter((f) => !listed.has(f)), gone = [...listed].filter((f
 if (missing.length || gone.length) { console.error("sw.js FILES out of date. Missing:", missing, "no longer exist:", gone); process.exit(1); }
 console.log(`sw: ${want.length} files listed`);
 
+// index.html asks for the first screen's modules at once: exactly js/app.js and what it imports, however deep. One
+// missing is a round trip more on a slow connection; one too many (the Picture and Open tabs' code, which comes when
+// the first design is on screen: app.js `tabCode`) is a download the first preview waits for (2026-11: 18 s to the
+// first preview on a slow phone, every second of it bytes). `--write` writes the list (before the hashes: index.html has one).
+{
+  const src = Object.fromEntries(want.filter((f) => f.endsWith(".js")).map((f) => [f, readFileSync(f, "utf8")])), dir = (f) => f.slice(0, f.lastIndexOf("/")), join = (d, r) => { const out = d.split("/"); for (const k of r.split("/")) { if (k === "..") out.pop(); else if (k !== ".") out.push(k); } return out.join("/"); };
+  const first = new Set(), walk = (f) => { if (first.has(f) || !src[f]) return; first.add(f); for (const m of src[f].matchAll(/^(?:import|export) (?:[^"]*? from )?"([^"]+)";/gm)) walk(join(dir(f), m[1])); };
+  walk("js/app.js");
+  const html = readFileSync("index.html", "utf8"), block = html.match(/<!-- first screen: start -->\n([\s\S]*?)<!-- first screen: end -->/);
+  if (!block) { console.error("index.html: no `first screen` block of modulepreload links"); process.exit(1); }
+  const lines = [...first].sort().map((f) => `<link rel="modulepreload" href="${f}" fetchpriority="low">`), now = [];
+  for (let i = 0; i < lines.length; i += 4) now.push(lines.slice(i, i + 4).join(""));
+  const text = now.join("\n") + "\n";
+  if (block[1] !== text && process.argv.includes("--write")) { writeFileSync("index.html", html.replace(block[0], `<!-- first screen: start -->\n${text}<!-- first screen: end -->`)); console.log(`sw: index.html asks for ${first.size} modules`); }
+  else if (block[1] !== text) { console.error("index.html's modulepreload list isn't js/app.js's imports (run node tests/sw.test.mjs --write)"); process.exit(1); }
+  for (const heavy of ["js/picture.js", "js/opened.js", "js/core/digitize.js", "js/core/palette.js"]) if (first.has(heavy)) { console.error(`${heavy} is part of the first load again (something the Design tab runs imports it): see app.js tabCode`); process.exit(1); }
+  const script = (src["js/studio/starters.js"].match(/^export const SCRIPT = "([^"]+)"/m) || [])[1];
+  if (!script || !html.includes(`["${script}"]`)) { console.error(`index.html asks early for a first font that isn't starters.js SCRIPT (${script})`); process.exit(1); }
+  console.log(`sw: the first screen is ${first.size} modules, asked for at once`);
+}
+
 const sha = (f) => createHash("sha256").update(readFileSync(f)).digest("hex");
 const entries = [...sw.matchAll(/^  "([^"]+)": "([0-9a-f]*)",$/gm)].map((m) => ({ file: m[1], hash: m[2], line: m[0] }));
 if (entries.length !== listed.size) { console.error(`sw.js FILES: ${entries.length} entries with a hash, ${listed.size} files named: one line each, "path": "hash",`); process.exit(1); }

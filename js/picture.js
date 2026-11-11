@@ -32,9 +32,11 @@ function picWorker() {
 // they work (and the picture never waits for them)
 const picJobs = picWorker(), picChecks = picWorker();
 // Everything a picture's stitches depend on (the stitches are a function of these and the picture, nothing else)
+// Small details (core/digitize.js, recipes.js `PICTURES.details`): "most" unless the person chose
+const DETAILS = ["all", "most"], detailsOf = (p) => (DETAILS.includes(p.details) ? p.details : "most");
 function picSettings(over = {}) {
   const p = state.pic, h = hoop(), turn = !!state.turn.picture && !square();
-  return { size: p.size, style: p.style, cross: p.cross, skip: p.skip, swap: p.swap, colors: p.colors, bg: p.bg, angle: p.angle, density: p.density,
+  return { size: p.size, style: p.style, cross: p.cross, skip: p.skip, swap: p.swap, colors: p.colors, bg: p.bg, angle: p.angle, density: p.density, details: detailsOf(p),
     line: p.line, edge: p.edge, turn, hoop: turn ? { ...h, w: h.h, h: h.w } : h, palette: ownedPalette(), ...over };
 }
 // the fit each exact setting was sewn at (sewing it again gives the same file, at once)
@@ -50,7 +52,7 @@ async function sewPicture(s, wk, isStale = () => false) {
   const key = `${p.key}:${s.colors}:${s.bg}:${s.edge ? 1 : 0}:${box.sx},${box.sy},${box.sw},${box.sh}`, k = LEARN / Math.max(box.sw, box.sh);
   if (p.learn?.key !== key) p.learn = { key, img: pictureImage(bitmap, box, Math.max(1, Math.round(box.sw * k)), Math.max(1, Math.round(box.sh * k))) };
   const learn = p.learn.img;
-  const opts = { colors: s.colors, removeBackground: s.bg, fillAngle: s.angle, density: DENSITY[s.density] || DENSITY.standard, skip: s.skip, ...(s.swap && Object.keys(s.swap).length ? { swap: s.swap } : {}), hoop: s.hoop, turn: s.turn, palette: s.palette, style: s.style, cross: s.cross, line: s.line || undefined, edge: s.edge || undefined };
+  const opts = { colors: s.colors, removeBackground: s.bg, fillAngle: s.angle, density: DENSITY[s.density] || DENSITY.standard, details: s.details, skip: s.skip, ...(s.swap && Object.keys(s.swap).length ? { swap: s.swap } : {}), hoop: s.hoop, turn: s.turn, palette: s.palette, style: s.style, cross: s.cross, line: s.line || undefined, edge: s.edge || undefined };
   // (kept per colour count: the checks try other counts)
   if (!p.models.has(key)) {
     const m = await wk.run({ key, learn, opts });
@@ -70,7 +72,7 @@ async function sewPicture(s, wk, isStale = () => false) {
 }
 export async function makePicture() {
   const p = state.pic; if (!p.bitmap) return;
-  if (!p.sample) store.set("pic.last", { style: p.style, colors: p.colors, size: p.size, angle: p.angle, cross: p.cross, bg: p.bg, line: p.line });
+  if (!p.sample) store.set("pic.last", { style: p.style, colors: p.colors, size: p.size, angle: p.angle, cross: p.cross, bg: p.bg, line: p.line, details: detailsOf(p) });
   // (nothing from another tab stays on screen, with its Download, while this picture stitches)
   if (state.mode === "picture" && state.view && state.view !== state.views.picture) setView(null);
   const req = ++p.req; busy(true, "Stitching your picture…");
@@ -95,6 +97,8 @@ export async function makePicture() {
   // (flecks sewn in the colour round them, `foldFlecks`: said in the panel when it's more than a handful, as what
   // happened; not a problem, so not on the sew sheet)
   state.pic.folded = r.fine?.folded >= FLECKS ? r.fine.folded : 0;
+  // (pieces the Small details choice left out: said with the way back)
+  state.pic.left = (p.style === "fill" && r.fine?.left) || 0;
   const mt = machineThreads(r.pattern.threads);
   state.pic.machineName = new Map(r.pattern.threads.map((t, i) => [t.color, mt[i].name]));
   paletteUI();
@@ -133,16 +137,20 @@ function pictureError(r) {
 function setSize(mm) { state.pic.size = mm; $("pic-size").value = mm; $("pic-size-out").textContent = sizeLabel(mm); makePicture(); }
 
 $("pic-merged").onclick = (e) => {
+  const d = e.target.closest("[data-details]");
+  if (d) { state.pic.details = d.dataset.details; detailsUI(); makePicture(); $("pic-details").querySelector('[aria-pressed="true"]')?.focus(); return; }
   const b = e.target.closest("[data-edge]"); if (!b) return;
   state.pic.edge = b.dataset.edge === "1"; state.pic.skip = []; state.pic.swap = {}; makePicture();
 };
 const FRAMED = "The band of one colour round the picture's edge looks like a frame round it, so it isn't sewn.";
 // (a fleck alone is a cut thread and two knots, or a hole in the colour round it: core/digitize.js `foldFlecks`)
+// (each piece left out would have been a start of its own: a cut thread and two knots for a few stitches)
+const leftOut = (n) => `${n} small ${n === 1 ? "piece is" : "pieces are"} left out, so ${n === 1 ? "it isn't" : "each isn't"} a knot and a cut thread for a few stitches. <button type="button" class="link" data-details="all">Keep ${n === 1 ? "it" : "them all"}</button>`;
 const FLECKS = 5, flecked = (n) => `${n} small flecks of colour inside bigger areas are sewn in the colour round them, so each isn't a knot and a cut thread of its own.`;
 export function paletteUI() {
   const cols = state.pic.colorsInfo.filter((c) => !c.background && c.area > 0);
   const edge = state.pic.edge && state.pic.edgeSeen;
-  $("pic-merged").hidden = !state.pic.merged && !state.pic.framed && !edge && !state.pic.folded;
+  $("pic-merged").hidden = !state.pic.merged && !state.pic.framed && !edge && !state.pic.folded && !state.pic.left;
   // (said as what happened, not as a fault: "3 colours were too close" beside a slider at 6 read like an error)
   const asked = state.pic.colors;
   $("pic-merged").textContent = state.pic.merged ? `${asked} asked for, ${cols.length} used: this picture has only ${cols.length} ${cols.length === 1 ? "colour" : "colours"} different enough to need ${cols.length === 1 ? "a thread of its own" : "threads of their own"} (the rest are shades of ${cols.length === 1 ? "it" : "these"} or of the fabric).` : "";
@@ -150,6 +158,7 @@ export function paletteUI() {
   if (state.pic.framed) $("pic-merged").insertAdjacentHTML("beforeend", `${state.pic.merged ? " " : ""}<span data-problem="framed">${FRAMED} <button type="button" class="link" data-edge="1">Sew the edge band too</button></span>`);
   else if (edge) $("pic-merged").insertAdjacentHTML("beforeend", `${state.pic.merged ? " " : ""}<span>The band round the picture's edge is sewn too. <button type="button" class="link" data-edge="0">Leave it out</button></span>`);
   if (state.pic.folded) $("pic-merged").insertAdjacentHTML("beforeend", `${$("pic-merged").textContent ? " " : ""}<span>${flecked(state.pic.folded)}</span>`);
+  if (state.pic.left) $("pic-merged").insertAdjacentHTML("beforeend", `${$("pic-merged").textContent ? " " : ""}<span>${leftOut(state.pic.left)}</span>`);
   ownedNote();
   const open = state.pic.swapOpen;
   $("pic-palette").innerHTML = cols.map((c) => `<button type="button" data-id="${c.id}" aria-pressed="${!state.pic.skip.includes(c.id)}" aria-expanded="${c.id === open}" aria-controls="pic-swap">
@@ -266,6 +275,7 @@ $("pic-fine").onclick = (e) => {
   const b = e.target.closest("[data-fix]"), f = b && state.pic.fixes?.[+b.dataset.fix]; if (!f) return;
   const p = state.pic, o = f.over;
   if (o.style) { p.style = o.style; styleUI(); }
+  if (o.details) { p.details = o.details; detailsUI(); }
   if (o.cross) { p.cross = o.cross; $("pic-cross").value = o.cross; $("pic-cross-out").textContent = `${o.cross} mm`; }
   if (o.colors) { p.colors = o.colors; p.skip = []; p.swap = {}; $("pic-colors").value = o.colors; $("pic-colors-out").textContent = String(o.colors); }
   if (o.size) { p.size = o.size; $("pic-size").value = o.size; $("pic-size-out").textContent = sizeLabel(o.size); }
@@ -289,6 +299,11 @@ async function checkLost(s, req) {
   };
   const offer = (label, over) => { p.fixes.push({ label, over }); fineUI(p.fine); };
   p.checking = true;
+  // the Small details choice, when keeping them all sews those parts (it is why they're out; no bigger Size needed)
+  if (s.style === "fill" && s.details !== "all" && p.fine.left) {
+    const q = await keeps({ details: "all" }); if (!q) return;
+    if (q.kept) offer("Keep all the small details", { details: "all" });
+  }
   // the smallest Size, in 5 mm steps, that keeps them (with no note left, when the biggest that fits manages that)
   if (s.size < p.max) {
     const top = await keeps({ size: p.max }); if (!top) return;
@@ -320,6 +335,12 @@ async function checkLost(s, req) {
   for (const [label, over] of others) { const q = await keeps(over); if (!q) return; if (q.kept) offer(label, over); }
   p.checking = false; fineUI(p.fine);
 }
+const detailsUI = () => document.querySelectorAll("#pic-details button").forEach((b) => b.setAttribute("aria-pressed", b.dataset.v === detailsOf(state.pic)));
+detailsUI();
+$("pic-details").onclick = (e) => {
+  const b = e.target.closest("button"); if (!b) return;
+  state.pic.details = b.dataset.v; detailsUI(); makePicture();
+};
 const densityUI = () => document.querySelectorAll("#pic-density button").forEach((b) => b.setAttribute("aria-pressed", b.dataset.d === state.pic.density));
 densityUI();
 $("pic-density").onclick = (e) => {
@@ -330,7 +351,7 @@ $("pic-density").onclick = (e) => {
 function styleUI() {
   const s = state.pic.style;
   document.querySelectorAll("#pic-style button").forEach((b) => b.setAttribute("aria-pressed", b.dataset.s === s));
-  $("pic-angle-row").hidden = $("pic-density-row").hidden = s !== "fill"; $("pic-cross-row").hidden = s !== "cross";
+  $("pic-angle-row").hidden = $("pic-density-row").hidden = $("pic-details-row").hidden = s !== "fill"; $("pic-cross-row").hidden = s !== "cross";
   $("pic-colors-label").textContent = s === "line" ? "Colours to trace" : "Thread colours";
   $("pic-line-row").hidden = s !== "line";
   lineUI();
@@ -375,6 +396,7 @@ export async function lastPicture() {
     if (["fill", "line", "cross"].includes(o.style)) p.style = o.style;
     for (const [k, lo, hi] of [["colors", 1, 99], ["size", 10, 400], ["angle", 0, 180], ["cross", 1, 10]]) if (Number.isFinite(o[k]) && o[k] >= lo && o[k] <= hi) { p[k] = o[k]; $("pic-" + k).value = o[k]; $(`pic-${k}-out`).textContent = { colors: String, size: sizeLabel, angle: (v) => `${v}°`, cross: (v) => `${v} mm` }[k](o[k]); }
     if (typeof o.bg === "boolean") $("pic-bg").checked = p.bg = o.bg;
+    if (DETAILS.includes(o.details)) { p.details = o.details; detailsUI(); }
     if (o.line === "" || /^#[0-9a-f]{6}$/i.test(o.line)) p.line = o.line;
     styleUI();
     await loadPicture(new File([got.blob], got.name, { type: got.blob.type }), false, true);
