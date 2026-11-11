@@ -147,6 +147,83 @@ await open("#design");
   check("Picture: a frame band left out is said (problem and panel)", r.ids.includes("framed") && /frame/.test(r.note), JSON.stringify(r));
 }
 
+// ---- What the page says is what the file has (the v27 tester round)
+{
+  await open("#design");
+  // the Automatic stroke label against the file: thin exactly when the file is the thin-line file
+  const lines = "Handmade with love\nby Grandma\nMarch 2026";
+  const r = await run(`const out = {}, base = ${JSON.stringify(design([words({ text: lines, font: "NW Quicksand" })]))};
+    const made = (size, style) => ({ ...base, pieces: base.pieces.map((p) => ({ ...p, size, ...(style ? { style } : {}) })) });
+    for (const size of [5, 6, 8]) { const st = [];
+      for (const style of ["", "line"]) { await __sf.load(made(size, style)); await new Promise((r) => setTimeout(r, 300)); st.push(nwTest.view().file.stitches.length); }
+      await __sf.load(made(size, ""));
+      document.querySelector("#st-pieces li[data-id]").click(); await __sf.wait(() => /Automatic: /.test(document.querySelector('[data-seg="style"] button')?.textContent || ""), 5000);
+      out[size] = [document.querySelector('[data-seg="style"] button').textContent, st[0] === st[1]]; }
+    return out;`).catch((e) => ({ error: String(e) }));
+  check("Stroke: \"Automatic: thin line\" exactly when the file is the thin-line file (5, 6, 8 mm print, three lines)", !r.error && Object.values(r).every(([label, thin]) => /thin line/.test(label) === thin), JSON.stringify(r));
+  // Fit to hoop says what it did, with the way back
+  const f = await run(`await __sf.load(${JSON.stringify(design([words({ size: 12 })]))}); document.getElementById("st-toast").hidden = true;
+    document.getElementById("st-fit").click(); await new Promise((r) => setTimeout(r, 1500)); return __sf.toast();`);
+  check("Fit to hoop: a design made bigger is said, with Undo", /Fit to hoop made the whole design bigger/.test(f) && /Undo/.test(f), f);
+  // a note never lies over Download or Send
+  const t = await run(`document.querySelector('#st-cards [data-start="keyfob"]').click(); await new Promise((r) => setTimeout(r, 1500));
+    const a = document.getElementById("st-toast").getBoundingClientRect(), hit = (id) => { const b = document.getElementById(id).getBoundingClientRect(); return b.width > 0 && b.left < a.right && b.right > a.left && b.top < a.bottom && b.bottom > a.top; };
+    return { shown: !document.getElementById("st-toast").hidden, over: hit("download") || hit("share") };`);
+  check("A note doesn't cover Download or Send", t.shown && !t.over, JSON.stringify(t));
+  // the machine: one with the same hoop is no Undo step, and says what the choice does
+  const m = await run(`await __sf.load(${JSON.stringify(design([frame(), words()]))}); document.getElementById("st-toast").hidden = true;
+    const sel = document.getElementById("machine"), was = sel.value, other = [...sel.options].map((o) => o.value).find((v) => v !== was);
+    if (!other) return null;
+    const undo0 = document.getElementById("st-undo").disabled; sel.value = other; sel.dispatchEvent(new Event("change", { bubbles: true })); await new Promise((r) => setTimeout(r, 1200));
+    const out = { undo0, undo1: document.getElementById("st-undo").disabled, toast: __sf.toast() };
+    sel.value = was; sel.dispatchEvent(new Event("change", { bubbles: true })); await new Promise((r) => setTimeout(r, 800)); return out;`);
+  check("My machine: the same hoop on another machine is no Undo step, and is said", !m || (m.undo0 === m.undo1 && /Set for the /.test(m.toast)), JSON.stringify(m));
+  // a hoop turned on purpose (the design's own name sews upright) stays turned for every name in a batch
+  const n = await run(`await __sf.load(${JSON.stringify({ ...design([words({ text: "Bjork", size: 20 })]), turned: true })});
+    if (!nwTest.state().turn) return null;
+    return ["Ann", "Zoe", "Abbie"].map((x) => nwTest.names(x, true).turned);`);
+  check("Names batch: a hoop turned on purpose stays turned for every name", !n || n.every(Boolean), JSON.stringify(n));
+  // zoomed in, a drag that doesn't start on the selected piece slides the view and moves nothing
+  const z0 = await run(`await __sf.load(${JSON.stringify(design([frame(), words()]))}); document.getElementById("st-toast").hidden = true;
+    for (let i = 0; i < 3; i++) document.getElementById("zoom-in").click(); document.activeElement.blur(); await new Promise((r) => setTimeout(r, 300));
+    const b = document.getElementById("view").getBoundingClientRect(), s = nwTest.state().scale;
+    return { x: Math.round(b.left + b.width / 2 + 400 * s), y: Math.round(b.top + b.height / 2), at: JSON.stringify(JSON.parse(localStorage.getItem("nw:studio")).pieces.map((p) => [p.x, p.y])) };`);
+  await call("drag", String(z0.x), String(z0.y), String(z0.x - 90), String(z0.y + 30)); await sleep(600);
+  const z = await run(`const out = { same: ${JSON.stringify(z0.at)} === JSON.stringify(JSON.parse(localStorage.getItem("nw:studio")).pieces.map((p) => [p.x, p.y])), pan: nwTest.state().pan };
+    document.getElementById("zoom-fit").click(); return out;`);
+  check("Zoomed in: a drag off the selected piece slides the view and moves no piece", z.same && (z.pan[0] !== 0 || z.pan[1] !== 0), JSON.stringify(z));
+}
+// ---- Open: a copy keeps the file's own machine names; a caution is not a tick; stop names follow the file into a design
+{
+  await open("#open");
+  const r = await run(`const get = async (n) => { const q = await fetch("/tests/external/pes/" + n); return q.ok ? new Uint8Array(await q.arrayBuffer()) : null; };
+    const u = await get("ufront.pes"), g = await get("gnome.pes"); if (!u || !g) return null;
+    __sf.put("#open-file", u, "ufront.pes"); await __sf.wait(() => !document.getElementById("open-info").hidden && /ufront/.test(document.getElementById("open-info").textContent), 20000); await new Promise((r) => setTimeout(r, 800));
+    const names = () => document.getElementById("threads").innerText.replace(/\\s+/g, " "), a = names();
+    const long = [...document.querySelectorAll("#doctor-list li")].find((l) => /longer than 10 mm/.test(l.textContent))?.className;
+    document.getElementById("doc-fit")?.click(); await new Promise((r) => setTimeout(r, 6000)); const b = names();
+    __sf.put("#open-file", g, "gnome.pes"); await __sf.wait(() => /gnome/.test(document.getElementById("open-info").textContent), 20000); await new Promise((r) => setTimeout(r, 800));
+    document.getElementById("open-words").click(); await __sf.wait(() => document.body.dataset.mode === "design" && nwTest.view(), 20000); await new Promise((r) => setTimeout(r, 2500));
+    const steps = [...document.querySelectorAll(".st-steps li, #st-steps li")].map((l) => l.textContent).join(" ");
+    return { a, b, long, placed: /placement line/i.test(steps), bare: /Sews gnome \\(colour 1\\)/.test(steps) };`);
+  check("Open: a resized copy names its threads as the file did", !r || (r.a === r.b && /Lavender/.test(r.b)), JSON.stringify(r));
+  check("Open: a caution isn't shown with a tick", !r || r.long !== "good", JSON.stringify(r?.long));
+  check("Open: an appliqué file's stop names follow it into a design", !r || (r.placed && !r.bare), JSON.stringify(r && [r.placed, r.bare]));
+}
+// ---- Picture: the Small details choice says what it did, beside the control
+{
+  await open("#picture");
+  const r = await run(`const c = Object.assign(document.createElement("canvas"), { width: 400, height: 400 }), g = c.getContext("2d");
+    g.fillStyle = "#ffffff"; g.fillRect(0, 0, 400, 400); g.fillStyle = "#1e3cc8"; g.beginPath(); g.arc(200, 200, 110, 0, 7); g.fill(); g.fillStyle = "#c81e1e"; for (const [x, y] of [[40, 40], [360, 50], [50, 350]]) g.fillRect(x, y, 5, 5);
+    const blob = await new Promise((r) => c.toBlob(r, "image/png")); __sf.put("#pic-file", new Uint8Array(await blob.arrayBuffer()), "dots.png", "image/png");
+    const ready = () => /^dots/.test(nwTest.view()?.filename || "") && !document.getElementById("download").disabled;
+    await __sf.wait(ready, 40000); await new Promise((r) => setTimeout(r, 500));
+    const note = document.getElementById("pic-details-note"), inRow = document.getElementById("pic-details-row").contains(note), most = note.hidden ? "" : note.textContent;
+    document.querySelector('#pic-details [data-v="all"]').click(); await new Promise((r) => setTimeout(r, 300)); await __sf.wait(ready, 40000); await new Promise((r) => setTimeout(r, 500));
+    return { inRow, most, all: note.hidden ? "" : note.textContent };`);
+  check("Picture: Small details says what it did beside the control, for both choices", r.inRow && /speck/.test(r.most) && /speck/.test(r.all) && !/left out/.test(r.all), JSON.stringify(r));
+}
+
 console.log(problems.length ? problems.map((p) => "PROBLEM " + p).join("\n") : "");
 console.log(`DONE ${checks} ${problems.length} (${Math.round((Date.now() - t0) / 1000)} s)`);
 process.exit(problems.length ? 1 : 0);
