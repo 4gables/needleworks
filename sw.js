@@ -41,6 +41,7 @@ const FILES = [
   "js/core/density.js",
   "js/core/fill.js",
   "js/core/machines.js",
+  "js/core/palette.js",
   "js/core/recipes.js",
   "js/core/raster.js",
   "js/core/text.js",

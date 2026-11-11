@@ -68,7 +68,8 @@ Phase 1, the base (no visible change, byte-identical batches):
     visit with its error (`docs/pictures.md`); ui_sweep `picture-after-blank` fails without the fix
   - [x] released as v16 with the fill cache (check.sh passed: 439 files unchanged, ui_sweep 340/0, monkey 960
     steps 0 problems)
-  - [ ] digitize.js: colour learning and styles apart
+  - [x] `core/palette.js`: colour learning, labelling and ink out of digitize.js (now 1,105 lines, from 2,081:
+    the three picture styles and sizing)
   - [ ] ui.js and app.js over one shared state; one worker job queue; matrix folded into files_flow
 - [ ] **F3 Atomic releases**: one release's files per load, never a mix
 
