@@ -57,14 +57,6 @@ fs.writeFileSync(path.join(FILES, "badge.png"), png(240, 240, (x, y) => {   // a
   if (y > 160 && y < 175 && x > 70 && x < 170) return [230, 180, 20, 255];
   return [255, 255, 255, 255];
 }));
-// (the badge with eight small red squares scattered round it: pieces "Main shapes only" leaves out)
-fs.writeFileSync(path.join(FILES, "sprigs.png"), png(240, 240, (x, y) => {
-  const d = Math.hypot(x - 120, y - 120);
-  if (d > 60 && d < 84) return [200, 20, 40, 255];
-  for (let k = 0; k < 8; k++) { const cx = 120 + 108 * Math.cos((k * Math.PI) / 4 + 0.4), cy = 120 + 108 * Math.sin((k * Math.PI) / 4 + 0.4); if (Math.abs(x - cx) < 3.5 && Math.abs(y - cy) < 3.5) return [200, 20, 40, 255]; }
-  if (Math.abs(x - 120) < 30 && Math.abs(y - 120) < 30) return [20, 40, 140, 255];
-  return [255, 255, 255, 255];
-}));
 fs.writeFileSync(path.join(FILES, "junk.pes"), Buffer.from("#PES0001 this is not really a design file at all"));
 // (a picture named .pes: Open says it's a picture, with a button to Picture to stitches)
 fs.copyFileSync(path.join(FILES, "badge.png"), path.join(FILES, "picture.pes"));
@@ -116,8 +108,8 @@ const STATES = [
   { id: "picture-error", hash: "picture", seed: {}, setup: async (p) => { await p.upload("#pic-file", path.join(FILES, "blank.png")); }, wait: "!document.getElementById('error').hidden" },
   // (a picture with nothing to stitch isn't brought back at the next visit: the tab opened on its error, not the sample)
   { id: "picture-after-blank", hash: "picture", seed: {}, setup: async (p) => { await p.upload("#pic-file", path.join(FILES, "blank.png")); for (let i = 0; i < 100 && !(await p.eval("!document.getElementById('error').hidden")); i++) await sleep(200); await sleep(500); await p.eval("location.reload()"); await sleep(1500); }, wait: "!document.getElementById('download').disabled && !document.getElementById('pic-sample-note').hidden" },
-  // (Small details: the choice, and the note that says what was left out with the way back)
-  { id: "picture-details", hash: "picture", seed: {}, setup: async (p) => { await p.upload("#pic-file", path.join(FILES, "sprigs.png")); for (let i = 0; i < 100 && !(await p.eval("!!document.querySelector('#pic-palette button')")); i++) await sleep(200); await p.eval("document.querySelector('#pic-details [data-v=main]').click()"); }, wait: "!document.getElementById('download').disabled && !!document.querySelector('#pic-merged [data-details]')", keys: true },
+  // (Small details: the choice, with "Keep all" taken)
+  { id: "picture-details", hash: "picture", seed: {}, setup: async (p) => { await p.upload("#pic-file", path.join(FILES, "badge.png")); for (let i = 0; i < 100 && !(await p.eval("!!document.querySelector('#pic-palette button')")); i++) await sleep(200); await p.eval("document.querySelector('#pic-details [data-v=all]').click()"); }, wait: "!document.getElementById('download').disabled && document.querySelector('#pic-details [data-v=all]').getAttribute('aria-pressed') === 'true'", keys: true },
   { id: "picture-swap", hash: "picture", seed: {}, setup: async (p) => { await p.upload("#pic-file", path.join(FILES, "badge.png")); for (let i = 0; i < 100 && !(await p.eval("!!document.querySelector('#pic-palette button')")); i++) await sleep(200); await p.eval("document.querySelector('#pic-palette button').click()"); }, wait: "!document.getElementById('pic-swap').hidden", keys: true },
   { id: "open", hash: "open", seed: {} },
   { id: "open-picture", hash: "open", seed: {}, setup: async (p) => { await p.upload("#open-file", path.join(FILES, "picture.pes")); }, wait: "!!document.querySelector('#error button')" },

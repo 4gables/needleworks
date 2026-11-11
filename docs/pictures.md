@@ -78,31 +78,32 @@ Reference for this part of Needleworks: the rules, the reason for each (it stops
   in 8 threads is over 100 starts): fewer needs fewer pieces, which is a choice for the person (a Details setting),
   not a rule.
 - Small details (Picture panel, Filled; `opts.details`, `recipes.js` `PICTURES.details`; Wilcom, Hatch and BERNINA
-  have a "Details" slider, Stitch Era deletes 30-50 % of traced shapes): "Keep all" is the rules above and nothing
-  more; "Most" is the default; "Main shapes only" is the person's choice. A *piece* is the parts of one colour the
-  needle reaches without a cut (one's end within 2 mm of the next one's start, or in its travel region within
-  `TRAVEL`), measured in mm of thread it sews.
-  - Most: a piece under 8 mm and under a tenth of its colour's biggest goes, and so does one that only a jump
-    reaches and that sews under 8 mm (a run of nothing but its own locks). Kept dots (an eye, an i's dot, a mark by
-    a bigger piece) stay. 12 samples: trims 1,162 -> 1,118, loose threads 67 -> 55, wasted moves 39 -> 27; no sample
-    has more trims or loose threads. The corpus hardly changes (2 of 117 files): its pictures have few specks.
-  - Main shapes only: flecks to 12 mm² with half their edge against other colours take that colour; a piece under
-    80 mm, under half its colour's biggest and among the smallest that together sew 30 % of the colour's thread
-    goes, unless 30 % of its edge lies against other colours (part of something). Samples: trims 1,162 -> 853
-    (-27 %), loose 67 -> 39 (-42 %); five held-out pictures 1,418 -> 950 (-33 %), 82 -> 46; corpus 538 -> 440
-    (-18 %), 9 -> 5, where small lettering loses letters (17 of its 122 cases then fail its drawn-against-sewn
-    checks, as they should). What is left is whole sprigs and shapes: a third off the trims on every picture would mean
-    dropping those.
+  have a "Details" slider, Stitch Era deletes 30-50 % of traced shapes): "Leave out specks" is the default, "Keep
+  all" is the rules above and nothing more (v26's bytes). A *piece* is the parts of one colour the needle reaches
+  without a cut (one's end within 2 mm of the next one's start, or in its travel region within `TRAVEL`), measured
+  in mm of thread it sews.
+  - Left out: a piece under 7 mm and under a tenth of its colour's biggest, and one that only a jump reaches and
+    that sews under 8 mm (a run of nothing but its own locks). Kept dots (an eye, an i's dot, a mark by a bigger
+    piece) stay, but a mark goes with the piece it sat beside (left, it became a start of its own for a knot: 10
+    more bare lock hits on one sample). 12 samples: trims 1,162 -> 1,119, loose threads 67 -> 51, wasted moves
+    39 -> 31, bare locks 90 -> 90; no sample has more trims, loose threads or wasted moves (at 8 mm one had a
+    wasted move more). Five held-out pictures: 1,418 -> 1,375, 82 -> 75. The corpus hardly changes: its pictures
+    have few specks.
   - The panel says how many pieces were left out, with "Keep them all"; the left-out-parts warning offers "Keep
-    all the small details" when that sews them, and is not raised for "Main shapes only" (a choice, not a fault).
-    Remembered with the picture (`pic.last`). Guard: ui_sweep `picture-details`; `picture_corpus.sh ... details=main`.
-  - Travel under a later colour's fill is planned only under fills no level can leave out (`solid`: a fill of at
+    all the small details" when that sews them. Remembered with the picture (`pic.last`). Guard: ui_sweep
+    `picture-details`; `picture_corpus.sh ... details=all`.
+  - Travel under a later colour's fill is planned only under fills that can't be left out (`solid`: a fill of at
     least `level.start` mm of thread), so nothing left out bares a travel run.
   - Worse: pieces found from the picture alone (colour touching colour): the router's regions are narrower, so
-    almost every piece looked joined and 5 of 1,162 went. By size alone at 60 mm: a sheet of 18 sprigs lost 31 of
-    its 49 pieces (every sprig is a main shape there: hence "among the smallest that sew 30 %"). The 30 % rule
-    without "under half the biggest": a pattern of equal dots lost a random third of them. 15 mm at the default:
-    2 mm leaves went from a 60 mm sheet.
+    almost every piece looked joined and 5 of 1,162 went. 15 mm at the default: 2 mm leaves went from a 60 mm sheet.
+  - Worse, a third choice "Main shapes only" (tried four ways, 2026-11). By thread alone (under 80 mm, or the
+    smallest 30 % of a colour): trims -27 % on the samples, but the stems that join a sheet's sprigs, a bow and
+    half a caption's letters went while specks stayed, and a pattern of equal dots lost a random third. Flecks to
+    12 mm² folded into the colour round them: a dog's eye went into its face, and at half-enclosed a vine through
+    a rose bed. Judged as asked of a main shape (things within 3 mm gathered whole, left out only when under
+    3-8 mm across, touching no other colour): nothing more than the default leaves out, 1,132 trims against
+    1,119. What is left of a picture's trims is whole sprigs, stems and letters: fewer means fewer colours or a
+    simpler picture, which the person already controls.
 - Speed: a colour's distance transforms are worked out in its own box (`cropDT`: the same values to the bit; a
   mask of everything *off* a shape only as far as the caller asks). Filled, 12 samples in Node: 20.8 s at v25,
   22.4 s at v26 (flecks), 18.9 s now; with the Small details pass about 20 s.

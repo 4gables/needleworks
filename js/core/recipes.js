@@ -71,14 +71,12 @@ export const ROWS = { solid: 0.35, standard: 0.4 };
 //   eyes:     up to this many such pieces in one colour are meant (an eye, a nostril) and stay; more are a texture.
 //   start:    a separate start (trim, tie-in, tie-off: 2.8 mm of thread in locks) must sew at least this much (mm).
 //   edge:     travel inside a fill may run this far (mm) inside the shape's own edge over finished rows (fill.js).
-//   details:  the Picture panel's Small details choice (digitize.js). A piece of a colour that needs a start of its
-//             own is left out when it would sew under `start` mm of thread, under `share` of its colour's biggest
-//             piece and (`tail`) is among the smallest that together sew that share of the colour's thread; so is
-//             one that only a jump reaches and that sews under `lone` mm. `fleck`, `enclosed` as above; `joined`: a
-//             shape with that share of its edge against other colours stays. "all" leaves nothing out (v26).
+//   details:  the Picture panel's Small details choice (digitize.js): "most" unless the person keeps them all. A
+//             piece of a colour that needs a start of its own is left out when it would sew under `start` mm of
+//             thread and under `share` of its colour's biggest piece; so is one that only a jump reaches and that
+//             sews under `lone` mm. "all" leaves nothing out (v26).
 export const PICTURES = { fleck: 3, enclosed: 0.8, eyes: 6, start: 4, edge: 0.75,
-  details: { all: { start: 0, share: 0, lone: 0, fleck: 3, enclosed: 0.8 }, most: { start: 8, share: 0.1, lone: 8, fleck: 3, enclosed: 0.8 },
-    main: { start: 80, share: 0.5, tail: 0.3, lone: 15, fleck: 12, enclosed: 0.5, joined: 0.3 } } };
+  details: { all: { start: 0, share: 0, lone: 0 }, most: { start: 7, share: 0.1, lone: 8 } } };
 
 // --- S1: pieces sewn in one go ---
 // Two pieces of script lettering are stitched across, not trimmed apart, when their columns are at most `gap` mm

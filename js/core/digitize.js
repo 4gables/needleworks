@@ -151,9 +151,9 @@ function clearStart(pts) {
 // under 1.5 mm², or under 4 mm² and 2.5 mm across) or under PICTURES.fleck mm², with PICTURES.enclosed of its edge
 // against other sewn colours. It joins the one it touches most. Up to PICTURES.eyes of them in a colour stay (an eye).
 // Returns the labels to sew (a copy when anything changed) and how many pieces were folded in.
-function foldFlecks(labels, w, h, colors, used, res, fleck = PICTURES.fleck, enclosed = PICTURES.enclosed) {
+function foldFlecks(labels, w, h, colors, used, res) {
   const n = w * h, out = [];
-  const minPx = 1.5 * res * res, dotPx = 4 * res * res, dotW = 2.5 * res, fleckPx = fleck * res * res;
+  const minPx = 1.5 * res * res, dotPx = 4 * res * res, dotW = 2.5 * res, fleckPx = PICTURES.fleck * res * res;
   // each sewn colour's pieces, and where a fill has body: a piece of 4 mm² or more that is 1.5 mm wide somewhere. A
   // fleck joins only such a fill: the blend round a dark letter on a pale label is a ring of a third colour, and the
   // letters took it (a label's "Embroidered" went from black to the grey of its own halo).
@@ -191,7 +191,7 @@ function foldFlecks(labels, w, h, colors, used, res, fleck = PICTURES.fleck, enc
     const to = new Int32Array(count + 1).fill(-1), best = new Int32Array(count + 1), all = new Int32Array(count + 1);
     for (const [key, k] of on) { const c = Math.floor(key / 64), l = key % 64; all[c] += k; if (k > best[c]) { best[c] = k; to[c] = l; } }
     const flecks = [];
-    for (let c = 1; c <= count; c++) if (small(c) && rim[c] && all[c] >= enclosed * rim[c]) flecks.push(c);
+    for (let c = 1; c <= count; c++) if (small(c) && rim[c] && all[c] >= PICTURES.enclosed * rim[c]) flecks.push(c);
     // (pieces big enough to sew as a dot: see `fair` below)
     const meant = flecks.filter((c) => size[c] >= 0.6 * res * res && Math.min(x1[c] - x0[c] + 1, y1[c] - y0[c] + 1) >= 0.8 * res);
     const keep = new Set(meant.length <= PICTURES.eyes ? meant : []);
@@ -215,7 +215,7 @@ function build(img, analysis, opts) {
   const { w, h, colors } = analysis;
   const used0 = colors.filter((c) => !c.background && c.area > 0 && !(o.skip || []).includes(c.id));
   const level = PICTURES.details[o.details] || PICTURES.details.most;
-  const { labels, folded } = foldFlecks(analysis.labels, w, h, colors, used0, o.res, level.fleck, level.enclosed);
+  const { labels, folded } = foldFlecks(analysis.labels, w, h, colors, used0, o.res);
   const res = o.res;
   const hoop = o.hoop;
   const cx = w / 2, cy = h / 2, toMm = (p) => p.map(([x, y]) => [(x - cx) / res, (y - cy) / res]);
@@ -388,12 +388,6 @@ function build(img, analysis, opts) {
     for (let i = 0; i < w * h; i++) if (cl[i]) comps[cl[i] - 1].pixels.push(i);
     let blocks = [];
     const filled = new Uint8Array(count + 1);   // shapes sewn as fills
-    // (the share of a shape's edge that lies against other sewn colours: part of something, not a piece on its own)
-    const joined = (mine) => {
-      let rim = 0, on = 0;
-      for (const i of mine) { const x = i % w; for (const j of [x > 0 ? i - 1 : -1, x < w - 1 ? i + 1 : -1, i - w, i + w]) if (j >= 0 && j < w * h && labels[j] !== col.id) { rim++; if (stitched.has(labels[j])) on++; } }
-      return rim ? on / rim : 0;
-    };
     for (const comp of comps) {
       const mine = comp.pixels.filter((i) => labels[i] === col.id);
       if (!mine.length) continue;
@@ -404,7 +398,7 @@ function build(img, analysis, opts) {
       const under = tatami(mask, comp, res, { angle: angle + 90, spacing: 2.5, stitch: 3, inset: 0.4, pull: 0 });
       // pull compensation widens a fill past its edge; on thin letters that closes the gaps between them
       const fill = tatami(mask, comp, res, { angle, spacing: o.density, stitch: 3.5, pull: widthMm < 2 ? 0.05 : 0.15 });
-      blocks.push({ centre, paths: routeFill([under, fill], comp, mask, res, budget, WORN, false, 0, null, PICTURES.edge).map(toMm), kind: "fill", comp: comp.id, thread: fillThread(mine.length), meant: level.joined ? eye[comp.id] || (dot(comp.id) && tittle(comp.id)) || joined(mine) >= level.joined : dot(comp.id) });
+      blocks.push({ centre, paths: routeFill([under, fill], comp, mask, res, budget, WORN, false, 0, null, PICTURES.edge).map(toMm), kind: "fill", comp: comp.id, thread: fillThread(mine.length), meant: dot(comp.id) });
       filled[comp.id] = 1;
     }
     if (anyThin) {
@@ -474,7 +468,11 @@ function build(img, analysis, opts) {
     // reaches without a cut: one's end within 2 mm of the next one's start, or in its travel region and within TRAVEL. It is left out when
     // it would sew under level.start mm of thread and under level.share of the colour's biggest piece (four flower
     // centres in one thread are each its biggest). Never a dot that was kept as meant (an eye, an i's dot, a mark by a
-    // bigger piece; with level.joined, the marks go and any shape with that share of its edge against other colours stays).
+    // bigger piece).
+    // Worse, as a third choice ("Main shapes only"): by thread alone (under 80 mm, the smallest 30 %) a sheet's stems,
+    // a bow and half a caption's letters went while specks stayed; flecks to 12 mm² folded a dog's eye into its face;
+    // and judged by reach and by what a thing joins (small, 3 mm from its colour, touching no other) it left out
+    // nothing this level doesn't: 1,132 trims against 1,119 on the 12 samples.
     if (level.start && blocks.length > 1) {
       const root = blocks.map((_, i) => i), find = (i) => (root[i] === i ? i : (root[i] = find(root[i])));
       // (a fill begins and ends where its rows do; a line's walk comes back to where it began, so it may begin anywhere)
@@ -485,12 +483,7 @@ function build(img, analysis, opts) {
       for (let i = 0; i < blocks.length; i++) for (let j = i + 1; j < blocks.length; j++) if (find(i) !== find(j) && (goes(i, j) || goes(j, i))) root[find(i)] = find(j);
       const sum = new Map();
       blocks.forEach((b, i) => sum.set(find(i), (sum.get(find(i)) || 0) + b.thread));
-      // (level.tail: only the smallest pieces that together sew that share of the colour's thread. On a sheet of 18
-      // sprigs every sprig is a main shape: by size alone "Main shapes only" took 31 of a 60 mm sheet's 49 pieces)
-      const most = Math.max(...sum.values()), all = [...sum.values()].sort((a, b) => a - b), whole = all.reduce((a, v) => a + v, 0);
-      let cut = Infinity;
-      if (level.tail) { cut = 0; let acc = 0; for (const v of all) { acc += v; if (acc > level.tail * whole) break; cut = v; } }
-      const go = (b, i) => !b.meant && sum.get(find(i)) < level.start && sum.get(find(i)) < level.share * most && sum.get(find(i)) <= cut;
+      const most = Math.max(...sum.values()), go = (b, i) => !b.meant && sum.get(find(i)) < level.start && sum.get(find(i)) < level.share * most;
       const out = new Set(blocks.filter(go).filter((b) => b.kind === "fill").map((b) => b.comp)), n0 = blocks.length;
       blocks = blocks.filter((b, i) => !go(b, i));
       fine.left += n0 - blocks.length;
@@ -583,6 +576,8 @@ function build(img, analysis, opts) {
       return q;
     };
     let out = null;   // a piece left out when the needle came to it
+    const gone = [];   // ... and all of them: a kept mark is kept for the piece it sits by
+    const by = (p) => gone.some((g) => g.paths.some((q) => q.some((v) => Math.hypot(v[0] - p[0], v[1] - p[1]) <= 2.5)));
     for (const b of ordered) for (const [pi, p] of b.paths.entries()) {
       let q;
       if (b === out) continue;
@@ -598,7 +593,8 @@ function build(img, analysis, opts) {
           // (nor a piece that only a jump reaches and that sews under level.lone mm in all: a dash 2 mm from its
           // line's other dashes but not from where the needle is. Each was a run of nothing but its own locks: 8 of them
           // were 75 of the 90 lock hits with nothing over them in the 12 sample pictures)
-          else if (gap > 2 && level.lone && !pi && !b.meant && b.paths.reduce((a, v) => a + pathLen(v), 0) < level.lone) { out = b; fine.left++; continue; }
+          // (a dot kept for the piece beside it goes with that piece: left, it was a start of its own for a knot)
+          else if (gap > 2 && level.lone && !pi && (!b.meant || by(p[0])) && b.paths.reduce((a, v) => a + pathLen(v), 0) < level.lone) { out = b; gone.push(b); fine.left++; continue; }
           else if (gap > 2) q = jumpTo(b, p);
           else d.path((q = noTiny(p, d.cur)), true, false);
         }

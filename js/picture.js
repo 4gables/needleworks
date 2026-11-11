@@ -33,7 +33,7 @@ function picWorker() {
 const picJobs = picWorker(), picChecks = picWorker();
 // Everything a picture's stitches depend on (the stitches are a function of these and the picture, nothing else)
 // Small details (core/digitize.js, recipes.js `PICTURES.details`): "most" unless the person chose
-const DETAILS = ["all", "most", "main"], detailsOf = (p) => (DETAILS.includes(p.details) ? p.details : "most");
+const DETAILS = ["all", "most"], detailsOf = (p) => (DETAILS.includes(p.details) ? p.details : "most");
 function picSettings(over = {}) {
   const p = state.pic, h = hoop(), turn = !!state.turn.picture && !square();
   return { size: p.size, style: p.style, cross: p.cross, skip: p.skip, swap: p.swap, colors: p.colors, bg: p.bg, angle: p.angle, density: p.density, details: detailsOf(p),
@@ -123,7 +123,7 @@ export async function makePicture() {
   // (adding needs a design there to add to)
   $("pic-use").hidden = false; $("pic-add").hidden = $("pic-or").hidden = (() => { try { return studio.empty(); } catch { return true; } })();
   if (state.mode === "picture") setView(v);
-  if (lostMuch(r.fine.kept) && !(s.style === "fill" && s.details === "main")) checkLost(s, req);
+  if (lostMuch(r.fine.kept)) checkLost(s, req);
 }
 // Nothing to stitch: say why, and offer only what can still be done (it said "make it bigger" at the largest size and
 // "turn off background removal" with it already off)
@@ -244,9 +244,7 @@ bindRange("pic-cross", "cross", (v) => `${v} mm`);
 // (and the parts of the picture no stitch reaches, in any style (keptParts, lostMuch): etsy_7's doodles at 60 mm,
 // a drawing's sun rays in cross-stitch, its 1.5 mm eye, all left out while the dialog said "Checked")
 function fineUI(fine) {
-  const p = state.pic, gaps = fine?.narrowMm2 >= Math.max(2, 0.015 * (fine.inkMm2 || 0)), k = fine?.kept;
-  // ("Main shapes only" is the person's own choice: what it leaves out is said beside the choice, not as a fault)
-  const lost = lostMuch(k) && !(p.style === "fill" && detailsOf(p) === "main");
+  const p = state.pic, gaps = fine?.narrowMm2 >= Math.max(2, 0.015 * (fine.inkMm2 || 0)), k = fine?.kept, lost = lostMuch(k);
   let hair = fine?.lost >= 0.05;
   // (the picture's problems, said beside Download and after too: words.js)
   // (said of any picture: "like inside or between small letters" was said of drawings with no letters in them)
