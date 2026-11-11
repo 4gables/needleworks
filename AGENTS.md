@@ -21,7 +21,8 @@ measurements behind each number are in the code's comments.
   quilting and carving stages, `gang`, two hoopings), `shapes.js` (frame shapes), `fabrics.js` (`FABRICS`,
   `THREADS` words), `files.js` (opened files as pieces), `ui.js` (editor, warnings, one-tap fixes; hands its state to its
   parts as `S`), `starters.js`, `names.js` (One for each name), `recent.js` (Recent designs),
-  `placing.js` (where a piece goes),
+  `placing.js` (where a piece goes), `threadsaid.js` (thread names in the editor), `toobig.js` (too big for the
+  hoop and the ways out),
   `outline.js`, `quilt.js`, `motifs.js`. pieces.js still re-exports what moved out of it.
 - `js/doctor.js` + `doctor-worker.js` (Open tab fixes), `quality.js` (the checker's rules), `words.js` (problems
   list per view, stop/thread vocabulary), `gate.js` (the only exit for files: `handOut`), `sheet.js` (step text, sew

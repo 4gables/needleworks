@@ -6,7 +6,7 @@ import { compose, THREADS } from "./pieces.js";
 import { machineThreads } from "../core/formats.js";
 
 export function threadSaid(S) {
-  const { api } = S;
+  const { api, $ } = S;
   // the name the machine will show for `hex` if the piece's colour `was` became it: the file's palette gives each colour
   // its nearest Brother thread no earlier colour took (machineThreads), so a colour may get its second-nearest. The
   // editor said "Brother Dark Gray" (the nearest) while the chips, steps and sew sheet said Olive Green (Dark Gray taken)

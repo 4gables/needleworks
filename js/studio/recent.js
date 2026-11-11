@@ -8,7 +8,7 @@ import { cleanPieces, compose, previewLook } from "./pieces.js";
 import { STARTERS } from "./starters.js";
 
 export function recentDesigns(S) {
-  const { api } = S;
+  const { api, $ } = S;
   // Recent designs: the last designs another one replaced (a starter, Open saved, a picture or file as a new design,
   // Add words), kept in this browser as Save design writes them and opened as Open saved opens them (cleanPieces). A
   // newcomer's downloaded design went with the next starter, back only by Undo and gone after a reload (rounds 9, 11).

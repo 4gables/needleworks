@@ -9,7 +9,7 @@ import { MARGIN } from "../core/machines.js";
 import { splitPieces, compose, crossName, crossStep, sewnBoxes, scaledFit, label, layoutSize, fittedSizes, pieceBounds, sewn, collisions, minSize, inkHeight, letterMetrics, sewnBox } from "./pieces.js";
 
 export function tooBigWays(S) {
-  const { api } = S;
+  const { api, $ } = S;
   // the too-big message, over the preview and under the selected piece's controls (with a second fix there too)
   // (the same fixes in both places: the preview's said Fit to hoop alone where the editor also offered the turn)
   function tooBig(msg, ...fixes) {
