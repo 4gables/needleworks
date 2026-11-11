@@ -79,10 +79,25 @@ export function tooBigWays(S) {
       const twoWay = (quick) => { const w = twoHoopings(hoop, quick); return w.pieces ? { ...w, pieces: JSON.stringify(w.pieces) } : w; };
       const ways = () => (known.ways ||= ((lands) => ({ lands, ways: fitWays(lands) }))(fitLands()));
       const full = () => { known.full ||= twoWay(false); say(ways(), known.full); };
+      // (the words on two, then three lines: each drawn in a task of its own once the note is up, then offered)
+      const lines = () => {
+        // (worked out once per design and hoop; a run the design was made again under is left to the newer one)
+        if (known.lines?.done || known.lines?.for === s) return;
+        known.lines = { for: s }; let best = null;
+        const step = (n) => setTimeout(() => {
+          if (s !== S.seq) return;
+          best = S.hoopLines(n, best);
+          if (n === 2) { step(3); return; }
+          known.lines = { done: true };
+          if (best) { ways().ways.lines = linesWay(best); say(ways(), known.full || known.quick); }
+        }, n === 2 ? 400 : 0);
+        step(2);
+      };
       const go = () => {
         if (s !== S.seq) return;
         say(ways(), (known.quick ||= known.full || twoWay(true)));
         if (known.quick.later) { if (known.full) full(); else setTimeout(() => { if (s === S.seq) full(); }, 700); }
+        lines();
       };
       if (had) { go(); return; }
       tooBig(msg); setTimeout(go, 0);
@@ -148,11 +163,10 @@ export function tooBigWays(S) {
     if (kt > k * 1.1) { const t = scaledFit(S.pieces, Math.min(kt, S.mostScale())); if (!t.tiny && !t.hit) out.turn = { label: "Fit and turn the hoop", run: () => { S.remember(); api.setTurn(!api.turned()); api.fit(); S.fitHoop(); } }; }
     if (!lands.ok) { const ps = framesFit(); if (ps) out.frame = { label: `Make the ${ps.n === 1 ? "frame" : "frames"} fit the hoop`, run: () => { S.remember(); S.fitted = false; S.pieces.forEach((q, i) => Object.assign(q, ps.list[i])); S.save(); S.ui(); S.make(); } }; }
     const sn = snugWay(); if (sn) out.snug = sn;
-    // (the longest line of words on two or three lines, where that alone brings the design inside the hoop)
-    const ln = S.hoopLines(k);
-    if (ln) out.lines = { label: `Put ${S.pieces.filter((o) => o.kind === "text").length > 1 ? label(ln.p) : "the words"} on ${ln.n === 2 ? "two" : "three"} lines${ln.size < ln.p.size ? ` at ${ln.size} mm` : ""}`, run: () => { const q = S.pieces.find((o) => o.id === ln.p.id); if (!q) return; S.remember(); S.fitted = false; q.text = ln.text; q.size = ln.size; S.save(); S.ui(); S.make(); } };
     return out;
   }
+  // the longest line of words on two or three lines, where that alone brings the design inside the hoop (`hoopLines`)
+  const linesWay = (ln) => ({ label: `Put ${S.pieces.filter((o) => o.kind === "text").length > 1 ? label(ln.p) : "the words"} on ${ln.n === 2 ? "two" : "three"} lines${ln.size < ln.p.size ? ` at ${ln.size} mm` : ""}`, run: () => { const q = S.pieces.find((o) => o.id === ln.p.id); if (!q) return; S.remember(); S.fitted = false; q.text = ln.text; q.size = ln.size; S.save(); S.ui(); S.make(); } });
   function snugWay() {
     const sn = snug();
     return sn && { label: `Make ${label(sn.p)} ${sn.size} mm`, run: () => { S.remember(); S.fitted = false; const q = S.pieces.find((o) => o.id === sn.p.id); if (q) q.size = sn.size; S.save(); S.ui(); S.make(); } };
