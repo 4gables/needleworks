@@ -150,7 +150,7 @@ export function tooBigWays(S) {
     const sn = snugWay(); if (sn) out.snug = sn;
     // (the longest line of words on two or three lines, where that alone brings the design inside the hoop)
     const ln = S.hoopLines(k);
-    if (ln) out.lines = { label: `Put ${label(ln.p)} on ${ln.n === 2 ? "two" : "three"} lines${ln.size < ln.p.size ? ` at ${ln.size} mm` : ""}`, run: () => { const q = S.pieces.find((o) => o.id === ln.p.id); if (!q) return; S.remember(); S.fitted = false; q.text = ln.text; q.size = ln.size; S.save(); S.ui(); S.make(); } };
+    if (ln) out.lines = { label: `Put ${S.pieces.filter((o) => o.kind === "text").length > 1 ? label(ln.p) : "the words"} on ${ln.n === 2 ? "two" : "three"} lines${ln.size < ln.p.size ? ` at ${ln.size} mm` : ""}`, run: () => { const q = S.pieces.find((o) => o.id === ln.p.id); if (!q) return; S.remember(); S.fitted = false; q.text = ln.text; q.size = ln.size; S.save(); S.ui(); S.make(); } };
     return out;
   }
   function snugWay() {

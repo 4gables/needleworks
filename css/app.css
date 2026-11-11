@@ -558,6 +558,8 @@ label:has(> .sr-file:focus-visible), label:has(+ .sr-file:focus-visible) { outli
    hoop at 1413 x 717) */
 .error { display: block; width: max-content; max-width: min(90%, 680px); }
 .error .link { display: inline; white-space: nowrap; font-weight: 700; }
+/* (a fix that names a piece can be longer than a phone is wide) */
+@media (max-width: 520px) { .error .link { white-space: normal; } }
 /* dark colour dots (navy, black threads) need an edge on the dark page */
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .pieces .pick i, :root:not([data-theme="light"]) .threads i, :root:not([data-theme="light"]) .st-steps i { border-color: rgba(255,255,255,.45); } }
 /* phones: the size chips keep clear of the zoom buttons */
