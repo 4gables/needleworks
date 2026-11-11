@@ -96,6 +96,7 @@ const FILES = {
   "js/worker.js": "58a84e06b5badb84d74e446e569b917f4892419c0a8aad783a11cf038ea8a3b6",
   "js/zip.js": "d3d529808cf0618975057f7a71bf6044059204da36a7ffc62d4679f627c6fcb3",
   "js/gate.js": "9973e406c59f1ee0cb66bdc51cf65fe246bfc98616de66e1e35fd551f27c451a",
+  "js/jobs.js": "",
 };
 const hex = (buf) => [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, "0")).join("");
 self.addEventListener("install", (e) => {

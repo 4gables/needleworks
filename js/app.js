@@ -84,7 +84,7 @@ export function setView(v) {
   if (state.step != null && !(v?.steps > state.step)) showStep(null);   // the design changed under a step view
   $("turn").setAttribute("aria-pressed", turned());
   $("turn").disabled = square(); $("turn").title = square() ? "A square hoop is the same either way round." : "Turn the hoop sideways, so a long design can use the hoop's long side.";
-  if (!v) { $("rename-open").hidden = true; $("dl-warn").hidden = true; $("facts").innerHTML = ""; $("threads").innerHTML = ""; $("download").disabled = true; $("download").textContent = "Download PES"; $("share").disabled = true; $("sheet-print").disabled = $("along-open").disabled = true; $("cut-files").hidden = true; $("names-open").hidden = true; paint(); return; }
+  if (!v) { $("rename-open").hidden = $("another-open").hidden = true; $("dl-warn").hidden = true; $("facts").innerHTML = ""; $("threads").innerHTML = ""; $("download").disabled = true; $("download").textContent = "Download PES"; $("share").disabled = true; $("sheet-print").disabled = $("along-open").disabled = true; $("cut-files").hidden = true; $("names-open").hidden = true; paint(); return; }
   // the preview is the file: decode the PES bytes and draw those, not the design they were made from
   if (!v.file) {
     // (a design moved onto the hoop's centre to be written, `shift`: drawn back where its pieces are, so the selection
@@ -157,7 +157,10 @@ export function setView(v) {
   const blocked = blocking(v);
   $("download").disabled = !fits || !!blocked; $("share").disabled = !fits || !!v.split || !!blocked;
   // (nor a sew sheet or Sew along for a file that can't be made)
-  $("sheet-print").disabled = $("along-open").disabled = !fits || !!v.split || !!blocked; $("cut-files").hidden = !v.sheet?.cut?.length; $("names-open").hidden = !!v.split || !namesFor(); $("rename-open").hidden = state.mode !== "design";
+  $("sheet-print").disabled = $("along-open").disabled = !fits || !!v.split || !!blocked; $("cut-files").hidden = !v.sheet?.cut?.length; $("names-open").hidden = !!v.split || !namesFor();
+  // (Make another, by the preview too: on a phone the one under the starters is 1,475 px down, past the preview and the
+  // first-run note, and a tester making two bookmarks never reached it)
+  $("another-open").hidden = state.mode !== "design" || !!v.split || !studio.another(); $("rename-open").hidden = state.mode !== "design";
   // (one per name from a design that doesn't fit yet made a zip of names that didn't fit either)
   // (and not while Download is blocked: every way out of the tab follows the same rule. It stayed on beside "Fix the
   // lettering first" and made a ZIP of names from a design that couldn't be sewn.)
@@ -495,6 +498,16 @@ $("share").onclick = async () => {
   }
 };
 
+// Ctrl+S (⌘S) goes to Download from anywhere on the page: from the Words box it was 48-67 Tabs away. It takes focus
+// there and Enter saves, so the button says what it will save, or why it can't, before anything is downloaded.
+addEventListener("keydown", (e) => {
+  if (!(e.metaKey || e.ctrlKey) || e.altKey || e.shiftKey || e.key.toLowerCase() !== "s") return;
+  e.preventDefault();
+  if (document.querySelector("dialog[open]")) return;
+  const b = $("download");
+  if (b.disabled) { toast(`${b.textContent.trim() === "Download PES" ? "Nothing to download yet" : b.textContent.trim()}${$("error").textContent ? ": the note over the preview says why." : "."}`); return; }
+  b.focus(); b.scrollIntoView({ block: "nearest" });
+});
 $("download").onclick = () => {
   const v = state.view; if (!v) return;
   // never hand out a file we haven't proven decodes to exactly this design and the machine can take
@@ -670,6 +683,7 @@ addEventListener("afterprint", () => { $("sheet").innerHTML = ""; });
 // Design Space (and CanvasWorkspace, Silhouette's paid editions), DXF for Silhouette's free edition. The size is in the
 // name (sheet.js cutName). The shapes are as the design reads (`upright`), not as the machine sews it in a turned hoop:
 // a turned MOM came out with its letters sideways (round 10).
+const NOT_SEWN = "It's for the cutting machine only: the embroidery machine can't read it, so only the .pes goes on the USB stick.";
 const cutFiles = (v, ext) => {
   const shapes = v?.sheet?.upright || v?.sheet?.cut;
   if (!shapes?.length) return [];
@@ -682,9 +696,12 @@ const cutFile = (ext) => () => {
   if (!r.ok) { showError("Cut file stopped: " + r.error); return; }
   // (said, as Download says what it saved: the cutter files saved with nothing said, round 13)
   const f = r.files[0].name, mm = f.match(/_(\d+)x(\d+)mm\.\w+$/);
-  toast(ext === "dxf" ? `Saved ${f} to your downloads, for Silhouette Studio (File > Open). The shapes are ${mm ? `${mm[1]} × ${mm[2]} mm` : "the size in its name"}: check they open at that size.`
-    : `Saved ${f} to your downloads, for Cricut Design Space (Upload). It opens at actual size.`);
+  // (and where it doesn't go: nothing said the SVG or DXF isn't for the embroidery machine, and a tester copied it
+  // to the USB stick with the .pes)
+  toast((ext === "dxf" ? `Saved ${f} to your downloads, for Silhouette Studio (File > Open). The shapes are ${mm ? `${mm[1]} × ${mm[2]} mm` : "the size in its name"}: check they open at that size.`
+    : `Saved ${f} to your downloads, for Cricut Design Space (Upload). It opens at actual size.`) + ` ${NOT_SEWN}`);
 };
+$("another-open").onclick = () => studio.twoUp();
 $("cut-file").onclick = cutFile("svg");
 $("cut-dxf").onclick = cutFile("dxf");
 

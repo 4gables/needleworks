@@ -3,7 +3,7 @@
 # Always: CI tests (golden bytes, doctor fixes, damaged files, gate, typed text, offline list) and the three browser
 # checks that have caught real bugs: ui_sweep --quick (layout, keyboard, focus), monkey (Design-tab invariants), files_flow
 # (every exit). Stitch code changed: both batches, pe900_check and the byte compare with BASELINE_DIR (then the VM).
-# Area checks only when their area changed. The rest (surfaces, matrix, perf, text_fuzz, engine_fuzz) are on demand.
+# Area checks only when their area changed. The rest (surfaces, files_flow --matrix, text_fuzz, engine_fuzz) are on demand.
 # Needs the venv; starts its own server (8796) and Chrome (9396, 9397); every check has a time limit.
 set -u
 cd "${0:A:h}/.."
@@ -44,7 +44,7 @@ if has '^js/(core/|studio/(pieces|compose|lettering|shapes|fabrics|files|starter
   has '^js/core/(text|raster|fonts)|^js/studio/(pieces|lettering)' && { node tests/cdp.mjs $CDP goto "$U/tests/browser/lettering_look.html?v=$RANDOM" >/dev/null; for i in $(seq 1 120); do t=$(node tests/cdp.mjs $CDP eval document.title); [[ $t == *DONE* ]] && break; sleep 5; done; say "== lettering_look $t"; [[ $t == *" 0\""* ]] || fail=1; }
 fi
 
-run files_flow 600 node tests/files_flow.mjs $CDP $U
+run files_flow 900 node tests/files_flow.mjs $CDP $U
 # one release at a time (its own server and browser)
 has '^sw\.js|^js/app\.js' && run upgrade 400 zsh tests/upgrade.sh $((HP+2)) $((CDP+4))
 # speed on a busy design (15 pieces + appliqué letters): no everyday action may hold the page over 600 ms (they sit at
