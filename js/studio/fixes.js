@@ -234,6 +234,43 @@ export function fixes(S) {
     }
     return best;
   }
+  // A design too big for the hoop whose longest single line of words (in no frame) brings it inside on `n` (2 or 3)
+  // lines: { p, n, text, size }, at the size it has where that lands, else at the biggest that does when it's a quarter
+  // over what Fit to hoop (the whole design scaled) would leave; else `best`, what the other count gave (three lines
+  // only when a tenth bigger). (A long line typed with no frame was offered Fit to hoop alone, 26 -> 11 mm, where two
+  // lines kept it at 26: only a frame's shrink offered them.)
+  // Cost: the words on new lines are drawn for the first time here (0.2-0.4 s for a script name), so toobig.js asks
+  // for each count in a task of its own after its note is up, and nothing is drawn where the one line's own box,
+  // cut to the longest new line, already says it can't fit (both drawn at once held "long line set" on a 15-piece
+  // design 0.6 s, for an offer that didn't land).
+  function hoopLines(n, best = null) {
+    const hp = api.hoop(), fw = hp.w - 5, fh = hp.h - 5, wide = (q) => { const b = pieceBounds(q); return b ? b[2] - b[0] : 0; };
+    // (lettering no frame fits: its size asked is the size sewn)
+    const fit = fittedSizes(S.pieces);
+    const p = S.pieces.filter((q) => twoLines(q) && !(q.rot || 0) && !fit.has(q.id)).sort((a, b) => wide(b) - wide(a))[0];
+    const text = p && (n === 2 ? twoLines(p) : threeLines(p)), [w, h] = layoutSize(S.pieces);
+    if (!text || !w || !h) return best;
+    const k = Math.min((hp.w - 10) / w, (hp.h - 10) / h);
+    // (only the words are measured at each size tried, against the box of everything else, measured once)
+    const rest = sewnBoxes(S.pieces.filter((o) => o.id !== p.id));
+    const R = rest.length ? [Math.min(...rest.map((b) => b[0])), Math.min(...rest.map((b) => b[1])), Math.max(...rest.map((b) => b[2])), Math.max(...rest.map((b) => b[3]))] : null;
+    const within = (b) => { const u = R ? [Math.min(R[0], b[0]), Math.min(R[1], b[1]), Math.max(R[2], b[2]), Math.max(R[3], b[3])] : b; return u[2] - u[0] <= fw && u[3] - u[1] <= fh; };
+    const fits = (t) => { const b = pieceBounds({ ...p, text, size: t }); return !!b && within(b); };
+    let t = p.size;
+    const lo = p.size * k * 1.25;
+    // the least it could take at `lo`: the one line's box, as wide as its longest new line's share of the letters
+    // (less a fifth), no taller than it is
+    const b1 = pieceBounds(p), share = Math.max(...text.split("\n").map((l) => l.length)) / Math.max(1, p.text.trim().length);
+    if (b1) { const f = Math.min(1, lo / p.size), hw = ((b1[2] - b1[0]) * share * 0.8 * f) / 2, hh = ((b1[3] - b1[1]) * f) / 2; if (!within([p.x - hw, p.y - hh, p.x + hw, p.y + hh])) return best; }
+    if (!fits(t)) {
+      let a = lo, hi = p.size;
+      if (a >= hi || !fits(a)) return best;
+      while (hi - a > 0.5) { const m = (a + hi) / 2; if (fits(m)) a = m; else hi = m; }
+      t = Math.floor(a * 2) / 2;
+    }
+    if (best && t < best.size * 1.1) return best;
+    return landing(p, { text, size: t }).fits === "fits" ? { p, n, text, size: t } : best;
+  }
   // Words of one line its frame shrank under 80 % of the size asked, on two (or three) lines: { n, text, size (as the
   // frame then sews it), ask, fits } at the biggest size up to the one asked that lands (`landing`), when that's at
   // least a quarter bigger, else null. Not only at the size asked: a quilt label's "Made with love for Grace" went
@@ -274,5 +311,5 @@ export function fixes(S) {
     const i = at.reduce((a, b) => (Math.abs(b - t.length / 2) < Math.abs(a - t.length / 2) ? b : a));
     return t.slice(0, i) + "\n" + t.slice(i).trim();
   }
-  return { newProblem, landing, hard, against, overlapping, runUp, frameLines, twoLines, frameOf, frameFor, display, sizeChange, roomIn, worseSaid, keepWord, moveAway, and, grown, asLettering, lineChoice, roundAll, carried, asText, sewAfter, resizeFrame };
+  return { newProblem, landing, hard, against, overlapping, runUp, frameLines, twoLines, frameOf, frameFor, display, sizeChange, roomIn, worseSaid, keepWord, moveAway, and, grown, asLettering, lineChoice, hoopLines, roundAll, carried, asText, sewAfter, resizeFrame };
 }

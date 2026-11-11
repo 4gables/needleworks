@@ -177,7 +177,31 @@ export function placing(S) {
   // anyway", which made the design too big, though turning the hoop S.fitted it. Each is worked out before it's offered.
   function noRoom(p, ith, insert = (q) => S.pieces.push(q)) {
     const what = whatOf(p);
-    if (ith) { S.toast(`There's no free room ${ith.border === "zip" ? "on the pouch's front" : `inside the ${label(ith).toLowerCase()}`} for ${what}. Make what's there smaller, or take something out first.`); return; }
+    if (ith) {
+      const where = ith.border === "zip" ? "on the pouch's front" : `inside the ${label(ith).toLowerCase()}`;
+      // (with the biggest thing on it made smaller, where that makes the room and brings no problem of its own: worked
+      // out by trying, a tenth at a time down to 60 %. "+ Motif" on the coaster, full of its monogram, said only "Make
+      // what's there smaller", and how much smaller was left to find by hand)
+      // (from the size it's sewn at: its frame may have shrunk it already)
+      const fit = fittedSizes(S.pieces), sewnSize = (o) => sewn(o, S.pieces, fit).size;
+      const on = onFrame(ith).filter((o) => sewnSize(o) != null && !(o.rot || 0)).sort((a, b) => sewnSize(b) - sewnSize(a))[0];
+      const keep = S.pieces;
+      for (let k = 0.9; on && k >= 0.6 - 1e-9; k -= 0.1) {
+        const size = Math.round(sewnSize(on) * k * 2) / 2; if (size < S.least(on)) break;
+        const change = S.sizeChange(on, size); if (!S.landing(on, change).fits) continue;
+        let room = null;
+        try { S.pieces = keep.map((o) => (o.id === on.id ? { ...o, ...change } : o)); room = freeRoom({ ...p }, ith); } finally { S.pieces = keep; }
+        if (!room) continue;
+        S.toast(`There's no free room ${where} for ${what}. With ${label(on)} at ${size} mm there is.`, { label: `Make ${label(on)} ${size} mm and add it`, run: () => {
+          const q = S.pieces.find((o) => o.id === on.id); if (!q) return;
+          S.remember(); Object.assign(q, change);
+          const at = freeRoom(p, S.pieces.find((o) => o.id === ith.id)); if (!at) { S.undo(); return; }
+          Object.assign(p, at); insert(p); S.sel = p.id; S.save(); S.ui(); S.make();
+        } });
+        return;
+      }
+      S.toast(`There's no free room ${where} for ${what}. Make what's there smaller, or take something out first.`); return;
+    }
     const add = (q, turn) => { S.remember(); S.fitted = false; if (turn) { api.setTurn(!api.turned()); api.fit(); } Object.assign(p, q); insert(p); S.sel = p.id; S.recentre(); S.save(); S.ui(); S.make(); };
     // (with the hoop turned: tried, and the turn put back)
     let turned = null;

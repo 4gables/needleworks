@@ -3,6 +3,7 @@
 // opened design files re-stitched at a new size by the doctor's worker. The editor hands in its state and helpers
 // as S. (Part of ui.js until 2026-11.)
 import { mmText } from "../words.js";
+import { jobQueue } from "../jobs.js";
 import { quiltOf } from "./quilt.js";
 import { carveDone, patchFillOf, quiltDone, FILE_SCALE, scaleBlocks, fileBlocks, blocksPattern } from "./pieces.js";
 
@@ -12,7 +13,9 @@ export function offPage(S) {
   // A stippled or echoed frame's quilting is worked out again whenever anything on it moves or changes (seconds on a
   // busy design): the preview shows the last quilting meanwhile and Download waits. One job at a time, the newest
   // waiting one next; the design is made again when it's done.
-  let quiltWorker = null, quiltBusy = null, quiltNext = null;
+  // (no time limit: the quilting is part of the file, and stopped here it would be worked out on the page instead,
+  // frozen for longer)
+  let quiltJobs = null, quiltBusy = null, quiltNext = null;
   function quiltSoon(job) {
     if (quiltBusy) { if (quiltBusy.key !== job.key) quiltNext = job; return; }
     const finish = (paths) => {
@@ -24,14 +27,8 @@ export function offPage(S) {
       S.make();
     };
     quiltBusy = job;
-    try {
-      if (!quiltWorker) {
-        quiltWorker = new Worker(new URL("../quilt-worker.js", import.meta.url), { type: "module" });
-        quiltWorker.onmessage = (e) => finish(e.data.paths);
-        quiltWorker.onerror = () => { quiltWorker = null; finish(null); };
-      }
-      quiltWorker.postMessage({ key: job.key, job });
-    } catch { quiltWorker = null; setTimeout(() => finish(null)); }
+    quiltJobs ||= jobQueue(new URL("../quilt-worker.js", import.meta.url));
+    quiltJobs.run({ key: job.key, job }).then((r) => finish(r.paths ?? null));
   }
   // ---------- design files resized ----------
   // A file piece keeps the stitches it was opened with (`orig`) and its size against them (`scale`); `blocks` are what
@@ -54,35 +51,27 @@ export function offPage(S) {
     for (const b of p.orig || p.blocks) for (const q of b.paths) for (const [x, y] of q) { x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y); }
     return `${Math.round(f * 100)} % · ${mmText([Math.round((x1 - x0) * f), Math.round((y1 - y0) * f)])}`;
   }
-  let fileWorker = null, fileJob = null;
+  let fileJobs = null, fileJob = null;
   function restitchFiles() {
     if (fileJob) return;
     const p = S.pieces.find((q) => q.kind === "file" && q.pending);
     if (!p) return;
     const hit = restitched.get(fileKey(p, p.scale));
     if (hit) { p.blocks = hit; delete p.pending; S.save(); S.make(); return; }
-    if (!fileWorker) {
-      fileWorker = new Worker(new URL("../doctor-worker.js", import.meta.url), { type: "module" });
-      fileWorker.onmessage = (e) => {
-        const job = fileJob; fileJob = null;
-        const q = S.pieces.find((o) => o.id === job.id && o.kind === "file" && o.pending && o.scale === job.scale);
-        let blocks = null;
-        if (e.data.ok) try { blocks = fileBlocks(e.data.pattern); restitched.set(job.key, blocks); } catch (err) { e.data.error = err.message; }
-        if (q && blocks) { q.blocks = blocks; delete q.pending; }
-        // (it couldn't be re-stitched at that size: back to the size it came in, and said)
-        else if (q) { resizeFile(q, 1); api.showError(`${q.name} couldn't be resized: ${e.data.error}`); }
-        S.save(); if (q && S.current()?.id === q.id) S.editor(); S.make();
-      };
-    }
-    // (a worker that dies never answers: the piece stayed pending and Download waited for good)
-    fileWorker.onerror = (err) => {
-      const job = fileJob; fileJob = null; fileWorker.terminate(); fileWorker = null;
-      const q = job && S.pieces.find((o) => o.id === job.id && o.kind === "file" && o.pending);
-      if (q) { resizeFile(q, 1); api.showError(`${q.name} couldn't be resized: ${err.message || "something went wrong"}`); }
-      S.save(); S.make();
-    };
-    fileJob = { id: p.id, scale: p.scale, key: fileKey(p, p.scale) };
-    fileWorker.postMessage({ id: 0, d: blocksPattern(p.orig), opts: { scale: p.scale, tiny: p.scale < 1, thin: true, grow: true } });
+    fileJobs ||= jobQueue(new URL("../doctor-worker.js", import.meta.url), { limit: 90000, slow: "it's taking too long at this size" });
+    const job = fileJob = { id: p.id, scale: p.scale, key: fileKey(p, p.scale) };
+    fileJobs.run({ id: 0, d: blocksPattern(p.orig), opts: { scale: p.scale, tiny: p.scale < 1, thin: true, grow: true } }).then((r) => {
+      fileJob = null;
+      // (a worker that dies never answered: the piece stayed pending and Download waited for good)
+      const failed = r.died || r.code === "slow";
+      const q = S.pieces.find((o) => o.id === job.id && o.kind === "file" && o.pending && (failed || o.scale === job.scale));
+      let blocks = null;
+      if (r.ok) try { blocks = fileBlocks(r.pattern); restitched.set(job.key, blocks); } catch (err) { r.error = err.message; }
+      if (q && blocks) { q.blocks = blocks; delete q.pending; }
+      // (it couldn't be re-stitched at that size: back to the size it came in, and said)
+      else if (q) { resizeFile(q, 1); api.showError(`${q.name} couldn't be resized: ${r.error || "something went wrong"}`); }
+      S.save(); if (q && S.current()?.id === q.id) S.editor(); S.make();
+    });
   }
   return { resizeFile, fileSize, restitchFiles, quiltSoon };
 }

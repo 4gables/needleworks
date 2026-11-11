@@ -71,10 +71,18 @@ const many = COLOURS.map((c, i) => text(i + 1, String.fromCharCode(65 + i), { co
 // ---------- states ----------
 // mode: the hash; seed: localStorage; setup: after load (p = page helpers); wait: what "ready" means
 const STATES = [
-  { id: "design-first", hash: "design", seed: {} },
+  // (the first design is up with nothing left saying it's loading)
+  { id: "design-first", hash: "design", seed: {}, wait: "!document.getElementById('download').disabled && document.getElementById('busy').hidden" },
   { id: "design", hash: "design", seed: studio([{ id: 1, x: 0, y: 0, color: "#ed171f", kind: "frame", shape: "circle", w: 90, h: 90, border: "satin" }, text(2, "Emma", { y: 0 })]) },
   { id: "design-empty", hash: "design", seed: studio([]) },
   { id: "design-toobig", hash: "design", seed: studio([text(1, "W".repeat(60), { font: "NW Quicksand", size: 30 })]), keys: true },
+  // (a long line with no frame, too big for the hoop: offered on two or three lines, not only shrunk)
+  { id: "design-toobig-lines", hash: "design", seed: studio([text(1, "Happy Birthday Grandma Josephine", { font: "NW Quicksand", size: 26 })]), wait: "[...document.querySelectorAll('#error button')].some((b) => /on (two|three) lines/.test(b.textContent))" },
+  // (+ Motif on a coaster full of its monogram: the size that makes room is offered, not only "make what's there smaller")
+  { id: "design-full", hash: "design", seed: studio([]), setup: async (p) => { await p.eval(`(async()=>{const w=(ms)=>new Promise((r)=>setTimeout(r,ms));document.querySelector('[data-start="coaster"]').click();for(let i=0;i<100&&document.getElementById("download").disabled;i++)await w(100);await w(1500);document.querySelector('[data-add="motif"]').click();return 1})()`); },
+    // (and a lone in-the-hoop project has Make another by the preview's own links: on a phone the one under the starters
+    // is 1,475 px down)
+    wait: "[...document.querySelectorAll('.toast button')].some((b) => /and add it/.test(b.textContent)) && !document.getElementById('another-open').hidden" },
   { id: "design-long", hash: "design", seed: studio([text(1, "Supercalifragilisticexpialidocious\nWWWWWWWWWWWWWWW", { font: "NW Quicksand", size: 6 })]), setup: async (p) => { await p.eval(`for (const d of document.querySelectorAll('#panel-design details')) d.open = true`); } },
   { id: "design-toobig-open", hash: "design", seed: studio([text(1, "W".repeat(60), { font: "NW Quicksand", size: 30 })]), setup: async (p) => { await p.eval(`for (const d of document.querySelectorAll('#panel-design details')) d.open = true`); } },
   { id: "design-threads", hash: "design", seed: studio(many) },
@@ -113,7 +121,7 @@ const STATES = [
   { id: "dlg-spools", hash: "design", seed: { ...studio([text(1, "Emma")]), "nw:brand": "isacord", "nw:spools": { isacord: ["0015", "1902", "3541"] } },
     setup: async (p) => { await p.eval(`(()=>{const s=document.getElementById('brand');s.value='@mine';s.dispatchEvent(new Event('change',{bubbles:true}))})()`); }, dialog: "spools" },
   { id: "dlg-rename", hash: "design", seed: studio([text(1, "Emma")]), setup: async (p) => { await p.click("#rename-open"); await p.eval(`(()=>{const t=document.getElementById('rename-name');t.value='A very long file name for the coaster I made for Grandma Jean';t.dispatchEvent(new Event('input',{bubbles:true}))})()`); }, dialog: "rename" },
-  { id: "dlg-along", hash: "design", seed: studio([{ id: 1, x: 0, y: 0, color: "#ed171f", kind: "frame", shape: "circle", w: 90, h: 90, border: "applique" }, text(2, "Emma")]), setup: async (p) => { await p.click("#along-open"); }, dialog: "along" },
+  { id: "dlg-along", hash: "design", seed: studio([{ id: 1, x: 0, y: 0, color: "#ed171f", kind: "frame", shape: "circle", w: 90, h: 90, border: "applique" }, text(2, "Emma")]), setup: async (p) => { await p.click("#along-open"); }, dialog: "along", wait: "!document.getElementById('along-hoop').hidden" },   // (how to hoop, and which needle, on the first screen)
   { id: "dlg-item", hash: "design", seed: studio([text(1, "Emma")]), setup: async (p) => { await p.click("#item-open"); }, dialog: "item", pre: async (p) => { await p.eval(`document.querySelector('details.views').open=true`); } },
   { id: "view-menu", hash: "design", seed: studio([text(1, "Emma")]), setup: async (p) => { await p.click("details.views > summary"); }, keys: true },
 ];

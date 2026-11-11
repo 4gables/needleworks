@@ -15,33 +15,18 @@ import { $, forgetPicture, hoop, keepPicture, kept, square, state, store, turned
 import { next } from "./focus.js";
 import { nearOwn, ownedPalette, owns, threadHtml } from "./threadui.js";
 import { mmText } from "./words.js";
+import { jobQueue } from "./jobs.js";
 import { busy, escapeHtml, openDesign, setMode, setView, showError, studio, warnUI } from "./app.js";   // (used when things happen, never while this file loads: app.js loads after it)
 
 export const sizeLabel = (v) => mmText(v);
 // ---------- picture ----------
-// A picture worker: one job at a time, and only the newest waiting (three quick slider moves on a slow picture
-// computed all three). A job that runs past a minute is stopped (a photo once routed for over 5 minutes and every later
-// change queued behind it): the worker is replaced and the picture tab says what to try. `stop()` drops what's
-// waiting and running (the checks of settings that just changed).
+// A picture worker (jobs.js: one job at a time, only the newest waiting). A job that runs past a minute is stopped (a
+// photo once routed for over 5 minutes and every later change queued behind it): the worker is replaced and the
+// picture tab says what to try. `stop()` drops what's waiting and running (the checks of settings that just changed).
 function picWorker() {
-  let w = null, running = null, waiting = null, watch = 0;
-  const start = () => {
-    w = new Worker(new URL("./worker.js", import.meta.url), { type: "module" });
-    w.onmessage = (e) => finish(e.data);
-    w.onerror = (e) => finish({ ok: false, error: "Something went wrong while stitching this picture. " + (e.message || "") });
-  };
-  const finish = (r) => { clearTimeout(watch); const j = running; running = null; j?.ok(r); next(); };
-  const kill = () => { clearTimeout(watch); w.terminate(); start(); };
-  const next = () => {
-    if (running || !waiting) return;
-    running = waiting; waiting = null; w.postMessage(running.msg);
-    watch = setTimeout(() => { kill(); finish({ ok: false, code: "slow", error: "This picture is taking too long to stitch. Try fewer colours, a smaller size, or Line drawing." }); }, 60000);
-  };
-  start();
-  return {
-    run: (msg) => new Promise((ok) => { waiting?.ok({ ok: false, stale: true }); waiting = { msg, ok }; next(); }),
-    stop() { waiting?.ok({ ok: false, stale: true }); waiting = null; if (running) { kill(); const j = running; running = null; j.ok({ ok: false, stale: true }); } },
-  };
+  const q = jobQueue(new URL("./worker.js", import.meta.url), { limit: 60000, eager: true, slow: "This picture is taking too long to stitch. Try fewer colours, a smaller size, or Line drawing." });
+  // (a worker that died says so in the picture tab's words)
+  return { run: async (msg) => { const r = await q.run(msg); return r.died ? { ok: false, error: "Something went wrong while stitching this picture. " + r.error } : r; }, stop: q.stop };
 }
 // the picture's own, and one that tries the one-tap fixes for what a picture leaves out, so they're offered only if
 // they work (and the picture never waits for them)
@@ -107,6 +92,9 @@ export async function makePicture() {
   // (a band of one colour round the edge is taken as a frame and left out (`findFrame`): said, it went with no word)
   state.pic.framed = !!r.framed; if (r.framed) p.edgeSeen = true;
   state.pic.owned = r.owned || null;
+  // (flecks sewn in the colour round them, `foldFlecks`: said in the panel when it's more than a handful, as what
+  // happened; not a problem, so not on the sew sheet)
+  state.pic.folded = r.fine?.folded >= FLECKS ? r.fine.folded : 0;
   const mt = machineThreads(r.pattern.threads);
   state.pic.machineName = new Map(r.pattern.threads.map((t, i) => [t.color, mt[i].name]));
   paletteUI();
@@ -149,16 +137,19 @@ $("pic-merged").onclick = (e) => {
   state.pic.edge = b.dataset.edge === "1"; state.pic.skip = []; state.pic.swap = {}; makePicture();
 };
 const FRAMED = "The band of one colour round the picture's edge looks like a frame round it, so it isn't sewn.";
+// (a fleck alone is a cut thread and two knots, or a hole in the colour round it: core/digitize.js `foldFlecks`)
+const FLECKS = 5, flecked = (n) => `${n} small flecks of colour inside bigger areas are sewn in the colour round them, so each isn't a knot and a cut thread of its own.`;
 export function paletteUI() {
   const cols = state.pic.colorsInfo.filter((c) => !c.background && c.area > 0);
   const edge = state.pic.edge && state.pic.edgeSeen;
-  $("pic-merged").hidden = !state.pic.merged && !state.pic.framed && !edge;
+  $("pic-merged").hidden = !state.pic.merged && !state.pic.framed && !edge && !state.pic.folded;
   // (said as what happened, not as a fault: "3 colours were too close" beside a slider at 6 read like an error)
   const asked = state.pic.colors;
   $("pic-merged").textContent = state.pic.merged ? `${asked} asked for, ${cols.length} used: this picture has only ${cols.length} ${cols.length === 1 ? "colour" : "colours"} different enough to need ${cols.length === 1 ? "a thread of its own" : "threads of their own"} (the rest are shades of ${cols.length === 1 ? "it" : "these"} or of the fabric).` : "";
   // (a guess: the band may be the drawing's own, so it can be sewn, and left out again)
   if (state.pic.framed) $("pic-merged").insertAdjacentHTML("beforeend", `${state.pic.merged ? " " : ""}<span data-problem="framed">${FRAMED} <button type="button" class="link" data-edge="1">Sew the edge band too</button></span>`);
   else if (edge) $("pic-merged").insertAdjacentHTML("beforeend", `${state.pic.merged ? " " : ""}<span>The band round the picture's edge is sewn too. <button type="button" class="link" data-edge="0">Leave it out</button></span>`);
+  if (state.pic.folded) $("pic-merged").insertAdjacentHTML("beforeend", `${$("pic-merged").textContent ? " " : ""}<span>${flecked(state.pic.folded)}</span>`);
   ownedNote();
   const open = state.pic.swapOpen;
   $("pic-palette").innerHTML = cols.map((c) => `<button type="button" data-id="${c.id}" aria-pressed="${!state.pic.skip.includes(c.id)}" aria-expanded="${c.id === open}" aria-controls="pic-swap">

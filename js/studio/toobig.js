@@ -64,9 +64,9 @@ export function tooBigWays(S) {
       // two hoopings, when they're possible: with the hoop turned, or with long lettering split between two words (that
       // one stitches both halves: worked out once the design has been still for a moment, not on every letter typed)
       const say = ({ lands, ways }, way) => {
-        const fitNow = ways.fit || ways.frame || ways.snug || ways.turn || null, alt = [ways.snug, ways.turn].filter((x) => x && x !== fitNow);
+        const fitNow = ways.fit || ways.frame || ways.snug || ways.turn || ways.lines || null, alt = [ways.snug, ways.turn, ways.lines].filter((x) => x && x !== fitNow);
         if (way.ok) tooBig(`${msg} ${way.ok} the machine sews one half, then you hoop the fabric again for the other (crosses line them up).${fitNow ? ` Or ${fitNow.label.replace(/^\w/, (c) => c.toLowerCase())} for one hooping, smaller.` : ` (Fitted to one hooping, ${lands.why}.)`}`,
-          { label: "Sew it in two hoopings", run: () => { S.remember(); S.fitted = false; S.two = true; if (way.pieces) S.pieces = JSON.parse(way.pieces); if (way.turn) { api.setTurn(!api.turned()); api.fit(); } S.save(); S.ui(); S.make(); } }, fitNow);
+          { label: "Sew it in two hoopings", run: () => { S.remember(); S.fitted = false; S.two = true; if (way.pieces) S.pieces = JSON.parse(way.pieces); if (way.turn) { api.setTurn(!api.turned()); api.fit(); } S.save(); S.ui(); S.make(); } }, fitNow, ways.lines !== fitNow && ways.lines);
         else tooBig(`${msg}${way.why ? ` ${way.why}` : ""} ${fitNow ? "Make the biggest piece smaller, or" : `Make the biggest piece smaller, or take something out (fitted to the hoop, ${lands.why}).`}`, fitNow, ...alt);
       };
       // The ways back to one hooping (each stitches the design again, scaled or with its frames made smaller) and to
@@ -79,10 +79,25 @@ export function tooBigWays(S) {
       const twoWay = (quick) => { const w = twoHoopings(hoop, quick); return w.pieces ? { ...w, pieces: JSON.stringify(w.pieces) } : w; };
       const ways = () => (known.ways ||= ((lands) => ({ lands, ways: fitWays(lands) }))(fitLands()));
       const full = () => { known.full ||= twoWay(false); say(ways(), known.full); };
+      // (the words on two, then three lines: each drawn in a task of its own once the note is up, then offered)
+      const lines = () => {
+        // (worked out once per design and hoop; a run the design was made again under is left to the newer one)
+        if (known.lines?.done || known.lines?.for === s) return;
+        known.lines = { for: s }; let best = null;
+        const step = (n) => setTimeout(() => {
+          if (s !== S.seq) return;
+          best = S.hoopLines(n, best);
+          if (n === 2) { step(3); return; }
+          known.lines = { done: true };
+          if (best) { ways().ways.lines = linesWay(best); say(ways(), known.full || known.quick); }
+        }, n === 2 ? 400 : 0);
+        step(2);
+      };
       const go = () => {
         if (s !== S.seq) return;
         say(ways(), (known.quick ||= known.full || twoWay(true)));
         if (known.quick.later) { if (known.full) full(); else setTimeout(() => { if (s === S.seq) full(); }, 700); }
+        lines();
       };
       if (had) { go(); return; }
       tooBig(msg); setTimeout(go, 0);
@@ -150,6 +165,8 @@ export function tooBigWays(S) {
     const sn = snugWay(); if (sn) out.snug = sn;
     return out;
   }
+  // the longest line of words on two or three lines, where that alone brings the design inside the hoop (`hoopLines`)
+  const linesWay = (ln) => ({ label: `Put ${S.pieces.filter((o) => o.kind === "text").length > 1 ? label(ln.p) : "the words"} on ${ln.n === 2 ? "two" : "three"} lines${ln.size < ln.p.size ? ` at ${ln.size} mm` : ""}`, run: () => { const q = S.pieces.find((o) => o.id === ln.p.id); if (!q) return; S.remember(); S.fitted = false; q.text = ln.text; q.size = ln.size; S.save(); S.ui(); S.make(); } });
   function snugWay() {
     const sn = snug();
     return sn && { label: `Make ${label(sn.p)} ${sn.size} mm`, run: () => { S.remember(); S.fitted = false; const q = S.pieces.find((o) => o.id === sn.p.id); if (q) q.size = sn.size; S.save(); S.ui(); S.make(); } };

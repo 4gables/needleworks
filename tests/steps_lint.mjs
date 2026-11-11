@@ -191,6 +191,11 @@ const ids = await ev(`[...document.querySelectorAll('[data-start]')].map((b) => 
 for (const id of ids) {
   if (only && !only.split(",").includes(id)) continue;
   await ev(`document.querySelector('[data-start="${id}"]').click(), 1`); await settle();
+  // (it opens with nothing wrong: no problem above a tip, no file verdict, Download on. starters.mjs's first check, on
+  // every run here; its 4x4, long-name and turned cut-file passes stay on demand)
+  const wrong = await ev(`(async () => { await new Promise((r) => setTimeout(r, 1000)); const dl = document.getElementById("download");
+    return [...nwTest.problems().filter((x) => x.level !== "tip").map((x) => x.text), ...(dl.disabled || /^Too big|files/.test(dl.textContent) ? ["Download reads “" + dl.textContent.trim() + "”"] : [])]; })()`);
+  if (wrong.length) { problems.push(`${id}: opens with ${wrong.join(" | ")}`); console.log(`${id}: opens with ${wrong.join(" | ")}`); }
   const d = await ev(READ);
   lint(id, d, false);
   // turned too, where step 1 hoops bare stabilizer and the starter isn't already

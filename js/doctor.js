@@ -553,8 +553,10 @@ function refill(runs, angle, taken = new Set(), scale = 0, from = null) {
   }
   // (sewn the other way round too, when that has fewer parts: a section the rows strand behind finished ones is a
   // trim, and dense rows strand more; ufront's big fill at 0.16 mm: 4 parts one way, 1 the other)
-  let paths = fillPolygon(loops, { angle: dir, density });
-  if (paths.length > 1) { const other = fillPolygon(loops, { angle: dir + 180, density }); if (other.length < paths.length) paths = other; }
+  // (`raster`: these outlines are traced from a drawing of the file's stitches, stair-stepped: rows read off the
+  // drawing, as before the fill's rows were worked out from the outline)
+  let paths = fillPolygon(loops, { angle: dir, density, raster: true });
+  if (paths.length > 1) { const other = fillPolygon(loops, { angle: dir + 180, density, raster: true }); if (other.length < paths.length) paths = other; }
   // (a point this fill will cover, 0.25 mm in from its edge)
   const on = (X, Y) => X >= 0 && Y >= 0 && X < w && Y < h && shape.data[Y * w + X];
   paths.inside = ([x, y]) => { const X = Math.round((x - x0) * R), Y = Math.round((y - y0) * R); return on(X, Y) && on(X - 1, Y) && on(X + 1, Y) && on(X, Y - 1) && on(X, Y + 1); };

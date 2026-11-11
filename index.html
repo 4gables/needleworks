@@ -24,7 +24,7 @@
 <link rel="apple-touch-icon" href="assets/icon-192.png">
 </head>
 <body>
-<nav class="skips" aria-label="Skip links"><a class="skip" href="#controls">Skip to the settings</a><a class="skip" href="#preview">Skip to the preview and Download</a></nav>
+<nav class="skips" aria-label="Skip links"><a class="skip" href="#controls">Skip to the settings</a><a class="skip" href="#preview">Skip to the preview and Download (Ctrl+S or ⌘S from anywhere)</a></nav>
 <header class="top">
   <div class="brand">
     <span class="logo">Needleworks</span>
@@ -55,7 +55,7 @@
         <button type="button" id="zoom-fit">Fit</button>
         <button type="button" id="zoom-in" aria-label="Zoom in">+</button>
       </div>
-      <div class="busy" id="busy" hidden><span class="spinner"></span><span id="busy-text">Stitching…</span></div>
+      <div class="busy" id="busy"><span class="spinner"></span><span id="busy-text">Getting ready…</span></div>
       <div class="empty" id="empty" hidden></div>
       <div class="error" id="error" role="alert" hidden></div>
     </div>
@@ -82,8 +82,8 @@
         <label class="ghost pick" id="pick-design" for="open-file">Open a design file</label>
         <button type="button" id="share" class="ghost share" hidden>Send by text or email</button>
         <button type="button" id="bar-undo" class="ghost bar-undo" disabled title="Undo the last change"><span aria-hidden="true">↶</span> Undo</button>
-        <button type="button" id="download" class="primary" disabled>Download PES</button>
-        <p class="extras"><button type="button" id="along-open" class="link" disabled>Sew along</button><button type="button" id="sheet-print" class="link" disabled>Print a sew sheet</button><button type="button" id="names-open" class="link" hidden>One for each name</button><span id="cut-files" class="cut-files" hidden>Cutter file: <button type="button" id="cut-file" class="link" title="The fabric shapes at actual size, to cut them out before you sew: an SVG for Cricut Design Space, Brother CanvasWorkspace or Silhouette Studio Designer Edition">Cricut</button> · <button type="button" id="cut-dxf" class="link" title="The fabric shapes at actual size, to cut them out before you sew: a DXF for Silhouette Studio (the free edition opens DXF, not SVG). Its size is in the file name: set it if Silhouette opens it scaled.">Silhouette</button></span><button type="button" id="rename-open" class="link" hidden title="Give the file a name of your own">Rename</button></p>
+        <button type="button" id="download" class="primary" disabled aria-keyshortcuts="Control+S Meta+S">Download PES</button>
+        <p class="extras"><button type="button" id="along-open" class="link" disabled>Sew along</button><button type="button" id="sheet-print" class="link" disabled>Print a sew sheet</button><button type="button" id="names-open" class="link" hidden>One for each name</button><button type="button" id="another-open" class="link" hidden title="Copies it and what's on it beside it: both sew in the same steps.">Make another in the hoop</button><span id="cut-files" class="cut-files" hidden>Cutter file: <button type="button" id="cut-file" class="link" title="The fabric shapes at actual size, to cut them out before you sew: an SVG for Cricut Design Space, Brother CanvasWorkspace or Silhouette Studio Designer Edition. Not for the embroidery machine.">Cricut</button> · <button type="button" id="cut-dxf" class="link" title="The fabric shapes at actual size, to cut them out before you sew: a DXF for Silhouette Studio (the free edition opens DXF, not SVG). Its size is in the file name: set it if Silhouette opens it scaled. Not for the embroidery machine.">Silhouette</button></span><button type="button" id="rename-open" class="link" hidden title="Give the file a name of your own">Rename</button></p>
       </div>
     </div>
   </section>
@@ -226,7 +226,7 @@
         <legend role="heading" aria-level="2">Selected piece <button type="button" id="st-center" class="link">Centre it</button></legend>
         <p class="hint warn" id="st-big" role="status" hidden></p>
         <div id="st-edit" class="edit"></div>
-        <p class="hint" id="st-drag-hint">Drag on the preview to move it<span class="keys">, or use the arrow keys (Shift for bigger steps)</span>. Tap an empty spot<span class="keys"> or press Esc</span> to unselect it.</p>
+        <p class="hint" id="st-drag-hint">Drag on the preview to move it<span class="keys">, or use the arrow keys (Shift for bigger steps)</span>. Tap an empty spot<span class="keys"> or press Esc</span> to unselect it.<span class="keys"> Ctrl+S (⌘S on a Mac) goes to Download.</span></p>
       </fieldset>
       <details class="steps">
         <summary>How to stitch it <span class="hint inline" id="st-steps-count"></span></summary>
@@ -265,7 +265,7 @@
     <p class="good" id="done-checked"></p>
     <p class="warn" id="done-turn" hidden><span id="done-turn-text">The hoop is turned, so the machine sews this design on its side. Hoop the fabric a quarter turn round: the top of the design goes to the right-hand side of the hoop as you face the machine (the sew sheet shows it that way).</span></p>
     <p class="warn" id="done-warn" hidden></p>
-    <p class="hint" id="done-cut" hidden>Cutting the fabric shapes on a Cricut or Silhouette? The Cutter file (next to Sew along) has them at actual size: lay each cut piece exactly on its outline when the steps say, with nothing to trim.</p>
+    <p class="hint" id="done-cut" hidden>Cutting the fabric shapes on a Cricut or Silhouette? The Cutter file (next to Sew along) has them at actual size: lay each cut piece exactly on its outline when the steps say, with nothing to trim. It's for the cutting machine only: just the .pes goes on the USB stick.</p>
     <p class="warn" id="done-zip" hidden>It's a .zip: open it first (double-click it) and copy the .pes files inside, not the .zip. The machine can't read a .zip.</p>
     <ol class="done-steps">
       <li><span id="done-copy">Copy the file to a USB stick.</span><span id="done-phone" hidden> On a phone: plug a USB-C (or Lightning) stick into it, then in the Files app move the file from Downloads to the stick. Or email the file to yourself and copy it on a computer.</span></li>
@@ -331,6 +331,7 @@
     <div id="along-you"></div>
     <p id="along-sews"></p>
     <p id="along-time" class="hint"></p>
+    <details id="along-hoop" class="along-wrong" hidden><summary>How to hoop it, and which needle</summary><div id="along-hoop-text"></div></details>
     <details id="along-wrong" class="along-wrong" hidden><summary>Sewed with the wrong thread?</summary>
       <ol class="sub"><li>Press the machine's start/stop button to stop it.</li><li>Unpick what it sewed: snip the stitches on the back every few stitches and pull them out from the front.</li><li>On the machine's screen, go back to where this thread started with the stitch back key (the needle with −).</li><li>Put on the right thread and press Start.</li></ol></details>
   </div>

@@ -63,3 +63,36 @@ export const BORDERS = {
 
 // Fill rows (mm apart). 0.3 fails the tiny-stitch check (row links under 0.3 mm).
 export const ROWS = { solid: 0.35, standard: 0.4 };
+
+// Pictures (Filled): what is made sewable before any stitch is planned (docs/pictures.md).
+//   fleck:    a piece of one colour this small (mm²), or a dot (see digitize.js), lying inside other sewn colours ...
+//   enclosed: ... along this share of its edge, takes the colour round it. Left out it was a hole in that colour's fill
+//             (the rows split round it: more sections, travel and trims); sewn it was a trim, two locks and no shape.
+//   eyes:     up to this many such pieces in one colour are meant (an eye, a nostril) and stay; more are a texture.
+//   start:    a separate start (trim, tie-in, tie-off: 2.8 mm of thread in locks) must sew at least this much (mm).
+//   edge:     travel inside a fill may run this far (mm) inside the shape's own edge over finished rows (fill.js).
+export const PICTURES = { fleck: 3, enclosed: 0.8, eyes: 6, start: 4, edge: 0.75 };
+
+// --- S1: pieces sewn in one go ---
+// Two pieces of script lettering are stitched across, not trimmed apart, when their columns are at most `gap` mm
+// apart (each is its width and `pull` mm wide), the centre lines at most `most` mm apart, or the next starts under
+// the last one's column (`under` past its half width). A link that short reads as the pen not lifting; a trim there
+// is two locks and two thread ends on a hairline. A fine line: `line` (1.5 until S1, reckoned before an arch
+// opened the gap: a Cookie "Sunday" 1.51 mm from its S once arched began 21 mm away).
+export const LINK = { gap: 0.5, pull: 0.3, most: 2.2, under: 0.3, line: 1.8 };
+
+// Fills by fabric. `pull`: how far each row runs past the outline at both ends, since the stitches draw the fabric in
+// along their length and the row ends up short (Wilcom's published pull compensation: 0.20 mm on cotton and drill,
+// 0.35 on T-shirt knit, 0.40 on fleece; 0.15 everywhere until 2026-11). `rows`: knit takes the standard spacing (a
+// dense fill puckers jersey and piqué). Every fill's row ends lie under a satin (a patch's or motif's edge, the
+// lettering sewn on it), so the pull decides how far under. A patch takes felt's pull whatever the design is sewn on
+// (it is sewn on its own fabric); only its rows follow the design's fabric.
+export const FILLS = {
+  cotton: { pull: 0.2, rows: ROWS.solid },
+  felt: { pull: 0.2, rows: ROWS.solid },
+  denim: { pull: 0.2, rows: ROWS.solid },
+  canvas: { pull: 0.2, rows: ROWS.solid },
+  knit: { pull: 0.35, rows: ROWS.standard },
+  towel: { pull: 0.4, rows: ROWS.solid },
+};
+export const fillRecipe = (fabric) => FILLS[fabric] || FILLS.cotton;

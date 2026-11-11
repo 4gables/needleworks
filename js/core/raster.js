@@ -576,8 +576,18 @@ export function strokeWidth(mask, sk = skeletonize(mask)) {
 // a stroke's taper, ends and sides are measured from its ends; the DP then picks starts that leave a move over `loose`,
 // which the machine trims, rather than a 1-5 mm loose thread, and the longest it can where none does: the needle
 // leaves from a column's edge, so a move reckoned short by the centre lines may still be trimmed)
-export function order(edges, near = 0, loose = Infinity, nodesOnly = false) {
-  if (near > 0 || nodesOnly) return chained(edges, near, loose, nodesOnly);
+// `how` (lettering): { at, step, dot, dotLen }
+// at: where a point of the strokes ends up once the lettering is laid out (an arch, a wave), in the strokes' own
+//   scale: moves are measured there, where they are sewn. Reckoned before the bend, a gap an arch opens came out a
+//   loose thread and one it closes was trimmed: 49 pieces left far from the next over the arched batch files.
+// step: how far apart the starts tried along a stroke are (half of `near` unless given: with a wide `near` a start
+//   that close was stepped over, and a piece 1.5 mm from the last began 46 mm away).
+// dot, dotLen: a piece of one stroke shorter than `dot` is sewn as a dot, at least `dotLen` long about its middle and
+//   with no run out: its stitches begin at the far end from its start and end at the start, so the move to it is
+//   measured to that far end, and the move on from its near one. Reckoned start to start between centre lines, the
+//   second dot of an ë was begun 4.2 mm from the first, a loose thread, where its other end made a trim.
+export function order(edges, near = 0, loose = Infinity, nodesOnly = false, how = {}) {
+  if (near > 0 || nodesOnly) return chained(edges, near, loose, nodesOnly, how);
   const adj = adjacency(edges);
   const used = new Array(edges.length).fill(false), comps = [];
   while (used.some((u) => !u)) {
@@ -621,10 +631,11 @@ function walk(edges, adj, used, start, id = (i) => i) {
 
 // `order` with each piece's start chosen for the cheapest moves from one piece's start to the next (dynamic programming
 // over the nodes of every piece and points every near/2 along its strokes): within `near` stitched (free), else a trim
-// (1), but within `loose` a jump the machine won't trim (1.5, a loose thread: `moveCost` in geom.js), then the leftmost
+// (1), but within `loose` a jump the machine won't trim (1.5 down to 1.1 at `loose`, the longest where every start
+// leaves a loose thread: it is cut from a column's edge and may be trimmed after all; `moveCost` in geom.js), then the leftmost
 // start where that changes nothing, a node before a point along a stroke. A stroke started partway is split there (both
 // halves report its index).
-function chained(edges, near, loose, nodesOnly = false) {
+function chained(edges, near, loose, nodesOnly = false, { at = null, step = near / 2, dot = 0, dotLen = 0 } = {}) {
   const adj = adjacency(edges), seen = new Array(edges.length).fill(false), pieces = [];
   const xOf = (e) => Math.min(e[2][0][0], e[2][e[2].length - 1][0]);
   for (let i = 0; i < edges.length; i++) {
@@ -643,24 +654,36 @@ function chained(edges, near, loose, nodesOnly = false) {
     const nodes = new Map(), cands = [];
     for (const j of list) { const [u, v, q] = edges[j]; nodes.set(u, q[0]); nodes.set(v, q[q.length - 1]); }
     for (const [id, q] of nodes) cands.push([q, id, -1, -1, id === first ? 0 : 1e-3]);
-    if (!nodesOnly) for (const j of list) {
-      const q = edges[j][2];
+    const lone = list.length === 1 && edges[bi][0] !== edges[bi][1] && dot > 0 && edges[bi][2].reduce((L, v, k, q) => (k ? L + Math.hypot(v[0] - q[k - 1][0], v[1] - q[k - 1][1]) : 0), 0) < dot;
+    if (!nodesOnly && !lone) for (const j of list) {
+      // (never within `dot` of the stroke's end: the short half would be sewn as a dot of its own. The second dot of
+      // an Allura ë, a stroke just over a column long, was begun in its middle and sewn as two.)
+      const q = edges[j][2], len = [0];
+      for (let t = 1; t < q.length; t++) len.push(len[t - 1] + Math.hypot(q[t][0] - q[t - 1][0], q[t][1] - q[t - 1][1]));
       let run = 0;
       for (let t = 1; t < q.length - 1; t++) {
-        run += Math.hypot(q[t][0] - q[t - 1][0], q[t][1] - q[t - 1][1]);
-        if (run >= near / 2) { cands.push([q[t], null, j, t, 2e-3]); run = 0; }
+        run += len[t] - len[t - 1];
+        if (run >= step && len[t] >= dot && len[len.length - 1] - len[t] >= dot) { cands.push([q[t], null, j, t, 2e-3]); run = 0; }
       }
     }
-    pieces.push({ bi, x: xOf(edges[bi]), cands });
+    // (`laid`: where each start is sewn, and the walk ends; `into`: where its stitches begin)
+    let laid = cands.map((c) => c[0]);
+    if (lone) {
+      const [u, v] = laid, L = Math.hypot(v[0] - u[0], v[1] - u[1]) || 1, h = Math.max(L, dotLen) / 2, c = [(u[0] + v[0]) / 2, (u[1] + v[1]) / 2], k = [((v[0] - u[0]) / L) * h, ((v[1] - u[1]) / L) * h];
+      laid = [[c[0] - k[0], c[1] - k[1]], [c[0] + k[0], c[1] + k[1]]];
+    }
+    if (at) laid = laid.map(at);
+    pieces.push({ bi, x: xOf(edges[bi]), cands, laid, into: lone ? [laid[1], laid[0]] : laid });
   }
   pieces.sort((u, v) => u.x - v.x || u.bi - v.bi);
   let prev = null;
   for (const pc of pieces) {
-    pc.dp = pc.cands.map(([q, , , , own]) => {
+    pc.dp = pc.cands.map(([, , , , own], n) => {
       let best = 0, from = -1;
+      const q = pc.into[n];
       if (prev) {
         best = Infinity;
-        prev.cands.forEach(([r], m) => { const d = Math.hypot(q[0] - r[0], q[1] - r[1]), c = prev.dp[m][0] + (d <= near ? 0 : d <= loose ? (nodesOnly ? 1.5 - (0.4 * d) / loose : 1.5) : 1); if (c < best) { best = c; from = m; } });
+        prev.laid.forEach((r, m) => { const d = Math.hypot(q[0] - r[0], q[1] - r[1]), c = prev.dp[m][0] + (d <= near ? 0 : d <= loose ? 1.5 - (0.4 * d) / loose : 1); if (c < best) { best = c; from = m; } });
       }
       return [best + own, from];
     });

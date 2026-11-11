@@ -7,9 +7,9 @@ import { Design } from "./design.js";
 import { FILL, FILL_PATTERNS, SEWN, WORN, fillPolygon, makeRouter, routeBudget, routeFill, tatami } from "./fill.js";
 import { arclen, followRun } from "./geom.js";
 import { MARGIN } from "./machines.js";
-import { ROWS } from "./recipes.js";
+import { LIMITS, PICTURES, ROWS } from "./recipes.js";
 import { distanceTransform, label, order, skeletonEdges } from "./raster.js";
-import { PEC_MATCH, hexToRgb, nearestBrotherThread, pecThread, rgbToHex } from "./threads.js";
+import { PEC_MATCH, hexToRgb, nearestBrotherThread, pecThread, pyRound, rgbToHex } from "./threads.js";
 import { DEFAULTS, across, deltaE2000, pixels, srgbToLab } from "./palette.js";
 export { DEFAULTS, analyze, labelWith, learnColours, pictureInk, toPalette } from "./palette.js";
 
@@ -21,7 +21,8 @@ export const DENSITY = ROWS;   // (core/recipes.js)
 // where two colours meet (digitizing guides: 0.2-0.4 mm).
 const OVERLAP = 0.35;
 // Moves between parts of one colour up to this far (mm) travel under stitches still to come rather than jump
-const TRAVEL = 10;
+// (10 until 2026-11: 20 took another 51 of the 12 sample pictures' 1,213 trims; 30 only 9 more)
+const TRAVEL = 20;
 // Parts of a shape narrower than twice this (mm) get no fill rows and are sewn along their centre instead
 const THIN_PART = 0.35;
 
@@ -63,9 +64,128 @@ export function digitize(img, analysis, opts = {}) {
   }
 }
 
+// A stitch as the file holds it (0.1 mm, rounded as the writer rounds): its length, and the hole a point lands in
+const R10 = (v) => pyRound(v * 10);
+const sewnLen = (a, b) => Math.hypot(R10(b[0]) - R10(a[0]), R10(b[1]) - R10(a[1]));
+const tinyStep = (a, b) => { const d = sewnLen(a, b); return d > 0 && d <= LIMITS.tiny; };
+
+// No tiny stitch in a path (mm). A fill's rows are 0.35-0.4 mm apart, so the link from one row's end to the next
+// row's start is 0.35-0.41 mm where the edge runs square to the rows, and a third of those round to 0.3 mm or less in
+// the file (0.25 + 0.25 at 45 degrees is 0.2 + 0.2): 336 tiny stitches in the 12 sample pictures, every one a row
+// link. The row's end moves along its own row by 0.1-0.4 mm (out first) until the link sews over 0.3 mm; the row
+// keeps its place and the edge moves by less than a thread's width. Dropping the point (`untiny`) would take the
+// row's end off the edge instead. first: the point the needle is at (never moved).
+function noTiny(pts, first = null) {
+  const p = first ? [first, ...pts] : pts.slice(), unit = (a, b) => { const L = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1; return [(b[0] - a[0]) / L, (b[1] - a[1]) / L]; };
+  const ok = (a, b) => !a || !b || sewnLen(a, b) > LIMITS.tiny;
+  for (let i = 1; i < p.length; i++) {
+    if (!tinyStep(p[i - 1], p[i])) continue;
+    // the point to move: this one along the stitch after it, or (at the path's end) the one before along the stitch before it
+    const tries = [];
+    if (i < p.length - 1) tries.push([i, p[i + 1]]);
+    if (i > 1) tries.push([i - 1, p[i - 2]]);
+    let done = false;
+    for (const [k, toward] of tries) {
+      const d = unit(p[k], toward);
+      for (const t of [-1, 1, -2, 2, -3, 3, -4, 4]) {
+        const q = [p[k][0] + d[0] * t * 0.1, p[k][1] + d[1] * t * 0.1];
+        if (ok(p[k - 1], q) && ok(q, p[k + 1])) { p[k] = q; done = true; break; }
+      }
+      if (done) break;
+    }
+    // (nowhere to move it: one stitch instead of two, if that isn't a long one)
+    if (!done && i < p.length - 1 && Math.hypot(p[i + 1][0] - p[i - 1][0], p[i + 1][1] - p[i - 1][1]) <= 4) { p.splice(i, 1); i--; }
+  }
+  return first ? p.slice(1) : p;
+}
+
+// A run that starts after a jump is tied in 0.7 mm along its first stitch (`Design.path`: start, 0.7 mm on, aside, back,
+// start). If the path's own next point is that 0.7 mm on (a fill's first row at a shape's tip, a short line's first
+// step), the hole takes three hits in six stitches: 164 such tie-ins in the 12 sample pictures. The path then starts
+// from its next point (the tip's 0.7 mm row is sewn over by the tie-in anyway).
+function clearStart(pts) {
+  let p = pts;
+  for (let n = 0; n < 3 && p.length > 3; n++) {
+    const a = p[0], ahead = p.find((q) => Math.hypot(q[0] - a[0], q[1] - a[1]) > 0.3);
+    if (!ahead) break;
+    const L = Math.hypot(ahead[0] - a[0], ahead[1] - a[1]), q = [a[0] + ((ahead[0] - a[0]) / L) * 0.7, a[1] + ((ahead[1] - a[1]) / L) * 0.7];
+    const next = p.find((v, i) => i && sewnLen(a, v) > 0);
+    if (!next || sewnLen(a, next) > 10 || sewnLen(q, next) > 0) break;
+    p = p.slice(1);
+  }
+  return p;
+}
+
+// Flecks take the colour round them before anything is sewn (Wilcom's "Details" slider and mySewnet's Despeckle
+// filter small areas of colour out of the picture first; Stitch Era's guide deletes 30-50 % of the traced shapes as
+// "too small to be stitched", then fills the holes). A fleck is a piece of one sewn colour that is a dot (as below:
+// under 1.5 mm², or under 4 mm² and 2.5 mm across) or under PICTURES.fleck mm², with PICTURES.enclosed of its edge
+// against other sewn colours. It joins the one it touches most. Up to PICTURES.eyes of them in a colour stay (an eye).
+// Returns the labels to sew (a copy when anything changed) and how many pieces were folded in.
+function foldFlecks(labels, w, h, colors, used, res) {
+  const n = w * h, out = [];
+  const minPx = 1.5 * res * res, dotPx = 4 * res * res, dotW = 2.5 * res, fleckPx = PICTURES.fleck * res * res;
+  // each sewn colour's pieces, and where a fill has body: a piece of 4 mm² or more that is 1.5 mm wide somewhere. A
+  // fleck joins only such a fill: the blend round a dark letter on a pale label is a ring of a third colour, and the
+  // letters took it (a label's "Embroidered" went from black to the grey of its own halo).
+  const body = new Uint8Array(n), parts = [];
+  for (const col of used) {
+    const m = { w, h, data: new Uint8Array(n) };
+    for (let i = 0; i < n; i++) m.data[i] = labels[i] === col.id ? 1 : 0;
+    const { labels: cl, count } = label(m);
+    if (!count) continue;
+    const dt = distanceTransform(m), size = new Int32Array(count + 1), wide = new Float64Array(count + 1);
+    const x0 = new Int32Array(count + 1).fill(w), x1 = new Int32Array(count + 1).fill(-1), y0 = new Int32Array(count + 1).fill(h), y1 = new Int32Array(count + 1).fill(-1);
+    for (let i = 0; i < n; i++) {
+      const c = cl[i]; if (!c) continue;
+      const x = i % w, y = (i - x) / w; size[c]++;
+      if (dt[i] > wide[c]) wide[c] = dt[i];
+      if (x < x0[c]) x0[c] = x; if (x > x1[c]) x1[c] = x; if (y < y0[c]) y0[c] = y; if (y > y1[c]) y1[c] = y;
+    }
+    for (let i = 0; i < n; i++) { const c = cl[i]; if (c && size[c] >= dotPx && (2 * wide[c]) / res >= 1.5) body[i] = 1; }
+    parts.push({ col, cl, count, size, wide, x0, x1, y0, y1 });
+  }
+  for (const { col, cl, count, size, wide, x0, x1, y0, y1 } of parts) {
+    // (a line under 1 mm wide is drawn on top of a fill, however short its pieces: only its dots are flecks)
+    const dot = (c) => size[c] < minPx || (size[c] < dotPx && x1[c] - x0[c] < dotW && y1[c] - y0[c] < dotW);
+    const small = (c) => dot(c) || (size[c] < fleckPx && (2 * wide[c]) / res >= 1.0);
+    const rim = new Int32Array(count + 1), on = new Map();   // on: piece * 64 + other colour -> shared edge
+    for (let i = 0; i < n; i++) {
+      const c = cl[i]; if (!c || !small(c)) continue;
+      const x = i % w;
+      for (const j of [x > 0 ? i - 1 : -1, x < w - 1 ? i + 1 : -1, i - w, i + w]) {
+        if (j < 0 || j >= n || cl[j] === c) continue;
+        rim[c]++;
+        if (body[j]) on.set(c * 64 + labels[j], (on.get(c * 64 + labels[j]) || 0) + 1);
+      }
+    }
+    const to = new Int32Array(count + 1).fill(-1), best = new Int32Array(count + 1), all = new Int32Array(count + 1);
+    for (const [key, k] of on) { const c = Math.floor(key / 64), l = key % 64; all[c] += k; if (k > best[c]) { best[c] = k; to[c] = l; } }
+    const flecks = [];
+    for (let c = 1; c <= count; c++) if (small(c) && rim[c] && all[c] >= PICTURES.enclosed * rim[c]) flecks.push(c);
+    // (pieces big enough to sew as a dot: see `fair` below)
+    const meant = flecks.filter((c) => size[c] >= 0.6 * res * res && Math.min(x1[c] - x0[c] + 1, y1[c] - y0[c] + 1) >= 0.8 * res);
+    const keep = new Set(meant.length <= PICTURES.eyes ? meant : []);
+    const go = new Int32Array(count + 1).fill(-1);
+    let any = false;
+    for (const c of flecks) if (!keep.has(c)) { go[c] = to[c]; any = true; }
+    if (any) out.push({ cl, go });
+  }
+  if (!out.length) return { labels, folded: 0 };
+  const next = labels.slice();
+  let folded = 0;
+  for (const { cl, go } of out) {
+    for (let i = 0; i < n; i++) if (cl[i] && go[cl[i]] >= 0) next[i] = go[cl[i]];
+    for (const g of go) if (g >= 0) folded++;
+  }
+  return { labels: next, folded };
+}
+
 function build(img, analysis, opts) {
   const o = { ...DEFAULTS, ...opts };
-  const { w, h, labels, colors } = analysis;
+  const { w, h, colors } = analysis;
+  const used0 = colors.filter((c) => !c.background && c.area > 0 && !(o.skip || []).includes(c.id));
+  const { labels, folded } = foldFlecks(analysis.labels, w, h, colors, used0, o.res);
   const res = o.res;
   const hoop = o.hoop;
   const cx = w / 2, cy = h / 2, toMm = (p) => p.map(([x, y]) => [(x - cx) / res, (y - cy) / res]);
@@ -73,7 +193,7 @@ function build(img, analysis, opts) {
   const used = colors.filter((c) => !c.background && c.area > 0 && !(o.skip || []).includes(c.id))
     .sort((a, b) => b.lightness - a.lightness);   // light first, dark details on top
   const summary = [], stitched = new Set(used.map((c) => c.id));
-  const fine = { narrowMm2: 0, hairlines: 0, inkMm2: 0 };   // details too small to stitch cleanly (shown as a hint)
+  const fine = { narrowMm2: 0, hairlines: 0, inkMm2: 0, folded };   // details too small to stitch cleanly (shown as a hint)
   for (let i = 0; i < w * h; i++) if (stitched.has(labels[i])) fine.inkMm2++;
   fine.inkMm2 /= res * res;
   // ignore specks: under 1.5 mm², or under 4 mm² and under 2.5 mm across (a dot, not a stem: each speck left was a
@@ -245,7 +365,7 @@ function build(img, analysis, opts) {
       const under = tatami(mask, comp, res, { angle: angle + 90, spacing: 2.5, stitch: 3, inset: 0.4, pull: 0 });
       // pull compensation widens a fill past its edge; on thin letters that closes the gaps between them
       const fill = tatami(mask, comp, res, { angle, spacing: o.density, stitch: 3.5, pull: widthMm < 2 ? 0.05 : 0.15 });
-      blocks.push({ centre, paths: routeFill([under, fill], comp, mask, res, budget, WORN).map(toMm), kind: "fill" });
+      blocks.push({ centre, paths: routeFill([under, fill], comp, mask, res, budget, WORN, false, 0, null, PICTURES.edge).map(toMm), kind: "fill" });
       filled[comp.id] = 1;
     }
     if (anyThin) {
@@ -350,17 +470,64 @@ function build(img, analysis, opts) {
     d.color(col.hex, col.thread.name);
     // Within 2 mm a move is sewn straight when it doesn't cross open fabric, and otherwise too if there's no hidden
     // way: a jump that short is never trimmed by the machine (a loose thread plus two locks).
-    for (const b of ordered) for (const p of b.paths) {
-      if (!d.cur) { d.path(p); continue; }
-      const gap = Math.hypot(p[0][0] - d.cur[0], p[0][1] - d.cur[1]);
-      if (gap <= 2 && !crosses(d.cur, p[0])) d.path(p);
-      else {
-        const r = gap <= TRAVEL ? R.route(toPx(d.cur), toPx(p[0]), SEWN, 1.5 * gap + 3) : null;
-        if (r && r.sewnMm <= SEWN && r.mm <= 1.5 * gap + 3) d.path([d.cur, ...toMm(R.stitches(r)), ...p]);
-        else d.path(p, true, gap > 2);
+    // A fill's locks lie under its own rows. Its path starts and ends at a shape's tips, where the first and last rows
+    // are a stitch long: a tie-in or tie-off there had nothing over it but that stitch (87 of the 173 exposed locks in
+    // the 12 sample pictures). After a jump the needle comes down 1-2 mm into the path (`lockAt`), locks there under
+    // rows still to come and stitches out to the start; before a trim it stitches 1-2 mm back onto its last rows and
+    // locks there.
+    // (the point 1.4 mm away along the path, on a stitch if no needle point lies there)
+    const inside = (from, pts) => {
+      const far = (q) => Math.hypot(q[0] - from[0], q[1] - from[1]);
+      let prev = from;
+      for (const q of pts) {
+        if (far(q) >= 1.4) {
+          let lo = 0, hi = 1, at = q;
+          for (let n = 0; n < 12; n++) { const t = (lo + hi) / 2; at = [prev[0] + (q[0] - prev[0]) * t, prev[1] + (q[1] - prev[1]) * t]; if (far(at) < 1.4) lo = t; else hi = t; }
+          if (far(at) >= 1.1 && far(at) <= 1.9 && !crosses(from, at)) return at;
+          break;
+        }
+        prev = q;
       }
+      return pts.find((q) => far(q) >= 1.1 && far(q) <= 1.9 && !crosses(from, q)) || null;
+    };
+    const pathLen = (q) => { let L = 0; for (let i = 1; i < q.length; i++) L += Math.hypot(q[i][0] - q[i - 1][0], q[i][1] - q[i - 1][1]); return L; };
+    // (neither when it would bring a jump the machine trims, over 5 mm, down to one it leaves as a loose thread, or a
+    // jump down to a step it could have sewn, 2 mm)
+    const gapTo = (a, c) => (a ? Math.hypot(c[0] - a[0], c[1] - a[1]) : Infinity);
+    const nearer = (was, now) => (was > 5 && now <= 5) || (was > 2 && now <= 2);
+    let tail = null;   // the fill path the needle is at the end of
+    const tuck = (to = null) => {
+      const q = tail && d.cur && inside(d.cur, tail.slice(-16, -1).reverse());
+      if (q && !(to && nearer(gapTo(d.cur, to), gapTo(q, to)))) d.path([d.cur, q]);
+      tail = null;
+    };
+    const jumpTo = (b, p) => {
+      let q = clearStart(noTiny(p)), at = b.kind === "fill" ? inside(q[0], q.slice(1, 16)) : null;
+      if (at && nearer(gapTo(d.cur, q[0]), gapTo(d.cur, at))) at = null;
+      tuck(at || q[0]);
+      if (at && nearer(gapTo(d.cur, q[0]), gapTo(d.cur, at))) at = null;
+      d.path(at ? noTiny(q, at) : q, true, true, at);
+      return q;
+    };
+    for (const b of ordered) for (const [pi, p] of b.paths.entries()) {
+      let q;
+      if (!d.cur) q = jumpTo(b, p);
+      else {
+        const gap = Math.hypot(p[0][0] - d.cur[0], p[0][1] - d.cur[1]);
+        if (gap <= 2 && !crosses(d.cur, p[0])) d.path((q = noTiny(p, d.cur)));
+        else {
+          const r = gap <= TRAVEL ? R.route(toPx(d.cur), toPx(p[0]), SEWN, 1.5 * gap + 3) : null;
+          if (r && r.sewnMm <= SEWN && r.mm <= 1.5 * gap + 3) d.path([d.cur, ...(q = noTiny([...toMm(R.stitches(r)), ...p], d.cur))]);
+          // (a part of a shape that travel can't reach and that sews less thread than its own locks: left out)
+          else if (gap > 2 && b.kind === "fill" && pi && pathLen(p) < PICTURES.start) continue;
+          else if (gap > 2) q = jumpTo(b, p);
+          else d.path((q = noTiny(p, d.cur)), true, false);
+        }
+      }
+      tail = b.kind === "fill" ? q : null;
       if (b.kind === "fill") R.markSewn(p.map(toPx));
     }
+    tuck();
     summary.push({ ...col, shapes: ordered.length, kinds: [...new Set(ordered.map((b) => b.kind))] });
   }
   if (!d.stitches.length) throw nothing(used, o);

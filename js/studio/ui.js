@@ -139,6 +139,7 @@ export function initStudio(api) {
     get grown() { return grown; },
     get asLettering() { return asLettering; },
     get lineChoice() { return lineChoice; },
+    get hoopLines() { return hoopLines; },
     get autoName() { return autoName; },
     get moreOpen() { return moreOpen; }, set moreOpen(v) { moreOpen = v; },
     get warnTimer() { return warnTimer; }, set warnTimer(v) { warnTimer = v; },
@@ -160,7 +161,7 @@ export function initStudio(api) {
     // (parts: more of the editor's state and helpers as they need them)
   };
   // the editor's parts (each reads the editor through S when it's used, so they can all be made here)
-  const { newProblem, landing, hard, against, overlapping, runUp, frameLines, twoLines, frameOf, frameFor, display, sizeChange, roomIn, worseSaid, keepWord, moveAway, and, grown, asLettering, lineChoice, roundAll, carried, asText, sewAfter, resizeFrame } = fixes(S);
+  const { newProblem, landing, hard, against, overlapping, runUp, frameLines, twoLines, frameOf, frameFor, display, sizeChange, roomIn, worseSaid, keepWord, moveAway, and, grown, asLettering, lineChoice, hoopLines, roundAll, carried, asText, sewAfter, resizeFrame } = fixes(S);
   const { recentUI, keptSaid, keep } = recentDesigns(S);
   const { swatchTip, threadOf, machineName, allThread, threadTip, threadNames, sameSpool, relabelThreads, oneThread } = threadSaid(S);
   const { split, appliqued } = tooBigWays(S);
@@ -420,12 +421,14 @@ export function initStudio(api) {
 
   let drawnId = null;   // (the piece the editor panel was last drawn for)
   function ui() { api.keepFocus($("panel-design"), () => { list(); editor(); sewnOn(); }); api.paint?.(); }
+  // the design's one in-the-hoop project, upright (the one "Make another in the hoop" copies), or null
+  const loneProject = () => { const ith = pieces.filter((f) => f.kind === "frame" && (f.border === "ith" || f.border === "zip") && !(f.rot || 0)); return ith.length === 1 ? ith[0] : null; };
   function sewnOn() {
     sewAs(fabric, thread);   // (pieces.js measures with the design's fabric and thread)
     $("st-fabric").innerHTML = Object.entries(FABRICS).map(([k, f]) => `<button type="button" data-fab="${k}" aria-pressed="${k === fabric}">${f.name}</button>`).join("");
     // (Make another, under the starter too for a lone in-the-hoop project: in the frame's own settings only, a newcomer
     // making two bookmarks didn't find it and made one for each name instead)
-    const ith = pieces.filter((f) => f.kind === "frame" && (f.border === "ith" || f.border === "zip") && !(f.rot || 0)), lone = ith.length === 1 ? ith[0] : null;
+    const lone = loneProject();
     $("st-tip").hidden = !tip && !lone; $("st-tip").textContent = tip;
     if (lone) {
       const b = Object.assign(document.createElement("button"), { type: "button", className: "link", textContent: "Make another in the hoop" });
@@ -488,13 +491,23 @@ export function initStudio(api) {
   }
 
   const nextTask = () => new Promise((r) => setTimeout(r));
+  let waitSaid = false, madeOnce = false;   // ("Getting the lettering ready…" is up; a design has been made)
   async function make(dragging = false) {
+    try { return await build(dragging); } finally { madeOnce = true; if (waitSaid) { waitSaid = false; api.busy(false); } }
+  }
+  async function build(dragging) {
     if (faces) thumbs();   // (the starters' fonts after the design's own: `facesOn`)
     const s = ++seq;
     api.showError(""); $("st-big").hidden = true;
     try {
       const fonts = [...new Set(pieces.filter((p) => p.font).map((p) => p.font))];
-      await Promise.all(fonts.map(loadFont));
+      // (said while a font is on its way: on a slow first load the preview read "Nothing to stitch yet: type some
+      // words" for the 4-5 s the bookmark's font took)
+      // (and until the design is made: `make` takes the note down)
+      // (at once for the first design, where there's nothing to look at meanwhile; later only when a font takes a while)
+      const say = () => { if (s === seq) { waitSaid = true; api.busy(true, "Getting the lettering ready…"); } };
+      const wait = madeOnce || !fonts.length ? setTimeout(say, 250) : (say(), 0);
+      try { await Promise.all(fonts.map(loadFont)); } finally { clearTimeout(wait); }
       // (the design's own fonts first, then the rest; a design with no lettering waits until it's still a moment, so a
       // passing empty state, before the design is in, doesn't ask for every font at once)
       if (fonts.length) facesOn(); else setTimeout(() => { if (s === seq) facesOn(); }, 1500);
@@ -1427,5 +1440,5 @@ export function initStudio(api) {
     }
     showEditor(true);
   }
-  return { make, addWords, showFix, usePicture, openSaved, downloaded, empty: () => !pieces.length, starter, rename, title: () => title, autoName: () => api.safeName(autoWords(), "design"), selBox: () => { const p = current(); return p ? pieceBounds(sewnAt(p)) : null; }, relabel: () => { ui(); make(); }, start, move, end, nudge, deselect, forNames, remember, recentre: () => { remember(); recentre(); save(); ui(); make(); } };
+  return { make, addWords, showFix, usePicture, openSaved, downloaded, empty: () => !pieces.length, starter, rename, title: () => title, autoName: () => api.safeName(autoWords(), "design"), selBox: () => { const p = current(); return p ? pieceBounds(sewnAt(p)) : null; }, relabel: () => { ui(); make(); }, start, move, end, nudge, deselect, forNames, remember, another: () => !!loneProject(), twoUp: () => twoUp(loneProject()), recentre: () => { remember(); recentre(); save(); ui(); make(); } };
 }
