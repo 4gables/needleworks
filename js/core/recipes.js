@@ -63,3 +63,12 @@ export const BORDERS = {
 
 // Fill rows (mm apart). 0.3 fails the tiny-stitch check (row links under 0.3 mm).
 export const ROWS = { solid: 0.35, standard: 0.4 };
+
+// Pictures (Filled): what is made sewable before any stitch is planned (docs/pictures.md).
+//   fleck:    a piece of one colour this small (mm²), or a dot (see digitize.js), lying inside other sewn colours ...
+//   enclosed: ... along this share of its edge, takes the colour round it. Left out it was a hole in that colour's fill
+//             (the rows split round it: more sections, travel and trims); sewn it was a trim, two locks and no shape.
+//   eyes:     up to this many such pieces in one colour are meant (an eye, a nostril) and stay; more are a texture.
+//   start:    a separate start (trim, tie-in, tie-off: 2.8 mm of thread in locks) must sew at least this much (mm).
+//   edge:     travel inside a fill may run this far (mm) inside the shape's own edge over finished rows (fill.js).
+export const PICTURES = { fleck: 3, enclosed: 0.8, eyes: 6, start: 4, edge: 0.75 };
