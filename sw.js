@@ -52,6 +52,7 @@ const FILES = [
   "js/render.js",
   "js/sheet.js",
   "js/studio/motifs.js",
+  "js/studio/names.js",
   "js/studio/outline.js",
   "js/studio/compose.js",
   "js/studio/fabrics.js",

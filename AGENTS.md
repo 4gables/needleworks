@@ -19,7 +19,8 @@ measurements behind each number are in the code's comments.
 - `js/studio/`: `pieces.js` (each piece's stitches, fitting, the sew context `sewAs`), `lettering.js` (a word drawn to strokes, counters,
   arches, `stitchLetters`), `compose.js` (`compose`,
   quilting and carving stages, `gang`, two hoopings), `shapes.js` (frame shapes), `fabrics.js` (`FABRICS`,
-  `THREADS` words), `files.js` (opened files as pieces), `ui.js` (editor, starters, warnings, one-tap fixes),
+  `THREADS` words), `files.js` (opened files as pieces), `ui.js` (editor, warnings, one-tap fixes; hands its state to its
+  parts as `S`), `starters.js`, `names.js` (One for each name),
   `outline.js`, `quilt.js`, `motifs.js`. pieces.js still re-exports what moved out of it.
 - `js/doctor.js` + `doctor-worker.js` (Open tab fixes), `quality.js` (the checker's rules), `words.js` (problems
   list per view, stop/thread vocabulary), `gate.js` (the only exit for files: `handOut`), `sheet.js` (step text, sew
