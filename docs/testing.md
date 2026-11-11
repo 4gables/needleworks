@@ -39,7 +39,7 @@ Reference for this part of Needleworks: the rules, the reason for each (it stops
   batches + pe900_check + byte compare when stitch code changed (then the VM); steps_lint / entry_state / said_flow /
   picture_corpus / lettering_look only when their area changed. ~25 min; every check has a time limit (no `timeout` on
   macOS: perl alarm; a hung surfaces run sat at 0 % CPU).
-- On demand only: surfaces (21 min, overlaps sweep + monkey), matrix, starters, picture_history, text_fuzz,
+- On demand only: surfaces (21 min, overlaps sweep + monkey), files_flow --matrix, starters, picture_history, text_fuzz,
   engine_fuzz, flow_lint on batches. A new guard replaces or extends one of the routine checks; add a new script only
   for a class nothing routine can reach, and retire one it overlaps.
 ### Category checks
@@ -81,7 +81,10 @@ Automated checks that each guard a bug class (add a line with every new guard):
     (\u2028/\v) is two names in the names batch (the app's `tidy` splits it) but one in the test's `refused` check.
   - Pictures unlike the samples: `tests/picture_corpus.sh CDP HP OUT [query]` (~1.5 min; 26 seeded drawings x styles x
     sizes; open cases in its `KNOWN` list with a reason; `?ext=etsy_N` renders the external samples).
-  - Starters open warning-free and fit (typing "Maximilian" too): `node tests/starters.mjs CDP http://127.0.0.1:HP` (~3 min).
+  - Starters open warning-free and fit (typing "Maximilian" too): `node tests/starters.mjs CDP http://127.0.0.1:HP` (~3 min). Its first check
+    (every starter opens on the 5x7 with no problem above a tip and Download on) also runs in steps_lint's starter
+    loop; the 4x4, long-name and turned cut-file passes are starters.mjs's alone. Not folded into studio_batch: the
+    batch page builds with `compose` and has no editor, so it can't see the page's problems list.
   - Picture output is a pure function of its settings; the lost note and its fixes: `node tests/picture_history.mjs CDP HP`.
     picture_corpus measures left-out pieces itself and must agree with the note.
   - Sizes agree everywhere: `tests/sizes_lint.mjs` (used by steps_lint and surfaces).
@@ -90,7 +93,7 @@ Automated checks that each guard a bug class (add a line with every new guard):
   - Speed: `node tests/monkey.mjs CDP HP --start fifteen-letters,fifteen --budget 1000`; ganged frames:
     `--start gang-<starter>` (checks `selbox`, `exit`).
   - Asked vs sewn, entry points, speed: `node tests/sewn_lint.mjs` (CI), `tests/said_flow.mjs` (~20 s), `tests/entry_state.mjs` (~5 min,
-    9 entry points x dirty state), `tests/matrix.mjs` (~11 min, kinds x modifiers x exits), `tests/perf.mjs` (500 ms
+    9 entry points x dirty state), `tests/files_flow.mjs --matrix` (~11 min, kinds x modifiers x exits; nine of the 63, each modifier once and each kind at least once, on every files_flow run), `tests/perf.mjs` (500 ms
     budget), surfaces per-fact equality, monkey toast checks, flow_lint.test degenerate frames.
   - Fix landing, dialogs, toasts: ui_sweep fix-landing, dialog-scrolled, picked-hidden, cut-short, toasts stay; surfaces <bdi>, said-twice,
     owned-spool rules, Open fixed/as-it-came; monkey asked, arch, Fit-never-shrinks, patch edge, Make another never

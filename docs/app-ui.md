@@ -19,7 +19,8 @@ Reference for this part of Needleworks: the rules, the reason for each (it stops
   a keyboard user's focus goes to the nearest live control; keyboard-or-not comes from the last real keydown/
   pointerdown (`keyboard`/`keyAt`), never a click's `detail`; for 2 s after a key the focused control is kept in view.
   `keepFocus` = render + `refocus`. No per-feature focus fixes. Arrow nudges only from the page or `#view`; the piece list is one Tab stop
-  (`rove`). Undo skips equal snapshots; Redo ⇧⌘Z / Ctrl+Y. 44 px coarse targets; `forced-colors` keeps thread
+  (`rove`). Undo skips equal snapshots; Redo ⇧⌘Z / Ctrl+Y. Ctrl+S / ⌘S focuses Download from anywhere (it was
+  48-67 Tabs from the Words box); focus, not a save, so the button says what it will save or why it can't. 44 px coarse targets; `forced-colors` keeps thread
   colours; `--danger/--warn/--good/--ink` tokens (red only for warnings).
 - Focus when a control is gone with no replacement: `refocus` takes the control in its place in the new markup
   (child-index path) or the next in document order, one task later (after async warnings); the container's first
@@ -67,9 +68,12 @@ Reference for this part of Needleworks: the rules, the reason for each (it stops
   POLYLINEs in mm, y up; Silhouette Studio's free edition opens DXF, not SVG). DXF keeps no size, so the file name
   carries it (`_cut_169x54mm`). Both judged in gate.js; ezdxf (in .venv) reads ours at size. Verify with headless `Page.printToPDF`, never the real print dialog via the Chrome extension (it blocks).
 - Cut files are exactly the shapes' size (no margin), named by `cutName`, upright as the design reads (`sheet.upright`,
-  never the machine's turn); gate.js refuses a size/name mismatch.
+  never the machine's turn); gate.js refuses a size/name mismatch. Its toast, titles and the download dialog say it's
+  for the cutting machine only (`NOT_SEWN`): a tester copied it to the USB stick with the .pes.
 - Sew along (`#along`): a step per screen, minutes = stitches / 550, own Have ready, Screen Wake Lock (retaken on
-  visibilitychange). Share text carries the steps (`shareText`). On my item (`#item`): a measured photo under the
+  visibilitychange). Its first screen has "How to hoop it, and which needle" (`hooping`): how to hoop (bare
+  stabilizer for an in-the-hoop design), the design's own notes that are about hooping or the needle, else a
+  general needle line. Share text carries the steps (`shareText`). On my item (`#item`): a measured photo under the
   design at true size (`state.backdrop`), never uploaded or saved.
 - Offline and one release at a time (`sw.js`, cache `needleworks-vN-<set>`): `FILES` lists every file with its
   SHA-256 (`node tests/sw.test.mjs --write`); add every new file there. Install fetches each past the browser's own
@@ -78,4 +82,20 @@ Reference for this part of Needleworks: the rules, the reason for each (it stops
   3 s. A new release waits: app.js offers "A new version of Needleworks is ready. Reload", and the worker takes over
   on that (`activate` message) or when every tab is closed. https only (`?sw` on 127.0.0.1 for tests/upgrade.sh).
   Share target: POST `./?share` -> `needleworks-shared` cache -> `./?shared` -> `route()`.
+- Work off the page (`js/jobs.js` `jobQueue`): one queue per worker (pictures x2, the doctor's fixes, re-stitched
+  file pieces, quilting and carved fills): one job at a time, only the newest waiting (`stale`), a worker that dies
+  or can't start answers `died` and is replaced. Time limits: pictures 60 s, doctor and file pieces 90 s (`slow`);
+  quilting none (it's part of the file: stopped, it would be worked out on the page, frozen for longer).
+- First load: `#busy` is in the page's own markup saying "Getting ready…" (setMode takes it down), then the first
+  design says "Getting the lettering ready…" until it's made (`waitSaid`); `.busy` hides `.empty`. Before, a slow
+  first load showed an empty preview, then "Nothing to stitch yet" while the font came. Measured on the slow-phone
+  profile against the live site (v25): first preview at 17-20 s = 437 KB of gzipped scripts (13 s) + Great Vibes
+  158 KB (4 s) + the first compose. modulepreload links for all 54 modules and a font preload saved 0.6-1 s of 18.5
+  (it's bandwidth, not round trips): not added. The real cut is loading Picture and Open code when their tab opens.
+- "Make another in the hoop" is also among the preview's links (`#another-open`, a lone upright in-the-hoop
+  project): on a phone the one under the starters is 1,475 px down.
+- A long line too big for the hoop is offered on two or three lines beside Fit to hoop (`hoopLines`: at its own size
+  where that lands, else the biggest that's a quarter over what Fit to hoop leaves). "+ Motif" (or any piece) on a
+  full in-the-hoop project offers the biggest thing on it a tenth to four tenths smaller, where that makes room and
+  lands (`noRoom`).
 - A hoop change drops other tabs' designs. Min/max over stitches uses loops (`Math.min(...pts)` overflows past ~110k).
