@@ -78,7 +78,10 @@ Phase 1, the base (no visible change, byte-identical batches):
   - [x] ui.js, first parts out: `starters.js` (the Start from designs, one id counter) and `names.js` (One for
     each name), the latter through `S`, the editor's state-and-helpers object (getters over the closure's state):
     the way every further part of ui.js moves out, one at a time, each proven by the name check + monkey + sweep
-  - [ ] ui.js: the rest (problems and fixes, too-big and fit, placement, editor, recent designs); app.js by its
+  - [x] ui.js: `recent.js` (Recent designs) and `placing.js` (where a piece goes) out through `S`, cut by a tool
+    that reads the name check's report (state and helpers become `S.x`, read when used: a helper defined further
+    down the editor isn't there yet at start-up)
+  - [ ] ui.js: the rest (problems and fixes, too-big and fit, threads, editor panel, events); app.js by its
     sections; one worker job queue; matrix folded into files_flow
 - [ ] **F3 Atomic releases**: one release's files per load, never a mix
 

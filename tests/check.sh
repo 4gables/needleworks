@@ -23,7 +23,7 @@ node tests/cdp.mjs $CDP start $OUT/chrome >/dev/null 2>&1; node tests/cdp.mjs $C
 trap 'node tests/cdp.mjs $CDP stop >/dev/null 2>&1; node tests/cdp.mjs $((CDP+1)) stop >/dev/null 2>&1; kill $SRV 2>/dev/null' EXIT
 
 # stitches: anything that builds, writes or reads them
-if has '^js/(core/|studio/(pieces|compose|lettering|shapes|fabrics|files|starters|names|outline|quilt|motifs)|doctor|worker|quilt-worker)'; then
+if has '^js/(core/|studio/(pieces|compose|lettering|shapes|fabrics|files|starters|names|placing|outline|quilt|motifs)|doctor|worker|quilt-worker)'; then
   say "== batches (stitch code changed)"
   rm -f $OUT/batch/*.pes(N)
   for pg in pe900_batch studio_batch; do
