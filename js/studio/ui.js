@@ -1,5 +1,7 @@
 /*! Needleworks (c) 2026 4Gables. All rights reserved. Proprietary, see LICENSE. https://4gables.com/needleworks/ */
 // Design tab UI: start from a card, edit pieces in a short list, drag them on the preview.
+import { offPage } from "./offpage.js";
+import { stepsPanel } from "./stepsui.js";
 import { fixes } from "./fixes.js";
 import { tooBigWays } from "./toobig.js";
 import { threadSaid } from "./threadsaid.js";
@@ -103,6 +105,16 @@ export function initStudio(api) {
     get freeRoom() { return freeRoom; },
     get pieceProblems() { return pieceProblems; },
     get probe() { return probe; },
+    get bareNow() { return bareNow; }, set bareNow(v) { bareNow = v; },
+    get lastSmall() { return lastSmall; }, set lastSmall(v) { lastSmall = v; },
+    get lastSteps() { return lastSteps; }, set lastSteps(v) { lastSteps = v; },
+    get smallNow() { return smallNow; },
+    get lettered() { return lettered; },
+    get floated() { return floated; },
+    get appliqued() { return appliqued; },
+    get relabelThreads() { return relabelThreads; },
+    get threadTip() { return threadTip; },
+    get editor() { return editor; },
     // (parts: more of the editor's state and helpers as they need them)
   };
   // the editor's parts (each reads the editor through S when it's used, so they can all be made here)
@@ -111,6 +123,8 @@ export function initStudio(api) {
   const { swatchTip, threadOf, machineName, allThread, threadTip, threadNames, sameSpool, relabelThreads, oneThread } = threadSaid(S);
   const { split, appliqued } = tooBigWays(S);
   const { spotIn, freeRoom, freeSpot, sewnAt, noRoom, onFrame, fitsWith, ungang, spotFor, MOTIF_MIN, alike } = placing(S);
+  const { stepsOf, stepsUI, firstStep, explainAll } = stepsPanel(S);
+  const { resizeFile, fileSize, restitchFiles, quiltSoon } = offPage(S);
   const saved = api.store.get("studio", null);
   // (checked like an opened design: a crafted file's pieces stayed broken through a reload)
   let pieces = (Array.isArray(saved?.pieces) ? saved.pieces : []).map(cleanPiece).filter(Boolean);
@@ -861,82 +875,7 @@ export function initStudio(api) {
       else { console.error(err); api.showError(err.message); }
     }
   }
-  // ---------- quilting and patch fills, worked out off the page ----------
-  // A stippled or echoed frame's quilting is worked out again whenever anything on it moves or changes (seconds on a
-  // busy design): the preview shows the last quilting meanwhile and Download waits. One job at a time, the newest
-  // waiting one next; the design is made again when it's done.
-  let quiltWorker = null, quiltBusy = null, quiltNext = null;
-  function quiltSoon(job) {
-    if (quiltBusy) { if (quiltBusy.key !== job.key) quiltNext = job; return; }
-    const finish = (paths) => {
-      const done = quiltBusy; quiltBusy = null;
-      // (no worker, or it failed: worked out here)
-      if (done.kind === "patch") carveDone(done.key, paths ?? patchFillOf(done)); else quiltDone(done.key, paths ?? quiltOf(done));
-      const n = quiltNext; quiltNext = null;
-      if (n && n.key !== done.key) quiltSoon(n);
-      make();
-    };
-    quiltBusy = job;
-    try {
-      if (!quiltWorker) {
-        quiltWorker = new Worker(new URL("../quilt-worker.js", import.meta.url), { type: "module" });
-        quiltWorker.onmessage = (e) => finish(e.data.paths);
-        quiltWorker.onerror = () => { quiltWorker = null; finish(null); };
-      }
-      quiltWorker.postMessage({ key: job.key, job });
-    } catch { quiltWorker = null; setTimeout(() => finish(null)); }
-  }
-  // ---------- design files resized ----------
-  // A file piece keeps the stitches it was opened with (`orig`) and its size against them (`scale`); `blocks` are what
-  // it sews. A new size is the stitches scaled as a stand-in (`pending`, Download waits) while the doctor's `fix`
-  // re-stitches it in a worker, one at a time; results are kept for undo and redo.
-  const restitched = new Map();
-  const fileKey = (p, f) => `${p.name}|${p.orig.length}|${p.orig[0].paths.length}|${p.orig[0].paths[0][0]}|${f}`;
-  function resizeFile(p, f) {
-    f = Math.min(FILE_SCALE[1], Math.max(FILE_SCALE[0], Math.round(f * 100) / 100));
-    const orig = p.orig || p.blocks;
-    if (f === 1) { p.blocks = orig; delete p.orig; delete p.scale; delete p.pending; return; }
-    if (f === p.scale) return;
-    p.orig = orig; p.scale = f;
-    const hit = restitched.get(fileKey(p, f));
-    if (hit) { p.blocks = hit; delete p.pending; } else { p.blocks = scaleBlocks(orig, f); p.pending = true; }
-  }
-  // its size in words, at scale f: "62 % · 55 × 48 mm"
-  function fileSize(p, f) {
-    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
-    for (const b of p.orig || p.blocks) for (const q of b.paths) for (const [x, y] of q) { x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y); }
-    return `${Math.round(f * 100)} % · ${mmText([Math.round((x1 - x0) * f), Math.round((y1 - y0) * f)])}`;
-  }
-  let fileWorker = null, fileJob = null;
-  function restitchFiles() {
-    if (fileJob) return;
-    const p = pieces.find((q) => q.kind === "file" && q.pending);
-    if (!p) return;
-    const hit = restitched.get(fileKey(p, p.scale));
-    if (hit) { p.blocks = hit; delete p.pending; save(); make(); return; }
-    if (!fileWorker) {
-      fileWorker = new Worker(new URL("../doctor-worker.js", import.meta.url), { type: "module" });
-      fileWorker.onmessage = (e) => {
-        const job = fileJob; fileJob = null;
-        const q = pieces.find((o) => o.id === job.id && o.kind === "file" && o.pending && o.scale === job.scale);
-        let blocks = null;
-        if (e.data.ok) try { blocks = fileBlocks(e.data.pattern); restitched.set(job.key, blocks); } catch (err) { e.data.error = err.message; }
-        if (q && blocks) { q.blocks = blocks; delete q.pending; }
-        // (it couldn't be re-stitched at that size: back to the size it came in, and said)
-        else if (q) { resizeFile(q, 1); api.showError(`${q.name} couldn't be resized: ${e.data.error}`); }
-        save(); if (q && current()?.id === q.id) editor(); make();
-      };
-    }
-    // (a worker that dies never answers: the piece stayed pending and Download waited for good)
-    fileWorker.onerror = (err) => {
-      const job = fileJob; fileJob = null; fileWorker.terminate(); fileWorker = null;
-      const q = job && pieces.find((o) => o.id === job.id && o.kind === "file" && o.pending);
-      if (q) { resizeFile(q, 1); api.showError(`${q.name} couldn't be resized: ${err.message || "something went wrong"}`); }
-      save(); make();
-    };
-    fileJob = { id: p.id, scale: p.scale, key: fileKey(p, p.scale) };
-    fileWorker.postMessage({ id: 0, d: blocksPattern(p.orig), opts: { scale: p.scale, tiny: p.scale < 1, thin: true, grow: true } });
-  }
+
   // A design opened on the Open tab, to add words to: a new design of the file and a line of lettering under it (the
   // last design stays one Undo away). Fit to hoop then resizes both.
   // (`words` false: the design alone, selected: the Picture tab's "start a new design with it")
@@ -1005,82 +944,12 @@ export function initStudio(api) {
   // the steps as shown and printed: what to have ready, what's done after, and whether the letters are small
   // (`lazy`: lettering not worked out yet (a long text drawn again as one line, 0.3-0.7 s) is taken as small as it last
   // was, and `later` says to check: typing waited for it before the preview changed)
+  let lastSteps = null;   // (the steps of the design as last made, for the editor's thread offers)
   let lastSmall = false, bareNow = false;
   // the turned hoop's note, as step 1 hoops: bare stabilizer (in the hoop) or the fabric (sheet.js `turnedNote`)
   const turnText = () => (api.turned() ? turnedNote(bareNow) : "");
   const smallNow = () => { const fit = fittedSizes(pieces); return (lastSmall = thread !== "60" && pieces.some((p) => smallText(fit.has(p.id) ? { ...p, size: fit.get(p.id) } : p))); };
-  function stepsOf({ design, steps, after, before, hoop, bare }, lazy = false) {
-    bareNow = !!bare;
-    const later = lazy && thread !== "60" && !pieces.every(bulkReady), small = later ? lastSmall : smallNow();
-    // (what the fabric needs goes first: a towel's topper was only in the folded "Sewing on"; the threads by the
-    // spools they own when they've listed them, not the Brother names)
-    // (the fabric's own stabilizer and finishing are left out when a project's own list already says (in-the-hoop,
-    // patch, quilt sandwich), bar a towel's topper)
-    // (a towel's topper only where there's lettering to sew under it)
-    const own = (list) => !(fabric === "towel" && lettered()) && list.some((b) => /stabilizer/i.test(b));
-    // (Have ready names each thread as the steps do: the file's palette, `threadNames`)
-    const named = threadNames(sameSpool(steps));
-    const fl = floated(), towel = fabric === "towel";
-    const ready = [own(before) ? "" : fl ? fl.ready : FABRICS[fabric].ready, fl && towel ? "A water-soluble topper (like Solvy) for on top of the terry." : "", ...before,
-      appliqued() ? `A piece of fabric for each appliqué shape, ${inchFirst(25.4)} bigger than its outline${steps.some((st) => st.cut) ? " (or cut to shape with the Cutter file, then there's nothing to trim)" : ""}, and small curved scissors (iron-on fusible web on the back stops cotton fraying).` : "",
-      api.threadList(named.map((st) => st.color), (hex) => named.find((st) => st.color === hex)?.machine || nearestBrotherThread(hex).name)].filter(Boolean),
-      done = snipsSaid([own(after) ? "" : fl ? fl.after + (towel ? " Tear the topper away (a damp cloth melts the bits left in the letters)." : "") : FABRICS[fabric].after, ...after].filter(Boolean), shortJumps(design.pattern()));
-    return { design, ...explainAll(ready, firstStep(named, hoop, fileName()), done), small, later };
-  }
-  // step 1 says what to do too: hoop it, put the thread on, Start (a one-step design said only "Sews “Leo”."), one
-  // sentence each so they show as numbered sub-steps (a towel's hoop, topper, thread and Start ran together as one)
-  // Have ready, the steps and When it's done with each sewing word explained where it's first used (words.js `explained`)
-  function explainAll(ready, steps, done) {
-    const all = explained([...ready, ...steps.map((st) => st.you), ...done]), n = ready.length;
-    return { ready: all.slice(0, n), steps: steps.map((st, i) => ({ ...st, you: all[n + i] })), done: all.slice(n + steps.length) };
-  }
-  // How the starter's project is hooped when it can't be (`floated`), in place of the fabric's way; never over a
-  // project's own (in-the-hoop, a patch, a quilt sandwich)
-  const hoopAs = (hoop) => { const fl = floated(); return fl && hoop === FABRICS[fabric].hoop ? (fabric === "towel" ? `${fl.hoop}. Lay the water-soluble topper on top` : fl.hoop) : hoop; };
-  // (and starts at the machine: the file picked from the USB stick, and where threading is shown, `pickIt`)
-  function firstStep(steps, hoop, file) {
-    hoop = hoopAs(hoop);
-    if (!steps.length || !hoop) return steps;
-    const h = `${hoop}.`.replace(/\.\.$/, "."), t = steps[0].thread;
-    return [{ ...steps[0], you: `${pickIt(file)} ${h} Put on ${t}. ${THREADING} ${steps[0].you || "Press Start."}` }, ...steps.slice(1)];
-  }
-  let lastSteps = null;   // (the steps of the design as last made, for the editor's thread offers)
 
-
-  function applGuide(steps) {
-    const has = steps.length > 0 && appliqued();
-    $("st-appl-open").hidden = !has;
-    if (!has) $("st-appl").hidden = true;
-    else if (!api.store.get("studio.applSeen", false) && $("st-guide").hidden) $("st-appl").hidden = false;
-  }
-  $("st-appl-close").onclick = () => { $("st-appl").hidden = true; api.store.set("studio.applSeen", true); };
-  $("st-appl-open").onclick = () => { $("st-appl").hidden = false; $("st-appl").scrollIntoView({ block: "nearest", behavior: "smooth" }); };
-  // (`first`: a split design's first file, named over its steps; the rehooping between the files isn't a step or a
-  // pause: the steps said "2 pauses" where the download said "no pauses")
-  function stepsUI(steps, after = [], small = false, before = [], waiting = "", first = "") {
-    guides = new Set(steps.filter((st) => !st.rehoop && st.under && steps.every((o) => o.rehoop || o.color !== st.color || o.under)).map((st) => st.color));
-    lastSteps = steps; applGuide(steps); relabelThreads(steps);
-    // (stops in the words the facts beside the preview use: "2 thread changes and 1 pause", not "3 pauses"; a split
-    // design's rehooping between its files is neither)
-    const rehoops = steps.filter((st) => st.rehoop).length, count = steps.length - rehoops;
-    let changes = 0, same = 0, prev = null;
-    for (const st of steps) { if (st.rehoop) { prev = null; continue; } if (prev) st.color === prev.color ? same++ : changes++; prev = st; }
-    $("st-steps-count").textContent = !steps.length ? "" : `· ${rehoops ? `${rehoops + 1} hoopings, ` : ""}${count} ${count === 1 ? "step" : "steps"}${changes + same ? `, ${stopWords(changes, same)}` : ""}`;
-    let n = 0;
-    // each step is a button: the preview shows the design as it is after that step, what's still to come faint
-    // (what's still wrong, and worth knowing, first: the steps said nothing of a name that closes up on fleece)
-    $("st-steps").innerHTML = (steps.length ? problemsItems(shownOn(problems, "steps")) : "")
-      + (waiting ? `<li class="after"><b>Waiting for a fit</b><span>${api.escapeHtml(waiting)}</span></li>` : "")
-      + (api.turned() ? `<li class="after"><b>Hooping</b><span class="turned">${TURN_PIC}${api.escapeHtml(turnText())}</span></li>` : "") + (before.length ? `<li class="after"><b>Have ready</b><ul class="ready">${before.map((r) => `<li>${api.escapeHtml(r)}</li>`).join("")}</ul></li>` : "")
-      + (first ? `<li class="after"><b>First hooping: ${api.escapeHtml(first)}</b></li>` : "")
-      + steps.map((st, i) => st.rehoop ? `<li class="after"><b>${api.escapeHtml(st.title)}</b>${youHtml(st.you, api.escapeHtml)}</li>` : `<li><button type="button" data-step="${i}" aria-pressed="${api.step() === i}">
-      <b><span class="n">${++n}</span><i style="background:${st.color}"></i>${api.threadHtml(st.color, st.machine || nearestBrotherThread(st.color).name, " ", guides.has(st.color))}</b>
-      ${st.you ? youHtml(st.you, api.escapeHtml) : ""}<span>${api.escapeHtml(st.sews.join(" "))}</span>
-      ${st.early ? `<small>Sewn early, with the other ${api.escapeHtml(st.machine || nearestBrotherThread(st.color).name)} parts, to save a thread change.</small>` : ""}</button></li>`).join("")
-      + (threadTip(small) ? `<li class="after"><b>Thread and needle</b><span>${api.escapeHtml(threadTip(small))}</span></li>` : "")
-      + (after.length ? `<li class="after"><b>When it's done</b><span>${api.escapeHtml(after.join(" "))}</span></li>` : "");
-  }
-  $("st-steps").onclick = (e) => { const b = e.target.closest("[data-step]"); if (b) api.showStep(api.step() === +b.dataset.step ? null : +b.dataset.step); };
   document.addEventListener("nw:step", (e) => {
     for (const b of $("st-steps").querySelectorAll("[data-step]")) b.setAttribute("aria-pressed", +b.dataset.step === e.detail);
     $("st-steps-all").hidden = e.detail == null;
