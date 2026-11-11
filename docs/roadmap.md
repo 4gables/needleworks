@@ -43,6 +43,9 @@ Phase 1, the base (no visible change, byte-identical batches):
     fit and compose share the sew context and five caches: lift those into one module first, then split
   - [x] `compose.js`: the top layer (compose, quilting and carving stages, gang, two hoopings, step tidying) out
     of pieces.js (now 1,899 lines); the sew context has `sewing()`/`sewWith()` instead of other code setting it
+  - [x] `lettering.js`: drawing a word to strokes, counters, arches, column shapes and `stitchLetters` out of
+    pieces.js (now 1,313 lines, from 2,553); the thread weight is passed to `stitchLetters`, the drawing state is
+    read and set through `drawings()`/`inkOnly()`
   - [ ] speed on a busy design (`tests/perf.mjs`, 15 pieces + appliqué letters: 6-9 of 23 actions over 500 ms,
     worst 745-830 ms, run to run). Measured, not guessed:
     - a per-piece memo for collision measuring changed nothing (clouds and `near` are ~57 ms of a towel change):
