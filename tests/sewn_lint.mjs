@@ -9,7 +9,7 @@
 // Stale entries fail too. Run: node tests/sewn_lint.mjs (< 1 s, CI).
 import { readFileSync } from "fs";
 
-const FILES = ["js/studio/ui.js", "js/app.js", "js/sheet.js", "js/words.js", "js/gate.js", "js/studio/pieces.js", "js/studio/compose.js", "js/studio/names.js", "js/studio/placing.js", "js/studio/recent.js", "js/studio/threadsaid.js", "js/studio/toobig.js", "js/studio/fixes.js", "js/studio/stepsui.js", "js/studio/offpage.js", "js/studio/problems.js", "js/studio/editor.js"];
+const FILES = ["js/studio/ui.js", "js/app.js", "js/sheet.js", "js/words.js", "js/gate.js", "js/studio/pieces.js", "js/studio/compose.js", "js/studio/names.js", "js/studio/placing.js", "js/studio/recent.js", "js/studio/threadsaid.js", "js/studio/toobig.js", "js/studio/fixes.js", "js/studio/stepsui.js", "js/studio/offpage.js", "js/studio/problems.js", "js/studio/editor.js", "js/picture.js", "js/along.js", "js/state.js", "js/opened.js", "js/threadui.js", "js/onitem.js", "js/focus.js"];
 // (pieces.js: its measuring calls only; its builders stitch the size they're handed)
 const SIZES_IN = (f) => f !== "js/studio/pieces.js" && f !== "js/studio/compose.js";
 const MEASURE = /\b(pieceBounds|touchingAll|touching|inFrame)\(/g;
@@ -41,9 +41,9 @@ const RAW_MEASURE = process.env.EMPTY ? [] : [
 ];
 // [file, function, reason]: functions that may read a piece's asked size
 const RAW_SIZE = process.env.EMPTY ? [] : [
-  ["js/app.js", "makePicture", "s is the Picture tab's settings (the Size asked), compared with the file as sewn for the size note"],
+  ["js/picture.js", "makePicture", "s is the Picture tab's settings (the Size asked), compared with the file as sewn for the size note"],
   ["js/studio/fixes.js", "frameLines", "compares what the frame sews (fs, fittedSizes) with the size asked: the offer is for words shrunk under 80 % of it, tried at asked sizes down from it"],
-  ["js/app.js", "keepPicture", "blob.size is the picture file's bytes (the storage cap), not a piece"],
+  ["js/state.js", "keepPicture", "blob.size is the picture file's bytes (the storage cap), not a piece"],
   ["js/studio/toobig.js", "snug", "pieces no frame fits (fit.has excluded): asked = sewn; each size checked by landing()"],
   ["js/studio/toobig.js", "snugWay", "sets the asked size snug() found (unfitted piece)"],
   ["js/studio/ui.js", "lineRest", "the line pitch from the size the lines were sewn at (set from sewn() just before)"],
@@ -73,14 +73,14 @@ const RAW_SIZE = process.env.EMPTY ? [] : [
   ["js/studio/placing.js", "spotInOf", "candidate sizes from the asked one; s.size is the sewn one"],
   ["js/studio/placing.js", "freeRoom", "candidate sizes from the asked one, fitted before one is taken"],
   ["js/studio/names.js", "once", "names batch: q at a candidate size, `now` its fitted size"],
-  ["js/app.js", "names-make.onclick", "m.size is a made name's sewn size (its file's)"],
-  ["js/app.js", "picSettings", "the picture's Size control (sewSized makes the sewn design that size)"],
-  ["js/app.js", "sewPicture", "the picture's Size, handed to sewSized"],
-  ["js/app.js", "pictureError", "the picture's Size vs the most the hoop takes"],
-  ["js/app.js", "fineUI", "the picture's Size (sewSized: the sewn design's longer side)"],
-  ["js/app.js", "pic-fine.onclick", "the picture's Size, for a one-tap fix"],
-  ["js/app.js", "checkLost", "the picture's Size, for a one-tap fix"],
-  ["js/app.js", "sizeRange", "the picture's Size control vs the most"],
+  ["js/along.js", "names-make.onclick", "m.size is a made name's sewn size (its file's)"],
+  ["js/picture.js", "picSettings", "the picture's Size control (sewSized makes the sewn design that size)"],
+  ["js/picture.js", "sewPicture", "the picture's Size, handed to sewSized"],
+  ["js/picture.js", "pictureError", "the picture's Size vs the most the hoop takes"],
+  ["js/picture.js", "fineUI", "the picture's Size (sewSized: the sewn design's longer side)"],
+  ["js/picture.js", "pic-fine.onclick", "the picture's Size, for a one-tap fix"],
+  ["js/picture.js", "checkLost", "the picture's Size, for a one-tap fix"],
+  ["js/picture.js", "sizeRange", "the picture's Size control vs the most"],
 ];
 
 const indent = (l) => l.match(/^\s*/)[0].length;
