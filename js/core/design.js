@@ -16,9 +16,12 @@ function inward(p, d, pts) {
 
 // Whether the points all lie within `LOCKS.line` mm of the line from p along d: a single line of thread (a fine
 // line's letter, a line border, a picture's run), with no column for a lock's sideways hit to hide in.
+// (And the line goes on at least as far as the lock will reach along it: on a dot, a 0.7 mm stroke out and back,
+// the hit past the lock's end made a fine-line i's dot 1.2 mm long, a bar over the i.)
 function bare(p, d, pts) {
   const L = Math.hypot(d[0], d[1]) || 1;
-  return pts.every((q) => Math.abs((q[0] - p[0]) * d[1] - (q[1] - p[1]) * d[0]) / L < LOCKS.line);
+  return pts.every((q) => Math.abs((q[0] - p[0]) * d[1] - (q[1] - p[1]) * d[0]) / L < LOCKS.line)
+    && pts.some((q) => ((q[0] - p[0]) * d[0] + (q[1] - p[1]) * d[1]) / L >= L + LOCKS.past);
 }
 
 export class Design {
