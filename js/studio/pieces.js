@@ -8,8 +8,8 @@ import { DENSITY, FILL_PATTERNS, fillPolygon } from "../core/digitize.js";
 import { APPLIQUE_FONTS, FONTS, fontOf } from "../core/fonts.js";
 import { machineThreads } from "../core/formats.js";
 import { MARGIN } from "../core/machines.js";
-import { WEIGHTS, fillFor, satinFor } from "../core/recipes.js";
-import { back, bounds, circle, edgeWalk, enter, filletPolygon, followRun, loop, moveCost, normals, rings, run, satin, zigzag } from "../core/geom.js";
+import { BORDERS as EDGES, fillFor, letterRecipe, satinFor } from "../core/recipes.js";
+import { back, bounds, circle, edgeWalk, enter, filletPolygon, followRun, loop, moveCost, normals, rings, run, satin, within, zigzag } from "../core/geom.js";
 import { counterPockets, distanceTransform, order } from "../core/raster.js";
 import { strokes } from "../core/text.js";
 import { MAX_INITIALS, MAX_WORDS, brief, initials, latin, swashes, tidy, unswashed } from "../core/typed.js";
@@ -525,8 +525,7 @@ function inkAt(rows, w, least = 0) {
   return { at, max: Math.max(...v) };
 }
 function stitchLetters(parts, satinW, fab = "cotton", small = false) {
-  const zz = fab === "knit" ? 1.5 : 2.5, pull = fab === "knit" ? 0.3 : 0;
-  const density = wt === "auto" ? (fab === "knit" ? 0.42 : small ? 0.34 : 0.38) : WEIGHTS[wt].letterSatin + (fab === "knit" ? 0.04 : 0);
+  const { zigzagFrom: zz, pull, gap: density } = letterRecipe(fab, wt, small);   // (core/recipes.js LETTERS)
   let gap = false, last = null, lastW = satinW;   // (a skipped stroke hands its jump on to the next one sewn)
   if (!satinW) parts = pointed(parts);
   return parts.map(([p0, mode, g, cap, taper, ends, sides, thick]) => {
@@ -1157,7 +1156,8 @@ const tack = (e) => [loop(run(e, 2.0, true)), loop(run(back(e), 2.0, true))];
 // the fabric show through and fray past it on Ashley's bookmarks, 2026-11-05). Its centre is 0.2 mm inside the line,
 // so it reaches 1.8 mm out as the 3.6 mm one did (sizes, fits and cut files unchanged: wider both ways, two key fobs
 // no longer fitted the 4x4 hoop) and 2.2 mm in, over the fabric's trimmed edge.
-const satinBorder = (edge) => { const e = inset(edge, 0.2); return [edgeWalk(e, 4.0, true), loop(zigzag(e, 3.0, 2.0, true)), loop(satin(e, 4.0, sd(0.34), 0.3, true))]; };
+const satinEdge = (e, B) => [edgeWalk(e, B.width, true), loop(zigzag(e, ...B.zigzag, true)), loop(satin(e, B.width, sd(B.gap), B.pull, true))];   // (core/recipes.js BORDERS)
+const satinBorder = (edge) => satinEdge(inset(edge, EDGES.edge.inset), EDGES.edge);
 // A closed outline started `f` of the way round, kept there (`seam`: compose doesn't enter it where the needle is).
 // Each stage of an outline sewn in stages (in-the-hoop, appliqué frame, zipper pouch) starts a third further round:
 // all three started at one corner, whose hole took 16 hits and its neighbour 15 more (the locks of three stages) on
@@ -1176,7 +1176,7 @@ const seamStage = (f, make) => ({ seam: f, reseam: (g) => seamed(make(g)), paths
 // a frame that's only a border: satin (3 mm), bold (a triple run) or a line
 // (the edge walk isn't closed: it ends on the side the zigzag starts. Closing it stepped 2.2 mm back across the
 // border, a trim and two locks on every satin frame, until 2026-10-31)
-const plainBorder = (e, border) => border === "satin" ? [edgeWalk(e, 3.0, true), loop(zigzag(e, 2.1, 2.0, true)), loop(satin(e, 3.0, sd(0.4), 0.3, true))]
+const plainBorder = (e, border) => border === "satin" ? satinEdge(e, EDGES.frame)
   : border === "bold" ? [run(e, 2.0, true), run(back(e), 2.0, true), run(e, 2.0, true)].map(loop)
   : [loop(run(e, 2.2, true))];
 
@@ -1356,12 +1356,7 @@ const edgeWidth = (l, max, min) => { const [x0, y0, x1, y1] = bounds(l); return 
 function edgeTop(l, max, min = 1.2) { const w = edgeWidth(l, max, min); return loop(satin(l, w, sd(0.4), w > 2 ? 0.3 : 0.2, true, true)); }
 
 // a point inside closed loops (even-odd)
-function insideLoops(loops, [x, y]) {
-  let k = false;
-  for (const l of loops) for (let i = 0, j = l.length - 1; i < l.length; j = i++)
-    if ((l[i][1] > y) !== (l[j][1] > y) && x < ((l[j][0] - l[i][0]) * (y - l[i][1])) / (l[j][1] - l[i][1]) + l[i][0]) k = !k;
-  return k;
-}
+const insideLoops = within;   // (core/geom.js)
 
 // every loop moved d mm away from the inside of the shape (even-odd over all the loops, so holes move into the hole)
 function outward(loops, d) {
@@ -1474,12 +1469,7 @@ function applRoutes(loops) {
     return picked;
   };
   // the holes of the piece an outline belongs to come first (the placement line links them across the letter)
-  const contains = (l, [x, y]) => {
-    let k = false;
-    for (let i = 0, j = l.length - 1; i < l.length; j = i++)
-      if ((l[i][1] > y) !== (l[j][1] > y) && x < ((l[j][0] - l[i][0]) * (y - l[i][1])) / (l[j][1] - l[i][1]) + l[i][0]) k = !k;
-    return k;
-  };
+  const contains = (l, q) => within([l], q);
   const host = loops.map((l, i) => {
     const around = loops.map((m, j) => j).filter((j) => j !== i && contains(loops[j], l[0]));
     if (around.length % 2 === 0) return i;
@@ -1740,14 +1730,7 @@ export function underPatch(p, pieces, before = false) {
   return null;
 }
 // point in polygon (even-odd)
-function inside([x, y], poly) {
-  let c = false;
-  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
-    const [xi, yi] = poly[i], [xj, yj] = poly[j];
-    if ((yi > y) !== (yj > y) && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) c = !c;
-  }
-  return c;
-}
+const inside = (q, poly) => within([poly], q);
 
 // A piece as the page names it, long words `brief` (`whole`: all of them, for the thread name in the file, which a
 // design's saved bytes carry). One with no words yet is named for what it is: the list showed an empty “” (round 13).

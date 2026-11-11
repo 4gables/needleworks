@@ -71,6 +71,6 @@ Reference for this part of Needleworks: the rules, the reason for each (it stops
 - Sew along (`#along`): a step per screen, minutes = stitches / 550, own Have ready, Screen Wake Lock (retaken on
   visibilitychange). Share text carries the steps (`shareText`). On my item (`#item`): a measured photo under the
   design at true size (`state.backdrop`), never uploaded or saved.
-- Offline (`sw.js`, `needleworks-v12`): precaches `FILES`, network first, cache after 3 s; add every new file to
+- Offline (`sw.js`, `needleworks-vN`, bumped each release): precaches `FILES`, network first, cache after 3 s; add every new file to
   `FILES`. https only. Share target: POST `./?share` -> `needleworks-shared` cache -> `./?shared` -> `route()`.
 - A hoop change drops other tabs' designs. Min/max over stitches uses loops (`Math.min(...pts)` overflows past ~110k).

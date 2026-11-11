@@ -34,3 +34,32 @@ export const WEIGHTS = {
 // a satin's same-edge gap and a fill's row spacing for a thread weight (to 0.001 mm, as the files were always made)
 export const satinFor = (wt, gap) => { const k = (WEIGHTS[wt] || WEIGHTS.auto).satin; return k === 1 ? gap : +(gap * k).toFixed(3); };
 export const fillFor = (wt, rows) => rows + (WEIGHTS[wt] || WEIGHTS.auto).fill;
+
+// Lettering satins by fabric. Knit: a zigzag underlay under thinner columns too (the fabric moves under a centre
+// run), 0.15 mm more pull a side and a slightly open satin (piqué and jersey pull in and pucker under a dense one).
+// Towel lettering has its knockdown lattice underneath instead (a zigzag on top of it took the name to 24 hits per
+// mm²). Cotton, felt, denim and canvas sew alike.
+//   zigzagFrom: column width (mm) from which the way out under a column is a zigzag, not a centre run
+//   pull:       extra total width (mm) on top of the column's own pull
+//   gap:        same-edge satin gap on Automatic; `small` (x-height under 6 mm, sewn for 60 wt) closer to cover
+//   open:       added to a chosen thread weight's gap
+export const LETTERS = {
+  cotton: { zigzagFrom: 2.5, pull: 0, gap: 0.38, small: 0.34, open: 0 },
+  knit: { zigzagFrom: 1.5, pull: 0.3, gap: 0.42, small: 0.42, open: 0.04 },
+};
+export function letterRecipe(fabric, wt, small) {
+  const f = LETTERS[fabric] || LETTERS.cotton, w = (WEIGHTS[wt] || WEIGHTS.auto).letterSatin;
+  return { zigzagFrom: f.zigzagFrom, pull: f.pull, gap: w === null ? (small ? f.small : f.gap) : w + f.open };
+}
+
+// Satin borders: an edge walk 0.4 mm inside each edge, a zigzag, then the satin (Ink/Stitch's contour underlay; a
+// firm edge on felt). `edge` is the appliqué, patch and in-the-hoop border: 4 mm at 0.34, centred 0.2 mm inside the
+// line (fabric showed through and frayed past 3.6 mm at 0.4 on a real bookmark). `frame` is the plain Satin border.
+//   width, gap (same edge), pull (total), inset (of the centre line), zigzag [width, spacing]
+export const BORDERS = {
+  edge: { width: 4.0, gap: 0.34, pull: 0.3, inset: 0.2, zigzag: [3.0, 2.0] },
+  frame: { width: 3.0, gap: 0.4, pull: 0.3, inset: 0, zigzag: [2.1, 2.0] },
+};
+
+// Fill rows (mm apart). 0.3 fails the tiny-stitch check (row links under 0.3 mm).
+export const ROWS = { solid: 0.35, standard: 0.4 };

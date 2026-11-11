@@ -1,5 +1,6 @@
 /*! Needleworks (c) 2026 4Gables. All rights reserved. Proprietary, see LICENSE. https://4gables.com/needleworks/ */
 // Design tab UI: start from a card, edit pieces in a short list, drag them on the preview.
+import { luminance, rgbOf } from "../core/colour.js";
 import { APPLIQUE_FONTS, FONTS, fontOf, loadFont } from "../core/fonts.js";
 import { MAX_INITIALS, MAX_WORDS, initials, monogramHelp, lackList, lacks, reswashed, swashes, swashless, tidy, tidyField, unswashed, withSwash } from "../core/typed.js";
 import { nearestBrotherThread } from "../core/threads.js";
@@ -990,7 +991,7 @@ export function initStudio(api) {
     save(); ui(); make();
   }
   // threads that are hard to tell apart on each other: nearly the same lightness, or the same Brother thread
-  const lum = (h) => { const [r, g, b] = [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16) / 255).map((c) => (c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4)); return 0.2126 * r + 0.7152 * g + 0.0722 * b; };
+  const lum = (h) => luminance(rgbOf(h));
   const ratio = (a, b) => { const x = lum(a), y = lum(b); return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05); };
   const hard = (a, b) => ratio(a, b) < 1.6 || nearestBrotherThread(a).name === nearestBrotherThread(b).name;
   // a thread that shows on patch f: what's already sewn on it, then its edge, else white or black
