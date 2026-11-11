@@ -90,8 +90,9 @@ Phase 1, the base (no visible change, byte-identical batches):
     before the long checks
   - [x] ui.js: `fixes.js` (one-tap fixes), `stepsui.js` (the steps panel), `offpage.js` (quilting, fills and file
     re-stitching in workers); the parts are all made in one place under `S`; ui.js is 1,747 lines
-  - [ ] ui.js: problems (`warnNow`), the editor panel, events; app.js by its sections; one worker job queue;
-    matrix folded into files_flow
+  - [x] ui.js: `problems.js` (the problems list) and `editor.js` (the piece editor panel); ui.js is 1,430 lines,
+    half what it was: what's left is the editor's state, the piece list, `make()`, new designs and the event handlers
+  - [ ] app.js by its sections; one worker job queue; matrix folded into files_flow
 - [ ] **F3 Atomic releases**: one release's files per load, never a mix
 
 Phase 2, stitch quality (measured against the scoreboard, VM-checked):

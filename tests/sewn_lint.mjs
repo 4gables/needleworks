@@ -9,7 +9,7 @@
 // Stale entries fail too. Run: node tests/sewn_lint.mjs (< 1 s, CI).
 import { readFileSync } from "fs";
 
-const FILES = ["js/studio/ui.js", "js/app.js", "js/sheet.js", "js/words.js", "js/gate.js", "js/studio/pieces.js", "js/studio/compose.js", "js/studio/names.js", "js/studio/placing.js", "js/studio/recent.js", "js/studio/threadsaid.js", "js/studio/toobig.js", "js/studio/fixes.js", "js/studio/stepsui.js", "js/studio/offpage.js", "js/studio/problems.js"];
+const FILES = ["js/studio/ui.js", "js/app.js", "js/sheet.js", "js/words.js", "js/gate.js", "js/studio/pieces.js", "js/studio/compose.js", "js/studio/names.js", "js/studio/placing.js", "js/studio/recent.js", "js/studio/threadsaid.js", "js/studio/toobig.js", "js/studio/fixes.js", "js/studio/stepsui.js", "js/studio/offpage.js", "js/studio/problems.js", "js/studio/editor.js"];
 // (pieces.js: its measuring calls only; its builders stitch the size they're handed)
 const SIZES_IN = (f) => f !== "js/studio/pieces.js" && f !== "js/studio/compose.js";
 const MEASURE = /\b(pieceBounds|touchingAll|touching|inFrame)\(/g;
@@ -49,7 +49,7 @@ const RAW_SIZE = process.env.EMPTY ? [] : [
   ["js/studio/ui.js", "lineRest", "the line pitch from the size the lines were sewn at (set from sewn() just before)"],
   ["js/studio/ui.js", "placeRest", "a new straight piece no frame fits yet: asked = sewn; spotIn/freeRoom measure it sewn"],
   ["js/studio/ui.js", "followed", "an arched word (never frame-fitted): asked = sewn"],
-  ["js/studio/ui.js", "drawEditor", "the controls show the size asked; warn() says the sewn one beside it (\"N mm sewn\")"],
+  ["js/studio/editor.js", "drawEditor", "the controls show the size asked; warn() says the sewn one beside it (\"N mm sewn\")"],
   ["js/studio/problems.js", "pieceProblems", "q.size is the fitted size; motifs are never fitted"],
   ["js/studio/problems.js", "warnNow", "fixes and notes compare the asked size with d.fs, the sewn one; each fix is checked by landing()"],
   ["js/studio/fixes.js", "runUp", "the most to try; each size measured sewn"],

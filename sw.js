@@ -70,6 +70,7 @@ const FILES = [
   "js/studio/stepsui.js",
   "js/studio/offpage.js",
   "js/studio/problems.js",
+  "js/studio/editor.js",
   "js/studio/ui.js",
   "js/doctor-worker.js",
   "js/quilt-worker.js",
