@@ -270,10 +270,12 @@ for (const id of ["mugrug", "applique"]) {
 // (round 11) a patch with print lettering whose moves between letters are loose threads (the hobbyist's CRAFT CLUB:
 // the chip said 2 to snip, When it's done nothing), on the 4x4 (or alone: "loose"); since round 12 each print letter starts
 // where its move is trimmed, so CRAFT CLUB has none: a 5 mm date, where no start helps, still has some
+// (S1b: a date's letters are sewn every second one first, so it has none either; "il" at 5 mm is narrower than the
+// 5 mm a trim needs whatever the start or the order)
 if (!only || only.split(",").includes("loose")) {
   await call("goto", `${base}/manifest.webmanifest`);
   const pieces = [{ id: 1, kind: "frame", shape: "circle", w: 90, h: 90, border: "patch", fill: "#0e1f7c", x: 0, y: 0, color: "#f0f0f0" },
-    { id: 2, kind: "text", text: "14.03.2026", size: 5, font: "NW Josefin Sans", x: 0, y: 0, color: "#f0f0f0" }];
+    { id: 2, kind: "text", text: "il", size: 5, font: "NW Josefin Sans", x: 0, y: 0, color: "#f0f0f0" }];
   await ev(`(() => { localStorage.setItem("nw:studio", ${JSON.stringify(JSON.stringify({ pieces, sel: 2, fabric: "cotton", thread: "auto" }))}); localStorage.setItem("nw:hoop", '"4x4"'); localStorage.setItem("nw:turn", '{"design":false}'); return 1 })()`);
   await open("#design"); await settle();
   const d = await ev(READ);
