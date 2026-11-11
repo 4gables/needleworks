@@ -14,88 +14,12 @@ import { BLOCK, LOOK, LOOK_HEAD, TIP, TIP_HEAD, isolate, problemsHtml, problemsI
 import { brief, monogramHelp, safeName, tidy, uniqueName, withSwash } from "./core/typed.js";
 import { BRANDS, apart, brotherNum, chartSpools, exampleSpools, lab, nearestSpool, nearestSpools, ownSpoolOf, spools } from "./core/brands.js";
 import { COLORS as LINE_THREADS, initStudio, savedDesign } from "./studio/ui.js";
-
-const $ = (id) => document.getElementById(id);
-const store = {
-  get(k, d) { try { return JSON.parse(localStorage.getItem("nw:" + k)) ?? d; } catch { return d; } },
-  // (false when the browser wouldn't keep it: private mode, or full)
-  set(k, v) {
-    try { localStorage.setItem("nw:" + k, JSON.stringify(v)); return true; }
-    catch { if (k === "studio" && !store.warned) { store.warned = true; toast("This design is too big to keep in the browser between visits. Use Save design to keep it."); } return false; }
-  },
-  del(k) { try { localStorage.removeItem("nw:" + k); } catch {} },
-};
-
-// The Picture tab's own picture (and its settings, `pic.last` in store), kept in this browser (IndexedDB: a photo is too
-// big for localStorage) and opened again on the next visit: a newcomer came back to the tab and her picture was gone,
-// the sample flower in its place (round 11). One picture, up to `PIC_KEEP`; anything failing (private mode, full,
-// no IndexedDB) leaves it as before: the sample.
-const PIC_KEEP = 15e6;
-const kept = {
-  db: null,
-  open() {
-    return (this.db ||= new Promise((ok, no) => {
-      const r = indexedDB.open("needleworks", 1);
-      r.onupgradeneeded = () => r.result.createObjectStore("kept");
-      // (another tab deleting or upgrading it: this connection gives way, else that waited for good and every open
-      // queued behind it, the Picture tab never ready, not even with the sample)
-      r.onsuccess = () => { const db = r.result; db.onversionchange = () => { db.close(); this.db = null; }; ok(db); };
-      r.onerror = () => no(r.error); r.onblocked = () => no(new Error("blocked"));
-    })).catch((e) => { this.db = null; throw e; });
-  },
-  async run(mode, f) {
-    const db = await this.open();
-    return new Promise((ok, no) => { const t = db.transaction("kept", mode), r = f(t.objectStore("kept")); t.oncomplete = () => ok(r?.result); t.onerror = t.onabort = () => no(t.error); });
-  },
-  // (at most 2 s: what's kept is a nicety, the tab must open either way)
-  async get(k) { try { return await Promise.race([this.run("readonly", (o) => o.get(k)), new Promise((ok) => setTimeout(ok, 2000))]); } catch { return undefined; } },
-  async set(k, v) { try { await this.run("readwrite", (o) => o.put(v, k)); } catch { /* not kept: the next visit starts with the sample */ } },
-};
-const keepPicture = (blob, name) => { if (blob.size <= PIC_KEEP) kept.set("picture", { blob, name }); };
-// A picture with nothing in it to stitch isn't brought back: kept like any other, a blank picture opened the tab on
-// its own error at every visit after, in place of the sample (and it was the Picture tab "never ready" in 1-2 of a
-// full ui_sweep's runs: whichever tab had the blank-picture state before the plain one).
-const forgetPicture = () => kept.set("picture", null);
+import { $, designHoop, designTurned, forgetPicture, hoop, keepPicture, kept, shownHoop, square, state, store, toMachine, turnCut, turned, turnedFile } from "./state.js";
 
 // the old bookmark panel's colours as saved, mapped to the exact Brother PEC colours (#1a1a1a showed as "Olive Green"),
 // for an old #bookmark link opening the Bookmark starter
 const OLD_THREADS = { "#c8102e": "#ed171f", "#e1252f": "#ed171f", "#f06292": "#f64a8a", "#7b2d8e": "#770176",
   "#1f3a68": "#0e1f7c", "#2e6b3a": "#00673e", "#c99a2e": "#e8a900", "#1a1a1a": "#000000" };
-
-const state = {
-  mode: "picture",
-  machine: store.get("machine", DEFAULT_MACHINE),
-  hoopId: store.get("hoop", null),
-  view: null,          // { pattern, bytes, filename, file (the bytes read back), shown, cache, fabric, fabricShapeBlock, hide,
-                       //   steps, sheet, split, verifyAgainst, fileNote }
-  views: {},           // last view per mode
-  zoom: 1, pan: [0, 0], upto: null,
-  step: null,   // Design tab: show the design as it is after that colour block
-  showHoop: store.get("showHoop", true),
-  // hoop turned sideways on screen, per tab
-  turn: { picture: false, design: false, open: false, ...store.get("turn", {}) },
-  brand: BRANDS[store.get("brand", "")] ? store.get("brand", "") : "",   // thread brand for spool numbers ("" = Brother only)
-  spools: store.get("spools", {}),   // { brand: [spool numbers owned] }
-  // their spools from brands not charted here (Madeira), matched by colour: [{ brand, num, hex }]. Ticking the nearest
-  // Brother spool stood for it, and every surface then said "Your Brother 079 Salmon Pink", a spool they didn't own
-  mine: (store.get("myspools", []) || []).filter((o) => o && typeof o.brand === "string" && /^#[0-9a-f]{6}$/i.test(o.hex)),
-  pic: { mine: store.get("pic.mine", false), style: "fill", cross: 2.5, file: null, bitmap: null, key: 0, skip: [], swap: {}, colors: 6, size: 100, angle: 45, bg: true, loads: 0, sample: false, density: store.get("pic.density", "standard"), req: 0, colorsInfo: [], line: "", edge: false, models: new Map() },
-};
-if (!MACHINES[state.machine]) state.machine = DEFAULT_MACHINE;
-const hoop = () => getHoop(state.machine, state.hoopId);
-// (a square hoop turned is the same hoop: the turn is off there, or a 4x4 file came out sideways with a turn note)
-const square = () => { const h = hoop(); return h.w === h.h; };
-const turned = () => !!state.turn[state.mode] && !square();
-// the hoop as it looks on screen
-const shownHoop = () => { const h = hoop(); return turned() ? { ...h, w: h.h, h: h.w } : h; };
-// the Design tab lays pieces out in the hoop as it's shown (turned: the long side across), and its files are turned
-// clockwise into the machine's orientation, as a turned picture is
-const designTurned = () => !!state.turn.design && !square();
-const designHoop = () => { const h = hoop(); return designTurned() ? { ...h, w: h.h, h: h.w } : h; };
-const toMachine = (p) => (designTurned() ? turnForMachine(p) : p);
-// the file is turned into the machine's orientation, so the machine shows it on its side (Design and Picture tabs)
-const turnedFile = () => (state.mode === "design" ? designTurned() : state.mode === "picture" && !!state.turn.picture);
-const turnCut = (loops) => loops.map((l) => l.map(([x, y]) => [-y, x]));
 
 // ---------- preview ----------
 const canvas = $("view");
@@ -341,7 +265,7 @@ function toastGone() {
   if (had) (toastFrom && live(toastFrom) && !toastFrom.disabled ? toastFrom : $("view")).focus({ preventScroll: true });
 }
 // (`action`: { label, run }, or a list of them)
-function toast(msg, action) {
+export function toast(msg, action) {
   const acts = [].concat(action || []);
   toastBox.innerHTML = `<span>${isolate(escapeHtml(msg))}</span>${acts.map((a) => `<button type="button" class="link">${escapeHtml(a.label)}</button>`).join("")}${acts.length ? `<button type="button" class="toast-x" aria-label="Dismiss this note" title="Dismiss">×</button>` : ""}`;
   const bs = toastBox.querySelectorAll("button");

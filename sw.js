@@ -51,6 +51,7 @@ const FILES = [
   "js/quality.js",
   "js/render.js",
   "js/sheet.js",
+  "js/state.js",
   "js/studio/motifs.js",
   "js/studio/names.js",
   "js/studio/outline.js",
