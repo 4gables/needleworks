@@ -8,7 +8,7 @@ import { FILL, FILL_PATTERNS, SEWN, WORN, fillPolygon, makeRouter, routeBudget, 
 import { arclen, followRun } from "./geom.js";
 import { MARGIN } from "./machines.js";
 import { LIMITS, PICTURES, ROWS } from "./recipes.js";
-import { distanceTransform, label, order, skeletonEdges } from "./raster.js";
+import { distanceTransform as wholeDT, label, order, skeletonEdges } from "./raster.js";
 import { PEC_MATCH, hexToRgb, nearestBrotherThread, pecThread, pyRound, rgbToHex } from "./threads.js";
 import { DEFAULTS, across, deltaE2000, pixels, srgbToLab } from "./palette.js";
 export { DEFAULTS, analyze, labelWith, learnColours, pictureInk, toPalette } from "./palette.js";
@@ -26,13 +26,42 @@ const TRAVEL = 20;
 // Parts of a shape narrower than twice this (mm) get no fill rows and are sewn along their centre instead
 const THIN_PART = 0.35;
 
+// The distance transform of the part of a picture a mask lies in. One colour of a picture covers a corner of it, and
+// eight of these per colour were a quarter of a picture's time: outside the mask's own box (and a pixel round it)
+// every value is 0, and inside it the nearest 0 is in that box, so the answer is the whole picture's, to the bit.
+function cropDT(m, x0, x1, y0, y1, rest) {
+  const { w, h, data } = m, n = w * h, cw = x1 - x0 + 1, ch = y1 - y0 + 1;
+  if (cw * ch > 0.8 * n) return wholeDT(m);
+  const part = new Uint8Array(cw * ch);
+  for (let y = 0; y < ch; y++) part.set(data.subarray((y + y0) * w + x0, (y + y0) * w + x0 + cw), y * cw);
+  const d = wholeDT({ w: cw, h: ch, data: part }), out = new Float64Array(n);
+  if (rest) out.fill(rest);
+  for (let y = 0; y < ch; y++) out.set(d.subarray(y * cw, (y + 1) * cw), (y + y0) * w + x0);
+  return out;
+}
+function boxOf({ w, h, data }, of = 1) {
+  let x0 = w, x1 = -1, y0 = h, y1 = -1;
+  for (let y = 0, i = 0; y < h; y++) for (let x = 0; x < w; x++, i++) if (!data[i] === !of) { if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
+  return x1 < 0 ? null : [x0, x1, y0, y1];
+}
+function distanceTransform(m) {
+  const b = boxOf(m), { w, h } = m;
+  return b ? cropDT(m, Math.max(0, b[0] - 1), Math.min(w - 1, b[1] + 1), Math.max(0, b[2] - 1), Math.min(h - 1, b[3] + 1), 0) : new Float64Array(w * h);
+}
+// The same for a mask of the pixels *off* some shapes, where the caller only asks "within `grow` px of one?": exact
+// in the shapes' box and `grow` px round it, Infinity past that (and everywhere when there is no shape).
+function distanceTo(m, grow) {
+  const b = boxOf(m, 0), { w, h } = m, pad = Math.ceil(grow) + 2;
+  return b ? cropDT(m, Math.max(0, b[0] - pad), Math.min(w - 1, b[1] + pad), Math.max(0, b[2] - pad), Math.min(h - 1, b[3] + pad), Infinity) : new Float64Array(w * h).fill(Infinity);
+}
+
 // Gaps narrower than 0.5 mm between parts of one colour (between small letters, inside an M's notch) close up once
 // sewn. Returns their area in mm²: a morphological closing of the colour, minus the colour, counted only where the
 // fabric would show (not where another stitched colour fills the gap), ignoring corner tips.
 const MIN_GAP = 0.5;
 function narrowGaps(mask, res, open) {
   const { w, h, data } = mask, r = (MIN_GAP / 2) * res, n = w * h;
-  const out = distanceTransform({ w, h, data: data.map((v) => 1 - v) });
+  const out = distanceTo({ w, h, data: data.map((v) => 1 - v) }, r);
   const dil = { w, h, data: new Uint8Array(n) };
   for (let i = 0; i < n; i++) dil.data[i] = data[i] || out[i] <= r ? 1 : 0;
   const inn = distanceTransform(dil), gap = { w, h, data: new Uint8Array(n) };
@@ -242,7 +271,7 @@ function build(img, analysis, opts) {
     // no dot: KENJI'S apostrophe at 60 mm went. Marks out on their own still go: each is a trim and two locks)
     const away = { w, h, data: new Uint8Array(w * h) };
     for (let i = 0; i < w * h; i++) away.data[i] = cl[i] && !dot(cl[i]) ? 0 : 1;
-    const toBig = distanceTransform(away), near = new Uint8Array(count + 1), byText = new Uint8Array(count + 1);
+    const toBig = distanceTo(away, 5 * res), near = new Uint8Array(count + 1), byText = new Uint8Array(count + 1);
     for (let i = 0; i < w * h; i++) if (cl[i] && toBig[i] <= 2 * res) near[cl[i]] = 1;
     for (let i = 0; i < w * h; i++) if (cl[i] && toBig[i] <= 5 * res) byText[cl[i]] = 1;
     const mark = (c) => { const a = bx1[c] - bx0[c] + 1, b = by1[c] - by0[c] + 1; return near[c] && Math.max(a, b) >= 2 * res && Math.max(a, b) >= 1.5 * Math.min(a, b); };
@@ -328,7 +357,7 @@ function build(img, analysis, opts) {
     {
       const r = THIN_PART * res, core = { w, h, data: new Uint8Array(w * h) };
       for (let i = 0; i < w * h; i++) core.data[i] = cl[i] && own[i] > r ? 0 : 1;
-      const toCore = distanceTransform(core);
+      const toCore = distanceTo(core, r + 0.5);
       for (let i = 0; i < w * h; i++) if (cl[i] && toCore[i] > r + 0.5) { thin.data[i] = 1; anyThin = true; }
     }
     if (later.size) {
