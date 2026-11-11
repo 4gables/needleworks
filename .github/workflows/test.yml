@@ -1,5 +1,11 @@
 name: test
-on: [push, pull_request]
+# main, release branches (rel-*) and tags only: a round's own branch is work in progress, tested where it is built,
+# and each of its failed pushes was an email to the owner (2026-11-11)
+on:
+  push:
+    branches: [main, "rel-*"]
+    tags: ["v*"]
+  pull_request:
 jobs:
   formats:
     runs-on: ubuntu-latest
@@ -11,7 +17,7 @@ jobs:
       - run: node tests/formats.test.mjs
       - run: node tests/doctor.test.mjs
       # hashes are written at the release: on a round's branch a stale one is reported, on main and tags it fails
-      - run: node tests/sw.test.mjs ${{ (github.ref != 'refs/heads/main' && !startsWith(github.ref, 'refs/tags/')) && '--wip' || '' }}
+      - run: node tests/sw.test.mjs ${{ startsWith(github.ref, 'refs/heads/rel-') && '--wip' || '' }}
       # text people type, outside the happy path: tidy, glyph coverage, file names, saved designs (category 9)
       - run: node tests/text.test.mjs
       # every file leaves through js/gate.js; damaged files through Open never offer a file the gate refuses
