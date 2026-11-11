@@ -38,6 +38,7 @@ const FILES = [
   "js/core/formats.js",
   "js/core/geom.js",
   "js/core/machines.js",
+  "js/core/recipes.js",
   "js/core/raster.js",
   "js/core/text.js",
   "js/core/typed.js",

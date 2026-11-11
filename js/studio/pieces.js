@@ -8,6 +8,7 @@ import { DENSITY, FILL_PATTERNS, fillPolygon } from "../core/digitize.js";
 import { APPLIQUE_FONTS, FONTS, fontOf } from "../core/fonts.js";
 import { machineThreads } from "../core/formats.js";
 import { MARGIN } from "../core/machines.js";
+import { WEIGHTS, fillFor, satinFor } from "../core/recipes.js";
 import { back, bounds, circle, edgeWalk, enter, filletPolygon, followRun, loop, moveCost, normals, rings, run, satin, zigzag } from "../core/geom.js";
 import { counterPockets, distanceTransform, order } from "../core/raster.js";
 import { strokes } from "../core/text.js";
@@ -525,7 +526,7 @@ function inkAt(rows, w, least = 0) {
 }
 function stitchLetters(parts, satinW, fab = "cotton", small = false) {
   const zz = fab === "knit" ? 1.5 : 2.5, pull = fab === "knit" ? 0.3 : 0;
-  const density = wt === "auto" ? (fab === "knit" ? 0.42 : small ? 0.34 : 0.38) : THREADS[wt].satin + (fab === "knit" ? 0.04 : 0);
+  const density = wt === "auto" ? (fab === "knit" ? 0.42 : small ? 0.34 : 0.38) : WEIGHTS[wt].letterSatin + (fab === "knit" ? 0.04 : 0);
   let gap = false, last = null, lastW = satinW;   // (a skipped stroke hands its jump on to the next one sewn)
   if (!satinW) parts = pointed(parts);
   return parts.map(([p0, mode, g, cap, taper, ends, sides, thick]) => {
@@ -2043,13 +2044,12 @@ export const FABRICS = {
 // closer rows make the row links shorter than the PE900 check's 0.3 mm).
 export const THREADS = {
   auto: { name: "Automatic", tip: "Standard 40 wt thread (the weight is printed on the spool: a bigger number is a finer thread); small letters are sewn for 60 wt (the steps say when)." },
-  30: { name: "30 wt", satin: 0.45, tip: "30 wt is heavier and bolder: use a 90/14 topstitch needle and slow the machine down." },
-  40: { name: "40 wt", satin: 0.38, tip: "40 wt is the standard machine embroidery thread: a 75/11 embroidery needle." },
-  60: { name: "60 wt", satin: 0.34, tip: "60 wt is fine, for small letters and fine detail: a 65/9 or 70/10 needle and 60 wt bobbin thread." },
+  30: { name: "30 wt", tip: "30 wt is heavier and bolder: use a 90/14 topstitch needle and slow the machine down." },
+  40: { name: "40 wt", tip: "40 wt is the standard machine embroidery thread: a 75/11 embroidery needle." },
+  60: { name: "60 wt", tip: "60 wt is fine, for small letters and fine detail: a 65/9 or 70/10 needle and 60 wt bobbin thread." },
 };
 let wt = "auto";   // set by compose for the length of a build
-const sd = (x) => (wt === "30" ? +(x * 1.15).toFixed(3) : wt === "60" ? +(x * 0.88).toFixed(3) : x);
-const fd = (x) => (wt === "30" ? x + 0.05 : x);
+const sd = (x) => satinFor(wt, x), fd = (x) => fillFor(wt, x);   // (the numbers: core/recipes.js WEIGHTS)
 
 // Quilting in a frame (`quilt`: stipple or echo) fills it around everything else on it, sewn right after the frame
 // (after the front fabric on an in-the-hoop frame, before what goes on it). Kept for the last few layouts: it's the

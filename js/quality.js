@@ -6,10 +6,13 @@
 import { stopWords } from "./words.js";
 import { COLOR_CHANGE, JUMP, STITCH, STOP, TRIM, designBlockAgrees, readEmbroidery } from "./core/formats.js";
 
-export const LIMIT = 24;       // needle hits per mm² per colour block (pe900_check MAX_PER_MM2)
-export const MAX_STITCH = 121; // 12.1 mm, the longest needle move (pe900_check MAX_STITCH)
-export const MAX_BLOCKS = 99;  // colour blocks the machine steps through (pe900_check MAX_BLOCKS): 98 thread changes
-const TINY = 3;                // stitches under 0.3 mm, bar tie-ins (the first 6 after a jump, trim or thread change)
+import { LIMITS } from "./core/recipes.js";
+
+// (core/recipes.js holds the numbers; pe900_check has MAX_PER_MM2, MAX_STITCH, MAX_BLOCKS)
+export const LIMIT = LIMITS.hits;         // needle hits per mm² per colour block
+export const MAX_STITCH = LIMITS.longest; // 12.1 mm, the longest needle move
+export const MAX_BLOCKS = LIMITS.blocks;  // colour blocks the machine steps through: 98 thread changes
+const TINY = LIMITS.tiny;                 // stitches under 0.3 mm, bar tie-ins (the first 6 after a jump, trim or thread change)
 const TINY_SHARE = 0.02, SAME_SHARE = 0.01, SPARSE = 0.6;
 
 // The densest 1 mm window in one colour block at any 0.1 mm grid offset (the machine's grid isn't ours: offset 0

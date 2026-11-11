@@ -3,6 +3,7 @@
 // 80-120 %, drop tiny stitches, thin the densest spots). Stitch units 0.1 mm; the PES writer stays untouched.
 import { COLOR_CHANGE, END, JUMP, STITCH, STOP, TRIM, designBlockAgrees, readEmbroidery, writePES } from "./core/formats.js";
 import { Design, relieve } from "./core/design.js";
+import { LIMITS, MOVES } from "./core/recipes.js";
 import { fillPolygon } from "./core/digitize.js";
 import { distanceTransform } from "./core/raster.js";
 import { contours } from "./studio/quilt.js";
@@ -59,7 +60,7 @@ export function blockLoads(p) {
     if (c === JUMP) { if (!from) from = last; last = [x, y]; continue; }
     if (c === STITCH) {
       b.stitches++;
-      if (from) { const d = Math.hypot(x - from[0], y - from[1]); if (d > 10 && d <= 50) b.snips++; from = null; }
+      if (from) { const d = Math.hypot(x - from[0], y - from[1]); if (d > MOVES.looseFrom * 10 && d <= MOVES.trimmed * 10) b.snips++; from = null; }
       last = [x, y];
     }
     if (c === TRIM) b.trims++;
@@ -744,7 +745,7 @@ const brother = (hex) => { const t = nearestBrotherThread(hex); return { color: 
 // to sit on it, as the machine centres it anyway. Files that fit stay where they are, byte for byte.
 // (centred on its stitches, and any jump still out there stops at their edge: the frame needn't travel further)
 function centred(d) {
-  const far = (c) => { for (const [x, y, k] of d.stitches) if ((k === STITCH || k === JUMP) && Math.max(Math.abs(x - c[0]), Math.abs(y - c[1])) > 2000) return true; return false; };
+  const far = (c) => { for (const [x, y, k] of d.stitches) if ((k === STITCH || k === JUMP) && Math.max(Math.abs(x - c[0]), Math.abs(y - c[1])) > LIMITS.recentre * 10) return true; return false; };
   if (!far([0, 0])) return d;
   let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
   for (const [x, y, c] of d.stitches) if (c === STITCH) { x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y); }

@@ -1,6 +1,7 @@
 /*! Needleworks (c) 2026 4Gables. All rights reserved. Proprietary, see LICENSE. https://4gables.com/needleworks/ */
 // Draw a stitch pattern ({ stitches: [[x, y, cmd]] in 0.1 mm, threads }) like real thread on fabric.
 import { COLOR_CHANGE, JUMP, STITCH, TRIM } from "./core/formats.js";
+import { LIMITS } from "./core/recipes.js";
 
 export function colorBlocks(design) {
   const blocks = [];
@@ -255,9 +256,9 @@ export function draw(canvas, design, opts = {}) {
   if (opts.heat) {   // thickness: needle hits per 1 mm cell (the most in one colour block), over the stitches faded
     ctx.fillStyle = "rgba(255,255,255,.7)"; ctx.fillRect(0, 0, W, H);
     for (const [k, n] of opts.heat) {
-      if (n < 12) continue;
+      if (n < LIMITS.hits / 2) continue;
       const [cx, cy] = k.split(",").map(Number);
-      ctx.fillStyle = n > 24 ? "rgba(214,25,25,.9)" : n > 18 ? "rgba(240,120,20,.75)" : "rgba(235,190,20,.55)";
+      ctx.fillStyle = n > LIMITS.hits ? "rgba(214,25,25,.9)" : n > LIMITS.hits * 0.75 ? "rgba(240,120,20,.75)" : "rgba(235,190,20,.55)";
       ctx.fillRect(X(cx * 10), Y(cy * 10), 10 * s + 0.5, 10 * s + 0.5);
     }
   }
