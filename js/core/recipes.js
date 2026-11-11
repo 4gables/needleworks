@@ -118,4 +118,7 @@ export const TIE_INS = [0.7, 0.5, 0.8];
 //           within `stray` mm of the straight line (a curve keeps its points)
 //   least:  no stitch made shorter than this (mm)
 //   most:   nor longer (mm) by leaving points out of a satin
-export const EASE = { cap: 20, short: [0.72, 0.5], merge: 3, stray: 0.15, least: 0.5, most: 4 };
+//   cut:    a corner, or one of two points a hair apart, is left out where the stitch past it runs within this (mm)
+//           of where it was
+// 19: a tie-off's four hits after it still leave the window under the limit (20 left 92 files at 24 exactly).
+export const EASE = { cap: 19, short: [0.72, 0.5], merge: 3, stray: 0.15, least: 0.5, most: 4, cut: 0.6 };

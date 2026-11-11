@@ -23,7 +23,7 @@ export class Design {
     this.tieOff();
     if (this.started) this.stitches.push([0, 0, COLOR_CHANGE]);
     this.threads.push({ color: hex, description, brand: "" });
-    this.cur = null;
+    this.cur = this.at = null;
     if (this.hits) this.hits = new Hits();   // (the limit is per colour block)
   }
 
@@ -42,7 +42,10 @@ export class Design {
   // the file rounds them; every point kept is counted here, so `st` doesn't count it again.
   // 2026-11 (v27): 1,640 points were taken out afterwards by `relieve` over the batch, 790 of them from towel names
   // (2.5 mm columns fanning round a junction) and nearly all the rest where a script's strokes meet.
-  eased(pts, first = true) {
+  // from: where the needle is, when it will stitch (not jump) to this run. Then a first point that doesn't fit is
+  // left out and the needle goes straight to the second: strokes that meet at a node each began on it (a run out
+  // from the node the last column came back to), and a kitchen caption's node took 10 hits in one hole.
+  eased(pts, first = true, from = null) {
     const H = this.hits, n = pts.length, out = [], R = (v) => pyRound(v * 10);
     const keep = (q, hit = true) => { out.push(q); if (hit) H.add(R(q[0]), R(q[1])); };
     const fits = (q) => H.top(R(q[0]), R(q[1]), EASE.cap) <= EASE.cap;
@@ -50,7 +53,13 @@ export class Design {
     let skipped = false;
     for (let i = 0; i < n; i++) {
       const b = pts[i];
+      if (!i && first && from && !fits(b) && D(from, pts[1]) <= EASE.most && D(from, pts[1]) > EASE.least) continue;
+      // (the last point too, where the run is already two points long and the stitch not sewn is a short one: the
+      // needle stops a stitch short of a node other strokes end on. `path` still reckons the next run from the end
+      // as drawn, so nothing that was stitched to becomes a jump.)
+      if (i === n - 1 && i && out.length > 1 && !fits(b) && D(out[out.length - 1], b) <= EASE.merge) continue;
       if (i < 1 || i > n - 2) { keep(b, i > 0 || first); skipped = false; continue; }
+      if (!out.length) { keep(b); continue; }   // (the first point was left out: this one starts the run)
       const a = out[out.length - 1], c = pts[i + 1], d1 = D(a, b), d2 = D(b, c);
       // (beside the last point kept, after one was left out: the same edge of a satin again)
       if (skipped && d1 < EASE.least && D(a, c) <= EASE.most && D(a, c) > EASE.least) continue;
@@ -65,6 +74,12 @@ export class Design {
         const L = D(a, c), off = L > 0 ? Math.abs((c[0] - a[0]) * (b[1] - a[1]) - (c[1] - a[1]) * (b[0] - a[0])) / L : 0;
         if (L <= EASE.merge && L > EASE.least && off <= EASE.stray) { skipped = true; continue; }
       }
+      // (any other point, a corner or one of a pair a hair apart, where the stitch past it is no longer than `most`
+      // and passes within `cut` of it)
+      {
+        const L = D(a, c), off = L > 0 ? Math.abs((c[0] - a[0]) * (b[1] - a[1]) - (c[1] - a[1]) * (b[0] - a[0])) / L : d1;
+        if (L <= EASE.most && L > EASE.least && off <= EASE.cut) continue;
+      }
       keep(b); skipped = false;
     }
     return out;
@@ -78,19 +93,18 @@ export class Design {
   // reach: how far (mm, over 2) the needle may be and still stitch to the start (a satin column whose start it's under)
   path(pts, lock = true, jump = false, lockAt = null, reach = 0, counted = false) {
     if (!pts.length) return;
+    const end = pts[pts.length - 1];
+    const far = !this.cur || jump || Math.hypot(pts[0][0] - this.cur[0], pts[0][1] - this.cur[1]) > Math.max(2.0, reach || 0);
     if (this.hits && !counted) {
       // (the first point is a hit unless the needle is in it already)
       const first = !this.cur || jump || Math.hypot(pts[0][0] - this.cur[0], pts[0][1] - this.cur[1]) >= 0.3;
-      if (pts.length > 4) pts = this.eased(pts, first);
-      else pts.forEach((q, i) => { if (i || first) this.hits.add(pyRound(q[0] * 10), pyRound(q[1] * 10)); });
+      pts = this.eased(pts, first, far ? null : this.at || this.cur);
     }
-    const far = !this.cur || jump || Math.hypot(pts[0][0] - this.cur[0], pts[0][1] - this.cur[1]) > Math.max(2.0, reach || 0);
     if (this.cur && far) { this.tieOff(); this.stitches.push([0, 0, TRIM]); }
     if (far && lock && lockAt && Math.hypot(lockAt[0] - pts[0][0], lockAt[1] - pts[0][1]) >= 0.7) {
       this.path([lockAt, pts[0]], true, false, null, 0, true);
       for (let i = 1; i < pts.length; i++) this.st(STITCH, pts[i], true);
-      this.cur = pts[pts.length - 1]; this.recent = pts.slice(-7, -1);
-      this.back = pts.slice().reverse().find((q) => Math.hypot(q[0] - this.cur[0], q[1] - this.cur[1]) > 0.3) || null;
+      this.ended(pts, end);
       return;
     }
     if (far) {
@@ -112,22 +126,28 @@ export class Design {
       }
     } else if (Math.hypot(pts[0][0] - this.cur[0], pts[0][1] - this.cur[1]) >= 0.3) this.st(STITCH, pts[0], true);   // (a run that starts where the needle is needs no extra stitch)
     for (let i = 1; i < pts.length; i++) this.st(STITCH, pts[i], true);
-    this.cur = pts[pts.length - 1]; this.started = true; this.recent = pts.slice(-7, -1);
-    // where a tie-off can step back to: along the line just sewn, so it hides in those stitches
-    this.back = pts.slice().reverse().find((q) => Math.hypot(q[0] - this.cur[0], q[1] - this.cur[1]) > 0.3) || null;
+    this.started = true; this.ended(pts, end);
+  }
+
+  // After a run: `cur` is its end as drawn (what the next run's distance is reckoned from), `at` where the needle
+  // is (the same, unless the last point gave way: `eased`), `back` where a tie-off can step back to: along the line
+  // just sewn, so it hides in those stitches.
+  ended(pts, end) {
+    this.cur = end; this.at = pts[pts.length - 1]; this.recent = pts.slice(-7, -1);
+    this.back = pts.slice().reverse().find((q) => Math.hypot(q[0] - this.at[0], q[1] - this.at[1]) > 0.3) || null;
   }
 
   // Lock the thread before it's cut (trim, colour change, end): two 0.7 mm stitches back and forth along the
   // last line, the second beside the first. Without it a trimmed thread can work loose (PEmbroider #105; Ink/Stitch locks every trim).
   tieOff() {
     if (!this.cur) return;
-    const c = this.cur;
+    const c = this.at || this.cur;
     let d = this.back ? [this.back[0] - c[0], this.back[1] - c[1]] : [1, 0];
     const L = Math.max(Math.hypot(...d), 1e-9); d = [(d[0] / L) * 0.7, (d[1] / L) * 0.7];
     // (the second hit 0.35 mm aside, toward the stitches just sewn so it hides in them)
     const k = inward(c, d, this.recent || []), q = [c[0] + d[0], c[1] + d[1]], e = [q[0] - (k * d[1]) / 2, q[1] + (k * d[0]) / 2];
     for (const r of [q, c, e, c]) this.st(STITCH, r);
-    this.cur = null;
+    this.cur = this.at = null;
   }
 
   // opts.untiny: drop stitches under 0.3 mm first (the Design tab; pictures and the bookmark sew as they always have)
