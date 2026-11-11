@@ -472,9 +472,12 @@ function edgeRuns(loops, comp, mask, res, d, stitch) {
   return out;
 }
 // opts.pull: how far each row runs past the outline at both ends (mm; the fabric's, core/recipes.js FILLS)
+// opts.cover: mm inside the first outline that a border sewn later covers (a patch's satin edge reaches 1.2 mm over
+// its fill): travel there is hidden whatever is sewn already, so a section stranded behind finished rows is reached
+// round the edge and not by a trim (a carved heart patch: a 27 mm trim between two parts of one region)
 // opts.raster: rows read off the 8 px/mm drawing, as every fill was until 2026-11 (the Open tab's re-stitching: its
 // outlines are traced from a drawing of the file's stitches already, stair-stepped)
-export function fillPolygon(poly, { angle = FILL.angle, density = ROWS.solid, res = FILL.res, inset = 0, pattern = "tatami", share = null, underlay = true, pull = FILLS.cotton.pull, raster = false } = {}) {
+export function fillPolygon(poly, { angle = FILL.angle, density = ROWS.solid, res = FILL.res, inset = 0, pattern = "tatami", share = null, underlay = true, pull = FILLS.cotton.pull, raster = false, cover = 0 } = {}) {
   const loops = Array.isArray(poly[0][0]) ? poly : [poly];
   const shape = shaped(loops, inset, res), { x0, y0, mask, labels, count, parts } = shape, paths = [];
   const toMm = (p) => p.map(([x, y]) => [x0 + (x + 0.5) / res, y0 + (y + 0.5) / res]);
@@ -504,6 +507,22 @@ export function fillPolygon(poly, { angle = FILL.angle, density = ROWS.solid, re
   const across = underlay ? exactRows(px, shape, res, { angle: angle + 90, spacing: UNDER.rows, inset: inset + UNDER.inset, pull: 0 }) : null;
   const along = exactRows(px, shape, res, { angle, spacing: density, inset, pull, share });
   const of = (R, id, stitch, pat) => sewRows(R.rows.map((row) => ({ ...row, ivs: row.ivs.filter((iv) => iv.part === id) })), R.U, R.V, res, stitch * res, pat, leaves);
+  // the covered band: every pixel within `cover` of the first outline
+  let band = null;
+  if (cover > 0) {
+    band = new Uint8Array(mask.w * mask.h);
+    const r = Math.ceil(cover * res), r2 = (cover * res) ** 2, l = px[0];
+    for (let i = 0; i < l.length; i++) {
+      const [ax, ay] = l[i], [bx, by] = l[(i + 1) % l.length], n = Math.max(1, Math.ceil(Math.hypot(bx - ax, by - ay) / (0.5 * r)));
+      for (let k = 0; k < n; k++) {
+        const cx = ax + ((bx - ax) * k) / n, cy = ay + ((by - ay) * k) / n, X0 = Math.round(cx), Y0 = Math.round(cy);
+        for (let dy = -r; dy <= r; dy++) for (let dx = -r; dx <= r; dx++) {
+          const X = X0 + dx, Y = Y0 + dy;
+          if (X >= 0 && Y >= 0 && X < mask.w && Y < mask.h && (X - cx) ** 2 + (Y - cy) ** 2 <= r2) band[Y * mask.w + X] = 1;
+        }
+      }
+    }
+  }
   for (let id = 1; id <= count; id++) {
     const comp = { id, labels, pixels: parts[id] };
     if (comp.pixels.length < 1.5 * res * res) continue;
@@ -514,7 +533,8 @@ export function fillPolygon(poly, { angle = FILL.angle, density = ROWS.solid, re
     // 20 mm, 56 parts -> 49)
     // (travel may use the inset band too: the satin the inset is there for covers it. A 20 mm snowflake's arms are
     // 1 mm wide once inset, too thin for the router's 0.5 mm cells to join up)
-    const cell = inset ? (x, y) => (labels[y * mask.w + x] === id ? 1 : shape.whole[y * mask.w + x] ? 2 : 0) : null;
+    const cell = inset ? (x, y) => (labels[y * mask.w + x] === id ? (band && band[y * mask.w + x] ? 2 : 1) : shape.whole[y * mask.w + x] ? 2 : 0)
+      : band ? (x, y) => (labels[y * mask.w + x] === id ? (band[y * mask.w + x] ? 2 : 1) : 0) : null;
     const groups = [edge, across ? of(across, id, UNDER.stitch, "tatami") : [], of(along, id, 3.5, pattern)];
     let best = routeFill(groups, comp, mask, res, undefined, undefined, true, 1, cell);
     if (best.length > 1) {

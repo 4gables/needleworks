@@ -106,3 +106,8 @@ export const fillRecipe = (fabric) => FILLS[fabric] || FILLS.cotton;
 // A tie-in's length (mm), first that keeps clear of the run's own next points: 0.7 is the middle of what sold
 // designs use (0.5-0.8; shorter can pull out before the bobbin thread catches), 0.5 and 0.8 its ends.
 export const TIE_INS = [0.7, 0.5, 0.8];
+
+// --- N2: fills, borders and quilting ---
+// A patch's satin edge (BORDERS.edge: 4 mm wide, its middle 0.2 mm inside the outline) reaches 2.2 mm in; the fill
+// stops 1 mm in, so the fill's outer 1.2 mm lies under the satin. Travel within `cover` of the fill's edge is hidden.
+export const PATCH = { cover: 1.0 };

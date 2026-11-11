@@ -8,7 +8,7 @@ import { FILL_PATTERNS, fillPolygon } from "../core/fill.js";
 import { APPLIQUE_FONTS, FONTS, fontOf } from "../core/fonts.js";
 import { machineThreads } from "../core/formats.js";
 import { MARGIN } from "../core/machines.js";
-import { BORDERS as EDGES, fillFor, fillRecipe, letterRecipe, satinFor } from "../core/recipes.js";
+import { BORDERS as EDGES, PATCH, fillFor, fillRecipe, letterRecipe, satinFor } from "../core/recipes.js";
 import { back, bounds, circle, edgeWalk, enter, filletPolygon, followRun, loop, moveCost, normals, rings, run, satin, within, zigzag } from "../core/geom.js";
 import { counterPockets, distanceTransform, order } from "../core/raster.js";
 import { strokes } from "../core/text.js";
@@ -701,7 +701,7 @@ function filled(loops, opts) {
 export function patchFill(p, loops, fab, name = shapeOf(p).name.toLowerCase()) {
   // (the rows follow what the patch goes on, lighter on knit; the pull is the patch's own fabric's, felt or twill,
   // whatever it's sewn on later: a towel design's patch is cotton's, and a change to Towel fills nothing again)
-  const base = { density: fd(fillRecipe(fab).rows), pull: fillRecipe("felt").pull, pattern: p.pattern || "tatami" }, color = p.fill || p.color;
+  const base = { density: fd(fillRecipe(fab).rows), pull: fillRecipe("felt").pull, pattern: p.pattern || "tatami", cover: PATCH.cover }, color = p.fill || p.color;
   const st = !p.blend || p.blend === color ? [{ color, paths: filled(loops, base), sews: `Fills the ${name} patch.`, patchFill: true }]
     : [{ color, paths: fillPolygon(loops, { ...base, share: (f) => 1 - f }), sews: `Fills the ${name} patch, fading out.`, patchFill: true },
       { color: p.blend, paths: fillPolygon(loops, { ...base, underlay: false, share: (f) => f }), sews: `Blends the second colour in across the patch.`, patchFill: true }];
