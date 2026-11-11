@@ -20,6 +20,18 @@ Reference for this part of Needleworks: the rules, the reason for each (it stops
   pieces were trimmed apart. Arcs and ovals: 513 -> 442 trims, 52 -> 13 wasted moves, 7 -> 3 loose threads; bookmark
   names 641 -> 625 trims. What flow_lint still calls a loop there is a gap of 1.5-2.3 mm between columns, a thread
   you would see: left trimmed. Print letters never link (`gap`).
+- Print letters (`order(..., { whole, skip })`): each move between letters is a trim (over 5.5 mm + half a column
+  between starts) or a loose thread to snip, never a stitch. Two things keep them trims: a letter may begin partway
+  along a plain stroke (every half mm or tenth of the x-height; a stroke with a taper, a shaped end or sides is only
+  begun at its ends, `whole`: those are measured along the whole stroke), and where the letters sewn as read would
+  still leave loose threads (narrow letters: i, l, 1, a full stop, each within 5 mm of the last whatever the start),
+  every second or third letter is sewn first and the ones between after (`skip`), so every move is long enough for
+  the machine to cut. The order as read is kept whenever it leaves none. Small print (4 files): loose threads
+  27 -> 0, trims the same 106, travel 780 -> 1,511 mm; caption starters 12 -> 5. flow_lint's "loop" on print letters
+  sewn as read (a point of the letter within 2 mm of the next start) is the price of not stitching across: it is
+  not a move to remove.
+- The two dots of an ë are 2.7 mm apart end to end: a loose thread (v25 stitched across them by a 2.0 mm fluke, a
+  bar joining the dots). Left.
 - What `order` is told so its moves are the sewn ones (`how`): the starts tried along a stroke are 0.35 mm apart at
   most and never leave a half shorter than a dot (it would be sewn as a second dot); a lone short stroke is a dot,
   entered at the far end from its start and as long as it is sewn (1 mm satin, 0.7 mm line); a move is a loose

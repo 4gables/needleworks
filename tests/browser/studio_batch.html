@@ -144,6 +144,12 @@ for (const f of APPLIQUE_FONTS) for (let [text, size] of [["AB", 60], ["Mia", 35
 }
 // (a round 4 tester's: "BABY" in Lilita One fitted to the 5x7 hoop)
 await save("st_appl_LilitaOne_BABY_34", [P({ kind: "letters", text: "BABY", font: APPLIQUE_FONTS.find((f) => /Lilita/.test(f.family)).family, size: 34 })]);
+// several appliqués in one thread sew stage by stage together (3 stops, not 6): two hearts with a name on each, and
+// a heart beside appliqué letters
+await save("st_appl_two_hearts", [P({ kind: "frame", shape: "heart", border: "applique", w: 50, h: 46, x: -30 }), P({ kind: "text", text: "Mia", font: FONTS[0].family, size: 10, x: -30, color: "#0e1f7c" }),
+  P({ kind: "frame", shape: "heart", border: "applique", w: 50, h: 46, x: 30 }), P({ kind: "text", text: "Leo", font: FONTS[0].family, size: 10, x: 30, color: "#0e1f7c" })], "5x7");
+await save("st_appl_heart_letters", [P({ kind: "frame", shape: "heart", border: "applique", w: 50, h: 46, y: -40, color: "#0e1f7c" }),
+  P({ kind: "letters", text: "AB", font: APPLIQUE_FONTS[0].family, size: 40, y: 30 })], "5x7");
 log("appliqué letters: done");
 for (const rot of [15, 90, -45, 180])
   await save(`st_rot_${rot}`, [P({ kind: "frame", shape: "diamond", border: "satin", w: 70, h: 90, rot }), P({ kind: "text", text: "Hello", font: FONTS[6].family, size: 16, rot })]);

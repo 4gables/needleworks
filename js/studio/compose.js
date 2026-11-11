@@ -330,6 +330,51 @@ function gang(pieces, staged) {
   });
   return gangs;
 }
+// Several appliqués in one thread (two hearts, a heart and appliqué letters beside it): their outlines are sewn
+// together, then one stop to lay the fabric, their tack-downs, one stop to trim, their satins. One after the other,
+// each added its own two stops (two appliqués: 6 pauses where 3 do; a tester's finding, docs/decisions.md). Only
+// pieces that are placement, tack-down, satin and nothing else, whose stitches don't overlap, and with nothing sewn
+// between them in the list that the later one would lie on. The later ones' stages are emptied into the first's;
+// each outline keeps its own seam (`seam` paths are never re-entered).
+function gangAppliques(staged, box, hits) {
+  const appl = (st) => st.length === 3 && st[0].fabric && !st[0].bare && !st[0].pause && !st[0].nocut && st[1].pause && st[1].under && st[1].then && st[2].pause && !st[2].last && !st[2].edge
+    && st.every((s) => s.paths.length && s.color === st[0].color);
+  const done = new Set();
+  staged.forEach((si, i) => {
+    if (done.has(i) || !appl(si)) return;
+    const group = [i], boxes = [box(si.flatMap((s) => s.paths))];
+    for (let j = i + 1; j < staged.length; j++) {
+      const sj = staged[j];
+      if (done.has(j) || !appl(sj) || sj[0].color !== si[0].color) continue;
+      const bj = box(sj.flatMap((s) => s.paths));
+      if (boxes.some((b) => hits(b, bj))) continue;
+      let under = false;
+      for (let k = i + 1; k < j && !under; k++) under = !group.includes(k) && staged[k].some((s) => s.paths.length && hits(box(s.paths), bj));
+      if (under) continue;
+      group.push(j); boxes.push(bj);
+    }
+    if (group.length < 2) return;
+    const n = group.length, all = n === 2 ? "both" : `all ${n}`;
+    staged[i] = si.map((st, k) => {
+      const mates = group.slice(1).map((j) => staged[j][k]), every = [st, ...mates];
+      const out = { ...st, paths: every.flatMap((m) => m.paths), sews: every.flatMap((m) => m.sews || []) };
+      for (const key of ["cut", "solid"]) if (every.some((m) => m[key])) out[key] = every.flatMap((m) => m[key] || []);
+      if (st.reseam) out.reseam = (f) => [...st.reseam(f), ...mates.flatMap((m) => m.paths)];
+      const thens = every.map((m) => m.then).filter(Boolean);
+      if (thens.length) { delete out.then; out.thens = thens.filter((t, a) => thens.findIndex((u) => u.trim === t.trim && u.where === t.where) === a); }
+      if (k === 1) {
+        // "Lay the appliqué fabric over the heart outline and “AB”, right side up, …past the outlines all round…"
+        const over = every.map((m) => /^Lay the appliqué fabric over (.+?), right side up, /.exec(m.you || "")?.[1]).filter(Boolean);
+        const same = over.length === n && over.every((o) => o === over[0]) && /^the (.+) outline$/.exec(over[0]);
+        const what = same ? `${all} ${same[1]} outlines` : listed([...new Set(over)]);
+        if (over.length && st.you) out.you = st.you.replace(/^Lay the appliqué fabric over .+?, right side up, /, `Lay the appliqué fabric over ${what} (one piece over ${n === 2 ? "both" : "all"}, or one each), right side up, `)
+          .replace(/past the outline all round/, "past the outlines all round").replace(/or lay a piece cut with/, "or lay pieces cut with").replace(/exactly on the line(?!s)/, "exactly on the lines").replace(/tacks it down/, "tacks them down");
+      }
+      return out;
+    });
+    for (const j of group.slice(1)) { staged[j] = []; done.add(j); }
+  });
+}
 // The steps' words, read as a whole: the same sentence twice in a step is said once with how many ("Sews the monogram
 // J. Sews the monogram J." with two key fobs in the hoop): "on both key fobs" when that many were made in the hoop
 // together, else "(2 of them)". Things sewn one after another are one sentence ("Sews “Noel”. Sews “2026”." read as
@@ -383,6 +428,7 @@ function build(pieces, hoop, opts) {
     staged[i] = carve(p, staged[i], above, fab, opts.fillLater ? opts.later : null);
   });
   const gangs = gang(pieces, staged);
+  gangAppliques(staged, box, hits);
   for (const st of staged.flat()) {
     if (!st.paths.length) continue;
     const s = { ...st, box: box(st.paths) };
@@ -424,7 +470,7 @@ function build(pieces, hoop, opts) {
     const rect = [[cx - hw, cy - hh], [cx + hw, cy - hh], [cx + hw, cy + hh], [cx - hw, cy + hh], [cx - hw, cy - hh]];
     // side by side, so the corners stay square
     const sides = rect.slice(1).flatMap((q, i) => run([rect[i], q], 4).slice(i ? 1 : 0));
-    order[0] = { ...order[0], paths: [sides, ...order[0].paths], sews: "Sews a basting box to hold everything flat. " + order[0].sews };
+    order[0] = { ...order[0], paths: [sides, ...order[0].paths], sews: Array.isArray(order[0].sews) ? ["Sews a basting box to hold everything flat.", ...order[0].sews] : "Sews a basting box to hold everything flat. " + order[0].sews };
   }
   const d = new Design(hoop), steps = [], after = [], before = [];
   // where the next part of the same block starts, past closed rings (a ring the needle has to jump to anyway starts
@@ -451,8 +497,8 @@ function build(pieces, hoop, opts) {
       steps.push({ color: st.color, sews: [], you: !lead ? you || null : you ? `${lead}. ${you}` : `${lead} and press Start.`,
         fabric: !!st.fabric, bare: !!st.bare, under: !!st.under || !!st.fabric, early: false, cut: st.fabric && !st.nocut ? st.cut || st.paths : null });
     }
-    if (st.sews) steps[steps.length - 1].sews.push(st.sews);
-    if (st.then && !owed.some((t) => t.trim === st.then.trim && t.where === st.then.where)) owed.push(st.then);
+    if (st.sews) steps[steps.length - 1].sews.push(...[].concat(st.sews));   // (several: appliqués sewn together, `gangAppliques`)
+    for (const then of st.thens || (st.then ? [st.then] : [])) if (!owed.some((t) => t.trim === then.trim && t.where === then.where)) owed.push(then);
     if (st.early) steps[steps.length - 1].early = true;
     // something you'd see joining a tack-down (quilting, lettering in the same thread) shows the block in the preview;
     // the tack line sits at the edge, under the satin that comes later
