@@ -19,6 +19,10 @@ import { MOTIFS } from "./motifs.js";
 import { letterOutlines, motifOutlines } from "./outline.js";
 import { QUILTS, contours, quiltOf } from "./quilt.js";
 import { BORDERS, EYE, MIN, SCALLOP_IN, SHAPES, eyeAt, eyeWide, frameH, frontAcross, frontPanel, hasEye, shapeOf, zipY } from "./shapes.js";
+import { FABRICS, THREADS } from "./fabrics.js";
+import { FILE_SCALE } from "./files.js";
+export { FILE_SCALE, blocksPattern, fileBlocks, scaleBlocks } from "./files.js";
+export { FABRICS, THREADS } from "./fabrics.js";
 export { BORDERS, SHAPES, frontAcross, frontPanel } from "./shapes.js";
 
 // min and max of a long list (spread into Math.min, 60 letters' points overflowed the stack: a crafted file's "WWW…")
@@ -1744,54 +1748,6 @@ export function cleanPieces(list) {
   return { pieces, said: said.join(" "), huge };
 }
 
-// How far a design file can be resized inside a design: the doctor's re-stitch range (Open a design's Size)
-export const FILE_SCALE = [0.5, 2.5];
-// a file piece's blocks scaled about their centre as they are (the stand-in while the re-stitch runs, and its size)
-export const scaleBlocks = (blocks, f) => blocks.map((b) => ({ ...b, paths: b.paths.map((q) => q.map(([x, y]) => [Math.round(x * f * 10) / 10, Math.round(y * f * 10) / 10])) }));
-// a file piece's blocks as a pattern again (0.1 mm units, a jump to each run), for the doctor's `fix`
-export function blocksPattern(blocks) {
-  const stitches = [];
-  blocks.forEach((b, k) => {
-    if (k) stitches.push([...stitches[stitches.length - 1].slice(0, 2), 5]);
-    for (const q of b.paths) {
-      stitches.push([Math.round(q[0][0] * 10), Math.round(q[0][1] * 10), 1]);
-      for (const [x, y] of q) stitches.push([Math.round(x * 10), Math.round(y * 10), 0]);
-    }
-  });
-  stitches.push([...stitches[stitches.length - 1].slice(0, 2), 4]);
-  return { stitches, threads: blocks.map((b) => ({ color: b.color, name: b.name })) };
-}
-
-// An opened design as a piece: its stitches split into runs at jumps/trims, per colour block, centred.
-export function fileBlocks(design) {
-  const blocks = [];
-  let cur = null, run = [];
-  const flush = () => { if (run.length > 1 && cur) cur.paths.push(run); run = []; };
-  // Each block keeps the machine thread the file's own PEC palette gives it: where the colour as written would be sewn
-  // as another thread, it takes that thread's colour (ufront.pes's #cc99ff is Lavender in its palette, but written from
-  // the hex it became Light Lilac: the Open tab and the Design tab named different threads)
-  const pec = design.pec, mine = pec ? machineThreads(design.threads) : [];
-  const color = (k, t) => (PEC_MATCH[pec?.[k]] && mine[k]?.index !== pec[k] ? pecThread(pec[k]).hex : t.color || "#000000");
-  design.stitches.forEach(([x, y, c], i) => {
-    if (!cur) { cur = { color: color(0, design.threads[0] || {}), name: design.threads[0]?.name || "", paths: [] }; blocks.push(cur); }
-    if (c === 0) run.push([x / 10, y / 10]);
-    // (a run starts at its first stitch, not where the jump to it stopped: files' jumps often stop a few mm short, and
-    // starting there sewed each one as a 2-5 mm stitch or loose thread: peace.pes had 31 to snip here, 3 opened alone)
-    else if (c === 1 || c === 2) flush();
-    else if (c === 5) {
-      flush();
-      const k = design.threads[blocks.length] ? blocks.length : design.threads.length - 1, t = design.threads[k] || {};
-      cur = { color: color(k, t), name: t.name || "", paths: [] }; blocks.push(cur);
-    }
-  });
-  flush();
-  const kept = blocks.filter((b) => b.paths.length), pts = kept.flatMap((b) => b.paths.flat());
-  if (!pts.length) throw new Error("That file has no stitches.");
-  const [x0, y0, x1, y1] = bounds(pts), cx = (x0 + x1) / 2, cy = (y0 + y1) / 2;
-  for (const b of kept) b.paths = b.paths.map((q) => q.map(([x, y]) => [Math.round((x - cx) * 10) / 10, Math.round((y - cy) * 10) / 10]));
-  return kept;
-}
-
 // the nearest frame before p in the list whose box holds p's centre, among `shapes` (any shape when omitted)
 function frameAround(p, pieces, shapes) {
   const i = pieces.indexOf(p);
@@ -1900,36 +1856,6 @@ export function followFrame(p, pieces) {
 // "Monogram " on the machine)
 const ascii = latin;
 
-// (`ready` is what "Have ready" lists and `tip` what "Sewing on" says: one place per fabric, so they agree)
-// (`hoop` starts step 1, `after` is "When it's done": knit said "tear or cut away" though cut-away must be trimmed)
-// (`item`: what to do when it's sewn on something already made, a pillowcase or a tote: said only when the design
-// doesn't say what it's sewn on, as a starter's own tip does: the quilt label's sew sheet said "On a pillowcase or bag…")
-export const FABRICS = {
-  cotton: { name: "Cotton", ready: "Tear-away stabilizer.", tip: "On woven cotton, hoop it with tear-away stabilizer underneath.", item: "On a pillowcase or bag, hoop only the front layer (turn it inside out) so it isn't sewn shut.",
-    hoop: "Hoop the fabric with tear-away stabilizer under it", after: "Take the hoop off, snip any loose threads and tear the stabilizer away gently, holding the stitches down with your thumb." },
-  knit: { name: "Knit / T-shirt", ready: "Cut-away stabilizer (fusible no-show mesh is easiest) and a 75/11 ballpoint needle; on piqué or other textured knits, a water-soluble topper too.", tip: "Knits stretch: hoop them with cut-away stabilizer (fusible no-show mesh is easiest) and use a 75/11 ballpoint needle. Don't stretch the fabric while hooping.",
-    hoop: "Hoop the knit with the cut-away stabilizer under it, without stretching it", after: "Take the hoop off and snip any loose threads. Trim the cut-away stabilizer on the back about ¼ in from the stitching, rounding the corners. Don't tear it: it stops the design stretching out of shape in the wash." },
-  towel: { name: "Towel / fleece", tip: "Hoop the towel or fleece with tear-away stabilizer under it (cut-away on fleece) and lay a water-soluble topper on top. The light base sewn under the letters flattens the loops; tear the topper off afterwards.",
-    ready: "A water-soluble topper (like Solvy) and tear-away stabilizer (cut-away on fleece, which stretches).", hoop: "Hoop the towel or fleece with the stabilizer under it. Lay the water-soluble topper on top",
-    after: "Take the hoop off and snip any loose threads. Tear the topper away (a damp cloth melts the bits left in the letters), then tear the stabilizer off the back (cut-away: trim it ¼ in from the stitching)." },
-  felt: { name: "Felt", ready: "Tear-away stabilizer and a sharp 75/11 needle.", tip: "Felt is firm: tear-away stabilizer is enough. Use a sharp 75/11 needle.",
-    hoop: "Hoop the felt with tear-away stabilizer under it", after: "Take the hoop off, snip any loose threads and tear the stabilizer away gently." },
-  denim: { name: "Denim", ready: "Cut-away stabilizer (heavy tear-away will do on denim that's rarely washed) and a 75/11 sharp or 80/12 needle (90/14 for heavy denim).", tip: "On denim use a 75/11 sharp or 80/12 needle (90/14 only for heavy denim) and cut-away stabilizer (heavy tear-away will do on denim that's rarely washed).",
-    hoop: "Hoop the denim with the stabilizer under it", after: "Take the hoop off and snip any loose threads. Cut-away stabilizer: trim it ¼ in from the stitching (don't tear it). Heavy tear-away: tear it off gently." },
-  canvas: { name: "Canvas / tote", ready: "Medium tear-away stabilizer (cut-away if it'll be washed a lot) and a 90/14 sharp needle.", tip: "Canvas is firm: medium tear-away stabilizer underneath (cut-away if it'll be washed a lot) and a 90/14 sharp needle.", item: "On a tote, hoop only the front layer (turn it inside out).",
-    hoop: "Hoop the canvas (on a tote, only the front layer) with the stabilizer under it", after: "Take the hoop off, snip any loose threads and tear the stabilizer away gently (cut-away: trim it ¼ in from the stitching)." },
-};
-
-// thread weight (compose opts `thread`): satin and fill spacing follow the thread's thickness. Automatic is what the
-// site always did: 40 wt, with lettering under a 6 mm x-height sewn for the 60 wt the steps suggest. 30 wt is ~1.3x
-// as thick as 40 (satins 15% more open, fills 0.05 mm); 60 wt ~0.75x (satins 12% closer; fills stay at 0.35 mm,
-// closer rows make the row links shorter than the PE900 check's 0.3 mm).
-export const THREADS = {
-  auto: { name: "Automatic", tip: "Standard 40 wt thread (the weight is printed on the spool: a bigger number is a finer thread); small letters are sewn for 60 wt (the steps say when)." },
-  30: { name: "30 wt", tip: "30 wt is heavier and bolder: use a 90/14 topstitch needle and slow the machine down." },
-  40: { name: "40 wt", tip: "40 wt is the standard machine embroidery thread: a 75/11 embroidery needle." },
-  60: { name: "60 wt", tip: "60 wt is fine, for small letters and fine detail: a 65/9 or 70/10 needle and 60 wt bobbin thread." },
-};
 // What the design is sewn with: the thread weight and the fabric. `compose` sets both for the length of its build
 // (from its opts), and the editor sets them with `sewAs` whenever the design's change, so everything measured outside
 // a build (what touches what, the size that clears a frame, Fit to hoop) is measured on the stitches that will be
