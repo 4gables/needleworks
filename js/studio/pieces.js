@@ -21,7 +21,7 @@ import { QUILTS, contours, quiltOf } from "./quilt.js";
 import { BORDERS, EYE, MIN, SCALLOP_IN, SHAPES, eyeAt, eyeWide, frameH, frontAcross, frontPanel, hasEye, shapeOf, zipY } from "./shapes.js";
 import { FABRICS, THREADS } from "./fabrics.js";
 import { FILE_SCALE } from "./files.js";
-import { OPEN, along, bend, bulk, densify, drawings, fontReady, initialSizes, inkOnly, length, letterStrokes, lettering, letters, paced, pacer, recent, spaced, stitchLetters } from "./lettering.js";
+import { OPEN, along, bend, bender, bulk, densify, drawings, fontReady, initialSizes, inkOnly, length, letterStrokes, lettering, letters, paced, pacer, recent, spaced, stitchLetters } from "./lettering.js";
 export { PACED, along, bulkReady, drawings, fineLine, initialSizes, inkOnly, letterMetrics, pacer, recent } from "./lettering.js";
 export { carveDone, compose, crossName, crossStep, patchFillOf, quiltDone, splitPieces } from "./compose.js";
 export { FILE_SCALE, blocksPattern, fileBlocks, scaleBlocks } from "./files.js";
@@ -411,16 +411,24 @@ function textRows(p, fab = "cotton") {
   if (!lines.length) return [];
   const kerns = kept.map(([l, s]) => Array.from({ length: l.length }, (_, i) => (print && p.kern?.[s + i]) || 0).map((v) => v / 100));
   const joined = kerns.flatMap((k, i) => (i ? [0, ...k] : k));   // (lines joined by a space: none after it)
-  if (p.shape === "up" || p.shape === "down") return unbent(print, (chain) => {
-    const l = letters(lines.join(" "), p.font, p.size, style, sp, joined, chain);
-    return l.parts.length ? [{ parts: bend(l.parts, p.shape, Math.max(p.radius, 8), Math.max(p.ry ?? p.radius, 8)), satinW: l.satinW, xh: l.xh }] : [];
-  });
-  if (p.shape === "wave" || p.shape === "bridge") return unbent(print, (chain) => {
-    const l = letters(lines.join(" "), p.font, p.size, style, sp, joined, chain);
-    if (!l.parts.length) return [];
-    const mid = (l.top + l.bottom) / 2;   // (letters come with the baseline at y = 0)
+  // Bent lettering: its pieces are chained by the moves as they are sewn, after the bend (`letters` warp). (Chained
+  // by the gaps before the bend, then kept only if that cost no more once bent: an arch stretches the gaps, and a
+  // 2 mm gap in a waved "Happy Birthday" came out a loose thread; 49 pieces over the arched batch files were left far
+  // from where the next began though they pass within 2 mm of it.)
+  if (p.shape === "up" || p.shape === "down") {
+    const a = Math.max(p.radius, 8), b = Math.max(p.ry ?? p.radius, 8);
+    const l = letters(lines.join(" "), p.font, p.size, style, sp, joined, true, bender(p.shape, a, b));
+    return l.parts.length ? [{ parts: bend(l.parts, p.shape, a, b), satinW: l.satinW, xh: l.xh }] : [];
+  }
+  if (p.shape === "wave" || p.shape === "bridge") {
+    const flat = letters(lines.join(" "), p.font, p.size, style, sp, joined, false);
+    if (!flat.parts.length) return [];
+    const mid = (flat.top + flat.bottom) / 2;   // (letters come with the baseline at y = 0)
+    const xs = flat.parts.flatMap(([q]) => q.map((v) => v[0])), x0 = minOf(xs), x1 = maxOf(xs);
+    const f = p.shape === "wave" ? ((g) => ([x, y]) => g([x, y - mid]))(waver(x0, x1, p)) : bridger(x0, x1, p);
+    const l = letters(lines.join(" "), p.font, p.size, style, sp, joined, true, f);
     return [{ parts: p.shape === "wave" ? wave(l.parts.map(([q, ...r]) => [q.map(([x, y]) => [x, y - mid]), ...r]), p) : bridge(l.parts, p), satinW: l.satinW, xh: l.xh }];
-  });
+  }
   // straight: one size for every line (scaled to the first line's x-height), baselines `leading` x size apart
   let ls = lines.map((t, i) => letters(t, p.font, p.size, style, sp, kerns[i]));
   if (ls.length > 1) ls = ls.map((l, i) => (i && l.xh ? letters(lines[i], p.font, (p.size * ls[0].xh) / l.xh, style, sp, kerns[i]) : l));
@@ -440,26 +448,17 @@ function textRows(p, fab = "cotton") {
     return { parts: l.parts.map(([q, ...r]) => [q.map(([x, y]) => [x + dx, y + dy]), ...r]), satinW: l.satinW, xh: l.xh };
   });
 }
-// Bent lettering with its pieces chained (`letters` chain) unless that costs more moves once bent (`moveCost`): the
-// chaining reckons gaps before the bend, and an arch or wave stretches them (a 2 mm gap in a waved "Happy Birthday"
-// came out a loose thread).
-// (print: every move is a trim or, up to 5 mm, a loose thread, however short)
-function unbent(print, make) {
-  const cost = (rows) => rows.reduce((c, { parts, satinW }) => {
-    for (let i = 1; i < parts.length; i++) {
-      const a = parts[i - 1][0], b = parts[i][0];
-      if (!a.length || !b.length) continue;
-      const d = Math.hypot(b[0][0] - a[a.length - 1][0], b[0][1] - a[a.length - 1][1]);
-      if (d > 0.01) c += print ? (d + (satinW ? satinW / 2 + 0.3 : 0) <= 5 ? 1.5 : 1) : moveCost(d + 0.25 + (satinW ? satinW / 2 + 0.3 : 0));
-    }
-    return c;
-  }, 0);
-  const a = make(true), b = make(false);
-  return cost(a) <= cost(b) ? a : b;
-}
 // along y = amp·sin(waves·2πx/W), letters spaced by arc length and turned with the curve
 function wave(parts, p) {
-  const xs = parts.flatMap(([q]) => q.map((v) => v[0])), x0 = minOf(xs), x1 = maxOf(xs), W = Math.max(x1 - x0, 1);
+  const xs = parts.flatMap(([q]) => q.map((v) => v[0])), f = waver(minOf(xs), maxOf(xs), p);
+  const out = parts.map(([q, ...r]) => [densify(q, 1).map(f), ...r]);
+  const cx = (minOf(out.flatMap(([q]) => q.map((v) => v[0]))) + maxOf(out.flatMap(([q]) => q.map((v) => v[0])))) / 2;
+  const ys = out.flatMap(([q]) => q.map((v) => v[1])), cy = (minOf(ys) + maxOf(ys)) / 2;
+  return out.map(([q, ...r]) => [q.map(([x, y]) => [x - cx, y - cy]), ...r]);
+}
+// (where one point of letters spanning x0..x1 goes, before the whole is centred)
+function waver(x0, x1, p) {
+  const W = Math.max(x1 - x0, 1);
   const amp = p.amp ?? p.size * 0.35, k = ((p.waves ?? 1) * 2 * Math.PI) / W, n = 600, pts = [], len = [0];
   for (let i = 0; i <= n; i++) { const x = x0 - W * 0.6 + (W * 2.2 * i) / n; pts.push([x, amp * Math.sin(k * (x - x0))]); }
   for (let i = 1; i <= n; i++) len.push(len[i - 1] + Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]));
@@ -470,18 +469,18 @@ function wave(parts, p) {
     const t = (s - len[i]) / Math.max(len[i + 1] - len[i], 1e-9), [ax, ay] = pts[i], [bx, by] = pts[i + 1], L = Math.hypot(bx - ax, by - ay);
     return [ax + (bx - ax) * t, ay + (by - ay) * t, -(by - ay) / L, (bx - ax) / L];
   };
-  const out = parts.map(([q, ...r]) => [densify(q, 1).map(([x, y]) => { const [px, py, nx, ny] = at(s0 + x - x0); return [px + y * nx, py + y * ny]; }), ...r]);
-  const cx = (minOf(out.flatMap(([q]) => q.map((v) => v[0]))) + maxOf(out.flatMap(([q]) => q.map((v) => v[0])))) / 2;
-  const ys = out.flatMap(([q]) => q.map((v) => v[1])), cy = (minOf(ys) + maxOf(ys)) / 2;
-  return out.map(([q, ...r]) => [q.map(([x, y]) => [x - cx, y - cy]), ...r]);
+  return ([x, y]) => { const [px, py, nx, ny] = at(s0 + x - x0); return [px + y * nx, py + y * ny]; };
 }
 // letters stretched upward toward the middle: the tops make an arch, the baseline stays put
 function bridge(parts, p) {
-  const xs = parts.flatMap(([q]) => q.map((v) => v[0])), x0 = minOf(xs), x1 = maxOf(xs), W = Math.max(x1 - x0, 1);
-  const k = (p.bulge ?? 30) / 100;
-  const out = parts.map(([q, ...r]) => [densify(q, 1).map(([x, y]) => { const u = (2 * (x - (x0 + x1) / 2)) / W; return [x, y < 0 ? y * (1 + k * (1 - u * u)) : y]; }), ...r]);
+  const xs = parts.flatMap(([q]) => q.map((v) => v[0])), f = bridger(minOf(xs), maxOf(xs), p);
+  const out = parts.map(([q, ...r]) => [densify(q, 1).map(f), ...r]);
   const ys2 = out.flatMap(([q]) => q.map((v) => v[1])), cy = (minOf(ys2) + maxOf(ys2)) / 2;
   return out.map(([q, ...r]) => [q.map(([x, y]) => [x, y - cy]), ...r]);
+}
+function bridger(x0, x1, p) {
+  const W = Math.max(x1 - x0, 1), k = (p.bulge ?? 30) / 100;
+  return ([x, y]) => { const u = (2 * (x - (x0 + x1) / 2)) / W; return [x, y < 0 ? y * (1 + k * (1 - u * u)) : y]; };
 }
 
 // a towel's loops swallow a fine line, so lettering there is always satin
@@ -505,6 +504,8 @@ function lettersOn(laid, satinW, fab, xh = Infinity) {
     for (const [p] of laid.slice(from, i)) out.push(spaced([p[0], ...zigzag(p, w, 2), p[p.length - 1]]));
     // (a separate letter's jump goes before its lattice, which ends where its letters start)
     if (sewn.slice(from, i).some((q) => q.gap)) { out[at].gap = true; for (const q of sewn.slice(from, i)) delete q.gap; }
+    // (and a piece stitched to from the last one, `linkReach`, is reached by its lattice)
+    else if (sewn[from]?.reach && from) { out[at].reach = sewn[from].reach; }
     out.push(...sewn.slice(from, i)); from = i;
   }
   return out;

@@ -72,3 +72,11 @@ export const ROWS = { solid: 0.35, standard: 0.4 };
 //   start:    a separate start (trim, tie-in, tie-off: 2.8 mm of thread in locks) must sew at least this much (mm).
 //   edge:     travel inside a fill may run this far (mm) inside the shape's own edge over finished rows (fill.js).
 export const PICTURES = { fleck: 3, enclosed: 0.8, eyes: 6, start: 4, edge: 0.75 };
+
+// --- S1: pieces sewn in one go ---
+// Two pieces of script lettering are stitched across, not trimmed apart, when their columns are at most `gap` mm
+// apart (each is its width and `pull` mm wide), the centre lines at most `most` mm apart, or the next starts under
+// the last one's column (`under` past its half width). A link that short reads as the pen not lifting; a trim there
+// is two locks and two thread ends on a hairline. A fine line: `line` (1.5 until S1, reckoned before an arch
+// opened the gap: a Cookie "Sunday" 1.51 mm from its S once arched began 21 mm away).
+export const LINK = { gap: 0.5, pull: 0.3, most: 2.2, under: 0.3, line: 1.8 };
