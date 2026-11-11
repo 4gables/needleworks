@@ -26,6 +26,8 @@ Reference for this part of Needleworks: the rules, the reason for each (it stops
   (`/Volumes/4TB_SSD/vm-pescheck/tools/vnc.py`); files in on an ISO (`hdiutil makehybrid -iso -joliet`, `cat` it over
   `vm-pescheck/files.iso`); `vm-pescheck/tools/boxcheck2.ps1` (box == stitch minimum: "FITS n/n"), then open them
   in PE-DESIGN.
+- `pe900_check.py` judges a file named `*6x10*` on the 160 x 260 mm field, and every version 6 file's header page
+  (100 x 100, or 160 x 260 for a design no 130 x 180 field holds).
 - Brother diff (`tests/brother_diff_core.js`): Brother-made PES files are re-written with `writePES` and the PEC
   blocks compared field by field, then by the machine's holes, jumps, trims and colour changes. The 379 PE-DESIGN
   samples stay in the VM (`C:\bro`): `sh tests/vm/run.sh` (builds `tests/vm/make.mjs`'s page; verdict
