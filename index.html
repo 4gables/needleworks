@@ -126,6 +126,14 @@
           <label for="pic-cross">Cross size <output id="pic-cross-out">2.5 mm</output></label>
           <input id="pic-cross" autocomplete="off" type="range" min="1.5" max="4" step="0.5" value="2.5">
         </div>
+        <fieldset class="field" id="pic-details-row">
+          <legend>Small details</legend>
+          <div id="pic-details" class="chips plain">
+            <button type="button" data-v="all" aria-pressed="false">Keep all</button>
+            <button type="button" data-v="most" aria-pressed="true">Most</button>
+            <button type="button" data-v="main" aria-pressed="false">Main shapes only</button>
+          </div>
+        </fieldset>
         <label class="check"><input id="pic-bg" autocomplete="off" type="checkbox" checked> Leave the background unstitched</label>
         <details class="more" id="pic-more">
           <summary>More settings</summary>

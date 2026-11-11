@@ -151,9 +151,9 @@ function clearStart(pts) {
 // under 1.5 mm², or under 4 mm² and 2.5 mm across) or under PICTURES.fleck mm², with PICTURES.enclosed of its edge
 // against other sewn colours. It joins the one it touches most. Up to PICTURES.eyes of them in a colour stay (an eye).
 // Returns the labels to sew (a copy when anything changed) and how many pieces were folded in.
-function foldFlecks(labels, w, h, colors, used, res) {
+function foldFlecks(labels, w, h, colors, used, res, fleck = PICTURES.fleck, enclosed = PICTURES.enclosed) {
   const n = w * h, out = [];
-  const minPx = 1.5 * res * res, dotPx = 4 * res * res, dotW = 2.5 * res, fleckPx = PICTURES.fleck * res * res;
+  const minPx = 1.5 * res * res, dotPx = 4 * res * res, dotW = 2.5 * res, fleckPx = fleck * res * res;
   // each sewn colour's pieces, and where a fill has body: a piece of 4 mm² or more that is 1.5 mm wide somewhere. A
   // fleck joins only such a fill: the blend round a dark letter on a pale label is a ring of a third colour, and the
   // letters took it (a label's "Embroidered" went from black to the grey of its own halo).
@@ -191,7 +191,7 @@ function foldFlecks(labels, w, h, colors, used, res) {
     const to = new Int32Array(count + 1).fill(-1), best = new Int32Array(count + 1), all = new Int32Array(count + 1);
     for (const [key, k] of on) { const c = Math.floor(key / 64), l = key % 64; all[c] += k; if (k > best[c]) { best[c] = k; to[c] = l; } }
     const flecks = [];
-    for (let c = 1; c <= count; c++) if (small(c) && rim[c] && all[c] >= PICTURES.enclosed * rim[c]) flecks.push(c);
+    for (let c = 1; c <= count; c++) if (small(c) && rim[c] && all[c] >= enclosed * rim[c]) flecks.push(c);
     // (pieces big enough to sew as a dot: see `fair` below)
     const meant = flecks.filter((c) => size[c] >= 0.6 * res * res && Math.min(x1[c] - x0[c] + 1, y1[c] - y0[c] + 1) >= 0.8 * res);
     const keep = new Set(meant.length <= PICTURES.eyes ? meant : []);
@@ -214,7 +214,8 @@ function build(img, analysis, opts) {
   const o = { ...DEFAULTS, ...opts };
   const { w, h, colors } = analysis;
   const used0 = colors.filter((c) => !c.background && c.area > 0 && !(o.skip || []).includes(c.id));
-  const { labels, folded } = foldFlecks(analysis.labels, w, h, colors, used0, o.res);
+  const level = PICTURES.details[o.details] || PICTURES.details.most;
+  const { labels, folded } = foldFlecks(analysis.labels, w, h, colors, used0, o.res, level.fleck, level.enclosed);
   const res = o.res;
   const hoop = o.hoop;
   const cx = w / 2, cy = h / 2, toMm = (p) => p.map(([x, y]) => [(x - cx) / res, (y - cy) / res]);
@@ -222,7 +223,7 @@ function build(img, analysis, opts) {
   const used = colors.filter((c) => !c.background && c.area > 0 && !(o.skip || []).includes(c.id))
     .sort((a, b) => b.lightness - a.lightness);   // light first, dark details on top
   const summary = [], stitched = new Set(used.map((c) => c.id));
-  const fine = { narrowMm2: 0, hairlines: 0, inkMm2: 0, folded };   // details too small to stitch cleanly (shown as a hint)
+  const fine = { narrowMm2: 0, hairlines: 0, inkMm2: 0, folded, left: 0 };   // details too small to stitch cleanly (shown as a hint)
   for (let i = 0; i < w * h; i++) if (stitched.has(labels[i])) fine.inkMm2++;
   fine.inkMm2 /= res * res;
   // ignore specks: under 1.5 mm², or under 4 mm² and under 2.5 mm across (a dot, not a stem: each speck left was a
@@ -230,6 +231,8 @@ function build(img, analysis, opts) {
   const minPx = 1.5 * res * res, EYES = 6, dotPx = 4 * res * res, dotW = 2.5 * res;
   // where each colour's fill will surely lie: over 0.6 mm inside a shape that isn't a speck. A travel run sewn there
   // by an earlier colour is covered.
+  // (the thread a fill of so many px sews: its rows and its underlay)
+  const fillThread = (px) => (px / (res * res)) * (1 / o.density + 1 / 2.5);
   const solid = new Uint8Array(w * h), budget = routeBudget();
   for (const col of used) {
     const m = { w, h, data: new Uint8Array(w * h) };
@@ -241,7 +244,8 @@ function build(img, analysis, opts) {
       const x = i % w, y = (i - x) / w; size[c]++;
       if (x < x0[c]) x0[c] = x; if (x > x1[c]) x1[c] = x; if (y < y0[c]) y0[c] = y; if (y > y1[c]) y1[c] = y;
     }
-    for (let c = 1; c <= count; c++) big[c] = size[c] >= dotPx || (size[c] >= minPx && (x1[c] - x0[c] >= dotW || y1[c] - y0[c] >= dotW)) ? 1 : 0;
+    // (and not one the Details choice may leave out: travel under it would lie bare)
+    for (let c = 1; c <= count; c++) big[c] = (size[c] >= dotPx || (size[c] >= minPx && (x1[c] - x0[c] >= dotW || y1[c] - y0[c] >= dotW))) && fillThread(size[c]) >= level.start ? 1 : 0;
     for (let i = 0; i < w * h; i++) if (cl[i] && big[cl[i]] && dt[i] > 0.6 * res) solid[i] = 1;
   }
   for (const [k, col] of used.entries()) {
@@ -384,6 +388,12 @@ function build(img, analysis, opts) {
     for (let i = 0; i < w * h; i++) if (cl[i]) comps[cl[i] - 1].pixels.push(i);
     let blocks = [];
     const filled = new Uint8Array(count + 1);   // shapes sewn as fills
+    // (the share of a shape's edge that lies against other sewn colours: part of something, not a piece on its own)
+    const joined = (mine) => {
+      let rim = 0, on = 0;
+      for (const i of mine) { const x = i % w; for (const j of [x > 0 ? i - 1 : -1, x < w - 1 ? i + 1 : -1, i - w, i + w]) if (j >= 0 && j < w * h && labels[j] !== col.id) { rim++; if (stitched.has(labels[j])) on++; } }
+      return rim ? on / rim : 0;
+    };
     for (const comp of comps) {
       const mine = comp.pixels.filter((i) => labels[i] === col.id);
       if (!mine.length) continue;
@@ -394,7 +404,7 @@ function build(img, analysis, opts) {
       const under = tatami(mask, comp, res, { angle: angle + 90, spacing: 2.5, stitch: 3, inset: 0.4, pull: 0 });
       // pull compensation widens a fill past its edge; on thin letters that closes the gaps between them
       const fill = tatami(mask, comp, res, { angle, spacing: o.density, stitch: 3.5, pull: widthMm < 2 ? 0.05 : 0.15 });
-      blocks.push({ centre, paths: routeFill([under, fill], comp, mask, res, budget, WORN, false, 0, null, PICTURES.edge).map(toMm), kind: "fill" });
+      blocks.push({ centre, paths: routeFill([under, fill], comp, mask, res, budget, WORN, false, 0, null, PICTURES.edge).map(toMm), kind: "fill", comp: comp.id, thread: fillThread(mine.length), meant: level.joined ? eye[comp.id] || (dot(comp.id) && tittle(comp.id)) || joined(mine) >= level.joined : dot(comp.id) });
       filled[comp.id] = 1;
     }
     if (anyThin) {
@@ -433,7 +443,7 @@ function build(img, analysis, opts) {
           const q = followRun(p, 1.5, 0.1, 0.6);
           return kind === "run" && q.length > 1 ? [...q, ...q.slice(0, -1).reverse(), ...q.slice(1)] : q;
         });
-        blocks.push({ centre: paths[0][0], paths, kind: "run" });
+        blocks.push({ centre: paths[0][0], paths, kind: "run", thread: 3 * t.len });
       });
     }
     if (!blocks.length) continue;
@@ -449,14 +459,48 @@ function build(img, analysis, opts) {
     // ... or along this colour's own thin lines (within 2 px), which are sewn in this thread anyway
     const near2 = new Uint8Array(w * h);
     if (anyThin) for (let i = 0; i < w * h; i++) if (thin.data[i]) { const x = i % w, y = (i - x) / w; for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) { const X = x + dx, Y = y + dy; if (X >= 0 && Y >= 0 && X < w && Y < h) near2[Y * w + X] = 1; } }
-    const R = makeRouter(mask, res, (x, y) => {
+    const router = () => makeRouter(mask, res, (x, y) => {
       const i = y * w + x;
       return solid[i] && later.has(labels[i]) ? 2 : filled[cl[i]] && dt[i] > 0.25 * res ? 1 : near2[i] ? 1 : 0;
     }, hop, budget);
+    let R = router();
     // Shapes in nearest-first order, preferring the nearest one a hidden way reaches (keeps travel and trims down),
     // then one far enough for the machine to trim the jump
     const ordered = [];
     blocks = blocks.map((b) => ({ ...b, paths: b.paths.filter((p) => p.length) })).filter((b) => b.paths.length);
+    // The Details choice (Wilcom, Hatch and BERNINA have a "Details" slider; Stitch Era's guide deletes 30-50 % of the
+    // traced shapes): what is left of a picture's trims is its own count of separate pieces (18 sprigs in 8 threads is
+    // over 100 starts, each a trim, two locks and two thread ends). A piece is the parts of this colour the needle
+    // reaches without a cut: one's end within 2 mm of the next one's start, or in its travel region and within TRAVEL. It is left out when
+    // it would sew under level.start mm of thread and under level.share of the colour's biggest piece (four flower
+    // centres in one thread are each its biggest). Never a dot that was kept as meant (an eye, an i's dot, a mark by a
+    // bigger piece; with level.joined, the marks go and any shape with that share of its edge against other colours stays).
+    if (level.start && blocks.length > 1) {
+      const root = blocks.map((_, i) => i), find = (i) => (root[i] === i ? i : (root[i] = find(root[i])));
+      // (a fill begins and ends where its rows do; a line's walk comes back to where it began, so it may begin anywhere)
+      const pt = (q) => ({ q, r: R.regionOf(toPx(q)) }), along = (b) => b.paths.flat().filter((_, i, a) => i % 6 === 0 || i === a.length - 1).map(pt);
+      const from = blocks.map((b) => (b.kind === "run" ? along(b) : [pt(b.paths[b.paths.length - 1].at(-1))]));
+      const to = blocks.map((b, i) => (b.kind === "run" ? from[i] : [pt(b.paths[0][0])]));
+      const goes = (i, j) => from[i].some((a) => to[j].some((b) => { const v = Math.hypot(a.q[0] - b.q[0], a.q[1] - b.q[1]); return v <= 2 || (v <= TRAVEL && a.r && a.r === b.r); }));
+      for (let i = 0; i < blocks.length; i++) for (let j = i + 1; j < blocks.length; j++) if (find(i) !== find(j) && (goes(i, j) || goes(j, i))) root[find(i)] = find(j);
+      const sum = new Map();
+      blocks.forEach((b, i) => sum.set(find(i), (sum.get(find(i)) || 0) + b.thread));
+      // (level.tail: only the smallest pieces that together sew that share of the colour's thread. On a sheet of 18
+      // sprigs every sprig is a main shape: by size alone "Main shapes only" took 31 of a 60 mm sheet's 49 pieces)
+      const most = Math.max(...sum.values()), all = [...sum.values()].sort((a, b) => a - b), whole = all.reduce((a, v) => a + v, 0);
+      let cut = Infinity;
+      if (level.tail) { cut = 0; let acc = 0; for (const v of all) { acc += v; if (acc > level.tail * whole) break; cut = v; } }
+      const go = (b, i) => !b.meant && sum.get(find(i)) < level.start && sum.get(find(i)) < level.share * most && sum.get(find(i)) <= cut;
+      const out = new Set(blocks.filter(go).filter((b) => b.kind === "fill").map((b) => b.comp)), n0 = blocks.length;
+      blocks = blocks.filter((b, i) => !go(b, i));
+      fine.left += n0 - blocks.length;
+      if (out.size) {
+        // (not there for travel or a short straight stitch either)
+        for (const c of out) filled[c] = 0;
+        for (let i = 0; i < w * h; i++) if (out.has(cl[i])) mask.data[i] = 0;
+        R = router();
+      }
+    }
     let at = d.cur ? toPx(d.cur) : [0, 0];
     // A line's walk ends where it began, so it can start anywhere along it: it's entered at its point nearest the
     // needle (a step of 2 mm or less is sewn, not jumped)
@@ -538,8 +582,10 @@ function build(img, analysis, opts) {
       d.path(at ? noTiny(q, at) : q, true, true, at);
       return q;
     };
+    let out = null;   // a piece left out when the needle came to it
     for (const b of ordered) for (const [pi, p] of b.paths.entries()) {
       let q;
+      if (b === out) continue;
       if (!d.cur) q = jumpTo(b, p);
       else {
         const gap = Math.hypot(p[0][0] - d.cur[0], p[0][1] - d.cur[1]);
@@ -549,6 +595,10 @@ function build(img, analysis, opts) {
           if (r && r.sewnMm <= SEWN && r.mm <= 1.5 * gap + 3) d.path([d.cur, ...(q = noTiny([...toMm(R.stitches(r)), ...p], d.cur))]);
           // (a part of a shape that travel can't reach and that sews less thread than its own locks: left out)
           else if (gap > 2 && b.kind === "fill" && pi && pathLen(p) < PICTURES.start) continue;
+          // (nor a piece that only a jump reaches and that sews under level.lone mm in all: a dash 2 mm from its
+          // line's other dashes but not from where the needle is. Each was a run of nothing but its own locks: 8 of them
+          // were 75 of the 90 lock hits with nothing over them in the 12 sample pictures)
+          else if (gap > 2 && level.lone && !pi && !b.meant && b.paths.reduce((a, v) => a + pathLen(v), 0) < level.lone) { out = b; fine.left++; continue; }
           else if (gap > 2) q = jumpTo(b, p);
           else d.path((q = noTiny(p, d.cur)), true, false);
         }
