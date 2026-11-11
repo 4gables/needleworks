@@ -234,6 +234,30 @@ export function fixes(S) {
     }
     return best;
   }
+  // A design too big for the hoop whose longest single line of words (not in a frame) brings it inside on two or three
+  // lines: { p, n, text, size }, at the size it has where that lands, else at the biggest that does when it's a quarter
+  // over what Fit to hoop (the whole design scaled by `k`) would leave; null when neither. (A long line typed with no
+  // frame was offered Fit to hoop alone, 26 -> 11 mm, where two lines kept it at 26: only a frame's shrink offered them.)
+  function hoopLines(k) {
+    const hp = api.hoop(), fw = hp.w - 5, fh = hp.h - 5, wide = (q) => { const b = pieceBounds(q); return b ? b[2] - b[0] : 0; };
+    const p = S.pieces.filter((q) => twoLines(q) && !(q.rot || 0) && !frameOf(q)).sort((a, b) => wide(b) - wide(a))[0];
+    if (!p) return null;
+    let best = null;
+    for (const [n, text] of [[2, twoLines(p)], [3, threeLines(p)]]) {
+      if (!text) continue;
+      const fits = (t) => { const [w, h] = layoutSize(S.pieces.map((r) => (r.id === p.id ? { ...p, text, size: t } : r))); return w <= fw && h <= fh; };
+      let t = p.size;
+      if (!fits(t)) {
+        let lo = p.size * k * 1.25, hi = p.size;
+        if (lo >= hi || !fits(lo)) continue;
+        while (hi - lo > 0.5) { const m = (lo + hi) / 2; if (fits(m)) lo = m; else hi = m; }
+        t = Math.floor(lo * 2) / 2;
+      }
+      if (best && t < best.size * 1.1) continue;
+      if (landing(p, { text, size: t }).fits === "fits") best = { p, n, text, size: t };
+    }
+    return best;
+  }
   // Words of one line its frame shrank under 80 % of the size asked, on two (or three) lines: { n, text, size (as the
   // frame then sews it), ask, fits } at the biggest size up to the one asked that lands (`landing`), when that's at
   // least a quarter bigger, else null. Not only at the size asked: a quilt label's "Made with love for Grace" went
@@ -274,5 +298,5 @@ export function fixes(S) {
     const i = at.reduce((a, b) => (Math.abs(b - t.length / 2) < Math.abs(a - t.length / 2) ? b : a));
     return t.slice(0, i) + "\n" + t.slice(i).trim();
   }
-  return { newProblem, landing, hard, against, overlapping, runUp, frameLines, twoLines, frameOf, frameFor, display, sizeChange, roomIn, worseSaid, keepWord, moveAway, and, grown, asLettering, lineChoice, roundAll, carried, asText, sewAfter, resizeFrame };
+  return { newProblem, landing, hard, against, overlapping, runUp, frameLines, twoLines, frameOf, frameFor, display, sizeChange, roomIn, worseSaid, keepWord, moveAway, and, grown, asLettering, lineChoice, hoopLines, roundAll, carried, asText, sewAfter, resizeFrame };
 }

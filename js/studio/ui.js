@@ -139,6 +139,7 @@ export function initStudio(api) {
     get grown() { return grown; },
     get asLettering() { return asLettering; },
     get lineChoice() { return lineChoice; },
+    get hoopLines() { return hoopLines; },
     get autoName() { return autoName; },
     get moreOpen() { return moreOpen; }, set moreOpen(v) { moreOpen = v; },
     get warnTimer() { return warnTimer; }, set warnTimer(v) { warnTimer = v; },
@@ -160,7 +161,7 @@ export function initStudio(api) {
     // (parts: more of the editor's state and helpers as they need them)
   };
   // the editor's parts (each reads the editor through S when it's used, so they can all be made here)
-  const { newProblem, landing, hard, against, overlapping, runUp, frameLines, twoLines, frameOf, frameFor, display, sizeChange, roomIn, worseSaid, keepWord, moveAway, and, grown, asLettering, lineChoice, roundAll, carried, asText, sewAfter, resizeFrame } = fixes(S);
+  const { newProblem, landing, hard, against, overlapping, runUp, frameLines, twoLines, frameOf, frameFor, display, sizeChange, roomIn, worseSaid, keepWord, moveAway, and, grown, asLettering, lineChoice, hoopLines, roundAll, carried, asText, sewAfter, resizeFrame } = fixes(S);
   const { recentUI, keptSaid, keep } = recentDesigns(S);
   const { swatchTip, threadOf, machineName, allThread, threadTip, threadNames, sameSpool, relabelThreads, oneThread } = threadSaid(S);
   const { split, appliqued } = tooBigWays(S);

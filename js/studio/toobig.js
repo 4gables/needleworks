@@ -64,9 +64,9 @@ export function tooBigWays(S) {
       // two hoopings, when they're possible: with the hoop turned, or with long lettering split between two words (that
       // one stitches both halves: worked out once the design has been still for a moment, not on every letter typed)
       const say = ({ lands, ways }, way) => {
-        const fitNow = ways.fit || ways.frame || ways.snug || ways.turn || null, alt = [ways.snug, ways.turn].filter((x) => x && x !== fitNow);
+        const fitNow = ways.fit || ways.frame || ways.snug || ways.turn || ways.lines || null, alt = [ways.snug, ways.turn, ways.lines].filter((x) => x && x !== fitNow);
         if (way.ok) tooBig(`${msg} ${way.ok} the machine sews one half, then you hoop the fabric again for the other (crosses line them up).${fitNow ? ` Or ${fitNow.label.replace(/^\w/, (c) => c.toLowerCase())} for one hooping, smaller.` : ` (Fitted to one hooping, ${lands.why}.)`}`,
-          { label: "Sew it in two hoopings", run: () => { S.remember(); S.fitted = false; S.two = true; if (way.pieces) S.pieces = JSON.parse(way.pieces); if (way.turn) { api.setTurn(!api.turned()); api.fit(); } S.save(); S.ui(); S.make(); } }, fitNow);
+          { label: "Sew it in two hoopings", run: () => { S.remember(); S.fitted = false; S.two = true; if (way.pieces) S.pieces = JSON.parse(way.pieces); if (way.turn) { api.setTurn(!api.turned()); api.fit(); } S.save(); S.ui(); S.make(); } }, fitNow, ways.lines !== fitNow && ways.lines);
         else tooBig(`${msg}${way.why ? ` ${way.why}` : ""} ${fitNow ? "Make the biggest piece smaller, or" : `Make the biggest piece smaller, or take something out (fitted to the hoop, ${lands.why}).`}`, fitNow, ...alt);
       };
       // The ways back to one hooping (each stitches the design again, scaled or with its frames made smaller) and to
@@ -148,6 +148,9 @@ export function tooBigWays(S) {
     if (kt > k * 1.1) { const t = scaledFit(S.pieces, Math.min(kt, S.mostScale())); if (!t.tiny && !t.hit) out.turn = { label: "Fit and turn the hoop", run: () => { S.remember(); api.setTurn(!api.turned()); api.fit(); S.fitHoop(); } }; }
     if (!lands.ok) { const ps = framesFit(); if (ps) out.frame = { label: `Make the ${ps.n === 1 ? "frame" : "frames"} fit the hoop`, run: () => { S.remember(); S.fitted = false; S.pieces.forEach((q, i) => Object.assign(q, ps.list[i])); S.save(); S.ui(); S.make(); } }; }
     const sn = snugWay(); if (sn) out.snug = sn;
+    // (the longest line of words on two or three lines, where that alone brings the design inside the hoop)
+    const ln = S.hoopLines(k);
+    if (ln) out.lines = { label: `Put ${label(ln.p)} on ${ln.n === 2 ? "two" : "three"} lines${ln.size < ln.p.size ? ` at ${ln.size} mm` : ""}`, run: () => { const q = S.pieces.find((o) => o.id === ln.p.id); if (!q) return; S.remember(); S.fitted = false; q.text = ln.text; q.size = ln.size; S.save(); S.ui(); S.make(); } };
     return out;
   }
   function snugWay() {
