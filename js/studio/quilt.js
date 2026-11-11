@@ -368,14 +368,14 @@ function lines(edge, obstacles, { kind, bound = edge, cover = false, clear = 2.5
   const cum = [0];
   for (let i = 0; i < bound.length; i++) { const a = bound[i], b = bound[(i + 1) % bound.length]; cum.push(cum[i] + Math.hypot(b[0] - a[0], b[1] - a[1])); }
   const T = cum[bound.length];
-  const pos = (q) => {
+  const pos = (q, how = 0) => {
     let bd = Infinity, bs = 0;
     for (let i = 0; i < bound.length; i++) {
       const a = bound[i], b = bound[(i + 1) % bound.length], dx = b[0] - a[0], dy = b[1] - a[1], L = dx * dx + dy * dy;
       const t = L ? Math.max(0, Math.min(1, ((q[0] - a[0]) * dx + (q[1] - a[1]) * dy) / L)) : 0, d = Math.hypot(q[0] - a[0] - dx * t, q[1] - a[1] - dy * t);
       if (d < bd) { bd = d; bs = cum[i] + t * (cum[i + 1] - cum[i]); }
     }
-    return bs;
+    return how ? bd : bs;
   };
   // the way round `bound` from position s0 to s1, the shorter of the two (the points between, s1's own not included)
   const round = (s0, s1) => {
@@ -404,7 +404,9 @@ function lines(edge, obstacles, { kind, bound = edge, cover = false, clear = 2.5
       const at = (u) => [u * U[0] + v * V[0], u * U[1] + v * V[1]];
       for (let k = 0; k + 1 < cut.length; k += 2) {
         let open = null;
-        const close = (u1, f1) => { if (open && u1 - open.u >= QUILT_LINES.min) segs.push({ r, ends: [{ q: at(open.u), f: open.f }, { q: at(u1), f: f1 }], done: false }); open = null; };
+        // (a stretch that only clips the edge, never `sliver` mm from it, reads as a second border line: left out)
+        const deep = (ua, ub) => [0.25, 0.5, 0.75].some((f) => pos(at(ua + (ub - ua) * f), 1) >= QUILT_LINES.sliver);
+        const close = (u1, f1) => { if (open && u1 - open.u >= QUILT_LINES.min && (!(open.f && f1) || deep(open.u, u1))) segs.push({ r, ends: [{ q: at(open.u), f: open.f }, { q: at(u1), f: f1 }], done: false }); open = null; };
         for (let u = cut[k]; ; u = Math.min(cut[k + 1], u + 0.25)) {
           const ok = free(...at(u));
           if (ok && !open) open = { u, f: u === cut[k] };

@@ -114,5 +114,6 @@ export const PATCH = { cover: 1.0 };
 // Straight-line quilting (studio/quilt.js `lines`): lines `stripes` mm apart, or two sets `cross` mm apart at right
 // angles, at `angle` degrees so no line runs along the weave. A hand quilter's crosshatch is 1/2 to 1 in apart on a
 // bed quilt; in a 4 to 5 in block 8 to 10 mm still reads as a pattern and holds thin batting everywhere (the stipple
-// here is 5 mm apart, the echo 4). Stitches up to `stitch` mm, as the other quilting; no stretch under `min` mm.
-export const QUILT_LINES = { stripes: 8, cross: 10, angle: 45, stitch: 2.5, min: 4 };
+// here is 5 mm apart, the echo 4). Stitches up to `stitch` mm, as the other quilting; no stretch under `min` mm,
+// and none that stays within `sliver` mm of the frame line all its way (it read as a second, crooked border).
+export const QUILT_LINES = { stripes: 8, cross: 10, angle: 45, stitch: 2.5, min: 4, sliver: 3 };
