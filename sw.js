@@ -73,6 +73,7 @@ const FILES = {
   "js/studio/motifs.js": "4f60c90573db9bd4f3affcc9d1b845f3a353c08f53c74f4e41f9e141745928cb",
   "js/studio/names.js": "b27454005de5aa56f118d550f890008913fdcb63de1035151a3a9527ba301e79",
   "js/studio/outline.js": "a40044337aa3875af73b8b8d3551ca4c233319d42ea75fd53b00406edf49f8fa",
+  "js/studio/borders.js": "",
   "js/studio/compose.js": "9015855c5789e57e3aac379b34dab458521f945e05f719d6deb0f09fcb49c552",
   "js/studio/fabrics.js": "8eb75afaa2462adae20b1a454164a003bfd1506b815aa82d6942a621632f0685",
   "js/studio/files.js": "3c1d1c2798c1f8d7e3611d83312886ce1a0555ff9ecb773808a67275cccdedb5",
