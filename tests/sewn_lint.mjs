@@ -61,7 +61,7 @@ const RAW_SIZE = process.env.EMPTY ? [] : [
   ["js/studio/fixes.js", "lineChoice", "offered only when no frame fits it (!d.fs): asked = sewn"],
   ["js/studio/toobig.js", "twoHoopings", "lettering no frame fits: asked = sewn"],
   ["js/studio/fixes.js", "hoopLines", "lettering no frame fits (!fit.has): asked = sewn; each size checked by landing()"],
-  ["js/studio/toobig.js", "fitWays", "sets and names the size hoopLines() found (lettering no frame fits)"],
+  ["js/studio/toobig.js", "linesWay", "sets and names the size hoopLines() found (lettering no frame fits)"],
   ["js/studio/ui.js", "autoWords", "the words made biggest name the file: what was asked (intent), not what a frame left"],
   ["js/studio/ui.js", "main", "the words made biggest are the name the names batch swaps (intent)"],
   ["js/studio/ui.js", "pickStarter", "a starter's own sizes, fitted (fitHoop, fittedSizes) before it's shown"],

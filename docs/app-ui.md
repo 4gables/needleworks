@@ -95,7 +95,9 @@ Reference for this part of Needleworks: the rules, the reason for each (it stops
 - "Make another in the hoop" is also among the preview's links (`#another-open`, a lone upright in-the-hoop
   project): on a phone the one under the starters is 1,475 px down.
 - A long line too big for the hoop is offered on two or three lines beside Fit to hoop (`hoopLines`: at its own size
-  where that lands, else the biggest that's a quarter over what Fit to hoop leaves). "+ Motif" (or any piece) on a
+  where that lands, else the biggest that's a quarter over what Fit to hoop leaves). Each line count is tried in a
+  task of its own after the note is up, and not at all where the one line's box says it can't fit: the words on new
+  lines are drawn for the first time there (0.2-0.4 s), and both at once held "long line set" 850 ms. "+ Motif" (or any piece) on a
   full in-the-hoop project offers the biggest thing on it a tenth to four tenths smaller, where that makes room and
   lands (`noRoom`).
 - A hoop change drops other tabs' designs. Min/max over stitches uses loops (`Math.min(...pts)` overflows past ~110k).
