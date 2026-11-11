@@ -209,6 +209,25 @@ try {
   await save("st_6x10_banner_turned", [P({ kind: "text", text: "Happy Birthday", font: FONTS[1].family, size: 30 }),
     P({ kind: "text", text: "Grandma Rose", font: FONTS.find((x) => x.print).family, size: 16, y: 34, color: "#ed171f" })], "6x10", false, { ...big, turn: true });
 }
+// Arrange (js/studio/layout.js): a wreath round a name, words round a circle, a corner set (mirrored, and with the
+// bottom two upright), a piece flipped top to bottom, a monogram in the usual order. The copies follow the piece in
+// the list, so each set sews in one thread.
+{
+  const L = await import("../../js/studio/layout.js"), { sewnBox } = await import("../../js/studio/pieces.js");
+  const field = [126, 176], next = () => id++, size = (p) => { const b = sewnBox(p, [p]); return [b[2] - b[0], b[3] - b[1]]; };
+  const leaf = P({ kind: "motif", motif: "leaf", size: 24, style: "fill", color: "#00673e" });
+  await save("st_lay_wreath_8", [...L.ring(leaf, 8, size(leaf), field, next), P({ kind: "text", text: "Noel", font: FONTS[0].family, size: 18, color: "#ed171f" })]);
+  const love = P({ kind: "text", text: "love", font: FONTS[0].family, size: 12, y: -34, color: "#ed171f" });
+  await save("st_lay_ring_words_5", L.ring(love, 5, size(love), field, next));
+  const bird = P({ kind: "motif", motif: "bird", size: 26, style: "fill", x: -42, y: -66, color: "#0e1f7c" });
+  await save("st_lay_corners", [P({ kind: "text", text: "Emma", font: FONTS[0].family, size: 22, color: "#ed171f" }), ...L.corners(bird, size(bird), field, next)]);
+  await save("st_lay_corners_upright", [P({ kind: "text", text: "Emma", font: FONTS[0].family, size: 22, color: "#ed171f" }), ...L.corners(bird, size(bird), field, next, true)]);
+  const star = P({ kind: "motif", motif: "star", size: 20, style: "fill", color: "#e8a900" });
+  await save("st_lay_corners_4x4", L.corners(star, size(star), [96, 96], next), "4x4");
+  await save("st_lay_flip_down", [L.flipDown(P({ kind: "motif", motif: "tulip", size: 60, style: "fill", rot: 20, color: "#ed171f" }))]);
+  await save("st_lay_mono_surname", [P({ kind: "monogram", letters: L.monogramOf("surname", { first: "Jane", middle: "Ann", last: "Smith" }).letters, font: FONTS[0].family, size: 30 })]);
+  log("arrange: done");
+}
 log(`DONE ${n} files, ${bad} problems`);
 document.title = `DONE ${n} ${bad}`;
 </script>

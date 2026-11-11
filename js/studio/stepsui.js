@@ -76,7 +76,7 @@ export function stepsPanel(S) {
       + steps.map((st, i) => st.rehoop ? `<li class="after"><b>${api.escapeHtml(st.title)}</b>${youHtml(st.you, api.escapeHtml)}</li>` : `<li><button type="button" data-step="${i}" aria-pressed="${api.step() === i}">
       <b><span class="n">${++n}</span><i style="background:${st.color}"></i>${api.threadHtml(st.color, st.machine || nearestBrotherThread(st.color).name, " ", S.guides.has(st.color))}</b>
       ${st.you ? youHtml(st.you, api.escapeHtml) : ""}<span>${api.escapeHtml(st.sews.join(" "))}</span>
-      ${st.early ? `<small>Sewn early, with the other ${api.escapeHtml(st.machine || nearestBrotherThread(st.color).name)} parts, to save a thread change.</small>` : ""}</button></li>`).join("")
+      ${st.early ? `<small>This part is sewn now, while ${api.escapeHtml(st.machine || nearestBrotherThread(st.color).name)} is on the machine, so you change thread once less.</small>` : ""}</button></li>`).join("")
       + (S.threadTip(small) ? `<li class="after"><b>Thread and needle</b><span>${api.escapeHtml(S.threadTip(small))}</span></li>` : "")
       + (after.length ? `<li class="after"><b>When it's done</b><span>${api.escapeHtml(after.join(" "))}</span></li>` : "");
   }

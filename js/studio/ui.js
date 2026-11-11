@@ -1,7 +1,8 @@
 /*! Needleworks (c) 2026 4Gables. All rights reserved. Proprietary, see LICENSE. https://4gables.com/needleworks/ */
 // Design tab UI: start from a card, edit pieces in a short list, drag them on the preview.
 import { editorPanel } from "./editor.js";
-import { problemsOfPieces } from "./problems.js";
+import { problemsOfPieces, sewsThin } from "./problems.js";
+import { layoutPanel } from "./layout.js";
 import { offPage } from "./offpage.js";
 import { stepsPanel } from "./stepsui.js";
 import { fixes } from "./fixes.js";
@@ -164,6 +165,7 @@ export function initStudio(api) {
   // the editor's parts (each reads the editor through S when it's used, so they can all be made here)
   const { newProblem, landing, hard, against, overlapping, runUp, frameLines, twoLines, frameOf, frameFor, display, sizeChange, roomIn, worseSaid, keepWord, moveAway, and, grown, asLettering, lineChoice, hoopLines, roundAll, carried, asText, sewAfter, resizeFrame } = fixes(S);
   const { recentUI, keptSaid, keep } = recentDesigns(S);
+  const { arrangeUI } = layoutPanel(S);
   const { swatchTip, threadOf, machineName, allThread, threadTip, threadNames, sameSpool, relabelThreads, oneThread } = threadSaid(S);
   const { split, appliqued } = tooBigWays(S);
   const { spotIn, freeRoom, freeSpot, sewnAt, noRoom, onFrame, fitsWith, ungang, spotFor, MOTIF_MIN, alike } = placing(S);
@@ -415,7 +417,7 @@ export function initStudio(api) {
   const autoName = (p) => {
     if (fabric === "towel") return "Automatic: bold";
     if (!bulkReady(p)) return "Automatic";
-    return !fineLine({ ...sewn(p, pieces), style: "auto" }) ? "Automatic: bold" : "Automatic: thin line";
+    return !sewsThin({ ...sewn(p, pieces), style: "auto" }) ? "Automatic: bold" : "Automatic: thin line";
   };
   const stitchSeg = (p) => seg("style", { ...STITCHES, auto: autoName(p) }, p.style || "auto");
   let moreOpen = false, sizing = null;   // (`sizing`: the layout as a frame's size slider was taken up)
@@ -424,7 +426,7 @@ export function initStudio(api) {
   const editor = () => api.keepFocus($("st-edit"), drawEditor);
 
   let drawnId = null;   // (the piece the editor panel was last drawn for)
-  function ui() { api.keepFocus($("panel-design"), () => { list(); editor(); sewnOn(); }); api.paint?.(); }
+  function ui() { api.keepFocus($("panel-design"), () => { list(); editor(); sewnOn(); arrangeUI(); }); api.paint?.(); }
   // the design's one in-the-hoop project, upright (the one "Make another in the hoop" copies), or null
   const loneProject = () => { const ith = pieces.filter((f) => f.kind === "frame" && (f.border === "ith" || f.border === "zip") && !(f.rot || 0)); return ith.length === 1 ? ith[0] : null; };
   function sewnOn() {
@@ -496,6 +498,9 @@ export function initStudio(api) {
 
   const nextTask = () => new Promise((r) => setTimeout(r));
   let waitSaid = false, madeOnce = false;   // ("Getting the lettering ready…" is up; a design has been made)
+  const plain = (ps) => JSON.stringify(ps.map(({ id, ...q }) => q));
+  let sample0 = null;
+  const untouched = () => plain(pieces) === (sample0 ??= plain(STARTERS.find((q) => q.id === "framed").make()));
   async function make(dragging = false) {
     try { return await build(dragging); } finally { madeOnce = true; if (waitSaid) { waitSaid = false; api.busy(false); } }
   }
@@ -537,6 +542,9 @@ export function initStudio(api) {
         const fill = unquilted?.find((j) => j.kind === "patch"); if (fill) quiltSoon(fill);
         // fitted with Fit to hoop and since grown by a font or style change: fitted again (it came out 1 mm over)
         if (fitted && !dragging && !refitted) { refitted = true; fitHoop(); return; }
+        // (the opening sample, untouched, is fitted to a smaller hoop when one is picked: a newcomer chose her 4x4
+        // first and met a red "Too big for this hoop" on a design she hadn't made)
+        if (!dragging && !refitted && untouched()) { refitted = true; fitHoop(); toast(`The sample is made smaller to fit the ${api.hoop().name}.`); return; }
         split(err, dragging); return;
       }
       if (s !== seq) return;
@@ -673,7 +681,9 @@ export function initStudio(api) {
     // (words with letters in them before a date: the ring-bearer pillow's bigger "06.20.27" named it 06_20_27.pes, not
     // after "Sam & Alex")
     const big = (ps) => ps.reduce((a, p) => (!a || p.size > a.size ? p : a), null), lettered = (p) => /\p{L}/u.test(p.text ?? p.letters ?? "");
-    const pick = (ok) => big(pieces.filter((p) => ok(p) && p.kind === "text" && (p.shape || "straight") === "straight")) || big(pieces.filter((p) => ok(p) && p.kind === "monogram"))
+    // (appliqué letters count with straight words: a bib's 60 mm appliqué M was M.pes until a small "Est. 2026" was
+    // typed under it, then Est_2026.pes)
+    const pick = (ok) => big(pieces.filter((p) => ok(p) && ((p.kind === "text" && (p.shape || "straight") === "straight") || p.kind === "letters"))) || big(pieces.filter((p) => ok(p) && p.kind === "monogram"))
       || big(pieces.filter((p) => ok(p) && (p.kind === "text" || p.kind === "monogram" || p.kind === "letters")));
     // (only words a file name can carry: empty lettering named it after the starter, spaces alone design.pes)
     const said = (p) => (p.kind === "monogram" ? p.letters : unswashed(p.text)), named = (p) => !!api.safeName(said(p), "");
@@ -1125,8 +1135,12 @@ export function initStudio(api) {
     }
     return best;
   };
-  function start(mm) {
+  // Zoomed in, a drag moves a piece only when it is the one already selected: any other drag slides the view (a
+  // tester zoomed in to read 6 mm lettering, dragged to reach it and moved the appliqué letter under her finger: the
+  // design grew from 80 to 140 mm tall and the view went blank). A tap picks a piece at any zoom (`pick`).
+  function start(mm, zoomed = false) {
     const p = hit(mm); if (!p) return false;
+    if (zoomed && sel !== p.id) return false;
     if (sel !== p.id) { sel = p.id; ui(); showEditor(false); }
     drag = { p, from: mm, x: p.x, y: p.y, moved: false };
     return true;
@@ -1141,6 +1155,11 @@ export function initStudio(api) {
   }
   let dragFrame = 0;
   function end() { if (drag) { const moved = drag.moved; drag = null; if (moved) { fitted = false; settle(); } save(); if (moved) { make(); warn(); } } }
+  // a tap that wasn't a drag: the piece under it is selected, or nothing is
+  function pick(mm) {
+    const p = mm && hit(mm); if (!p) { deselect(); return; }
+    if (sel !== p.id) { sel = p.id; save(); ui(); showEditor(false); }
+  }
   // nothing selected (Escape, or a tap on empty preview): copy then takes the whole design
   function deselect() {
     if (sel == null) return;
@@ -1161,7 +1180,15 @@ export function initStudio(api) {
   function center() { change((p) => { p.x = 0; p.y = 0; }, true); }
   $("st-center").onclick = center;
   // shrink (or grow) everything together so the whole design fills the hoop, less a little room
-  $("st-fit").onclick = () => { remember(); fitHoop(); };
+  // (said, with the way back: it made an opened design 156 % of its size and the only word of it was in the piece's
+  // editor, once the piece was picked)
+  $("st-fit").onclick = () => {
+    const size = () => { const bs = sewnBoxes(pieces); return bs.length ? [Math.max(...bs.map((b) => b[2])) - Math.min(...bs.map((b) => b[0])), Math.max(...bs.map((b) => b[3])) - Math.min(...bs.map((b) => b[1]))] : null; };
+    const was = size(); remember(); fitHoop(); const now = size();
+    if (!was || !now) return;
+    const k = Math.max(now[0], now[1]) / Math.max(was[0], was[1]);
+    if (Math.abs(k - 1) >= 0.03) toast(`Fit to hoop made the whole design ${k > 1 ? "bigger" : "smaller"}, to fill the ${api.hoop().name}: ${Math.round(k * 100)} % of the size it was.`, { label: "Undo", run: undo });
+  };
   // how much bigger the design may be made: never a frame past the size its project is made for (`most`: the birth
   // announcement's 6 in display hoop)
   const mostScale = () => Math.min(...pieces.filter((p) => p.kind === "frame" && p.most).map((p) => p.most / Math.max(p.w, p.shape === "circle" ? p.w : p.h)));
@@ -1444,5 +1471,5 @@ export function initStudio(api) {
     }
     showEditor(true);
   }
-  return { make, addWords, showFix, usePicture, openSaved, downloaded, empty: () => !pieces.length, starter, rename, title: () => title, autoName: () => api.safeName(autoWords(), "design"), selBox: () => { const p = current(); return p ? pieceBounds(sewnAt(p)) : null; }, relabel: () => { ui(); make(); }, start, move, end, nudge, deselect, forNames, remember, another: () => !!loneProject(), twoUp: () => twoUp(loneProject()), recentre: () => { remember(); recentre(); save(); ui(); make(); } };
+  return { make, addWords, showFix, usePicture, openSaved, downloaded, empty: () => !pieces.length, starter, rename, title: () => title, autoName: () => api.safeName(autoWords(), "design"), selBox: () => { const p = current(); return p ? pieceBounds(sewnAt(p)) : null; }, relabel: () => { ui(); make(); }, start, move, end, nudge, deselect, pick, forNames, remember, another: () => !!loneProject(), twoUp: () => twoUp(loneProject()), recentre: () => { remember(); recentre(); save(); ui(); make(); } };
 }

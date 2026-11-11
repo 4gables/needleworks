@@ -171,7 +171,8 @@ export function placing(S) {
   }
   // nothing added: there's no room for it, said plainly (with "Add it anyway" where that can still be sewn, in two
   // hoopings or a bigger hoop; not on an in-the-hoop project, where it would sew on the bare stabilizer)
-  const whatOf = (p) => ({ text: "more lettering", monogram: "a monogram", letters: "appliqué letters", frame: "another frame" }[p.kind] || `a ${label(p).toLowerCase()}`);
+  // (a frame by what it is: a copy of an appliqué heart was "another frame")
+  const whatOf = (p) => ({ text: "more lettering", monogram: "a monogram", letters: "appliqué letters", frame: `another ${label(p).toLowerCase()}` }[p.kind] || `a ${label(p).toLowerCase()}`);
   // Where there's room with the hoop turned (the long side across), or for a design file made smaller (it's re-stitched
   // at that size, 90 % down to 50 %), that's offered first: a 100 mm bolt.pes on the tote bag offered only "Add it
   // anyway", which made the design too big, though turning the hoop S.fitted it. Each is worked out before it's offered.

@@ -269,11 +269,17 @@ Reference for this part of Needleworks: the rules, the reason for each (it stops
   colour; blocks named Placement/Tackdown/Cutting get appliqué words; same-thread blocks keep their pause. Resize via
   `orig` + `scale` 0.5-2.5, re-stitched by `fix` in a worker (`resizeFile`/`restitchFiles`; `pending` holds Download).
   Open tab "Add words to this design" (`studio.addWords`).
+- The file's own block names travel with it: a copy written by the Open tab names threads as the machine does, and
+  the doctor's `fix` hands back threads without names, so `open-words` puts the opened file's names back block for
+  block and a re-stitch keeps `orig`'s (gnome.pes fixed, words added, fitted: 18 steps of "Sews gnome (colour 1)" and
+  no word on the appliqué fabric).
 ### One for each name
 - `main()` (biggest text or monogram, letters before a date) names the file and is swapped. Names drawn at the
   design's letter scale (`inkHeight`), keep bold, shrink to fit (90 %… 55 %) or are captioned; a missing glyph refuses
   a name; past 40 are left out; with the hoop turned, a name that sews the same upright (size, nothing run into, as bold, one
-  line) is made upright, only names needing the room turned, each captioned "hoop turned" and named in the hooping note
+  line) is made upright, only names needing the room turned (unless the hoop was turned on purpose: the design's own
+  name sews upright too, a towel starter hooped sideways; then every file stays turned, `onPurpose`: the single
+  download was turned and the batch upright, nothing said, v27 tester), each captioned "hoop turned" and named in the hooping note
   (Bo and Grace were turned with Benjamin). Each file's caption says its loose threads (`shortJumps`). The dialog says
   problems as names are typed (`namesTyped`/`namesSaid`, `forNames().refused` shared with Make). Each file validated and judged;
   `<starter or file>_<N>_names|monograms.zip`, names deduplicated ignoring case (emma/Emma collide on macOS, FAT).
@@ -283,6 +289,27 @@ Reference for this part of Needleworks: the rules, the reason for each (it stops
   (`Lily_Noah.pes`).
 - A batch name under the font's least x-height is refused (names with spaces tried on two lines first); captions say
   "smaller, N %"; exact duplicates are said. "One for each name" follows Download's block rule.
+
+### Arrange (`layout.js`)
+- Layout tools make ordinary pieces: a piece's place is x, y, `rot` and `flip` (flipped left to right, then turned:
+  `placer`), so a copy is the piece with those changed and nothing new is stitched. The copies take the piece's place
+  in the list, in its thread: a wreath of 8 has no thread change.
+- Mirrors as rot and flip: left to right = flip, rot -> -rot; top to bottom = flip, rot -> 180 - rot; both = rot + 180.
+  Lettering (text, monogram, appliqué letters) is never mirrored: its copies are plain copies, and Flip top to bottom
+  is off for it.
+- Repeat in a circle: n copies round the hoop's centre, each turned to face out. A piece standing 5 mm or more off
+  centre sets the radius and the start; one in the middle gets `ringRadius`: 2 mm clear of its neighbours, three
+  quarters of the way out to the field's edge when there is room (at the edge a wreath leaves no middle for words).
+  Too many for the hoop is the design's usual "too big", with its usual ways out.
+- One in each corner: where the piece stands is one corner (the field's corner, 3 mm in, from the middle), the other
+  three its mirrors across the centre lines. Mirrored top to bottom a figure stands on its head (right for a
+  flourish, wrong for a bunny): the note offers "Stand the bottom two upright" (left-to-right mirrors only).
+- A frame isn't arranged (it holds other pieces; copies would each claim them).
+- Monogram orders (`MONOGRAMS`, `monogramOf`): from first, middle (or a partner's first) and last name: surname big in
+  the middle (first LAST middle), a couple (first LAST partner), in order all one size (plain lettering: a monogram
+  piece always sews the middle of three bigger), two initials. Each choice shows the letters as they will sew.
+- Guards: said_flow (8 in a circle are 8 pieces in one thread, said with Undo; corners mirrored and inside the hoop;
+  no top-to-bottom flip for lettering), ui_sweep `design-arrange`, batch files `st_lay_*`.
 
 ## Bookmark (a starter since 2026-10-31)
 - Was its own panel and engine (`bookmark.js`, `#panel-bookmark`, `bookmarks_N.zip`); now the first "Start from" card,

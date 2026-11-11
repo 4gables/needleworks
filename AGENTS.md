@@ -28,7 +28,8 @@ measurements behind each number are in the code's comments.
   parts as `S`), `starters.js`, `names.js` (One for each name), `recent.js` (Recent designs),
   `placing.js` (where a piece goes), `threadsaid.js` (thread names in the editor), `toobig.js` (too big for the
   hoop and the ways out), `problems.js` (the problems list), `editor.js` (the piece editor panel), `fixes.js` (one-tap fixes), `stepsui.js` (steps panel), `offpage.js` (worker jobs),
-  `outline.js`, `quilt.js`, `motifs.js`. pieces.js still re-exports what moved out of it.
+  `outline.js`, `quilt.js`, `motifs.js`, `borders.js` (decorative and blanket-stitch borders), `layout.js` (Arrange: circle,
+  corners, flip, monogram orders), `ownfont.js` (a maker's own font file, kept in the browser). pieces.js still re-exports what moved out of it.
 - `js/doctor.js` + `doctor-worker.js` (Open tab fixes), `quality.js` (the checker's rules), `words.js` (problems
   list per view, stop/thread vocabulary), `gate.js` (the only exit for files: `handOut`), `sheet.js` (step text, sew
   sheet, cut file), `render.js` (`draw`), `jobs.js` (one job queue for the three workers, with time limits), `worker.js`,
@@ -90,7 +91,8 @@ measurements behind each number are in the code's comments.
   float 0.3 reads 0.29999) over 2 % bar the first 6 after a jump/trim/colour change; same hole over 1 %; density over
   24; satin same-edge gap over 0.6 mm; over 99 colour blocks (the PE900's limit); PEC thread count not one per block;
   design block disagreeing with PEC.
-- **Hoops** (`machines.js`): fit the field minus `MARGIN` 2 mm. PE900 5x7 = 130 x 180 mm, 4x4 = 100 x 100 mm.
+- **Hoops** (`machines.js`): fit the field minus `MARGIN` 2 mm. PE900 5x7 = 130 x 180 mm, 4x4 = 100 x 100 mm. A design
+  no 5x7 field holds is written with the 160 x 260 page (writer change W1; unproven on a 6x10 machine).
 - **Download names are ASCII** (`safeName`: transliterates Ł ø ß æ œ đ þ, Greek, Cyrillic, Hebrew; `CON_.pes` for
   Windows device names): the machine's USB reader may not show others.
 - **The preview is the file:** `setView` decodes `v.bytes` with `readEmbroidery` and draws, counts and fit-checks
@@ -142,6 +144,8 @@ Read the topic's file before changing its code; each holds the rules, their reas
 - The batch run ends with the scoreboard (`flow_lint.mjs --score`): each kind of design's trims, loose threads,
   wasted moves, exposed locks, tiny stitches and files at the density limit, with the change from
   `tests/fixtures/quality.json`. A stitch change is better when its row improves and no other gets worse.
+- CI runs on `main`, `rel-*` branches and tags only; a round's own branch is tested where it is built (run the Node
+  tests before each push).
 - Details, the VM check and what each check guards: `docs/testing.md`.
 
 ## Hosting

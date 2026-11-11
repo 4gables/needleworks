@@ -97,6 +97,9 @@ const STATES = [
   { id: "design-steps", hash: "design", seed: studio([{ id: 1, x: 0, y: 0, color: "#ed171f", kind: "frame", shape: "circle", w: 90, h: 90, border: "applique" }, text(2, "Emma")]),
     setup: async (p) => { await p.eval(`(()=>{const d=document.querySelector('#panel-design details.steps');d.open=true;d.scrollIntoView({block:'start'})})()`); await p.click("#st-steps [data-step]"); } },
   { id: "design-sewn", hash: "design", seed: studio([text(1, "Emma")], { fabric: "towel" }), setup: async (p) => { await p.eval(`document.getElementById('st-sewn').open=true`); } },
+  // (Arrange open on a monogram: the layout tools and the monogram's orders, with names typed)
+  { id: "design-arrange", hash: "design", seed: studio([{ id: 1, x: 0, y: 0, color: "#0e1f7c", kind: "monogram", letters: "aMs", font: "NW Great Vibes", size: 30 }]),
+    setup: async (p) => { await p.eval(`(()=>{const d=document.getElementById('st-arrange');d.open=true;for(const [k,v] of [['first','Jane'],['middle','Ann'],['last','Smith']]){const e=document.getElementById('st-mono-'+k);e.value=v;e.dispatchEvent(new Event('input',{bubbles:true}))}d.scrollIntoView({block:'center'})})()`); }, keys: true },
   { id: "design-more", hash: "design", seed: studio([text(1, "Emma")]), setup: async (p) => { await p.eval(`(()=>{const d=document.querySelector('#st-edit details.more');if(d){d.open=true;d.scrollIntoView({block:'center'})}})()`); } },
   // (Recent designs, open, with long names: round 14; the appliqué tips seen, as they'd open above the list and push
   // it down, a scroll the keys check counts)
@@ -109,7 +112,7 @@ const STATES = [
   { id: "picture-error", hash: "picture", seed: {}, setup: async (p) => { await p.upload("#pic-file", path.join(FILES, "blank.png")); }, wait: "!document.getElementById('error').hidden" },
   // (a picture with nothing to stitch isn't brought back at the next visit: the tab opened on its error, not the sample)
   { id: "picture-after-blank", hash: "picture", seed: {}, setup: async (p) => { await p.upload("#pic-file", path.join(FILES, "blank.png")); for (let i = 0; i < 100 && !(await p.eval("!document.getElementById('error').hidden")); i++) await sleep(200); await sleep(500); await p.eval("location.reload()"); await sleep(1500); }, wait: "!document.getElementById('download').disabled && !document.getElementById('pic-sample-note').hidden" },
-  // (Small details: the choice, with "Keep all" taken)
+  // (Small details: the choice, with "Keep specks" taken, and its note beside it)
   { id: "picture-details", hash: "picture", seed: {}, setup: async (p) => { await p.upload("#pic-file", path.join(FILES, "badge.png")); for (let i = 0; i < 100 && !(await p.eval("!!document.querySelector('#pic-palette button')")); i++) await sleep(200); await p.eval("document.querySelector('#pic-details [data-v=all]').click()"); }, wait: "!document.getElementById('download').disabled && document.querySelector('#pic-details [data-v=all]').getAttribute('aria-pressed') === 'true'", keys: true },
   { id: "picture-swap", hash: "picture", seed: {}, setup: async (p) => { await p.upload("#pic-file", path.join(FILES, "badge.png")); for (let i = 0; i < 100 && !(await p.eval("!!document.querySelector('#pic-palette button')")); i++) await sleep(200); await p.eval("document.querySelector('#pic-palette button').click()"); }, wait: "!document.getElementById('pic-swap').hidden", keys: true },
   { id: "open", hash: "open", seed: {} },

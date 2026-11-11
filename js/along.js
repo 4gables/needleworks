@@ -112,7 +112,7 @@ function renameNote() {
   if (cut) el.value = el.value.slice(0, 60);
   const t = tidy(el.value).trim(), as = safeName(t, "");
   $("rename-auto").hidden = !studio.title();
-  $("rename-note").textContent = (cut ? "60 letters and spaces is the most: the rest was left out. " : "") + (!t ? `Empty, it's named from the design: ${studio.autoName()}.pes.`
+  $("rename-note").textContent = (cut ? "60 letters and spaces is the most: the rest was left out. " : "") + (!t ? `Left empty, the file is named after the biggest words in the design, so the name follows what you type there: ${studio.autoName()}.pes now. A name typed here stays.`
     : !as ? "Use some letters or numbers: the machine shows only those." : `The file will be ${as}.pes${as !== t.replace(/\s+/g, "_") ? " (the machine's screen shows plain letters, numbers, - and _)" : ""}. Saved designs, ZIPs and cutter files take this name too.`);
 }
 $("rename-name").addEventListener("input", renameNote);
@@ -232,7 +232,7 @@ $("names-make").onclick = async () => {
   $("names-note").classList.toggle("warn", bad.length > 0 || runs.length > 0 || poor.length > 0 || left.length > 0 || thin.length > 0 || twice.length > 0 || tiny.length > 0);
   $("names-note").textContent = `${files.length ? `Made ${files.length} ${files.length === 1 ? "file" : "files"}, saved as one .zip (open it and copy the .pes files to the USB stick). ` : ""}`
     + (side.length === made.length && side.length > 1 ? `Every file is turned like the design: ${lay} a quarter turn round for each, with the top of the name toward the right of the hoop (the machine shows them on their side). `
-      : side.length ? `${lay[0].toUpperCase() + lay.slice(1)} a quarter turn round for ${side.map((m) => m.file).join(", ")}: the machine shows ${side.length === 1 ? "it" : "them"} on ${side.length === 1 ? "its" : "their"} side, with the top of the name toward the right of the hoop. ` : "")
+      : side.length ? `${lay[0].toUpperCase() + lay.slice(1)} a quarter turn round for ${side.map((m) => m.file).join(", ")}: the machine shows ${side.length === 1 ? "it" : "them"} on ${side.length === 1 ? "its" : "their"} side, with the top of the name toward the right of the hoop. ${side.length < made.length ? `The ${made.length - side.length === 1 ? "other is" : "others are"} upright, since ${made.length - side.length === 1 ? "it fits" : "they fit"} that way: hoop ${made.length - side.length === 1 ? "it" : "them"} as usual. ` : ""}` : "")
     + (runs.length ? `Runs into another piece: ${runs.map((m) => m.name).join(", ")} (${$("names-shrink").checked ? "even at half size: shorten" : `tick "Make long names smaller", or shorten`} ${runs.length === 1 ? "it" : "them"}). ` : "")
     + (tiny.length ? `Too small to stitch cleanly, like the design's own lettering: ${tiny.map((m) => m.name).join(", ")} (letters ${mmText(Math.min(...tiny.map((m) => m.size[0])))} tall; this font needs ${mmText(tiny[0].size[1])}). Make the lettering bigger first. ` : "")
     + (thin.length ? `Sewn as a thin line, not bold like the design (too small for bold once shrunk to fit): ${thin.map((m) => m.name).join(", ")}. ` : "")
