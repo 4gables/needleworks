@@ -89,8 +89,9 @@ Reference for this part of Needleworks: the rules, the reason for each (it stops
   - Main shapes only: flecks to 12 mm² with half their edge against other colours take that colour; a piece under
     80 mm, under half its colour's biggest and among the smallest that together sew 30 % of the colour's thread
     goes, unless 30 % of its edge lies against other colours (part of something). Samples: trims 1,162 -> 853
-    (-27 %), loose 67 -> 39 (-42 %); five held-out pictures 1,418 -> 950 (-33 %), 82 -> 46; corpus 538 -> see
-    `docs/roadmap.md`. What is left is whole sprigs and shapes: a third off the trims on every picture would mean
+    (-27 %), loose 67 -> 39 (-42 %); five held-out pictures 1,418 -> 950 (-33 %), 82 -> 46; corpus 538 -> 440
+    (-18 %), 9 -> 5, where small lettering loses letters (17 of its 122 cases then fail its drawn-against-sewn
+    checks, as they should). What is left is whole sprigs and shapes: a third off the trims on every picture would mean
     dropping those.
   - The panel says how many pieces were left out, with "Keep them all"; the left-out-parts warning offers "Keep
     all the small details" when that sews them, and is not raised for "Main shapes only" (a choice, not a fault).
