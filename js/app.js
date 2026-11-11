@@ -309,10 +309,11 @@ export function toast(msg, action) {
 function toastPlace() {
   if (toastBox.hidden) return;
   toastBox.classList.remove("top");
-  const a = document.activeElement;
-  if (!a || a === document.body || toastBox.contains(a)) return;
-  const r = a.getBoundingClientRect(), t = toastBox.getBoundingClientRect();
-  if (r.width && r.left < t.right && r.right > t.left && r.top < t.bottom && r.bottom > t.top) toastBox.classList.add("top");
+  // (nor Download and Send, whatever has focus: "Replaced your design…" sat over both for 15 s on a phone and a
+  // laptop, and a tester waited for it to go before she could get her file)
+  const a = document.activeElement, t = toastBox.getBoundingClientRect();
+  const under = (el) => { const r = el?.getBoundingClientRect(); return !!r && r.width > 0 && r.left < t.right && r.right > t.left && r.top < t.bottom && r.bottom > t.top; };
+  if ((a && a !== document.body && !toastBox.contains(a) && under(a)) || under($("download")) || under($("share"))) toastBox.classList.add("top");
 }
 // (held while it's being read or reached for, then given a moment more)
 const toastHold = (on) => {
@@ -354,12 +355,16 @@ function toMm(e) {
 // A piece drag holds the view's fit and centre (`state.hold`) until it's let go, then the view refits. A tap on empty
 // preview (not a pan) unselects the piece (there was no way to, so copying the whole design was out of reach).
 let dragging = false, tap = null;
+// (past this zoom a drag slides the view unless it starts on the selected piece: ui.js `start`)
+const ZOOMED = 1.2;
+// a slide never takes the design off the preview: the fitted view's middle stays inside it (it was left blank)
+const held = ([x, y]) => { const lx = (canvas.clientWidth / 2) * Math.max(1, state.zoom), ly = (canvas.clientHeight / 2) * Math.max(1, state.zoom); return [Math.max(-lx, Math.min(lx, x)), Math.max(-ly, Math.min(ly, y))]; };
 canvas.addEventListener("pointerdown", (e) => {
   canvas.setPointerCapture(e.pointerId);
   tap = null;
   if (state.mode === "design" && !pointers.size) {
-    const mm = toMm(e); dragging = !!(mm && studio.start(mm));
-    if (dragging) state.hold = state.tf?.base; else tap = [e.clientX, e.clientY];
+    const mm = toMm(e); dragging = !!(mm && studio.start(mm, state.zoom > ZOOMED));
+    if (dragging) state.hold = state.tf?.base; else tap = [e.clientX, e.clientY, mm];
   }
   pointers.set(e.pointerId, [e.clientX, e.clientY]);
 });
@@ -378,14 +383,14 @@ canvas.addEventListener("pointermove", (e) => {
   // on a photo of the item, a drag that isn't on a piece slides the photo under the design
   if (state.backdrop && state.tf) {
     const k = 1 / state.tf.scale; state.backdrop.center = [state.backdrop.center[0] + (e.clientX - prev[0]) * k, state.backdrop.center[1] + (e.clientY - prev[1]) * k];
-  } else state.pan = [state.pan[0] + e.clientX - prev[0], state.pan[1] + e.clientY - prev[1]];
+  } else state.pan = held([state.pan[0] + e.clientX - prev[0], state.pan[1] + e.clientY - prev[1]]);
   pointers.set(e.pointerId, [e.clientX, e.clientY]); paintSoon();
 });
 export const up = (e) => {
   pointers.delete(e.pointerId);
   if (pointers.size) { tap = null; return; }
   if (dragging) { dragging = false; state.hold = null; studio.end(); paintSoon(); }
-  else if (tap && e.type === "pointerup" && state.mode === "design") studio.deselect();
+  else if (tap && e.type === "pointerup" && state.mode === "design") studio.pick(tap[2]);
   tap = null;
 };
 canvas.addEventListener("pointerup", up); canvas.addEventListener("pointercancel", up);

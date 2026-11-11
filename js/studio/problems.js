@@ -10,6 +10,16 @@ import { LOOK, BLOCK, TIP, mmText, isolate } from "../words.js";
 import { unswashed, initials, lackList, swashes } from "../core/typed.js";
 import { fittedSizes, label, pieceStitches, minSize, archRoom, touchingAll, loopsFill, fineLine, towelMin, underPatch, TEXT_SHAPES, archTight, pacer, PACED, drawAhead, fitFrame, inFrame, touching, archFit, archShrink, clearSize } from "./pieces.js";
 
+// Whether automatic lettering sews as a thin line, as the file has it: straight lines are each sized by the first
+// line's own ink (`textRows`), so it is the first line that decides. (Asked of all the lines as one, "Handmade with
+// love / by Grandma / March 2026" at 6 mm read "Automatic: thin line" over a satin file: the g and y of the later
+// lines made the joined words taller, so smaller.)
+export function sewsThin(p) {
+  if (p.kind !== "text" || (p.shape && p.shape !== "straight")) return fineLine(p);
+  const first = (p.text || "").split("\n").map((l) => l.trim()).find((l) => l);
+  return fineLine(first === undefined ? p : { ...p, text: first });
+}
+
 export function problemsOfPieces(S) {
   const { $, api } = S;
   function pieceProblems(p, fit = fittedSizes(S.pieces)) {
@@ -26,7 +36,7 @@ export function problemsOfPieces(S) {
     }
     if (words !== null && !pieceStitches(q).length) add("undrawn", BLOCK, `${L} comes out as no stitches at all: use fewer or other letters.`);
     d.m = minSize(q); d.room = archRoom(p); d.nears = touchingAll(q, S.pieces); d.near = d.nears[0] || null; d.fills = loopsFill(q);
-    d.gone = S.missing(p.text ?? p.letters ?? "", p.font); d.thin = fineLine(q);
+    d.gone = S.missing(p.text ?? p.letters ?? "", p.font); d.thin = sewsThin(q);
     d.towel = d.onTowel ? towelMin(d.m ? { ...q, size: d.m } : q) : 0;
     d.cover = underPatch(p, S.pieces);
     const base = p.kind !== "file" && underPatch(p, S.pieces, true), lost = !!base && S.hard(p.color, base.fill || base.color);
@@ -230,8 +240,8 @@ export function problemsOfPieces(S) {
       // (the size it sews bold with its loops open, found by trying: loops scale with the satin's width, which doesn't
       // grow with the size: measured at 12 mm the bold loops wanted 19, at 19 they wanted 24)
       let boldFills = bold ? loopsFill({ ...q, style: "satin" }) : 0;
-      for (let i = 0; i < 4 && boldFills > q.size && boldFills <= 60; i++) { const r = { ...p, size: boldFills }, n = fineLine(r) ? boldFills + 1 : loopsFill(r); if (!n || n <= boldFills) break; boldFills = n; }
-      const boldAt = boldFills > q.size && boldFills <= 60 && !fineLine({ ...p, size: boldFills }) && !(loopsFill({ ...p, size: boldFills }) > boldFills) ? S.landing(p, S.sizeChange(p, boldFills)) : null;
+      for (let i = 0; i < 4 && boldFills > q.size && boldFills <= 60; i++) { const r = { ...p, size: boldFills }, n = sewsThin(r) ? boldFills + 1 : loopsFill(r); if (!n || n <= boldFills) break; boldFills = n; }
+      const boldAt = boldFills > q.size && boldFills <= 60 && !sewsThin({ ...p, size: boldFills }) && !(loopsFill({ ...p, size: boldFills }) > boldFills) ? S.landing(p, S.sizeChange(p, boldFills)) : null;
       // (too small, thin, or loops filling on one long line, as Fit to hoop leaves a long name: two lines may be much
       // bigger; said with the problem it fixes)
       const lines = !d.fs && (m || fills || (d.thin && S.fabric !== "towel")) ? ((c) => (c ? ` On ${c.n === 2 ? "two" : "three"} lines${c.turn ? " with the hoop turned" : ""} it can be ${c.size} mm. ${btn(`data-lines="${c.size}" data-text="${encodeURIComponent(c.text)}"`, `Put it on ${c.n === 2 ? "two" : "three"} lines`, { fits: c.turn ? "turn" : "fits" })}` : ""))(S.lineChoice(p)) : "";

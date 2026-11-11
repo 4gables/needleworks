@@ -4,7 +4,8 @@
 // hands in its state and helpers as `S`. (Part of ui.js until 2026-11.)
 import { fontOf } from "../core/fonts.js";
 import { MAX_INITIALS, MAX_WORDS, initials, lackList, lacks, swashes, unswashed, withSwash } from "../core/typed.js";
-import { inkHeight, monoSize, collision, letterMetrics, touching, fineLine, compose, fittedSizes, label, minSize, pieceStitches } from "./pieces.js";
+import { sewsThin } from "./problems.js";
+import { inkHeight, monoSize, collision, letterMetrics, touching, compose, fittedSizes, label, minSize, pieceStitches } from "./pieces.js";
 
 // one file per name: the biggest lettering (the name, nearly always) gets each name in turn; when that's a monogram
 // (the coaster, the key fob), each line's initials take its place
@@ -15,7 +16,7 @@ export function forNames(S) {
   const mono = p.kind === "monogram";
   // (a design that already runs into itself isn't shrunk name by name for it: every name would come out smaller)
   // (worked out with the first name: every preview asks whether there's lettering to swap, ~50 ms on 15 pieces)
-  let clean = null;
+  let clean = null, chosen = null;
   const isClean = () => (clean ??= !collision(S.pieces)), opts = { fabric: S.fabric, baste: S.baste, thread: S.thread };
   return {
     canTurn: !api.turned() && api.hoop().w !== api.hoop().h, refused,
@@ -36,14 +37,23 @@ export function forNames(S) {
     // design's own lettering isn't) is refused, said with the size it would have been: in the oval a 36-letter name
     // fitted across the frame came out at 28 % with 2 mm letters, "(smaller)" all it said. A name of two or more
     // words is tried on two lines first (`lines: 2`).
+    // (a hoop turned though the design's own name sews upright was turned on purpose, by the starter or the maker:
+    // a towel hooped sideways. Then every file stays turned like the design: the single download came out turned
+    // and the batch upright, with nothing said, 2026-11.)
     build: (name, shrink = false, hp) => {
       const h = api.hoop();
-      if (!hp && api.turned() && h.w !== h.h) {
+      if (!hp && api.turned() && h.w !== h.h && !onPurpose()) {
         try { const u = whole(name, false, { ...h, w: h.h, h: h.w }); if (!u.smaller && !u.runs && !u.thin && !u.lines) return { ...u, turned: false }; } catch {}
       }
       return whole(name, shrink, hp || h);
     },
   };
+  function onPurpose() {
+    if (chosen !== null) return chosen;
+    const h = api.hoop(), own = mono ? p.letters : p.text;
+    try { const u = once(own, false, { ...h, w: h.h, h: h.w }); chosen = !u.smaller && !u.runs && !u.thin; } catch { chosen = false; }
+    return chosen;
+  }
   function whole(name, shrink, hp) {
       const m = once(name, shrink, hp);
       // (and one shrunk under 70 % whose letters come out a quarter bigger on two lines)
@@ -84,7 +94,7 @@ export function forNames(S) {
       // bib's heart at 18 mm and sewed thin at 15.5 though 16 cleared it bold, as typed in the editor). Shrunk by a
       // frame to letters at least 85 % of the design's x-height, it's sewn bold (satin) rather than thin. A thin line
       // only where bold genuinely can't sew, and the dialog says so.
-      const bold = S.fabric !== "towel" && (p.style || "auto") === "auto" && !fineLine({ ...p, size: was });
+      const bold = S.fabric !== "towel" && (p.style || "auto") === "auto" && !sewsThin({ ...p, size: was });
       const xh = (q) => (mono ? q.size : letterMetrics(q.text.split("\n").find((l) => l.trim()) || q.text, q.font, q.size, "auto").xh || 0);
       const step = (v) => Math.round(v * 2) / 2;
       let f = 1, size = step(size0), lastBold = 0, floor = 0, refined = false;
@@ -92,7 +102,7 @@ export function forNames(S) {
         try {
           let q = { ...p, [mono ? "letters" : "text"]: mono ? name : ends(name), size }, ps = S.pieces.map((r) => (r.id === p.id ? q : r));
           // (lettering inside a frame shrinks to fit it, so a long name can come out small without f changing)
-          const now = fittedSizes(ps).get(p.id) ?? q.size, ref = mono ? was : size0, thin = bold && fineLine({ ...q, size: now });
+          const now = fittedSizes(ps).get(p.id) ?? q.size, ref = mono ? was : size0, thin = bold && sewsThin({ ...q, size: now });
           if (thin && lastBold && !refined && !floor && size < lastBold - 0.5) { floor = size; size = lastBold - 0.5; continue; }
           if (thin && xh({ ...q, size: now }) >= 0.85 * xh({ ...p, size: was }) && !minSize({ ...q, size: now })) { q = { ...q, style: "satin" }; ps = S.pieces.map((r) => (r.id === p.id ? q : r)); }
           const turned = api.turned(), pattern = compose(ps, hp, opts).design.pattern();
@@ -109,7 +119,7 @@ export function forNames(S) {
           const small = minSize({ ...q, size: now }) && !minSize({ ...p, size: was }) ? xh({ ...q, size: now }) || 0.1 : 0;
           return { pattern, name, turned, runs: hit ? label(hit) : "", smaller: now < ref * 0.95,   // (said from 5 % smaller: "Ben (smaller)" stood beside an Ava the same height)
            // (`xh`, `least`, `own`: the x-height it sews at, the least that reads, the design's own: tests/text_fuzz.mjs)
-           pct: Math.round((100 * now) / ref), small, xh: xh({ ...q, size: now }), least: mono ? 4 : fontOf(p.font).min || 4, own: xh({ ...p, size: was }), thin: S.fabric !== "towel" && fineLine({ ...q, size: now }) && !fineLine({ ...p, size: was }) };
+           pct: Math.round((100 * now) / ref), small, xh: xh({ ...q, size: now }), least: mono ? 4 : fontOf(p.font).min || 4, own: xh({ ...p, size: was }), thin: S.fabric !== "towel" && sewsThin({ ...q, size: now }) && !sewsThin({ ...p, size: was }) };
         }
         catch (err) { if (!shrink || !err.overBy || f < 0.55) throw err; f -= 0.1; size = step(size0 * f); floor = 0; }
       }

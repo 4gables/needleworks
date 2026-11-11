@@ -1,7 +1,7 @@
 /*! Needleworks (c) 2026 4Gables. All rights reserved. Proprietary, see LICENSE. https://4gables.com/needleworks/ */
 // Design tab UI: start from a card, edit pieces in a short list, drag them on the preview.
 import { editorPanel } from "./editor.js";
-import { problemsOfPieces } from "./problems.js";
+import { problemsOfPieces, sewsThin } from "./problems.js";
 import { offPage } from "./offpage.js";
 import { stepsPanel } from "./stepsui.js";
 import { fixes } from "./fixes.js";
@@ -414,7 +414,7 @@ export function initStudio(api) {
   const autoName = (p) => {
     if (fabric === "towel") return "Automatic: bold";
     if (!bulkReady(p)) return "Automatic";
-    return !fineLine({ ...sewn(p, pieces), style: "auto" }) ? "Automatic: bold" : "Automatic: thin line";
+    return !sewsThin({ ...sewn(p, pieces), style: "auto" }) ? "Automatic: bold" : "Automatic: thin line";
   };
   const stitchSeg = (p) => seg("style", { ...STITCHES, auto: autoName(p) }, p.style || "auto");
   let moreOpen = false, sizing = null;   // (`sizing`: the layout as a frame's size slider was taken up)
@@ -1124,8 +1124,12 @@ export function initStudio(api) {
     }
     return best;
   };
-  function start(mm) {
+  // Zoomed in, a drag moves a piece only when it is the one already selected: any other drag slides the view (a
+  // tester zoomed in to read 6 mm lettering, dragged to reach it and moved the appliqué letter under her finger: the
+  // design grew from 80 to 140 mm tall and the view went blank). A tap picks a piece at any zoom (`pick`).
+  function start(mm, zoomed = false) {
     const p = hit(mm); if (!p) return false;
+    if (zoomed && sel !== p.id) return false;
     if (sel !== p.id) { sel = p.id; ui(); showEditor(false); }
     drag = { p, from: mm, x: p.x, y: p.y, moved: false };
     return true;
@@ -1140,6 +1144,11 @@ export function initStudio(api) {
   }
   let dragFrame = 0;
   function end() { if (drag) { const moved = drag.moved; drag = null; if (moved) { fitted = false; settle(); } save(); if (moved) { make(); warn(); } } }
+  // a tap that wasn't a drag: the piece under it is selected, or nothing is
+  function pick(mm) {
+    const p = mm && hit(mm); if (!p) { deselect(); return; }
+    if (sel !== p.id) { sel = p.id; save(); ui(); showEditor(false); }
+  }
   // nothing selected (Escape, or a tap on empty preview): copy then takes the whole design
   function deselect() {
     if (sel == null) return;
@@ -1443,5 +1452,5 @@ export function initStudio(api) {
     }
     showEditor(true);
   }
-  return { make, addWords, showFix, usePicture, openSaved, downloaded, empty: () => !pieces.length, starter, rename, title: () => title, autoName: () => api.safeName(autoWords(), "design"), selBox: () => { const p = current(); return p ? pieceBounds(sewnAt(p)) : null; }, relabel: () => { ui(); make(); }, start, move, end, nudge, deselect, forNames, remember, another: () => !!loneProject(), twoUp: () => twoUp(loneProject()), recentre: () => { remember(); recentre(); save(); ui(); make(); } };
+  return { make, addWords, showFix, usePicture, openSaved, downloaded, empty: () => !pieces.length, starter, rename, title: () => title, autoName: () => api.safeName(autoWords(), "design"), selBox: () => { const p = current(); return p ? pieceBounds(sewnAt(p)) : null; }, relabel: () => { ui(); make(); }, start, move, end, nudge, deselect, pick, forNames, remember, another: () => !!loneProject(), twoUp: () => twoUp(loneProject()), recentre: () => { remember(); recentre(); save(); ui(); make(); } };
 }

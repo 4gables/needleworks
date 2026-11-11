@@ -2,9 +2,9 @@
 // The Open tab: a design file opened, checked and shown, the fixes offered (sizes, colours, thinning, re-stitching
 // in the doctor's worker), and where a dropped or shared file goes. (Part of app.js until 2026-11.)
 import { turnPattern } from "./core/design.js";
-import { designStats, readEmbroidery, writePES } from "./core/formats.js";
+import { designStats, machineThreads, readEmbroidery, writePES } from "./core/formats.js";
 import { MARGIN } from "./core/machines.js";
-import { hexToRgb, nearestBrotherThread } from "./core/threads.js";
+import { hexToRgb, nearestBrotherThread, pecThread } from "./core/threads.js";
 import { DST_COLOURS, checkup, fix, openedFile, pauses, shortJumps, sortedChanges } from "./doctor.js";
 import { HARD, MAX_BLOCKS, denseWords, moves } from "./quality.js";
 import { BLOCK, LOOK, TIP } from "./words.js";
@@ -23,6 +23,17 @@ function pesVersion(v) {
   if (!v || Number.isNaN(n)) return "";
   return ` version ${n >= 10 ? n / 10 : n}`;   // "0060" -> 6, "0100" -> 10, "0001" -> 1
 }
+// A copy written here (resized, fixed) keeps the machine's names the file came with. The machine shows a thread by
+// the file's own palette entry, and the writer picks that entry from the thread's colour: where the two disagree (a
+// file whose chart says one purple and whose palette says Lavender), the copy is written from the palette's own
+// colour, so the label stays (ufront.pes at 177 %: "Brother Lavender" became "Brother Light Lilac").
+function ownPalette(o) {
+  const d = o.d;
+  if (!o.isPes || !d.pec || d.pec.length !== d.threads.length) return;
+  const now = machineThreads(d.threads);
+  if (d.pec.every((i, k) => now[k].index === i)) return;
+  d.threads = d.threads.map((t, k) => (now[k].index === d.pec[k] ? t : { ...t, color: pecThread(d.pec[k]).hex }));
+}
 export async function openDesign(file) {
   try {
     const bytes = new Uint8Array(await file.arrayBuffer());
@@ -31,6 +42,7 @@ export async function openDesign(file) {
     if (savedDesign(bytes)) { studio.openSaved(file); return; }
     // (what the file is and what's saved from it: doctor.js `openedFile`, shared with tests/open_fuzz.test.mjs)
     const o = openedFile(bytes, file.name), { d, check, need } = o;
+    ownPalette(o);
     const base = safeName(file.name.replace(/\.[^.]+$/, ""), "design"), st = designStats(d);
     state.opened = { ...o, bytes, name: file.name, base,
       opts: { scale: 1, tiny: need.has("tiny") || need.has("same"), thin: need.has("dense"), sort: false, split: need.has("long"), satin: need.has("sparse") },
@@ -221,7 +233,8 @@ function doctorUI(p, check) {
   const warns = checkupWarns(c, state.views.open?.file || p);
   for (const q of warns) if (q.html) items.push(`<li class="warn" data-problem="${q.id}">${q.html}</li>`);
   if (!warns.some((q) => q.id.endsWith("dense"))) say(true, `Thickness is fine: <span ${per}>at most ${c.max} stitches in one square millimetre</span> (sold designs have 24 at most).`);
-  if (!c.over && c.long) say(true, `${c.long} ${c.long === 1 ? "stitch is" : "stitches are"} longer than 10 mm. Fine on a wall hanging; on clothes they can snag.`);
+  // (a caution, not a pass: it stood with a green tick like the lines that say all is well)
+  if (!c.over && c.long) say("note", `${c.long} ${c.long === 1 ? "stitch is" : "stitches are"} longer than 10 mm. Fine on a wall hanging; on clothes they can snag.`);
   // (a copy written here has its stitches over 7 mm split by the writer: the ones over the machine's 12 mm said so)
   const srcLong = state.opened.srcLong;
   if (!c.over && srcLong?.over && !state.opened.isPes && !state.opened.stuck) say("note", `${srcLong.over} ${srcLong.over === 1 ? "stitch was" : "stitches were"} longer than 12 mm (up to ${srcLong.longest.toFixed(1)} mm), more than the machine sews in one stitch: the copy saved here splits ${srcLong.over === 1 ? "it" : "them"}.`);
