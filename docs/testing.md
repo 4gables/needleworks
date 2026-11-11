@@ -56,6 +56,10 @@ Automated checks that each guard a bug class (add a line with every new guard):
 - One release at a time, never a mix: `zsh tests/upgrade.sh` (~1.5 min; three copies of the site served one after
   another: stays whole on the running release, offers the new one, refuses a half-published one). `check.sh` runs it
   when sw.js or app.js's registration changes.
+- What the page says against the file (v27 testers): said_flow checks the stroke label against the thin-line file,
+  Fit to hoop and the machine choice said, notes clear of Download, a turned batch, a zoomed drag, an opened copy's
+  thread and stop names (needs `tests/external/pes`), the Small details note, and Arrange. A branch's CI reports a
+  stale preload list as it does stale hashes (`sw.test --wip`).
 - Each check below would have caught the past bugs of its class; run the browser ones after touching their area.
   Browser checks need `batch_server.py` and `node tests/cdp.mjs PORT start DIR`.
   - Known problems shown on every surface, one vocabulary, jargon lint: `node tests/surfaces.mjs CDP http://127.0.0.1:HP

@@ -60,7 +60,8 @@ Reference for this part of Needleworks: the rules, the reason for each (it stops
   `ASIDES`) ride with the action before, never numbered. Hand actions before "put the hoop back". When it's done names
   the loose threads (`snipsSaid`). A patch frame's colour is "Edge thread".
 - Toasts: one `toast()` in app.js (studio `api.toast`), one timing rule (3-8 s; an action's stays until used or
-  dismissed); never over the focused control (`toastPlace` moves it to the top); a failure from a tap is a toast, `#error` only for what's wrong with the design. View menu stays open for ticks/Background.
+  dismissed); never over the focused control, nor over Download or Send whatever has focus (`toastPlace` moves it to
+  the top: "Replaced your design…" sat on both for 15 s); a failure from a tap is a toast, `#error` only for what's wrong with the design. View menu stays open for ticks/Background.
 - Sew sheet (`sewSheet`: `#sheet` + `window.print()`, also on `beforeprint`): field at 1:1 in mm, centred as the
   machine centres, 5 cm bar; steps with machine names (`machineThreadList`); appliqué shapes. Cut files (any design with
   fabric shapes: appliqué, in-the-hoop fronts): "Cricut cut file (SVG)" `cutSVG` (width/height in mm, viewBox in mm:
@@ -129,3 +130,27 @@ Reference for this part of Needleworks: the rules, the reason for each (it stops
   full in-the-hoop project offers the biggest thing on it a tenth to four tenths smaller, where that makes room and
   lands (`noRoom`).
 - A hoop change drops other tabs' designs. Min/max over stitches uses loops (`Math.min(...pts)` overflows past ~110k).
+
+### What the v27 tester round changed (2026-11)
+- What a control says is read from what is sewn, the same way the builder reads it. The Automatic stroke label asked
+  whether the words were thin as one joined line; the file sizes straight lines by the first line (`sewsThin` in
+  problems.js: "Automatic: thin line" stood over a satin file at 6 mm). The names batch and the problems list use it too.
+- Zoomed in (over 1.2x), a drag slides the view unless it starts on the piece already selected; a tap picks a piece
+  at any zoom (`studio.pick`); the slide is held so the fitted view's middle stays on the preview. (A tester zoomed in
+  to read small lettering, dragged, and moved the letter under her finger off the design.)
+- A choice that changes nothing in the design is not an Undo step and says what it did: My machine with the same
+  hoop keeps the hoop picked and says "Set for the …". Fit to hoop says how much bigger or smaller, with Undo.
+- The opening sample, untouched, is fitted when a smaller hoop is picked (no red "Too big" on a design she didn't make).
+- An opened file's copy keeps the machine names the file came with: where its chart colour and its palette entry
+  disagree, the copy is written from the palette's colour (`ownPalette`; ufront.pes resized read Light Lilac for Lavender).
+  A caution in the checkup is a note, never a tick.
+- Picture, Small details: its notes sit under the control, a sentence each. One word per thing: a speck is a small
+  piece on its own (left out or kept), a dot is colour inside a bigger area (always sewn in that colour). "Show them"
+  sews the picture once more with specks kept and rings what only that has (`v.marks`, render.js `marks`). A new
+  picture starts from "Leave out specks". A busy picture (150 cuts or more) says its stitches and pieces and offers
+  fewer colours.
+- The loose-threads chip comes second in the row, and a phone's one-line row fades at its right edge.
+- The file's name: appliqué letters count with straight words (the biggest names it); the Rename dialog says the rule.
+- Sewing words explained where first used (words.js `GLOSSARY`): basting, floating, fusible web, cutter file, tacking
+  down, satin, wt.
+- Long read-outs go under their slider (`.range.wide`): beside it an opened design's size slider was 4 px wide.

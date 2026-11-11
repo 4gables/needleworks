@@ -193,6 +193,24 @@ await open("#design");
     document.getElementById("zoom-fit").click(); return out;`);
   check("Zoomed in: a drag off the selected piece slides the view and moves no piece", z.same && (z.pan[0] !== 0 || z.pan[1] !== 0), JSON.stringify(z));
 }
+// ---- Arrange: copies are ordinary pieces, in one thread, said with the way back
+{
+  await open("#design");
+  const heart = { kind: "motif", motif: "heart", size: 30, style: "fill", color: "#c00000", x: 0, y: 0 };
+  const r = await run(`await __sf.load(${JSON.stringify(design([heart]))}); document.getElementById("st-toast").hidden = true;
+    document.querySelector("#st-pieces li[data-id] .pick").click(); await new Promise((r) => setTimeout(r, 300)); document.getElementById("st-arrange").open = true;
+    document.getElementById("st-ring-n").value = "8"; document.querySelector('[data-lay="ring"]').click(); await new Promise((r) => setTimeout(r, 2500));
+    const ring = { n: __sf.pieces(), toast: __sf.toast(), changes: nwTest.view().file.stitches.filter((q) => q[2] === 5).length };
+    [...document.querySelectorAll("#st-toast button")].find((b) => b.textContent === "Undo").click(); await new Promise((r) => setTimeout(r, 1500));
+    const back = __sf.pieces();
+    document.querySelector("#st-pieces li[data-id] .pick").click(); await new Promise((r) => setTimeout(r, 300));
+    document.querySelector('[data-lay="corners"]').click(); await new Promise((r) => setTimeout(r, 2500));
+    const st = JSON.parse(localStorage.getItem("nw:studio")).pieces;
+    return { ring, back, corners: st.map((p) => [Math.sign(p.x), Math.sign(p.y), !!p.flip]), fits: !/Too big/.test(document.getElementById("facts").textContent), flipOff: (await (async () => { await __sf.load(${JSON.stringify(design([words()]))}); document.querySelector("#st-pieces li[data-id] .pick").click(); await new Promise((r) => setTimeout(r, 300)); return document.querySelector('[data-lay="down"]').disabled; })()) };`);
+  check("Arrange: 8 round a circle are 8 pieces in one thread, said with Undo, and Undo takes them back", r.ring.n === 8 && r.ring.changes === 0 && /Undo/.test(r.ring.toast) && r.back === 1, JSON.stringify(r));
+  check("Arrange: one in each corner, mirrored, inside the hoop", r.corners.length === 4 && new Set(r.corners.map(([x, y]) => `${x},${y}`)).size === 4 && r.corners.filter((c) => c[2]).length === 2 && r.fits, JSON.stringify(r.corners));
+  check("Arrange: lettering can't be flipped top to bottom", r.flipOff === true, String(r.flipOff));
+}
 // ---- Open: a copy keeps the file's own machine names; a caution is not a tick; stop names follow the file into a design
 {
   await open("#open");
