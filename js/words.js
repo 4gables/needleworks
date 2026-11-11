@@ -108,6 +108,14 @@ export const GLOSSARY = [
   [/\bstabilizer\b/i, "Stabilizer is a backing sheet, sold next to embroidery thread, that keeps the fabric from puckering while it's sewn."],
   [/\btopper\b/i, "A topper is a thin film laid on top of a fluffy fabric so the stitches don't sink into it; it tears or washes away."],
   [/\bloose threads?\b/i, "A loose thread is a short thread the machine leaves between two parts instead of cutting it."],
+  // (the v27 newcomer's list, 2026-11: each of these stood in the steps with no word of what it is)
+  [/\bbast(?:e|es|ed|ing)\b/i, "Basting is a line of long, loose stitches that holds the layers still while they're sewn: snip it and pull it out afterwards."],
+  [/\bfloat(?:s|ed|ing)?\b/i, "Floating means laying the fabric on top of the hooped stabilizer instead of clamping it in the hoop."],
+  [/\bfusible web\b/i, "Fusible web is a thin iron-on sheet of glue, sold with interfacing, that sticks one fabric to another."],
+  [/\bcutter file\b/i, "The Cutter file is a drawing for a cutting machine such as a Cricut or Silhouette, not for the embroidery machine: with no cutter, cut with scissors."],
+  [/\btack(?:s|ed|ing)?\b|\btack-?down\b/i, "Tacking down is a line of stitches that holds the appliqué fabric in place before its edge is covered."],
+  [/\bsatin\b/i, "Satin stitches are close side-to-side stitches that make a smooth, solid line."],
+  [/\b\d\d wt\b/i, "wt is the thread's weight, printed on the spool: a bigger number is a finer thread, and 40 wt is the usual one."],
 ];
 // `texts` in reading order, each with each word explained after its first sentence that uses it (where it isn't yet)
 export function explained(texts) {
