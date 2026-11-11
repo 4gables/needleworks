@@ -9,7 +9,7 @@
 // Stale entries fail too. Run: node tests/sewn_lint.mjs (< 1 s, CI).
 import { readFileSync } from "fs";
 
-const FILES = ["js/studio/ui.js", "js/app.js", "js/sheet.js", "js/words.js", "js/gate.js", "js/studio/pieces.js", "js/studio/compose.js", "js/studio/names.js", "js/studio/placing.js", "js/studio/recent.js", "js/studio/threadsaid.js", "js/studio/toobig.js"];
+const FILES = ["js/studio/ui.js", "js/app.js", "js/sheet.js", "js/words.js", "js/gate.js", "js/studio/pieces.js", "js/studio/compose.js", "js/studio/names.js", "js/studio/placing.js", "js/studio/recent.js", "js/studio/threadsaid.js", "js/studio/toobig.js", "js/studio/fixes.js", "js/studio/stepsui.js", "js/studio/offpage.js"];
 // (pieces.js: its measuring calls only; its builders stitch the size they're handed)
 const SIZES_IN = (f) => f !== "js/studio/pieces.js" && f !== "js/studio/compose.js";
 const MEASURE = /\b(pieceBounds|touchingAll|touching|inFrame)\(/g;
@@ -24,8 +24,8 @@ const RAW_MEASURE = process.env.EMPTY ? [] : [
   ["js/studio/placing.js", "patchEdge", "p is passed in as sewn (sewnAt) by its callers; f is a patch frame (never fitted)"],
   ["js/studio/ui.js", "pieceProblems", "q is the piece at its fitted size (fit.get), made at the top"],
   ["js/studio/ui.js", "warnNow", "candidate sizes fitted with fittedSizes on the same line (two lines, the size fix)"],
-  ["js/studio/ui.js", "roundAll", "a first frame drawn round the pieces as asked, so it shrinks none of them"],
-  ["js/studio/ui.js", "landing", "frames (never fitted) and the piece at fit / f0, its fitted sizes"],
+  ["js/studio/fixes.js", "roundAll", "a first frame drawn round the pieces as asked, so it shrinks none of them"],
+  ["js/studio/fixes.js", "landing", "frames (never fitted) and the piece at fit / f0, its fitted sizes"],
   ["js/studio/toobig.js", "twoHoopings", "lettering no frame fits (filtered by !fit.has), split at a word gap"],
   ["js/studio/ui.js", "reArch", "arched lettering: never frame-fitted"],
   ["js/studio/ui.js", "pickStarter", "q at its fitted size, made on the line before"],
@@ -42,7 +42,7 @@ const RAW_MEASURE = process.env.EMPTY ? [] : [
 // [file, function, reason]: functions that may read a piece's asked size
 const RAW_SIZE = process.env.EMPTY ? [] : [
   ["js/app.js", "makePicture", "s is the Picture tab's settings (the Size asked), compared with the file as sewn for the size note"],
-  ["js/studio/ui.js", "frameLines", "compares what the frame sews (fs, fittedSizes) with the size asked: the offer is for words shrunk under 80 % of it, tried at asked sizes down from it"],
+  ["js/studio/fixes.js", "frameLines", "compares what the frame sews (fs, fittedSizes) with the size asked: the offer is for words shrunk under 80 % of it, tried at asked sizes down from it"],
   ["js/app.js", "keepPicture", "blob.size is the picture file's bytes (the storage cap), not a piece"],
   ["js/studio/toobig.js", "snug", "pieces no frame fits (fit.has excluded): asked = sewn; each size checked by landing()"],
   ["js/studio/toobig.js", "snugWay", "sets the asked size snug() found (unfitted piece)"],
@@ -52,12 +52,12 @@ const RAW_SIZE = process.env.EMPTY ? [] : [
   ["js/studio/ui.js", "drawEditor", "the controls show the size asked; warn() says the sewn one beside it (\"N mm sewn\")"],
   ["js/studio/ui.js", "pieceProblems", "q.size is the fitted size; motifs are never fitted"],
   ["js/studio/ui.js", "warnNow", "fixes and notes compare the asked size with d.fs, the sewn one; each fix is checked by landing()"],
-  ["js/studio/ui.js", "runUp", "the most to try; each size measured sewn"],
-  ["js/studio/ui.js", "frameFor", "the asked size kept as the frame grows; fitted after"],
-  ["js/studio/ui.js", "moveAway", "freeRoom's answer at the same size (sameSize), for an unfitted piece"],
-  ["js/studio/ui.js", "landing", "the capped test itself: change.size asked vs the size it's sewn"],
-  ["js/studio/ui.js", "asLettering", "a monogram turned to lettering keeps the size asked, then fitted where it is"],
-  ["js/studio/ui.js", "lineChoice", "offered only when no frame fits it (!d.fs): asked = sewn"],
+  ["js/studio/fixes.js", "runUp", "the most to try; each size measured sewn"],
+  ["js/studio/fixes.js", "frameFor", "the asked size kept as the frame grows; fitted after"],
+  ["js/studio/fixes.js", "moveAway", "freeRoom's answer at the same size (sameSize), for an unfitted piece"],
+  ["js/studio/fixes.js", "landing", "the capped test itself: change.size asked vs the size it's sewn"],
+  ["js/studio/fixes.js", "asLettering", "a monogram turned to lettering keeps the size asked, then fitted where it is"],
+  ["js/studio/fixes.js", "lineChoice", "offered only when no frame fits it (!d.fs): asked = sewn"],
   ["js/studio/toobig.js", "twoHoopings", "lettering no frame fits: asked = sewn"],
   ["js/studio/ui.js", "autoWords", "the words made biggest name the file: what was asked (intent), not what a frame left"],
   ["js/studio/ui.js", "main", "the words made biggest are the name the names batch swaps (intent)"],
