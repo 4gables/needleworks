@@ -123,6 +123,12 @@ Phase 2, stitch quality (measured against the scoreboard, VM-checked):
     routes, quilting; `st_lines_JosefinSans` (wasted 1 -> 2 in v27, not traced); Zoë's ë dots (a 2.7 mm loose
     thread). flow_lint's "loop" on print letters sewn as read is the cost of the no-connector rule
 - [ ] **S2 Density at the source** (crossings, towel lattice)
+  - [ ] in progress on branch `s2-density` (not for release: no full batch, no sheets, no timings). Measured on
+    v27: `relieve` removes about 1,640 points across the batch (towel 790 in 15 of 19 files, arcs and ovals 323,
+    caption starters 256, frames and fills 206, pictures 38), nearly all at script junctions and the inside of
+    tight wide-column turns. Built so far: paths ease as they enter `Design.path` (eight sample files: towel
+    Great Vibes 165 -> 15, kitchen 111 -> 2, oval Allura 67 -> 9; script files still peak at 24). Next: the
+    shared junction node (`docs/stitch-model.md` on that branch); writer change W2 is on branch `w1-page`'s list
 - [ ] **S3 Vector fills** (exact edges, edge-run underlay, pull and density by fabric, contour fill)
   - [x] v26: rows worked out from the outline (row-end error 0.06 mean / 0.19 worst -> 0), edge-run underlay,
     pull by fabric (`recipes.js` `FILLS`), sections sewn in row order. 41 files: trims 182 -> 140, loose 22 -> 13,
@@ -146,14 +152,37 @@ Phase 3, friction and features:
   - [x] v27: Picture and Open code loads after the first design is up; the page's own fonts after the first
     preview, over stand-in faces of the same width (slow phone: first paint 4.0 -> 1.8 s, first preview
     17.7 -> 14.1 s; desktop first visit 0.8 -> 0.45 s). The rest is bytes: scripts 376 KB, Great Vibes 158 KB
-  - [ ] the tester round; first load further only with the owner's say (scripts shipped without comments needs
+  - [ ] tester round on live v27 (2026-11-11, cut short: newcomer 7, hobbyist 7 on 4 of 8 tasks, expert 6 on
+    2.5 of 8). No P0 or P1. Open, by the path each belongs to:
+    - stitches: the ë of "Zoë" in Great Vibes at 19 mm has its dots joined by a sewn line (reads "Zoē": the
+      v26 join rule reaches a letter's dots); "Tabitha" in Allura 20 mm on an arc has 4 trims in one word (T bar
+      to stem 0.63 mm apart, each part ending back at its own start); a 27 mm trim inside one connected patch
+      fill; satin border fanning onto one pivot at a heart's tip and cleft (23-24 hits); a lock's sideways hit
+      showing beside a one-thread stroke; wide script columns (2.2 mm) with a centre run only
+    - truth of what is said: at 6 mm print the Stroke button reads "Automatic: thin line" while the file is
+      satin; "Keep all" still says flecks are sewn in the colour round them; a caution shown with a green tick;
+      a thread label changing on resize of an opened file (Lavender -> Light Lilac); an opened design's appliqué
+      stop names lost once words are added
+    - names batch: files ignore the turned hoop (single download turned, batch not, nothing said)
+    - editor: dragging while zoomed moves a piece instead of panning; the size slider 4 px wide beside a long
+      label on an opened design; toasts covering Download for 15 s; starters keeping the sample's file name; the
+      download name flipping between pieces; stats chips cut off on a phone; Fit to hoop enlarging without
+      asking; choosing the machine enables Undo and says nothing
+    - pictures: Small details shows no before/after and its note sits far below; a busy picture (17,000
+      stitches, 180 trims) gets no warning; "Leave out specks" gave more loose threads than "Keep all" on one
+    - asked for by the expert: lettering on a circle by radius; per-piece density, underlay and pull; entry and
+      exit points; trim-or-connect for small text
+    Reports and screenshots: the session scratchpad's `ut27/` (not kept in the repo)
+  - [ ] first load further only with the owner's say (scripts shipped without comments needs
     a release step; a lighter first starter font changes the starters)
 - [ ] **N1** layout tools (mirror, circle repeat, wreath, corner set, monogram layouts)
 - [ ] **N2** borders and quilting (blanket stitch, triple and motif runs, crosshatch, stripe, shaded fill)
 - [ ] **N3** use your own font file
 - [ ] **N4** more Brother machines and hoops
   - [x] v27: "My machine" choice; Brother SE2000 (5x7, 4x4) added
-  - [ ] 6x10 machines wait for writer change W1 (`docs/writer-changes.md`); 4x4-only models (SE700, PE545)
+  - [ ] 6x10 machines wait for writer change W1 (`docs/writer-changes.md`; started on branch `w1-page`: no page
+    bytes established yet, the trial PE-DESIGN cannot save, so Brother's 379 samples are the only source: run
+    that branch's `tests/vm/measure.ps1`); 4x4-only models (SE700, PE545)
     wait for a published fact: whether they cut jump stitches
 
 Ask the owner first: other formats out (DST, JEF, EXP, VP3), photo stitch, free-standing lace, 3D puff.
