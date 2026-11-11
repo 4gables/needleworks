@@ -19,7 +19,7 @@ const EXIT = [/navigator\.share\s*\(/, /\.download\s*=/, /<a\b[^>]*\sdownload\b/
   /createObjectURL\s*\(/, /window\.open\s*\(/, /location(\.href)?\s*=\s*[^=]*(blob:|data:)/, /from\s+["'][./]*zip\.js["']/];
 // (what may match, and why: not a way out)
 const ALLOWED = [
-  ["js/app.js", "thumb.src = URL.createObjectURL(blob)", "the chosen picture's thumbnail, shown on the page"],
+  ["js/picture.js", "thumb.src = URL.createObjectURL(blob)", "the chosen picture's thumbnail, shown on the page"],
 ];
 const code = (line) => line.replace(/^\s*\/\/.*$/, "").replace(/\s\/\/ .*$/, "");
 for (const f of files.filter((f) => f !== "js/gate.js")) {

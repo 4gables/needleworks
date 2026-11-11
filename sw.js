@@ -48,6 +48,7 @@ const FILES = [
   "js/core/typed.js",
   "js/core/threads.js",
   "js/doctor.js",
+  "js/picture.js",
   "js/threadui.js",
   "js/along.js",
   "js/onitem.js",
