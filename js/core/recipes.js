@@ -96,3 +96,8 @@ export const FILLS = {
   towel: { pull: 0.4, rows: ROWS.solid },
 };
 export const fillRecipe = (fabric) => FILLS[fabric] || FILLS.cotton;
+
+// --- S1b: locks ---
+// A tie-in's length (mm), first that keeps clear of the run's own next points: 0.7 is the middle of what sold
+// designs use (0.5-0.8; shorter can pull out before the bobbin thread catches), 0.5 and 0.8 its ends.
+export const TIE_INS = [0.7, 0.5, 0.8];

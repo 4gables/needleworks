@@ -2,7 +2,7 @@
 // Build a stitch pattern block by block (mm in, 0.1 mm out).
 import { COLOR_CHANGE, END, JUMP, STITCH, TRIM, writePES } from "./formats.js";
 import { MARGIN } from "./machines.js";
-import { LIMITS } from "./recipes.js";
+import { LIMITS, TIE_INS } from "./recipes.js";
 import { pyRound } from "./threads.js";
 
 // Which side of the line from p along d the points mostly lie on: 1 for the left (-d.y, d.x), -1 for the right
@@ -49,7 +49,11 @@ export class Design {
         const ahead = pts.find((q) => Math.hypot(q[0] - pts[0][0], q[1] - pts[0][1]) > 0.3);
         let d = ahead ? [ahead[0] - pts[0][0], ahead[1] - pts[0][1]] : [1, 0];
         // 0.7 mm tie-in, mid-range of sold designs (0.5-0.8); shorter ones can pull out before the bobbin thread catches
-        const L = Math.max(Math.hypot(...d), 1e-9); d = [(d[0] / L) * 0.7, (d[1] / L) * 0.7];
+        // (0.5 where the run's own next points land on the 0.7 one: a run whose second point is 0.7 mm on put three
+        // hits in that hole, 71 tie-ins over the batch: script columns begun at a junction, picture runs)
+        const L = Math.max(Math.hypot(...d), 1e-9), u = [d[0] / L, d[1] / L], near = pts.slice(1, 5);
+        const tie = TIE_INS.find((t) => near.every((r) => Math.hypot(r[0] - pts[0][0] - u[0] * t, r[1] - pts[0][1] - u[1] * t) > 0.12)) || TIE_INS[0];
+        d = [u[0] * tie, u[1] * tie];
         // one hit 0.35 mm to the side, so the needle doesn't go through the same hole three times: on the side the
         // stitches go (it poked 0.5 mm out of script strokes on the other side)
         const p = pts[0], q = [p[0] + d[0], p[1] + d[1]], k = inward(p, d, pts.slice(1, 7)), e = [p[0] - (k * d[1]) / 2, p[1] + (k * d[0]) / 2];
