@@ -206,6 +206,17 @@ for (const [bytes, says, pic] of [[png, /is a picture \(PNG\)/, true], ["new Uin
     return { hex, swapped, back: !has(), shown: document.getElementById("pic-swap").hidden };`);
   check("a swapped thread is the one in the file", w.swapped, JSON.stringify(w));
   check("Back to the matched thread undoes the swap", w.back, JSON.stringify(w));
+  // (tester, 2026-11) any thread for a colour: the whole chart under More colours, and any colour, which never lands
+  // on a thread another colour of the picture sews
+  const m = await run(`const chips = [...document.querySelectorAll("#pic-palette button")]; if (document.getElementById("pic-swap").hidden) chips[0].click(); await new Promise((r) => setTimeout(r, 200));
+    const chart = [...document.querySelectorAll("#pic-swap .pic-chart [data-hex]")].length, other = chips[1].querySelector("i").style.background;
+    const hexOf = (rgb) => "#" + rgb.match(/\d+/g).slice(0, 3).map((v) => (+v).toString(16).padStart(2, "0")).join("");
+    const any = document.getElementById("pic-swap-any"); any.value = hexOf(other); any.dispatchEvent(new Event("change", { bubbles: true }));
+    await new Promise((r) => setTimeout(r, 500)); await __ff.wait(() => !document.getElementById("download").disabled, 40000); await new Promise((r) => setTimeout(r, 500));
+    const cols = [...document.querySelectorAll("#pic-palette button i")].map((i) => i.style.background);
+    return { chart, other, cols, paste: !!document.getElementById("pic-paste") };`);
+  check("More colours lists the Brother chart", m.chart >= 40, JSON.stringify(m));
+  check("any colour never shares another colour's thread", new Set(m.cols).size === m.cols.length, JSON.stringify(m));
 }
 
 // ---- (round 13) the first draw asks only for the fonts it needs: the font row in all 16 faces and the starters' cards
