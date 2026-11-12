@@ -248,6 +248,16 @@ const PICS = [
   { name: "dark_on_black", n: 2, back: "#000000", layers: [
     { role: "ink", col: "#3b2a1a", draw: (c) => { starPath(c, 260, 300, 200, 90); c.fillStyle = "#3b2a1a"; c.fill(); } },
     { role: "ink", col: "#14274e", draw: (c) => { circle(c, 580, 300, 150); c.fillStyle = "#14274e"; c.fill(); } }] },
+  // Ashley's pictures (2026-11): white that is part of the design, on a white page, was left as fabric: white lettering
+  // on a badge, a jersey's white diamonds. Sewn in white now (only the page the picture's edge reaches is fabric).
+  { name: "white_inside", n: 3, cases: [["fill", 100, 3], ["fill", 60, 6], ["cross", 100, 3]], layers: [
+    { role: "ink", col: "#1d4e89", draw: (c) => { c.fillStyle = "#1d4e89"; c.beginPath(); c.roundRect(90, 110, 620, 300, 50); c.fill(); } },
+    { role: "text", col: "#ffffff", draw: (c) => text(c, "OPEN", 400, 320, font("bold", 170), "#ffffff") },
+    { role: "ink", col: "#c8102e", draw: (c) => { circle(c, 400, 500, 70); c.fillStyle = "#c8102e"; c.fill(); } },
+    { role: "ink", col: "#ffffff", draw: (c) => { starPath(c, 400, 500, 50, 22); c.fillStyle = "#ffffff"; c.fill(); } }] },
+  { name: "white_diamonds", n: 2, cases: [["fill", 100, 2], ["fill", 40, 6]], layers: [
+    { role: "ink", col: "#2a7fc1", draw: (c) => { c.fillStyle = "#2a7fc1"; c.beginPath(); [[250, 90], [550, 90], [720, 330], [640, 380], [560, 270], [560, 540], [240, 540], [240, 270], [160, 380], [80, 330]].forEach(([x, y], i) => (i ? c.lineTo(x, y) : c.moveTo(x, y))); c.closePath(); c.fill(); } },
+    { role: "ink", col: "#ffffff", draw: (c) => { c.fillStyle = "#ffffff"; for (let y = 0; y < 3; y++) for (let x = 0; x < 3; x++) { const X = 300 + x * 100, Y = 170 + y * 140; c.beginPath(); c.moveTo(X, Y - 62); c.lineTo(X + 42, Y); c.lineTo(X, Y + 62); c.lineTo(X - 42, Y); c.closePath(); c.fill(); } } }] },
   { name: "polka_dots", n: 2, layers: (() => {
     const out = [{ role: "ink", col: "#e63946", draw: (c) => { c.fillStyle = "#e63946"; for (let y = 0; y < 5; y++) for (let x = 0; x < 8; x++) { circle(c, 80 + x * 90 + (y % 2) * 45, 80 + y * 110, 16); c.fill(); } } },
       { role: "text", col: "#1d3557", draw: (c) => text(c, "dots", 400, 590, font("bold", 60), "#1d3557") }];
@@ -581,8 +591,9 @@ async function run(spec) {
       if (r.framed && !spec.layers.some((L) => L.role === "bg")) bad.push("taken for a frame round the picture, with none drawn");
       // no thread nobody drew (fill, threads enough): every thread matches a drawn colour or a shadow
       if (style === "fill" && spec.colours !== false && colors >= spec.n) {
-        const drawn = spec.layers.filter((L) => L.role !== "bg" || c.edge).flatMap((L) => L.cols || [L.col]);
-        for (const th of thread) if (!drawn.some((x) => matches(x, th))) bad.push(`thread ${th} (${family(th)}) matches nothing drawn`);
+        // (nor the page's own colour where the design closes it in, sewn in the page's thread: the hole of a big O)
+        const drawn = spec.layers.filter((L) => L.role !== "bg" || c.edge).flatMap((L) => L.cols || [L.col]), page = r.colors.find((q) => q.inside)?.hex;
+        for (const th of thread) if (th !== page && !drawn.some((x) => matches(x, th))) bad.push(`thread ${th} (${family(th)}) matches nothing drawn`);
       }
       // trims: a jump per sewable piece at most, plus two a colour (cross-stitch and line drawings join pieces), and
       // no more than 1 per cm² sewn beyond that

@@ -486,10 +486,17 @@ export function learnColours(img, opts = {}) {
     for (const j of g.members) map[j] = id;
     return { id, hex: g.thread.hex, picture: g.picture, thread: g.thread, lightness: g.lab[0], background: false };
   });
+  // The background's colour inside the design (white lettering on a badge, a jersey's white diamonds, an eye's white) is
+  // part of the design, sewn in the background's thread: `inside`, a colour of its own after the background (labelWith
+  // finds its pixels: those the picture's edge doesn't reach), or the design colour that has that thread already.
+  let bgId = -1, inside = -1;
   if (bg >= 0) {
-    const id = colors.length;
+    const id = (bgId = colors.length), thread = nearestBrotherThread(bgHex);
     for (let j = 0; j < K; j++) if (map[j] < 0) map[j] = id;
-    colors.push({ id, hex: bgHex, picture: bgHex, thread: nearestBrotherThread(bgHex), lightness: C[bg][0], background: true });
+    colors.push({ id, hex: bgHex, picture: bgHex, thread, lightness: C[bg][0], background: true });
+    const same = colors.find((c) => !c.background && c.thread.hex === thread.hex);
+    inside = same ? same.id : id + 1;
+    if (!same) colors.push({ id: id + 1, hex: thread.hex, picture: bgHex, thread, lightness: C[bg][0], background: false, inside: true });
   }
   // each colour's extent (pieces over 0.02% of the picture: a stray speck doesn't make the design bigger)
   const boxes = colors.map(() => [1, 1, 0, 0]);
@@ -520,12 +527,20 @@ export function learnColours(img, opts = {}) {
   }
   // (a shade or fringe left out on purpose is no lost line)
   const lost = groups.length ? lostLines(P, labels.map((l) => (l < 0 ? -1 : fringe[l] ? -2 : map[l])), colors) / Math.max(w, h) : 0;
-  return { w, h, C, first: C.first ?? C.length, map, colors, bg: bg >= 0 ? colors.length - 1 : -1, frame, boxes, hasAlpha,
+  return { w, h, C, first: C.first ?? C.length, map, colors, bg: bgId, inside, frame, boxes, hasAlpha,
     merged: Math.max(0, o.colors - groups.length), empty, lost };
 }
 // Label a picture's pixels with the colours learned from it (possibly from a copy at another size). `crop`
 // [x0, y0, x1, y1] is the part of the learned copy img shows (fractions; default the whole).
-export function labelWith(img, model, crop = [0, 0, 1, 1]) {
+// The background's colour that the picture's edge doesn't reach is closed in by the design, and sewn (`inside` "all",
+// the default) as part of it: white lettering on a badge, a jersey's diamonds, the white of an eye. No rule tells
+// those from page seen through the design (the hole of a big O, the inside of an outline): a rule on how thick the ink
+// round a piece is left a white star in a red ring out and still sewed the gaps in a bouquet. So it's all sewn, said
+// on the page, with one tap to leave it out ("none"; a line drawing too).
+// `res` (working px per mm, when img is the working copy): a piece that is a dot (under 1.5 mm², or under 4 mm² and
+// 2.5 mm across: the hole in a small e) or nowhere 0.6 mm across (the blend between a fill and its outline, read as
+// the background's colour) stays fabric. Returns `closed` too: the share of the picture that is closed in.
+export function labelWith(img, model, crop = [0, 0, 1, 1], { inside = "all", res = 0 } = {}) {
   const P = pixels(img), { w, h, n, lab, opaque } = P;
   let labels = new Int16Array(n).fill(-1);
   // the frame's pixels, found in the learned copy
@@ -569,10 +584,39 @@ export function labelWith(img, model, crop = [0, 0, 1, 1]) {
       }
     }
   }
+  let closed = 0;
+  if (model.inside >= 0) {
+    // the fabric: the background's colour that the picture's edge (or a frame, or see-through) reaches
+    const open = new Uint8Array(n), st = [], B = model.bg;
+    const reach = (i) => { if (!open[i] && (labels[i] === B || labels[i] < 0)) { open[i] = 1; st.push(i); } };
+    for (let x = 0; x < w; x++) { reach(x); reach((h - 1) * w + x); }
+    for (let y = 0; y < h; y++) { reach(y * w); reach(y * w + w - 1); }
+    for (let i = 0; i < n; i++) if (labels[i] < 0) reach(i);
+    while (st.length) {
+      const i = st.pop(), x = i % w;
+      if (x > 0) reach(i - 1); if (x < w - 1) reach(i + 1); if (i >= w) reach(i - w); if (i + w < n) reach(i + w);
+    }
+    const m = { w, h, data: new Uint8Array(n) };
+    let any = false;
+    for (let i = 0; i < n; i++) if (labels[i] === B && !open[i]) { m.data[i] = 1; any = true; }
+    if (any) {
+      const { labels: cl, count } = label(m), dt = distanceTransform(m), keep = new Uint8Array(count + 1).fill(1);
+      const size = new Int32Array(count + 1), wide = new Float64Array(count + 1), x0 = new Int32Array(count + 1).fill(w), x1 = new Int32Array(count + 1).fill(-1), y0 = new Int32Array(count + 1).fill(h), y1 = new Int32Array(count + 1).fill(-1);
+      for (let i = 0; i < n; i++) {
+        const c = cl[i]; if (!c) continue;
+        const x = i % w, y = (i - x) / w; size[c]++; if (dt[i] > wide[c]) wide[c] = dt[i];
+        if (x < x0[c]) x0[c] = x; if (x > x1[c]) x1[c] = x; if (y < y0[c]) y0[c] = y; if (y > y1[c]) y1[c] = y;
+      }
+      if (res) for (let c = 1; c <= count; c++)
+        if (size[c] < 1.5 * res * res || (size[c] < 4 * res * res && x1[c] - x0[c] < 2.5 * res && y1[c] - y0[c] < 2.5 * res) || 2 * wide[c] < 0.6 * res) keep[c] = 0;
+      for (let c = 1; c <= count; c++) if (keep[c]) closed += size[c];
+      if (inside !== "none") for (let i = 0; i < n; i++) if (cl[i] && keep[cl[i]]) labels[i] = model.inside;
+    }
+  }
   const area = new Array(G).fill(0);
   for (let i = 0; i < n; i++) if (labels[i] >= 0) area[labels[i]]++;
   const colors = model.colors.map((c) => ({ ...c, area: area[c.id] }));
-  return { w, h, labels, colors, merged: model.merged, frame: !!model.frame, empty: model.empty, lost: model.lost || 0 };
+  return { w, h, labels, colors, merged: model.merged, frame: !!model.frame, empty: model.empty, lost: model.lost || 0, closed: closed / n };
 }
 // The lines in the picture too thin to keep: a pixel or two wide, unlike the fabric (ΔE over 20) yet read as fabric, 2 px
 // clear of anything sewn (not the blend round a shape's edge). A logo's 1 px grey rule vanished without a word.

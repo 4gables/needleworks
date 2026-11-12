@@ -157,7 +157,7 @@ function foldFlecks(labels, w, h, colors, used, res) {
   // each sewn colour's pieces, and where a fill has body: a piece of 4 mm² or more that is 1.5 mm wide somewhere. A
   // fleck joins only such a fill: the blend round a dark letter on a pale label is a ring of a third colour, and the
   // letters took it (a label's "Embroidered" went from black to the grey of its own halo).
-  const body = new Uint8Array(n), parts = [];
+  const body = new Uint8Array(n), parts = [], fabric = colors.find((c) => c.background);
   for (const col of used) {
     const m = { w, h, data: new Uint8Array(n) };
     for (let i = 0; i < n; i++) m.data[i] = labels[i] === col.id ? 1 : 0;
@@ -197,7 +197,9 @@ function foldFlecks(labels, w, h, colors, used, res) {
     const keep = new Set(meant.length <= PICTURES.eyes ? meant : []);
     const go = new Int32Array(count + 1).fill(-1);
     let any = false;
-    for (const c of flecks) if (!keep.has(c)) { go[c] = to[c]; any = true; }
+    // (a fleck of the fabric's colour inside the design, `inside`, is fabric again: folded, the hole in a letter filled
+    // with the letter's thread)
+    for (const c of flecks) if (!keep.has(c)) { go[c] = col.inside && fabric ? fabric.id : to[c]; any = true; }
     if (any) out.push({ cl, go });
   }
   if (!out.length) return { labels, folded: 0 };
@@ -381,7 +383,9 @@ function build(img, analysis, opts) {
       }
     }
     // neighbouring colours alternate the row direction so their joins don't open into one seam
-    const angle = o.fillAngle + (k % 2) * 90;
+    // (the fabric's colour inside the design, `inside`, takes no turn of its own: the other colours' rows run as they
+    // did without it. With it counted, a logo's navy turned 90 degrees and its apostrophe sewed under 8 mm: left out)
+    const turnOf = used.slice(0, k).filter((c) => !c.inside).length, angle = o.fillAngle + ((col.inside ? turnOf + 1 : turnOf) % 2) * 90;
     const dt = distanceTransform(mask);
     const comps = [];
     for (let id = 1; id <= count; id++) comps.push({ id, pixels: [], labels: cl, dt });
