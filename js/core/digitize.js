@@ -157,7 +157,7 @@ function foldFlecks(labels, w, h, colors, used, res) {
   // each sewn colour's pieces, and where a fill has body: a piece of 4 mm² or more that is 1.5 mm wide somewhere. A
   // fleck joins only such a fill: the blend round a dark letter on a pale label is a ring of a third colour, and the
   // letters took it (a label's "Embroidered" went from black to the grey of its own halo).
-  const body = new Uint8Array(n), parts = [];
+  const body = new Uint8Array(n), parts = [], fabric = colors.find((c) => c.background);
   for (const col of used) {
     const m = { w, h, data: new Uint8Array(n) };
     for (let i = 0; i < n; i++) m.data[i] = labels[i] === col.id ? 1 : 0;
@@ -197,7 +197,9 @@ function foldFlecks(labels, w, h, colors, used, res) {
     const keep = new Set(meant.length <= PICTURES.eyes ? meant : []);
     const go = new Int32Array(count + 1).fill(-1);
     let any = false;
-    for (const c of flecks) if (!keep.has(c)) { go[c] = to[c]; any = true; }
+    // (a fleck of the fabric's colour inside the design, `inside`, is fabric again: folded, the hole in a letter filled
+    // with the letter's thread)
+    for (const c of flecks) if (!keep.has(c)) { go[c] = col.inside && fabric ? fabric.id : to[c]; any = true; }
     if (any) out.push({ cl, go });
   }
   if (!out.length) return { labels, folded: 0 };
@@ -381,7 +383,9 @@ function build(img, analysis, opts) {
       }
     }
     // neighbouring colours alternate the row direction so their joins don't open into one seam
-    const angle = o.fillAngle + (k % 2) * 90;
+    // (the fabric's colour inside the design, `inside`, takes no turn of its own: the other colours' rows run as they
+    // did without it. With it counted, a logo's navy turned 90 degrees and its apostrophe sewed under 8 mm: left out)
+    const turnOf = used.slice(0, k).filter((c) => !c.inside).length, angle = o.fillAngle + ((col.inside ? turnOf + 1 : turnOf) % 2) * 90;
     const dt = distanceTransform(mask);
     const comps = [];
     for (let id = 1; id <= count; id++) comps.push({ id, pixels: [], labels: cl, dt });
@@ -1320,6 +1324,62 @@ export function contentBox(bitmap) {
   return { sx: x0 / k, sy: y0 / k, sw: (x1 - x0 + 1) / k, sh: (y1 - y0 + 1) / k };
 }
 
+// A picture of several separate things (a sheet of three motifs: a horse, a cup, a jersey) shares one set of thread
+// colours and one Size between them: at 6 threads the cup had none left for its greys, and each part came out 30 mm
+// wide. The parts are found (ink, as contentBox reads it, joined across gaps under 3 % of the picture; parts under 3 %
+// of the ink go with the nearest) and offered under the picture: all together, or one on its own, which is then the
+// picture (the others cleared from its cut-out).
+export function findParts(b) {
+  const S = 256, k = Math.min(1, S / Math.max(b.width, b.height)), w = Math.max(1, Math.round(b.width * k)), h = Math.max(1, Math.round(b.height * k));
+  const c = canvasOf(w, h), g = c.getContext("2d", { willReadFrequently: true });
+  g.imageSmoothingQuality = "high"; g.drawImage(b, 0, 0, w, h);
+  const d = g.getImageData(0, 0, w, h).data, border = [];
+  for (let x = 0; x < w; x++) border.push(x, (h - 1) * w + x);
+  for (let y = 0; y < h; y++) border.push(y * w, y * w + w - 1);
+  const clear = border.filter((i) => d[i * 4 + 3] <= 127).length > border.length / 2;
+  const avg = [0, 1, 2].map((ch) => border.reduce((a, i) => a + d[i * 4 + ch], 0) / border.length);
+  const ink = { w, h, data: new Uint8Array(w * h) };
+  let all = 0;
+  for (let i = 0; i < w * h; i++) if (d[i * 4 + 3] > 127 && (clear || Math.abs(d[i * 4] - avg[0]) + Math.abs(d[i * 4 + 1] - avg[1]) + Math.abs(d[i * 4 + 2] - avg[2]) > 60)) { ink.data[i] = 1; all++; }
+  if (!all) return null;
+  // (joined across small gaps: grown by 1.5 % of the picture each way)
+  const r = Math.max(1.5, 0.015 * Math.max(w, h)), away = distanceTransform({ w, h, data: ink.data.map((v) => 1 - v) });
+  const fat = { w, h, data: new Uint8Array(w * h) };
+  for (let i = 0; i < w * h; i++) fat.data[i] = ink.data[i] || away[i] <= r ? 1 : 0;
+  const { labels, count } = label(fat);
+  if (count < 2) return null;
+  const size = new Int32Array(count + 1), x0 = new Int32Array(count + 1).fill(w), x1 = new Int32Array(count + 1).fill(-1), y0 = new Int32Array(count + 1).fill(h), y1 = new Int32Array(count + 1).fill(-1);
+  for (let i = 0; i < w * h; i++) {
+    const q = labels[i]; if (!q) continue;
+    const x = i % w, y = (i - x) / w;
+    if (ink.data[i]) size[q]++;
+    if (x < x0[q]) x0[q] = x; if (x > x1[q]) x1[q] = x; if (y < y0[q]) y0[q] = y; if (y > y1[q]) y1[q] = y;
+  }
+  const big = []; for (let q = 1; q <= count; q++) if (size[q] >= 0.03 * all) big.push(q);
+  if (big.length < 2 || big.length > 8) return null;
+  // (left to right, then top to bottom, in rows a third of the picture high)
+  big.sort((a, q) => Math.round((3 * (y0[a] + y1[a])) / 2 / h) - Math.round((3 * (y0[q] + y1[q])) / 2 / h) || x0[a] - x0[q]);
+  return { w, h, k, labels, clear, avg, parts: big.map((q) => ({ id: q, box: [x0[q], y0[q], x1[q] + 1, y1[q] + 1] })) };
+}
+// one part cut out of the whole picture: everything in its box that belongs to another part cleared (to the page's
+// colour, or see-through)
+export function cutPart(whole, found, n) {
+  const { w, k, labels, clear, avg, parts } = found, [bx0, by0, bx1, by1] = parts[n].box, id = parts[n].id;
+  const m = 2, X0 = Math.max(0, bx0 - m), Y0 = Math.max(0, by0 - m), X1 = Math.min(found.w, bx1 + m), Y1 = Math.min(found.h, by1 + m);
+  const sx = X0 / k, sy = Y0 / k, sw = Math.min(whole.width - sx, (X1 - X0) / k), sh = Math.min(whole.height - sy, (Y1 - Y0) / k);
+  const c = canvasOf(Math.max(1, Math.round(sw)), Math.max(1, Math.round(sh))), g = c.getContext("2d");
+  g.drawImage(whole, sx, sy, sw, sh, 0, 0, c.width, c.height);
+  const mc = canvasOf(X1 - X0, Y1 - Y0), mg = mc.getContext("2d"), md = mg.createImageData(X1 - X0, Y1 - Y0);
+  let others = false;
+  for (let y = Y0; y < Y1; y++) for (let x = X0; x < X1; x++) { const q = labels[y * w + x]; if (q && q !== id) { md.data[((y - Y0) * (X1 - X0) + x - X0) * 4 + 3] = 255; others = true; } }
+  if (others) {
+    mg.putImageData(md, 0, 0);
+    g.globalCompositeOperation = "destination-out"; g.imageSmoothingEnabled = false; g.drawImage(mc, 0, 0, c.width, c.height);
+    if (!clear) { g.globalCompositeOperation = "destination-over"; g.fillStyle = `rgb(${avg.map(Math.round).join(",")})`; g.fillRect(0, 0, c.width, c.height); }
+    g.globalCompositeOperation = "source-over";
+  }
+  return c;
+}
 // the picture's colours are learned from a copy this size (px, longer side) whatever the Size or hoop, so changing
 // either never changes the threads
 export const LEARN = 800;

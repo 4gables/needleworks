@@ -11,6 +11,51 @@ Reference for this part of Needleworks: the rules, the reason for each (it stops
   cheap, cross-family dear). Each count = the next with one split (more colours never lose one). Default 6
   (`DEFAULTS`). Worse: kL 2 (stems into leaves), 16 clusters, folding slivers into neighbours. `findFrame`: an edge band
   of one colour family is a frame; learned again without it.
+- The background is by position, not colour (2026-11, a tester's white lettering and white diamonds went unsewn
+  with nothing said): only the background's colour that the picture's edge (or a frame, or see-through) reaches is
+  fabric (`labelWith`, a flood from the edge). What the design closes in is a colour of its own (`inside`, the
+  background's thread; or the design colour that already has that thread) and is sewn in Filled and Cross-stitch; a
+  line drawing leaves it. Pieces that are dots (under 1.5 mm², or under 4 mm² and 2.5 mm across: the hole in a small
+  e) or nowhere 0.6 mm across stay fabric, and a fleck of it is never folded into the colour round it (the letter's
+  hole would fill with the letter's thread). It takes no turn in the alternating row angles (counted, a logo's navy
+  turned 90° and its apostrophe fell under the 8 mm lone-piece rule). The page says which white is fabric and which
+  is sewn, with "Leave it out" / "Sew it" (`state.pic.inside`). Tried and dropped: sewing it only where the ink
+  round it is at least as thick as the piece (a white star in a red ring was left out, and bouquets still gained
+  white). Known cost: the hole of a big O, the inside of an outline and gaps in a bouquet are sewn white until
+  tapped off; the 8 Etsy samples each gain a White thread (3-25 % more stitches).
+- A see-through picture has no background to find: every opaque pixel is sewn, as drawn (the page's lede says so).
+- Separate parts (picture.js `findParts`, `cutPart`): a picture of several things apart from each other (ink
+  joined across gaps under 3 % of the picture; 2 to 8 parts of 3 % of the ink or more) offers each "on its own"
+  under the picture. The part is then the picture: its own colours, its own Size, its own file (`name_2.pes`). A
+  tester's sheet of a horse, a cup and a jersey at 6 threads left the cup none for its greys and sewed each 30 mm
+  wide.
+- Textured pictures (drawn to look stitched, photo noise) are smoothed before the colours are learned (`smoothed`,
+  Kuwahara: squares two picture pixels across and 3 px at least, twice) and before labelling (one picture pixel
+  across, three times: at 3 px a script title's 0.8 mm strokes wore away). Unsmoothed, each area was a
+  salt-and-pepper mix of light and dark clusters: a silver cup and a jersey's white were one colour at any count and
+  the cup sewed flat white.
+  - The test (`flatShare`): of the ink pixels more than 3 `s` px inside the ink (not the page's colour, not
+    see-through), the share flat to the four pixels `s` away, `s` = two of the picture's own pixels (`opts.scale`).
+    Under `TEXTURED` 0.28 it is smoothed. Needs `INSIDE` 15 % of the ink that deep (thin stems and line art have no
+    inside: 1).
+  - Measured: the tester's sheet 0.25, its three parts 0.11-0.22; the corpus's stitched sheets (5: three sizes,
+    see-through and on a white page) and their parts 0.04-0.24 where the texture survives the scaling; clip art
+    0.52-1; a crayon drawing 0.49; photos of real embroidery 0.31 (etsy_5, etsy_8).
+  - Photos are not smoothed unasked: smoothed, etsy_8's red, pink and purple roses became one mauve (shaded tones
+    become solid colours and the merges average toward them). From `TEXTURED` to 0.55 the verdict under the picture
+    suggests "Smooth it first"; a smoothed picture has "Don't smooth it" (`state.pic.smooth`).
+  - Worse, each tried: every opaque pixel 1 px apart (0.23 for the sheet, 0.31-0.56 for its parts, 0.59 on a white
+    page); smoothing only where the picture is rough (small lettering and 2 px rules are rough too and were lost;
+    with "no calm square nearby" a stitched cup was no longer found); colours learned from the picture as it is and
+    only the areas from the smoothed copy (the cup was flat white again).
+  - Guard: `picture_corpus.html` `stitched_*` (the grey and the white beside it never share a thread, each part
+    sews alone) and "a clean picture is never smoothed" on every other case.
+- Swapping a thread: the six nearest, then "More colours" (every Brother thread by hue, less those other colours
+  use) and any colour (the nearest thread no other colour uses: two colours never share one).
+- Holes (`picture_corpus.html` `holes`): sewn area 0.35 mm inside its shape with no thread within 0.45 mm. Baseline
+  v29: 20 bare patches (20.5 mm²) over 62 filled corpus cases; etsy_3 at 120 mm 48 patches (70 mm²), etsy_1 16,
+  etsy_8 15. The 80 % rule passed all of them. Closing them is P1's (roadmap): dropped pieces handed to the
+  neighbouring colour, thin bands absorbed, overlap both ways, a second underlay.
 - Threads: each group the nearest unique Brother thread no bigger group took (CIEDE2000, never 62-64; plain Lab sent
   olive to Russet Brown); greys and other hue families (`FAMILY`, where Brother's names change) cost more for hued
   colours; the background's thread is skipped unless within SAME. Swatch = solid pixels' mean. The writer's red-mean

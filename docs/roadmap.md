@@ -215,7 +215,11 @@ of v28 (agents that had not seen the work) found:
 - [ ] **P0 References and the parity scoreboard**: Brother's samples measured (out of the VM, untracked),
   more commercial designs gathered (untracked), eight numbers per kind beside the professional range, printed by
   check.sh and failing when a row gets worse; batch pruned (504 files: only cases that guard a distinct path)
-- [ ] **P1 Fills and pictures**: fill cover, lattice and angle; ring fill off the page's blocking path; even run
+- [x] **Tester feedback, pictures (v29)**: the white inside a design sewn and said; textured pictures smoothed;
+  a verdict under the picture; any thread for a colour; Paste a picture; a hole measure in the picture corpus
+- [ ] **P1 Fills and pictures**: bare patches inside fills (the corpus's new `holes`: 20 on the corpus, 48 on
+  etsy_3; dropped pieces to the neighbouring colour, thin bands absorbed, overlap both ways), a fill's rows chosen
+  off its edges' direction (a 3 mm diamond's edge 15° off the rows sews ragged); fill cover, lattice and angle; ring fill off the page's blocking path; even run
   lengths; an all-colour density limit; cross-stitch in rows; picture trims
 - [ ] **P2 Satin and lettering**: short stitches inside curves, underlay under print columns, towel counters,
   the digits-only size bug, crosshatch travel, locks on opened files

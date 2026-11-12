@@ -115,13 +115,20 @@
     <!-- picture -->
     <div class="panel" id="panel-picture" role="tabpanel" aria-labelledby="tab-picture">
       <h1>Turn a picture into stitches</h1>
-      <p class="lede">Works best with logos, clip art and simple drawings with a few solid colours. Photos won't stitch well.</p>
+      <p class="lede">Works best with logos, clip art and simple drawings with a few solid colours. Photos won't stitch well. A picture with a see-through background is sewn just as it is drawn.</p>
       <label class="drop" id="pic-drop">
         <input id="pic-file" type="file" accept="image/*" class="sr-file">
         <img id="pic-thumb" alt="" hidden>
         <span class="drop-text"><b>Choose a picture</b> or drop it here. You can also paste one.</span>
       </label>
+      <button type="button" id="pic-paste" class="ghost" hidden>Paste a picture</button>
       <button type="button" id="pic-rotate" class="ghost" hidden>⟳ Rotate picture</button>
+      <fieldset class="field" id="pic-parts-row" hidden>
+        <legend>This picture has <span id="pic-parts-n"></span> separate parts</legend>
+        <div id="pic-parts" class="pic-parts" role="group" aria-label="Which part to sew"></div>
+        <p class="hint">Sewn on its own, a part gets all the thread colours and the whole Size to itself.</p>
+      </fieldset>
+      <p class="hint pic-verdict" id="pic-verdict" role="status" hidden></p>
       <p class="hint" id="pic-sample-note" hidden>Showing a sample flower. Choose your own picture above to stitch it instead.</p>
       <div id="pic-settings" class="settings" hidden>
         <fieldset class="field">
@@ -178,6 +185,7 @@
           <legend>Threads <span class="hint inline">(tap one to swap it or leave it out)</span></legend>
           <div id="pic-palette" class="palette"></div>
           <div id="pic-swap" class="pic-swap" role="region" aria-label="This thread" hidden></div>
+          <p class="hint" id="pic-inside" role="status" hidden></p>
           <p class="hint" id="pic-merged" hidden></p>
           <label class="check small" id="pic-mine-row" hidden><input type="checkbox" id="pic-mine"> Use only threads I own</label>
         </fieldset>

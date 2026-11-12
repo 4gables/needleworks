@@ -144,6 +144,8 @@ Reference for this part of Needleworks: the rules, the reason for each (it stops
 - An opened file's copy keeps the machine names the file came with: where its chart colour and its palette entry
   disagree, the copy is written from the palette's colour (`ownPalette`; ufront.pes resized read Light Lilac for Lavender).
   A caution in the checkup is a note, never a tick.
+- Paste: Ctrl/Cmd+V anywhere (app.js; clipboard files and file items), and "Paste a picture" under the chooser
+  (`navigator.clipboard.read`, shown where it exists): a phone has no key for it.
 - Picture, Small details: its notes sit under the control, a sentence each. One word per thing: a speck is a small
   piece on its own (left out or kept), a dot is colour inside a bigger area (always sewn in that colour). "Show them"
   sews the picture once more with specks kept and rings what only that has (`v.marks`, render.js `marks`). A new

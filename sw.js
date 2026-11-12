@@ -11,12 +11,12 @@
 // cache.
 // (`SET`: a fingerprint of the list below, written with the hashes. It is part of the cache's name, so a release whose
 // files changed can never install into the cache the running one is serving from, version number bumped or not.)
-const SET = "a98213ee43b0";
-const CACHE = `needleworks-v28-${SET}`, SHARED = "needleworks-shared";
+const SET = "39a86d9a0bc9";
+const CACHE = `needleworks-v29-${SET}`, SHARED = "needleworks-shared";
 const FILES = {
-  "index.html": "bd43321c094454ee388e3a1ed7dda7cf9de5848d7191696004deb8f8cc3216a2",
+  "index.html": "5eb0b04a468055e4f03fbb7929bc2f783d05e8aa23d87a764285270f3d748032",
   "manifest.webmanifest": "82f627e1def5254866cf364a55a1c2a85e2c3dd61abeeb890829362969fcfb63",
-  "css/app.css": "c2b11825c08dd7149d071fb37b294afe49a25ec3cf60c748e989e394b43edce3",
+  "css/app.css": "76df75ceebf02669ea113eb76ecafdf815b3d7a82ec872835474ceaa8f202d55",
   "assets/icon-192.png": "19ae131e0ea47270a4cd0eefdac045f1811f7b3b25966a08d27e3c94b3262c76",
   "assets/icon-512.png": "343d901ae82aef47b3c8313c36ad8c6c79609e8aa60d96ea983336fd170e863a",
   "assets/sample-flower.png": "ecacd191496defa4bd71af6d3570c7b67c30714002eaf1749f1a9d7eb2a52d00",
@@ -39,12 +39,12 @@ const FILES = {
   "fonts/Sacramento-Regular.woff2": "299d61f6171d04bf3ffc19f45cf015ca50301d34df5425b5643cfe86c5742029",
   "fonts/Satisfy-Regular.woff2": "693c536670f722fc975f38664c4b87315e5b3b784e01200fe309ecaed9c090e3",
   "fonts/Yellowtail-Regular.woff2": "4be14e2b33416b292c558bbb36b6ca50ee7a44dab395fd475a7d45830c99b6f8",
-  "js/app.js": "122efa530e884c3d02dcf3b3b924d50b7e1d7c98751547c946cd459c3eccc017",
+  "js/app.js": "08e950d723ba822158250268492823237f11773959cf1d095dde783e248486ca",
   "js/words.js": "32351ae8626fa69c73fbb07762152d451d8c812b98a9172210705a9fa2fc6ac4",
   "js/core/brandcharts.js": "85f4772a2de19ab56691d984a8aad930b2c427cd34498c70f66933c6f09199be",
   "js/core/brands.js": "cb0a36b5fe3128de55654bdd350bdc86508f11fb089eb822bd73b7a26eba1c59",
   "js/core/design.js": "524343b1e64430e00794de16ca112806f34725c49e18755d2bf02416ef276fbb",
-  "js/core/digitize.js": "204f784ef73763dac4159a92bd92c1658d9753c358e1f36eeecb09dcb0c4f476",
+  "js/core/digitize.js": "89ff4101c823491f5d50e37658bdbf98f6b1c26e9df838116382704d07740933",
   "js/core/fonts.js": "17f00207b7a5ae85ec8ae5059a1a7122a0ab059cd27a70f27e607db74790e5ce",
   "js/core/glyphs.js": "5923a80f5f9c7d8be7e271af557783d7b3ee46c00bf0c4185f8840f344e99433",
   "js/core/formats.js": "6c635b29d843e7eb112ad773f92f79b26ea0ad17769889104b271faa2915b76e",
@@ -53,7 +53,7 @@ const FILES = {
   "js/core/density.js": "fc507b2818e7cdb700d52d88ac328a784b89ddac6f609fcc469b95c4805a237e",
   "js/core/fill.js": "484b598858c4661c82b349bdab6070f93bf60322f918ac2b50bb0f4b9682984f",
   "js/core/machines.js": "d8dcc65e52b81d23c7eecb1bdcbe2091bbc4d36e505ea7b406f58f939e539a85",
-  "js/core/palette.js": "b7331ece1855474ab51d04225b58810ecfb19e9b2616e8736270eafc61d4c084",
+  "js/core/palette.js": "981c9378a3b36cb0d46c774f4adef8b1c96d5413bff597d5008b03e79bcde6b0",
   "js/core/recipes.js": "6d3a7978b03fbe5f4604152184d390d59ff08c126ba964aedb5b3afc2ed2fab5",
   "js/core/raster.js": "ae1885a4450df9ac59e1e37cb253bf729a0c2d680b0a3aa54239f0df9a355baa",
   "js/core/text.js": "a253f11cfeafe6c9dd630fb3c2f010f0a88b37771923e92ffa9db70f32ff0378",
@@ -61,7 +61,7 @@ const FILES = {
   "js/core/threads.js": "2f843722671915cef7d2aad9344f171040e59d2cf70aa43b139da9dd4229fc1f",
   "js/doctor.js": "ff80ece0fa4d29d7523fd2d5c2af3247e184fe49d2e6220dba286af39281e64c",
   "js/opened.js": "4a56f6bbcd1d67639d19ca1f052ec421d32b7cde6fedf5a016f827f11ccd4b84",
-  "js/picture.js": "9a1a5058e566807684040be024636c15a9dfc578d16b5a588fba12ad2dd2b1aa",
+  "js/picture.js": "5208ef2d45b57f32ab01754efa7b0371b72d6235a428cf9cf030cf28f40b1026",
   "js/threadui.js": "8ceabd64367deaaa390dd1b99ff44ae7f6ee9a461d188c77e9c35263747af525",
   "js/along.js": "9980c7b4bd1c6026ec60d255991b03e5a7d8ee0cc03bc28a9fbd59806e5472e8",
   "js/onitem.js": "e8f881bc81209ff19ee6a80c75afa0abb9a2f120077228d9370b5c864e054f6d",
@@ -69,7 +69,7 @@ const FILES = {
   "js/quality.js": "195942145d60801fdbef0940746642dcedc1cc2c78cef3f3f4a4aa26dc8345ed",
   "js/render.js": "e4d21a8dcc5f6bf039dc6c4fa009b8848ad50a522a06224b4d152db2d52becf1",
   "js/sheet.js": "27290ea9399e4d587c9a7ed5889603026a51bc0e5edc675c35d6bd2691de4678",
-  "js/state.js": "8224a7fa790cb9d554da2d3c61942287af26aaddd900b815336e4a737c92c216",
+  "js/state.js": "5308f01a2463455ac9eb8169f524ee1f397dde0799a38789b3f340ed265b4446",
   "js/studio/motifs.js": "4f60c90573db9bd4f3affcc9d1b845f3a353c08f53c74f4e41f9e141745928cb",
   "js/studio/ownfont.js": "755f1c910f9c13b18bc0691fe3c86cfeabe3bfbd5d393e5b9ce69f8df0f2fb43",
   "js/studio/layout.js": "db1920b82ccbd7b04359e51cc8295a4e9abab86f7d569c29f7e049c692ff65b1",
@@ -96,7 +96,7 @@ const FILES = {
   "js/studio/ui.js": "2b977fea0b9d5a23f6c2cd7206bce09492881d30465a722629b5b61c73581152",
   "js/doctor-worker.js": "3317fbb8ef871771b787b51a9778e16fe4b0d0269e3bedbcc4128c482beed8fc",
   "js/quilt-worker.js": "75ae9e71b130b2bafcb5fee6e169ffdd39e7cea9de949cbb344900bc5b6da76c",
-  "js/worker.js": "58a84e06b5badb84d74e446e569b917f4892419c0a8aad783a11cf038ea8a3b6",
+  "js/worker.js": "22078b367f1dae827cca8011bb6bc5a1df78e3428c58fa0e156ad953376e57fc",
   "js/zip.js": "d3d529808cf0618975057f7a71bf6044059204da36a7ffc62d4679f627c6fcb3",
   "js/gate.js": "9973e406c59f1ee0cb66bdc51cf65fe246bfc98616de66e1e35fd551f27c451a",
   "js/jobs.js": "1309a0a2ad6edd8d872c0e7af21e48da0041406b1f901d8a95c3af157a6d6617",

@@ -159,6 +159,87 @@ export function pixels(img) {
   }
   return { w, h, n, lab, opaque, hasAlpha: clear > n * 0.02 };
 }
+// A textured picture: inside its shapes, away from their edges, the colour is not flat. Of the ink pixels more than
+// 3 `s` px inside the ink (the ink: opaque and not the page's colour, the mean colour along the picture's border),
+// under TEXTURED are flat (ΔE under 6 to the four pixels `s` away). `s` is two of the picture's own pixels on the
+// copy the colours are learned from (`scale`: copy px per picture px). Clip art and logos are flat inside whatever
+// their edges do (0.63-1 on the corpus; a crayon drawing's flecked strokes 0.49); a picture of thin lines has no
+// inside to judge and is left alone (1). A picture drawn to look stitched is not flat anywhere (the tester's sheet
+// 0.25 and its three parts 0.11-0.22; the corpus's stitched sheets 0.03-0.27). Photos of real embroidery read 0.31
+// and are not smoothed unasked: smoothed, a sheet of roses lost its reds and pinks to one mauve (shaded tones become
+// solid colours of their own and the merges average toward them). Between TEXTURED and 0.55 the page suggests it.
+// Ashley's julep cup (2026-11): each area was a salt-and-pepper mix of light and dark pixels, the cup's grey and a
+// jersey's white were learned as one colour at any count, and the cup sewed as a flat white shape.
+// Tried and dropped: every opaque pixel 1 px apart (the answer changed with the scale, 0.23 for a sheet of three
+// motifs and 0.31-0.56 for each cut out on its own, and with the page: the same sheet on white 0.59); and smoothing
+// only where the picture is rough (small lettering and thin rules are rough too: a logo's 2 px rule was lost, and
+// with "no calm square nearby" added a stitched cup was no longer found).
+const TEXTURED = 0.28, INSIDE = 0.15;
+export function flatShare(P, s = 1) {
+  const { w, h, n, lab, opaque, hasAlpha } = P;
+  if (!opaque.length) return 1;
+  const d2 = (i, j) => (lab[i * 3] - lab[j * 3]) ** 2 + (lab[i * 3 + 1] - lab[j * 3 + 1]) ** 2 + (lab[i * 3 + 2] - lab[j * 3 + 2]) ** 2;
+  const ink = { w, h, data: new Uint8Array(n) };
+  let page = null;
+  if (!hasAlpha) {
+    const sum = [0, 0, 0]; let k = 0;
+    const add = (i) => { sum[0] += lab[i * 3]; sum[1] += lab[i * 3 + 1]; sum[2] += lab[i * 3 + 2]; k++; };
+    for (let x = 0; x < w; x++) { add(x); add((h - 1) * w + x); }
+    for (let y = 0; y < h; y++) { add(y * w); add(y * w + w - 1); }
+    page = sum.map((v) => v / k);
+  }
+  for (const i of opaque) ink.data[i] = !page || (lab[i * 3] - page[0]) ** 2 + (lab[i * 3 + 1] - page[1]) ** 2 + (lab[i * 3 + 2] - page[2]) ** 2 > 100 ? 1 : 0;
+  const deep = distanceTransform(ink);
+  let all = 0, k = 0;
+  for (const i of opaque) {
+    if (deep[i] <= 3 * s) continue;
+    const x = i % w; if (x < s || x >= w - s || i < s * w || i >= n - s * w) continue;
+    all++; if (Math.max(d2(i, i - s), d2(i, i + s), d2(i, i - s * w), d2(i, i + s * w)) < 36) k++;
+  }
+  // (too little inside to judge: under INSIDE of the ink. A sheet of small flowers on thin stems had 1 % of its
+  // pixels that deep, their petals' shading, and read 0.01)
+  let inked = 0; for (const i of opaque) inked += ink.data[i];
+  return all < INSIDE * inked ? 1 : k / all;
+}
+// Such a picture is smoothed before its colours are learned and before it is labelled: each pixel takes the mean of
+// the calmest of the four squares that meet at it (Kuwahara's filter, 1976: texture flattens, edges stay where they
+// are, where a blur would smear them into blend colours). The squares are `r` + 1 px across; `passes` times over.
+// Only opaque pixels count, and see-through ones stay as they are. Returns a new image.
+export function smoothed(img, r = 2, passes = 2) {
+  const { width: w, height: h } = img, W = w + 1;
+  let data = img.data;
+  for (let pass = 0; pass < passes; pass++) {
+    // summed-area tables of r, g, b, luminance, its square, and the count of opaque pixels
+    const S = Array.from({ length: 6 }, () => new Float64Array(W * (h + 1)));
+    for (let y = 0; y < h; y++) {
+      const row = [0, 0, 0, 0, 0, 0];
+      for (let x = 0; x < w; x++) {
+        const i = (y * w + x) * 4;
+        if (data[i + 3] >= 128) { const R = data[i], G = data[i + 1], B = data[i + 2], L = 0.2126 * R + 0.7152 * G + 0.0722 * B; row[0] += R; row[1] += G; row[2] += B; row[3] += L; row[4] += L * L; row[5]++; }
+        const j = (y + 1) * W + x + 1;
+        for (let q = 0; q < 6; q++) S[q][j] = S[q][j - W] + row[q];
+      }
+    }
+    const box = (q, x0, y0, x1, y1) => S[q][(y1 + 1) * W + x1 + 1] - S[q][y0 * W + x1 + 1] - S[q][(y1 + 1) * W + x0] + S[q][y0 * W + x0];
+    const out = new Uint8ClampedArray(data);
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+      const i = (y * w + x) * 4;
+      if (data[i + 3] < 128) continue;
+      let best = null, bv = Infinity;
+      for (const [dx, dy] of [[-r, -r], [0, -r], [-r, 0], [0, 0]]) {
+        const x0 = Math.max(0, x + dx), y0 = Math.max(0, y + dy), x1 = Math.min(w - 1, x + dx + r), y1 = Math.min(h - 1, y + dy + r), k = box(5, x0, y0, x1, y1);
+        if (!k) continue;
+        const m = box(3, x0, y0, x1, y1) / k, v = box(4, x0, y0, x1, y1) / k - m * m;
+        if (v < bv) { bv = v; best = [x0, y0, x1, y1, k]; }
+      }
+      if (!best) continue;
+      const [x0, y0, x1, y1, k] = best;
+      out[i] = box(0, x0, y0, x1, y1) / k; out[i + 1] = box(1, x0, y0, x1, y1) / k; out[i + 2] = box(2, x0, y0, x1, y1) / k;
+    }
+    data = out;
+  }
+  return { width: w, height: h, data };
+}
 // (the clusters from `first` on are those learned from thin lines: a pixel further than ΔE 12 from one, and a blend of
 // its nearest other cluster and another, takes that nearest. The anti-aliased edge of green lettering, nearer a teal
 // rule's colour than to the green or the white, sewed teal slivers)
@@ -236,7 +317,14 @@ function cluster(P, k, skip, lines = false) {
 // Returns { C: fine clusters (Lab), map: fine cluster -> colour id, colors, bg (the background's id, or -1), frame
 // (a mask over img, or null), boxes: each colour's extent as fractions of img [x0, y0, x1, y1], merged, empty }.
 export function learnColours(img, opts = {}) {
-  const o = { ...DEFAULTS, ...opts }, P = pixels(img), { w, h, n, opaque, hasAlpha } = P, { data } = img;
+  const o = { ...DEFAULTS, ...opts };
+  // (a textured picture is learned from its smoothed copy, and labelled from one. `smooth`: true or false as the
+  // person chose, else by the picture. `scale`: the copy's px per picture px. Tried: the colours learned from the
+  // picture as it is and only its areas from the smoothed copy; the stitched cup was flat white again.)
+  let P = pixels(img);
+  const step = Math.max(1, Math.min(6, Math.round(2 * (o.scale || 0.5)))), share = flatShare(P, step), smooth = o.smooth ?? (!!o.scale && share < TEXTURED);   // (judged only when the scale is known: the page always says it)
+  if (smooth) { img = smoothed(img, Math.max(2, step)); P = pixels(img); }
+  const { w, h, n, opaque, hasAlpha } = P, { data } = img;
   const cut = o.removeBackground && !hasAlpha;
   let { C, labels, real } = cluster(P, FINE, null, true), frame = null;
   // a frame (a band at the picture's edge) isn't part of the design, and isn't the background: learn again without it
@@ -486,10 +574,17 @@ export function learnColours(img, opts = {}) {
     for (const j of g.members) map[j] = id;
     return { id, hex: g.thread.hex, picture: g.picture, thread: g.thread, lightness: g.lab[0], background: false };
   });
+  // The background's colour inside the design (white lettering on a badge, a jersey's white diamonds, an eye's white) is
+  // part of the design, sewn in the background's thread: `inside`, a colour of its own after the background (labelWith
+  // finds its pixels: those the picture's edge doesn't reach), or the design colour that has that thread already.
+  let bgId = -1, inside = -1;
   if (bg >= 0) {
-    const id = colors.length;
+    const id = (bgId = colors.length), thread = nearestBrotherThread(bgHex);
     for (let j = 0; j < K; j++) if (map[j] < 0) map[j] = id;
-    colors.push({ id, hex: bgHex, picture: bgHex, thread: nearestBrotherThread(bgHex), lightness: C[bg][0], background: true });
+    colors.push({ id, hex: bgHex, picture: bgHex, thread, lightness: C[bg][0], background: true });
+    const same = colors.find((c) => !c.background && c.thread.hex === thread.hex);
+    inside = same ? same.id : id + 1;
+    if (!same) colors.push({ id: id + 1, hex: thread.hex, picture: bgHex, thread, lightness: C[bg][0], background: false, inside: true });
   }
   // each colour's extent (pieces over 0.02% of the picture: a stray speck doesn't make the design bigger)
   const boxes = colors.map(() => [1, 1, 0, 0]);
@@ -520,13 +615,26 @@ export function learnColours(img, opts = {}) {
   }
   // (a shade or fringe left out on purpose is no lost line)
   const lost = groups.length ? lostLines(P, labels.map((l) => (l < 0 ? -1 : fringe[l] ? -2 : map[l])), colors) / Math.max(w, h) : 0;
-  return { w, h, C, first: C.first ?? C.length, map, colors, bg: bg >= 0 ? colors.length - 1 : -1, frame, boxes, hasAlpha,
+  return { w, h, C, first: C.first ?? C.length, map, colors, bg: bgId, inside, frame, boxes, hasAlpha, smooth, flat: share, scale: o.scale || 0,
     merged: Math.max(0, o.colors - groups.length), empty, lost };
 }
 // Label a picture's pixels with the colours learned from it (possibly from a copy at another size). `crop`
 // [x0, y0, x1, y1] is the part of the learned copy img shows (fractions; default the whole).
-export function labelWith(img, model, crop = [0, 0, 1, 1]) {
-  const P = pixels(img), { w, h, n, lab, opaque } = P;
+// The background's colour that the picture's edge doesn't reach is closed in by the design, and sewn (`inside` "all",
+// the default) as part of it: white lettering on a badge, a jersey's diamonds, the white of an eye. No rule tells
+// those from page seen through the design (the hole of a big O, the inside of an outline): a rule on how thick the ink
+// round a piece is left a white star in a red ring out and still sewed the gaps in a bouquet. So it's all sewn, said
+// on the page, with one tap to leave it out ("none"; a line drawing too).
+// `res` (working px per mm, when img is the working copy): a piece that is a dot (under 1.5 mm², or under 4 mm² and
+// 2.5 mm across: the hole in a small e) or nowhere 0.6 mm across (the blend between a fill and its outline, read as
+// the background's colour) stays fabric. Returns `closed` too: the share of the picture that is closed in.
+export function labelWith(img, model, crop = [0, 0, 1, 1], { inside = "all", res = 0 } = {}) {
+  // (labelled from a gentler smoothing than the colours were learned from, squares 2 px across: at 3 px a script
+  // title's 0.8 mm strokes wore away)
+  // (labelled from a gentler smoothing than the colours were learned from: squares one picture pixel across on the
+  // working copy and 2 px at least, three times. At 3 px a script title's 0.8 mm strokes wore away)
+  const kw = model.scale ? (model.scale * img.width) / Math.max(1, (crop[2] - crop[0]) * model.w) : 0.5;
+  const P = pixels(model.smooth ? smoothed(img, Math.max(1, Math.min(4, Math.round(kw))), 3) : img), { w, h, n, lab, opaque } = P;
   let labels = new Int16Array(n).fill(-1);
   // the frame's pixels, found in the learned copy
   let frame = null;
@@ -569,10 +677,39 @@ export function labelWith(img, model, crop = [0, 0, 1, 1]) {
       }
     }
   }
+  let closed = 0;
+  if (model.inside >= 0) {
+    // the fabric: the background's colour that the picture's edge (or a frame, or see-through) reaches
+    const open = new Uint8Array(n), st = [], B = model.bg;
+    const reach = (i) => { if (!open[i] && (labels[i] === B || labels[i] < 0)) { open[i] = 1; st.push(i); } };
+    for (let x = 0; x < w; x++) { reach(x); reach((h - 1) * w + x); }
+    for (let y = 0; y < h; y++) { reach(y * w); reach(y * w + w - 1); }
+    for (let i = 0; i < n; i++) if (labels[i] < 0) reach(i);
+    while (st.length) {
+      const i = st.pop(), x = i % w;
+      if (x > 0) reach(i - 1); if (x < w - 1) reach(i + 1); if (i >= w) reach(i - w); if (i + w < n) reach(i + w);
+    }
+    const m = { w, h, data: new Uint8Array(n) };
+    let any = false;
+    for (let i = 0; i < n; i++) if (labels[i] === B && !open[i]) { m.data[i] = 1; any = true; }
+    if (any) {
+      const { labels: cl, count } = label(m), dt = distanceTransform(m), keep = new Uint8Array(count + 1).fill(1);
+      const size = new Int32Array(count + 1), wide = new Float64Array(count + 1), x0 = new Int32Array(count + 1).fill(w), x1 = new Int32Array(count + 1).fill(-1), y0 = new Int32Array(count + 1).fill(h), y1 = new Int32Array(count + 1).fill(-1);
+      for (let i = 0; i < n; i++) {
+        const c = cl[i]; if (!c) continue;
+        const x = i % w, y = (i - x) / w; size[c]++; if (dt[i] > wide[c]) wide[c] = dt[i];
+        if (x < x0[c]) x0[c] = x; if (x > x1[c]) x1[c] = x; if (y < y0[c]) y0[c] = y; if (y > y1[c]) y1[c] = y;
+      }
+      if (res) for (let c = 1; c <= count; c++)
+        if (size[c] < 1.5 * res * res || (size[c] < 4 * res * res && x1[c] - x0[c] < 2.5 * res && y1[c] - y0[c] < 2.5 * res) || 2 * wide[c] < 0.6 * res) keep[c] = 0;
+      for (let c = 1; c <= count; c++) if (keep[c]) closed += size[c];
+      if (inside !== "none") for (let i = 0; i < n; i++) if (cl[i] && keep[cl[i]]) labels[i] = model.inside;
+    }
+  }
   const area = new Array(G).fill(0);
   for (let i = 0; i < n; i++) if (labels[i] >= 0) area[labels[i]]++;
   const colors = model.colors.map((c) => ({ ...c, area: area[c.id] }));
-  return { w, h, labels, colors, merged: model.merged, frame: !!model.frame, empty: model.empty, lost: model.lost || 0 };
+  return { w, h, labels, colors, merged: model.merged, frame: !!model.frame, empty: model.empty, lost: model.lost || 0, closed: closed / n };
 }
 // The lines in the picture too thin to keep: a pixel or two wide, unlike the fabric (ΔE over 20) yet read as fabric, 2 px
 // clear of anything sewn (not the blend round a shape's edge). A logo's 1 px grey rule vanished without a word.
@@ -617,8 +754,9 @@ export function pictureInk(img, ref) {
   for (let i = 0; i < n; i++) if (cl[i] && (len[cl[i]] || half[cl[i]] <= 1.5)) data[i] = 1;
   return { w, h, data };
 }
+// (as the worker does it: a line drawing leaves the fabric's colour inside the design as fabric)
 export function analyze(img, opts = {}) {
-  return labelWith(img, learnColours(img, opts));
+  return labelWith(img, learnColours(img, opts), undefined, { inside: opts.style === "line" || opts.inside === "none" ? "none" : "all", res: opts.res || DEFAULTS.res });
 }
 // ---------- build ----------
 // "Use only my threads": every colour becomes the nearest of `palette` (hex, by Lab), and colours that land on the
