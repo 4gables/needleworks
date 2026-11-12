@@ -24,10 +24,17 @@ Reference for this part of Needleworks: the rules, the reason for each (it stops
   white). Known cost: the hole of a big O, the inside of an outline and gaps in a bouquet are sewn white until
   tapped off; the 8 Etsy samples each gain a White thread (3-25 % more stitches).
 - A see-through picture has no background to find: every opaque pixel is sewn, as drawn (the page's lede says so).
-- Textured pictures (a picture drawn to look stitched: `flatShare` under `TEXTURED` 0.3, the tester's was 0.23;
-  clip art 0.66-0.82; photos and noisy scans 0.39-0.43) are smoothed before the colours are learned (`smoothed`,
-  Kuwahara, 3 px squares twice) and before labelling (2 px squares three times: at 3 px a script title's 0.8 mm
-  strokes wore away). Unsmoothed, each area was a salt-and-pepper mix of light and dark clusters: a silver cup and
+- Separate parts (picture.js `findParts`, `cutPart`): a picture of several things apart from each other (ink
+  joined across gaps under 3 % of the picture; 2 to 8 parts of 3 % of the ink or more) offers each "on its own"
+  under the picture. The part is then the picture: its own colours, its own Size, its own file (`name_2.pes`). A
+  tester's sheet of a horse, a cup and a jersey at 6 threads left the cup none for its greys and sewed each 30 mm
+  wide.
+- Textured pictures (a picture drawn to look stitched: `flatShare` under `TEXTURED` 0.25, measured two of the
+  picture's own pixels apart, `opts.scale`: the tester's sheet 0.23 and its parts 0.09-0.23; clip art 0.57-0.95;
+  photo noise 0.14; photos of embroidery 0.29) are smoothed before the colours are learned (`smoothed`, Kuwahara,
+  squares two picture pixels across and 3 px at least, twice) and before labelling (one picture pixel across, three
+  times: at 3 px a script title's 0.8 mm strokes wore away). Measured 1 px apart on the learned copy the answer
+  changed with the scale: a part cut out and scaled up read as a photo. Unsmoothed, each area was a salt-and-pepper mix of light and dark clusters: a silver cup and
   a jersey's white were one colour at any count and the cup sewed flat white. Not for photos by default: smoothed,
   etsy_8's red, pink and purple roses became one mauve. The page's verdict under the picture says which it is
   (good / smoothed / looks like a photo, with "Smooth it first" and "Sew it as a line drawing"); More settings has

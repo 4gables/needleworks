@@ -123,6 +123,11 @@
       </label>
       <button type="button" id="pic-paste" class="ghost" hidden>Paste a picture</button>
       <button type="button" id="pic-rotate" class="ghost" hidden>⟳ Rotate picture</button>
+      <fieldset class="field" id="pic-parts-row" hidden>
+        <legend>This picture has <span id="pic-parts-n"></span> separate parts</legend>
+        <div id="pic-parts" class="pic-parts" role="group" aria-label="Which part to sew"></div>
+        <p class="hint">Sewn on its own, a part gets all the thread colours and the whole Size to itself.</p>
+      </fieldset>
       <p class="hint pic-verdict" id="pic-verdict" role="status" hidden></p>
       <p class="hint" id="pic-sample-note" hidden>Showing a sample flower. Choose your own picture above to stitch it instead.</p>
       <div id="pic-settings" class="settings" hidden>

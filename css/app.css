@@ -119,6 +119,10 @@ input[type="range"] { width: 100%; accent-color: var(--accent); min-height: 32px
 .turn { min-height: 34px; padding: 4px 10px; font-size: 14px; }
 .turn[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); }
 #pic-rotate, #pic-paste { justify-self: start; }
+.pic-parts { display: flex; flex-wrap: wrap; gap: 8px; }
+.pic-parts button { display: grid; place-items: center; gap: 4px; min-width: 64px; min-height: 64px; padding: 6px 10px; border: 1.5px solid var(--line); border-radius: 12px; background: var(--bg); color: var(--ink); font: inherit; cursor: pointer; }
+.pic-parts button[aria-pressed="true"] { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent); }
+.pic-parts img { max-width: 72px; max-height: 48px; object-fit: contain; }
 .pic-verdict { margin: 0; padding: 8px 12px; border-radius: 10px; border: 1.5px solid var(--line); background: var(--panel); }
 .pic-verdict[data-kind="photo"] { border-color: var(--accent); }
 .pic-more-threads { margin: 8px 0 2px; }

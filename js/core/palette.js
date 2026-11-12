@@ -159,19 +159,22 @@ export function pixels(img) {
   }
   return { w, h, n, lab, opaque, hasAlpha: clear > n * 0.02 };
 }
-// A textured picture: under TEXTURED of its opaque pixels are flat (ΔE under 6 to all four neighbours). Clip art and
-// logos are flat but for their edges (0.66-0.82 on the samples); a picture drawn to look stitched is not (0.23).
-// Photos and noisy scans lie between (0.39-0.43) and are left as they are: smoothed, a sheet of embroidered roses
+// A textured picture: under TEXTURED of its opaque pixels are flat (ΔE under 6 to the four pixels `s` away). `s` is
+// two of the picture's own pixels on the copy the colours are learned from (`scale`: copy px per picture px; 1 when
+// not given): measured 1 px apart whatever the scale, a sheet of three motifs scaled down was 0.23 and each motif
+// cut out on its own, scaled up, 0.31-0.56. Clip art and logos are flat but for their edges (0.57-0.95 on the
+// samples); a picture drawn to look stitched is not (0.09-0.23), nor one with photo noise (0.14). Photos of
+// embroidery lie just above (0.29) and are left as they are: smoothed, a sheet of embroidered roses
 // lost its reds and pinks to one mauve; the page's "Smooth the picture first" does it for those who ask. Ashley's julep cup (2026-11), drawn as stitches: each area was a salt-and-pepper mix of light and dark
 // pixels, the cup's grey and a jersey's white were learned as one colour at any count, and the cup sewed as a flat
 // white shape.
-const TEXTURED = 0.3;
-export function flatShare(P) {
+const TEXTURED = 0.25;
+export function flatShare(P, s = 1) {
   const { w, n, lab, opaque } = P;
   if (!opaque.length) return 1;
   const d2 = (i, j) => (lab[i * 3] - lab[j * 3]) ** 2 + (lab[i * 3 + 1] - lab[j * 3 + 1]) ** 2 + (lab[i * 3 + 2] - lab[j * 3 + 2]) ** 2;
   let k = 0;
-  for (const i of opaque) { const x = i % w; if (x === 0 || x === w - 1 || i < w || i >= n - w || Math.max(d2(i, i - 1), d2(i, i + 1), d2(i, i - w), d2(i, i + w)) < 36) k++; }
+  for (const i of opaque) { const x = i % w; if (x < s || x >= w - s || i < s * w || i >= n - s * w || Math.max(d2(i, i - s), d2(i, i + s), d2(i, i - s * w), d2(i, i + s * w)) < 36) k++; }
   return k / opaque.length;
 }
 // Such a picture is smoothed before its colours are learned and before it is labelled: each pixel takes the mean of
@@ -293,8 +296,8 @@ export function learnColours(img, opts = {}) {
   const o = { ...DEFAULTS, ...opts };
   // (a textured picture is learned from its smoothed copy, and labelled from one: `smooth` false turns it off)
   let P = pixels(img);
-  const share = flatShare(P), smooth = o.smooth ?? share < TEXTURED;
-  if (smooth) { img = smoothed(img); P = pixels(img); }
+  const step = Math.max(1, Math.min(6, Math.round(2 * (o.scale || 0.5)))), share = flatShare(P, step), smooth = o.smooth ?? share < TEXTURED;
+  if (smooth) { img = smoothed(img, Math.max(2, step)); P = pixels(img); }
   const { w, h, n, opaque, hasAlpha } = P, { data } = img;
   const cut = o.removeBackground && !hasAlpha;
   let { C, labels, real } = cluster(P, FINE, null, true), frame = null;
@@ -586,7 +589,7 @@ export function learnColours(img, opts = {}) {
   }
   // (a shade or fringe left out on purpose is no lost line)
   const lost = groups.length ? lostLines(P, labels.map((l) => (l < 0 ? -1 : fringe[l] ? -2 : map[l])), colors) / Math.max(w, h) : 0;
-  return { w, h, C, first: C.first ?? C.length, map, colors, bg: bgId, inside, frame, boxes, hasAlpha, smooth, flat: share,
+  return { w, h, C, first: C.first ?? C.length, map, colors, bg: bgId, inside, frame, boxes, hasAlpha, smooth, flat: share, scale: o.scale || 0,
     merged: Math.max(0, o.colors - groups.length), empty, lost };
 }
 // Label a picture's pixels with the colours learned from it (possibly from a copy at another size). `crop`
@@ -602,7 +605,9 @@ export function learnColours(img, opts = {}) {
 export function labelWith(img, model, crop = [0, 0, 1, 1], { inside = "all", res = 0 } = {}) {
   // (labelled from a gentler smoothing than the colours were learned from, squares 2 px across: at 3 px a script
   // title's 0.8 mm strokes wore away)
-  const P = pixels(model.smooth ? smoothed(img, 1, 3) : img), { w, h, n, lab, opaque } = P;
+  // (as wide on the working copy as one picture pixel is, 1 px at least)
+  const sr = model.scale ? Math.max(1, Math.min(4, Math.round((model.scale * img.width) / Math.max(1, (crop[2] - crop[0]) * model.w)))) : 1;
+  const P = pixels(model.smooth ? smoothed(img, sr, 3) : img), { w, h, n, lab, opaque } = P;
   let labels = new Int16Array(n).fill(-1);
   // the frame's pixels, found in the learned copy
   let frame = null;
