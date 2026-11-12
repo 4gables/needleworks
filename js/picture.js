@@ -4,8 +4,7 @@
 // and the picture kept from the last visit. (Part of app.js until 2026-11.)
 import { turnPattern } from "./core/design.js";
 import { designStats, machineThreads, readEmbroidery } from "./core/formats.js";
-import { DENSITY, LEARN, MOST, contentBox, lostMuch, picturePlan, pictureImage, sewSized } from "./core/digitize.js";
-import { distanceTransform, label } from "./core/raster.js";
+import { DENSITY, LEARN, MOST, contentBox, cutPart, findParts, lostMuch, picturePlan, pictureImage, sewSized } from "./core/digitize.js";
 import { PEC_MATCH, hexToRgb, nearestBrotherThread, pecThread } from "./core/threads.js";
 import { fix } from "./doctor.js";
 import { moves } from "./quality.js";
@@ -97,8 +96,7 @@ export async function makePicture() {
   state.pic.framed = !!r.framed; if (r.framed) p.edgeSeen = true;
   state.pic.owned = r.owned || null;
   // (the fabric's colour closed in by the design: sewn, or left out, and said: insideNote)
-  // (smoothed on its own when the picture is textured: the tick shows what was done)
-  $("pic-smooth").checked = !!r.smooth; verdictUI(r);
+  verdictUI(r);
   state.pic.closed = r.closed || 0; state.pic.fabric = r.colors.find((c) => c.background) || null;
   // (flecks sewn in the colour round them, `foldFlecks`: said in the panel when it's more than a handful, as what
   // happened; not a problem, so not on the sew sheet)
@@ -218,25 +216,24 @@ export function paletteUI() {
     <i style="background:${c.hex}"></i><span>${threadHtml(c.hex, state.pic.machineName?.get(c.hex) || c.thread.name, "")}</span></button>`).join("");
   swapUI(cols);
 }
-// Is this picture simple enough to stitch? Said under it as soon as it is sewn, from how much of it is flat colour
-// (core/palette.js `flatShare`): clip art and logos are flat but for their edges; a picture drawn with shading or
-// texture is smoothed into flat colours first, and says so; a photo says what thread can't do and what to try. (The
-// page said only "Photos won't stitch well", before any picture was chosen: a shaded cup sewed as a flat white shape
-// and nothing said why.)
+// Is this picture simple enough to stitch? Said under it as soon as it is sewn (core/palette.js `flatShare`): clip
+// art and logos are flat colour inside their shapes; a picture that is shaded or drawn with texture is smoothed into
+// flat colours first, and says so. Either way one tap does the other: the test is a guess, and the person can see
+// which sews better. (The page said only "Photos won't stitch well", before any picture was chosen: a shaded cup
+// sewed as a flat white shape and nothing said why.)
 function verdictUI(r) {
-  const p = state.pic, el = $("pic-verdict"), flat = r?.flat;
-  el.hidden = !r || p.sample || typeof flat !== "number"; if (el.hidden) { el.textContent = ""; return; }
-  const line = p.style === "line" ? "" : ` <button type="button" class="link" data-verdict="line">Sew it as a line drawing</button>`;
-  el.dataset.kind = r.smooth ? "smoothed" : flat >= 0.5 ? "good" : "photo";
+  const p = state.pic, el = $("pic-verdict");
+  el.hidden = !r || p.sample || typeof r.flat !== "number"; if (el.hidden) { el.textContent = ""; return; }
+  el.dataset.kind = r.smooth ? "smoothed" : p.smooth === false || r.flat < 0.55 ? "photo" : "good";
   el.innerHTML = r.smooth
     ? `<b>Shaded or textured.</b> Thread sews flat colours, so this picture was smoothed into flat areas first. Look over the preview: fine details and soft shading are simplified. <button type="button" class="link" data-verdict="rough">Don't smooth it</button>`
-    : flat >= 0.5 ? `<b>Good for stitching:</b> flat colours with clean edges.`
-    : `<b>This looks like a photo or a shaded picture.</b> Thread sews flat colours, so shading turns into patches. Clip art or a simple drawing sews cleaner. <button type="button" class="link" data-verdict="smooth">Smooth it first</button>${line}`;
+    : p.smooth === false ? `<b>Not smoothed.</b> Shading and texture are sewn as they are, in patches of colour. <button type="button" class="link" data-verdict="smooth">Smooth it first</button>`
+    : r.flat < 0.55 ? `<b>This picture looks shaded, like a photo.</b> Thread sews flat colours, so shading turns into patches. If areas come out flat or in the wrong colour: <button type="button" class="link" data-verdict="smooth">Smooth it first</button>`
+    : `<b>Good for stitching:</b> flat colours with clean edges.`;
 }
 $("pic-verdict").onclick = (e) => {
   const b = e.target.closest("[data-verdict]"), p = state.pic; if (!b) return;
-  if (b.dataset.verdict === "line") { p.style = "line"; styleUI(); }
-  else { p.smooth = b.dataset.verdict === "smooth"; p.skip = []; p.swap = {}; }
+  p.smooth = b.dataset.verdict === "smooth"; p.skip = []; p.swap = {};
   makePicture();
 };
 // The fabric's colour inside the design (white lettering on a badge, a jersey's white diamonds) is part of it and is
@@ -498,7 +495,6 @@ $("pic-line").onclick = (e) => {
 $("pic-line-any").onchange = (e) => { state.pic.line = nearestBrotherThread(e.target.value).hex; lineUI(); makePicture(); };
 $("pic-style").onclick = (e) => { const b = e.target.closest("button"); if (!b || b.dataset.s === state.pic.style) return; state.pic.style = b.dataset.s; styleUI(); makePicture(); };
 styleUI();
-$("pic-smooth").onchange = (e) => { state.pic.smooth = e.target.checked; state.pic.skip = []; state.pic.swap = {}; makePicture(); };
 $("pic-bg").onchange = (e) => { state.pic.bg = e.target.checked; state.pic.skip = []; state.pic.swap = {}; state.pic.inside = "all"; makePicture(); };
 // first visit: show a sample so the page opens on real stitches, not an empty box
 async function loadSample() {
@@ -545,62 +541,7 @@ export async function loadPicture(file, sample = false, again = false) {
     setMode("picture"); makePicture();
   } catch { showError("This picture couldn't be opened. Try saving it as a PNG or JPG."); }
 }
-// A picture of several separate things (a sheet of three motifs: a horse, a cup, a jersey) shares one set of thread
-// colours and one Size between them: at 6 threads the cup had none left for its greys, and each part came out 30 mm
-// wide. The parts are found (ink, as contentBox reads it, joined across gaps under 3 % of the picture; parts under 3 %
-// of the ink go with the nearest) and offered under the picture: all together, or one on its own, which is then the
-// picture (the others cleared from its cut-out).
-function findParts(b) {
-  const S = 256, k = Math.min(1, S / Math.max(b.width, b.height)), w = Math.max(1, Math.round(b.width * k)), h = Math.max(1, Math.round(b.height * k));
-  const c = makeCanvas(w, h), g = c.getContext("2d", { willReadFrequently: true });
-  g.imageSmoothingQuality = "high"; g.drawImage(b, 0, 0, w, h);
-  const d = g.getImageData(0, 0, w, h).data, border = [];
-  for (let x = 0; x < w; x++) border.push(x, (h - 1) * w + x);
-  for (let y = 0; y < h; y++) border.push(y * w, y * w + w - 1);
-  const clear = border.filter((i) => d[i * 4 + 3] <= 127).length > border.length / 2;
-  const avg = [0, 1, 2].map((ch) => border.reduce((a, i) => a + d[i * 4 + ch], 0) / border.length);
-  const ink = { w, h, data: new Uint8Array(w * h) };
-  let all = 0;
-  for (let i = 0; i < w * h; i++) if (d[i * 4 + 3] > 127 && (clear || Math.abs(d[i * 4] - avg[0]) + Math.abs(d[i * 4 + 1] - avg[1]) + Math.abs(d[i * 4 + 2] - avg[2]) > 60)) { ink.data[i] = 1; all++; }
-  if (!all) return null;
-  // (joined across small gaps: grown by 1.5 % of the picture each way)
-  const r = Math.max(1.5, 0.015 * Math.max(w, h)), away = distanceTransform({ w, h, data: ink.data.map((v) => 1 - v) });
-  const fat = { w, h, data: new Uint8Array(w * h) };
-  for (let i = 0; i < w * h; i++) fat.data[i] = ink.data[i] || away[i] <= r ? 1 : 0;
-  const { labels, count } = label(fat);
-  if (count < 2) return null;
-  const size = new Int32Array(count + 1), x0 = new Int32Array(count + 1).fill(w), x1 = new Int32Array(count + 1).fill(-1), y0 = new Int32Array(count + 1).fill(h), y1 = new Int32Array(count + 1).fill(-1);
-  for (let i = 0; i < w * h; i++) {
-    const q = labels[i]; if (!q) continue;
-    const x = i % w, y = (i - x) / w;
-    if (ink.data[i]) size[q]++;
-    if (x < x0[q]) x0[q] = x; if (x > x1[q]) x1[q] = x; if (y < y0[q]) y0[q] = y; if (y > y1[q]) y1[q] = y;
-  }
-  const big = []; for (let q = 1; q <= count; q++) if (size[q] >= 0.03 * all) big.push(q);
-  if (big.length < 2 || big.length > 8) return null;
-  // (left to right, then top to bottom, in rows a third of the picture high)
-  big.sort((a, q) => Math.round((3 * (y0[a] + y1[a])) / 2 / h) - Math.round((3 * (y0[q] + y1[q])) / 2 / h) || x0[a] - x0[q]);
-  return { w, h, k, labels, clear, avg, parts: big.map((q) => ({ id: q, box: [x0[q], y0[q], x1[q] + 1, y1[q] + 1] })) };
-}
-// one part cut out of the whole picture: everything in its box that belongs to another part cleared (to the page's
-// colour, or see-through)
-function cutPart(whole, found, n) {
-  const { w, k, labels, clear, avg, parts } = found, [bx0, by0, bx1, by1] = parts[n].box, id = parts[n].id;
-  const m = 2, X0 = Math.max(0, bx0 - m), Y0 = Math.max(0, by0 - m), X1 = Math.min(found.w, bx1 + m), Y1 = Math.min(found.h, by1 + m);
-  const sx = X0 / k, sy = Y0 / k, sw = Math.min(whole.width - sx, (X1 - X0) / k), sh = Math.min(whole.height - sy, (Y1 - Y0) / k);
-  const c = makeCanvas(Math.max(1, Math.round(sw)), Math.max(1, Math.round(sh))), g = c.getContext("2d");
-  g.drawImage(whole, sx, sy, sw, sh, 0, 0, c.width, c.height);
-  const mc = makeCanvas(X1 - X0, Y1 - Y0), mg = mc.getContext("2d"), md = mg.createImageData(X1 - X0, Y1 - Y0);
-  let others = false;
-  for (let y = Y0; y < Y1; y++) for (let x = X0; x < X1; x++) { const q = labels[y * w + x]; if (q && q !== id) { md.data[((y - Y0) * (X1 - X0) + x - X0) * 4 + 3] = 255; others = true; } }
-  if (others) {
-    mg.putImageData(md, 0, 0);
-    g.globalCompositeOperation = "destination-out"; g.imageSmoothingEnabled = false; g.drawImage(mc, 0, 0, c.width, c.height);
-    if (!clear) { g.globalCompositeOperation = "destination-over"; g.fillStyle = `rgb(${avg.map(Math.round).join(",")})`; g.fillRect(0, 0, c.width, c.height); }
-    g.globalCompositeOperation = "source-over";
-  }
-  return c;
-}
+// (the parts of a picture of several separate things: core/digitize.js `findParts`, `cutPart`)
 function partsUI() {
   const p = state.pic, f = p.found, row = $("pic-parts-row");
   row.hidden = !f || p.sample; if (row.hidden) { $("pic-parts").innerHTML = ""; return; }

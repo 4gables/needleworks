@@ -29,16 +29,27 @@ Reference for this part of Needleworks: the rules, the reason for each (it stops
   under the picture. The part is then the picture: its own colours, its own Size, its own file (`name_2.pes`). A
   tester's sheet of a horse, a cup and a jersey at 6 threads left the cup none for its greys and sewed each 30 mm
   wide.
-- Textured pictures (a picture drawn to look stitched: `flatShare` under `TEXTURED` 0.25, measured two of the
-  picture's own pixels apart, `opts.scale`: the tester's sheet 0.23 and its parts 0.09-0.23; clip art 0.57-0.95;
-  photo noise 0.14; photos of embroidery 0.29) are smoothed before the colours are learned (`smoothed`, Kuwahara,
-  squares two picture pixels across and 3 px at least, twice) and before labelling (one picture pixel across, three
-  times: at 3 px a script title's 0.8 mm strokes wore away). Measured 1 px apart on the learned copy the answer
-  changed with the scale: a part cut out and scaled up read as a photo. Unsmoothed, each area was a salt-and-pepper mix of light and dark clusters: a silver cup and
-  a jersey's white were one colour at any count and the cup sewed flat white. Not for photos by default: smoothed,
-  etsy_8's red, pink and purple roses became one mauve. The page's verdict under the picture says which it is
-  (good / smoothed / looks like a photo, with "Smooth it first" and "Sew it as a line drawing"); More settings has
-  the tick.
+- Textured pictures (drawn to look stitched, photo noise) are smoothed before the colours are learned (`smoothed`,
+  Kuwahara: squares two picture pixels across and 3 px at least, twice) and before labelling (one picture pixel
+  across, three times: at 3 px a script title's 0.8 mm strokes wore away). Unsmoothed, each area was a
+  salt-and-pepper mix of light and dark clusters: a silver cup and a jersey's white were one colour at any count and
+  the cup sewed flat white.
+  - The test (`flatShare`): of the ink pixels more than 3 `s` px inside the ink (not the page's colour, not
+    see-through), the share flat to the four pixels `s` away, `s` = two of the picture's own pixels (`opts.scale`).
+    Under `TEXTURED` 0.28 it is smoothed. Needs `INSIDE` 15 % of the ink that deep (thin stems and line art have no
+    inside: 1).
+  - Measured: the tester's sheet 0.25, its three parts 0.11-0.22; the corpus's stitched sheets (5: three sizes,
+    see-through and on a white page) and their parts 0.04-0.24 where the texture survives the scaling; clip art
+    0.52-1; a crayon drawing 0.49; photos of real embroidery 0.31 (etsy_5, etsy_8).
+  - Photos are not smoothed unasked: smoothed, etsy_8's red, pink and purple roses became one mauve (shaded tones
+    become solid colours and the merges average toward them). From `TEXTURED` to 0.55 the verdict under the picture
+    suggests "Smooth it first"; a smoothed picture has "Don't smooth it" (`state.pic.smooth`).
+  - Worse, each tried: every opaque pixel 1 px apart (0.23 for the sheet, 0.31-0.56 for its parts, 0.59 on a white
+    page); smoothing only where the picture is rough (small lettering and 2 px rules are rough too and were lost;
+    with "no calm square nearby" a stitched cup was no longer found); colours learned from the picture as it is and
+    only the areas from the smoothed copy (the cup was flat white again).
+  - Guard: `picture_corpus.html` `stitched_*` (the grey and the white beside it never share a thread, each part
+    sews alone) and "a clean picture is never smoothed" on every other case.
 - Swapping a thread: the six nearest, then "More colours" (every Brother thread by hue, less those other colours
   use) and any colour (the nearest thread no other colour uses: two colours never share one).
 - Holes (`picture_corpus.html` `holes`): sewn area 0.35 mm inside its shape with no thread within 0.45 mm. Baseline

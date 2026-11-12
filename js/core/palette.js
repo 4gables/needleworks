@@ -159,36 +159,60 @@ export function pixels(img) {
   }
   return { w, h, n, lab, opaque, hasAlpha: clear > n * 0.02 };
 }
-// A textured picture: under TEXTURED of its opaque pixels are flat (ΔE under 6 to the four pixels `s` away). `s` is
-// two of the picture's own pixels on the copy the colours are learned from (`scale`: copy px per picture px; 1 when
-// not given): measured 1 px apart whatever the scale, a sheet of three motifs scaled down was 0.23 and each motif
-// cut out on its own, scaled up, 0.31-0.56. Clip art and logos are flat but for their edges (0.57-0.95 on the
-// samples); a picture drawn to look stitched is not (0.09-0.23), nor one with photo noise (0.14). Photos of
-// embroidery lie just above (0.29) and are left as they are: smoothed, a sheet of embroidered roses
-// lost its reds and pinks to one mauve; the page's "Smooth the picture first" does it for those who ask. Ashley's julep cup (2026-11), drawn as stitches: each area was a salt-and-pepper mix of light and dark
-// pixels, the cup's grey and a jersey's white were learned as one colour at any count, and the cup sewed as a flat
-// white shape.
-const TEXTURED = 0.25;
+// A textured picture: inside its shapes, away from their edges, the colour is not flat. Of the ink pixels more than
+// 3 `s` px inside the ink (the ink: opaque and not the page's colour, the mean colour along the picture's border),
+// under TEXTURED are flat (ΔE under 6 to the four pixels `s` away). `s` is two of the picture's own pixels on the
+// copy the colours are learned from (`scale`: copy px per picture px). Clip art and logos are flat inside whatever
+// their edges do (0.63-1 on the corpus; a crayon drawing's flecked strokes 0.49); a picture of thin lines has no
+// inside to judge and is left alone (1). A picture drawn to look stitched is not flat anywhere (the tester's sheet
+// 0.25 and its three parts 0.11-0.22; the corpus's stitched sheets 0.03-0.27). Photos of real embroidery read 0.31
+// and are not smoothed unasked: smoothed, a sheet of roses lost its reds and pinks to one mauve (shaded tones become
+// solid colours of their own and the merges average toward them). Between TEXTURED and 0.55 the page suggests it.
+// Ashley's julep cup (2026-11): each area was a salt-and-pepper mix of light and dark pixels, the cup's grey and a
+// jersey's white were learned as one colour at any count, and the cup sewed as a flat white shape.
+// Tried and dropped: every opaque pixel 1 px apart (the answer changed with the scale, 0.23 for a sheet of three
+// motifs and 0.31-0.56 for each cut out on its own, and with the page: the same sheet on white 0.59); and smoothing
+// only where the picture is rough (small lettering and thin rules are rough too: a logo's 2 px rule was lost, and
+// with "no calm square nearby" added a stitched cup was no longer found).
+const TEXTURED = 0.28, INSIDE = 0.15;
 export function flatShare(P, s = 1) {
-  const { w, n, lab, opaque } = P;
+  const { w, h, n, lab, opaque, hasAlpha } = P;
   if (!opaque.length) return 1;
   const d2 = (i, j) => (lab[i * 3] - lab[j * 3]) ** 2 + (lab[i * 3 + 1] - lab[j * 3 + 1]) ** 2 + (lab[i * 3 + 2] - lab[j * 3 + 2]) ** 2;
-  let k = 0;
-  for (const i of opaque) { const x = i % w; if (x < s || x >= w - s || i < s * w || i >= n - s * w || Math.max(d2(i, i - s), d2(i, i + s), d2(i, i - s * w), d2(i, i + s * w)) < 36) k++; }
-  return k / opaque.length;
+  const ink = { w, h, data: new Uint8Array(n) };
+  let page = null;
+  if (!hasAlpha) {
+    const sum = [0, 0, 0]; let k = 0;
+    const add = (i) => { sum[0] += lab[i * 3]; sum[1] += lab[i * 3 + 1]; sum[2] += lab[i * 3 + 2]; k++; };
+    for (let x = 0; x < w; x++) { add(x); add((h - 1) * w + x); }
+    for (let y = 0; y < h; y++) { add(y * w); add(y * w + w - 1); }
+    page = sum.map((v) => v / k);
+  }
+  for (const i of opaque) ink.data[i] = !page || (lab[i * 3] - page[0]) ** 2 + (lab[i * 3 + 1] - page[1]) ** 2 + (lab[i * 3 + 2] - page[2]) ** 2 > 100 ? 1 : 0;
+  const deep = distanceTransform(ink);
+  let all = 0, k = 0;
+  for (const i of opaque) {
+    if (deep[i] <= 3 * s) continue;
+    const x = i % w; if (x < s || x >= w - s || i < s * w || i >= n - s * w) continue;
+    all++; if (Math.max(d2(i, i - s), d2(i, i + s), d2(i, i - s * w), d2(i, i + s * w)) < 36) k++;
+  }
+  // (too little inside to judge: under INSIDE of the ink. A sheet of small flowers on thin stems had 1 % of its
+  // pixels that deep, their petals' shading, and read 0.01)
+  let inked = 0; for (const i of opaque) inked += ink.data[i];
+  return all < INSIDE * inked ? 1 : k / all;
 }
 // Such a picture is smoothed before its colours are learned and before it is labelled: each pixel takes the mean of
 // the calmest of the four squares that meet at it (Kuwahara's filter, 1976: texture flattens, edges stay where they
-// are, where a blur would smear them into blend colours). `r`: the squares are r + 1 px across; twice over. Only
-// opaque pixels count, and see-through ones stay as they are. Returns a new image.
+// are, where a blur would smear them into blend colours). The squares are `r` + 1 px across; `passes` times over.
+// Only opaque pixels count, and see-through ones stay as they are. Returns a new image.
 export function smoothed(img, r = 2, passes = 2) {
-  const { width: w, height: h } = img, W = w + 1, n = w * h;
+  const { width: w, height: h } = img, W = w + 1;
   let data = img.data;
   for (let pass = 0; pass < passes; pass++) {
     // summed-area tables of r, g, b, luminance, its square, and the count of opaque pixels
     const S = Array.from({ length: 6 }, () => new Float64Array(W * (h + 1)));
     for (let y = 0; y < h; y++) {
-      let row = [0, 0, 0, 0, 0, 0];
+      const row = [0, 0, 0, 0, 0, 0];
       for (let x = 0; x < w; x++) {
         const i = (y * w + x) * 4;
         if (data[i + 3] >= 128) { const R = data[i], G = data[i + 1], B = data[i + 2], L = 0.2126 * R + 0.7152 * G + 0.0722 * B; row[0] += R; row[1] += G; row[2] += B; row[3] += L; row[4] += L * L; row[5]++; }
@@ -294,7 +318,9 @@ function cluster(P, k, skip, lines = false) {
 // (a mask over img, or null), boxes: each colour's extent as fractions of img [x0, y0, x1, y1], merged, empty }.
 export function learnColours(img, opts = {}) {
   const o = { ...DEFAULTS, ...opts };
-  // (a textured picture is learned from its smoothed copy, and labelled from one: `smooth` false turns it off)
+  // (a textured picture is learned from its smoothed copy, and labelled from one. `smooth`: true or false as the
+  // person chose, else by the picture. `scale`: the copy's px per picture px. Tried: the colours learned from the
+  // picture as it is and only its areas from the smoothed copy; the stitched cup was flat white again.)
   let P = pixels(img);
   const step = Math.max(1, Math.min(6, Math.round(2 * (o.scale || 0.5)))), share = flatShare(P, step), smooth = o.smooth ?? share < TEXTURED;
   if (smooth) { img = smoothed(img, Math.max(2, step)); P = pixels(img); }
@@ -605,9 +631,10 @@ export function learnColours(img, opts = {}) {
 export function labelWith(img, model, crop = [0, 0, 1, 1], { inside = "all", res = 0 } = {}) {
   // (labelled from a gentler smoothing than the colours were learned from, squares 2 px across: at 3 px a script
   // title's 0.8 mm strokes wore away)
-  // (as wide on the working copy as one picture pixel is, 1 px at least)
-  const sr = model.scale ? Math.max(1, Math.min(4, Math.round((model.scale * img.width) / Math.max(1, (crop[2] - crop[0]) * model.w)))) : 1;
-  const P = pixels(model.smooth ? smoothed(img, sr, 3) : img), { w, h, n, lab, opaque } = P;
+  // (labelled from a gentler smoothing than the colours were learned from: squares one picture pixel across on the
+  // working copy and 2 px at least, three times. At 3 px a script title's 0.8 mm strokes wore away)
+  const kw = model.scale ? (model.scale * img.width) / Math.max(1, (crop[2] - crop[0]) * model.w) : 0.5;
+  const P = pixels(model.smooth ? smoothed(img, Math.max(1, Math.min(4, Math.round(kw))), 3) : img), { w, h, n, lab, opaque } = P;
   let labels = new Int16Array(n).fill(-1);
   // the frame's pixels, found in the learned copy
   let frame = null;

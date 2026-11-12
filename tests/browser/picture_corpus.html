@@ -15,7 +15,7 @@ it finishes in time. Run: tests/picture_corpus.sh CDP_PORT HTTP_PORT OUT (or ser
 this page; ?only=name,name runs some images, ?quick one case each). Title: DONE &lt;cases&gt; &lt;problems&gt;.</p>
 <pre id="log"></pre>
 <script type="module">
-import { DENSITY, LEARN, contentBox, lostMuch, picturePlan, pictureImage, sewSized } from "../../js/core/digitize.js";
+import { DENSITY, LEARN, contentBox, cutPart, findParts, lostMuch, picturePlan, pictureImage, sewSized } from "../../js/core/digitize.js";
 import { COLOR_CHANGE, JUMP, STITCH, TRIM, designStats, validatePES } from "../../js/core/formats.js";
 import { hoop as getHoop } from "../../js/core/machines.js";
 import { distanceTransform, label } from "../../js/core/raster.js";
@@ -258,6 +258,26 @@ const PICS = [
   { name: "white_diamonds", n: 2, cases: [["fill", 100, 2], ["fill", 40, 6]], layers: [
     { role: "ink", col: "#2a7fc1", draw: (c) => { c.fillStyle = "#2a7fc1"; c.beginPath(); [[250, 90], [550, 90], [720, 330], [640, 380], [560, 270], [560, 540], [240, 540], [240, 270], [160, 380], [80, 330]].forEach(([x, y], i) => (i ? c.lineTo(x, y) : c.moveTo(x, y))); c.closePath(); c.fill(); } },
     { role: "ink", col: "#ffffff", draw: (c) => { c.fillStyle = "#ffffff"; for (let y = 0; y < 3; y++) for (let x = 0; x < 3; x++) { const X = 300 + x * 100, Y = 170 + y * 140; c.beginPath(); c.moveTo(X, Y - 62); c.lineTo(X + 42, Y); c.lineTo(X, Y + 62); c.lineTo(X - 42, Y); c.closePath(); c.fill(); } } }] },
+  // Ashley's sheet (2026-11), as a class: several things apart from each other, drawn to look stitched (`stitched`:
+  // every inked pixel shaded by a thread-like hatch and grain, so no area is flat), with a shaded grey that is not the
+  // white beside it. Unsmoothed, the grey and the white were learned as one colour and a silver cup sewed flat white.
+  // At three resolutions (`zoom`: the hatch stays 3 px, so it is coarse on the small one and fine on the big one), on
+  // a see-through page and on a white one. `distinct`: drawn colours that must not share a thread; `parts`: how many
+  // separate parts are offered, each then sewn on its own.
+  ...[["clear_small", null, 0.5], ["clear", null, 1], ["clear_big", null, 2.2], ["page", "#ffffff", 1], ["page_big", "#ffffff", 2.2]].map(([tag, back, zoom]) => ({
+    name: `stitched_${tag}`, n: 6, w: 1500, h: 520, back, zoom, stitched: 3, smooth: true, parts: 3, distinct: [["#b9b9b3", "#ffffff"], ["#b9b9b3", "#6b6d70"]],
+    cases: [["fill", 120, 8], ["fill", 170, 8]], layers: [
+      // a pony: brown body, dark mane and legs
+      { role: "ink", col: "#b5651d", draw: (c) => { c.fillStyle = "#b5651d"; c.beginPath(); c.ellipse(250, 270, 170, 90, 0, 0, 2 * Math.PI); c.fill(); c.beginPath(); c.ellipse(420, 170, 70, 55, -0.5, 0, 2 * Math.PI); c.fill(); } },
+      { role: "ink", col: "#3b2412", draw: (c) => { c.fillStyle = "#3b2412"; for (const x of [130, 200, 310, 370]) c.fillRect(x, 330, 34, 130); c.beginPath(); c.ellipse(90, 250, 50, 28, 0.5, 0, 2 * Math.PI); c.fill(); } },
+      // a cup: shaded grey, a darker grey mark on it, white ice on top, green leaves
+      { role: "ink", col: "#b9b9b3", draw: (c) => { c.fillStyle = "#b9b9b3"; c.beginPath(); [[610, 150], [890, 150], [850, 450], [650, 450]].forEach(([x, y], i) => (i ? c.lineTo(x, y) : c.moveTo(x, y))); c.closePath(); c.fill(); } },
+      { role: "ink", col: "#6b6d70", draw: (c) => { c.strokeStyle = "#6b6d70"; c.lineWidth = 26; c.lineCap = "round"; c.beginPath(); c.arc(750, 300, 48, 0.1 * Math.PI, 0.9 * Math.PI); c.stroke(); } },
+      { role: "ink", col: "#ffffff", draw: (c) => { c.fillStyle = "#ffffff"; c.beginPath(); c.ellipse(750, 150, 140, 42, 0, 0, 2 * Math.PI); c.fill(); } },
+      { role: "ink", col: "#3f9b2f", draw: (c) => { c.fillStyle = "#3f9b2f"; c.beginPath(); c.ellipse(700, 95, 80, 34, -0.5, 0, 2 * Math.PI); c.fill(); c.beginPath(); c.ellipse(800, 95, 80, 34, 0.5, 0, 2 * Math.PI); c.fill(); } },
+      // a jersey: blue, white diamonds
+      { role: "ink", col: "#2a7fc1", draw: (c) => { c.fillStyle = "#2a7fc1"; c.beginPath(); [[1090, 80], [1350, 80], [1470, 300], [1400, 340], [1350, 250], [1350, 470], [1090, 470], [1090, 250], [1040, 340], [970, 300]].forEach(([x, y], i) => (i ? c.lineTo(x, y) : c.moveTo(x, y))); c.closePath(); c.fill(); } },
+      { role: "ink", col: "#ffffff", draw: (c) => { c.fillStyle = "#ffffff"; for (let y = 0; y < 3; y++) for (let x = 0; x < 3; x++) { const X = 1140 + x * 80, Y = 160 + y * 120; c.beginPath(); c.moveTo(X, Y - 52); c.lineTo(X + 34, Y); c.lineTo(X, Y + 52); c.lineTo(X - 34, Y); c.closePath(); c.fill(); } } }] })),
   { name: "polka_dots", n: 2, layers: (() => {
     const out = [{ role: "ink", col: "#e63946", draw: (c) => { c.fillStyle = "#e63946"; for (let y = 0; y < 5; y++) for (let x = 0; x < 8; x++) { circle(c, 80 + x * 90 + (y % 2) * 45, 80 + y * 110, 16); c.fill(); } } },
       { role: "text", col: "#1d3557", draw: (c) => text(c, "dots", 400, 590, font("bold", 60), "#1d3557") }];
@@ -278,7 +298,19 @@ function paint(spec, k, only = -1) {
   return c;
 }
 async function picture(spec) {
-  const c = paint(spec, 1), ctx = c.getContext("2d", { willReadFrequently: true });
+  const c = paint(spec, spec.zoom || 1), ctx = c.getContext("2d", { willReadFrequently: true });
+  // (`stitched`: the ink shaded like thread: a hatch `stitched` px across, its angle and phase drifting, and grain.
+  // The page and see-through pixels stay as they are)
+  if (spec.stitched) {
+    const d = ctx.getImageData(0, 0, c.width, c.height), r = rng(7), per = spec.stitched, back = spec.back === null ? null : [1, 3, 5].map((k) => parseInt((spec.back || "#ffffff").slice(k, k + 2), 16));
+    const ink = paint({ ...spec, back: null }, spec.zoom || 1).getContext("2d").getImageData(0, 0, c.width, c.height).data;
+    for (let y = 0; y < c.height; y++) for (let x = 0; x < c.width; x++) {
+      const i = (y * c.width + x) * 4; if (ink[i + 3] < 128) continue;
+      const t = 0.5 + 0.5 * Math.sin((2 * Math.PI * (x * 0.8 + y * 0.6 + 6 * Math.sin(y / 23) + 4 * Math.sin(x / 31))) / per), f = 0.55 + 0.5 * t ** 0.3 + 0.05 * gauss(r);   // (bright thread with narrow dark gaps between: the tester's white read p10 118, p50 198, p90 248)
+      for (let ch = 0; ch < 3; ch++) d.data[i + ch] = Math.max(0, Math.min(255, d.data[i + ch] * f));
+    }
+    ctx.putImageData(d, 0, 0);
+  }
   if (spec.noise) {
     const d = ctx.getImageData(0, 0, c.width, c.height), r = rng(99);
     for (let i = 0; i < d.data.length; i += 4) for (let ch = 0; ch < 3; ch++) d.data[i + ch] = Math.max(0, Math.min(255, d.data[i + ch] + spec.noise * gauss(r)));
@@ -290,8 +322,9 @@ async function picture(spec) {
 // every layer's visible pixels (what later layers don't cover), at a scale where the longer side is <= 1000 px, split
 // into pieces: { role, col, layer, k (mask px per picture px), px (indices), w (mask px), wide (max inside distance) }
 function regions(spec) {
-  const k = Math.min(1, 1000 / Math.max(spec.w || W, spec.h || H)), m = spec.layers.map((_, i) => {
-    const c = paint(spec, k, i), d = c.getContext("2d").getImageData(0, 0, c.width, c.height);
+  // (`zoom`: the picture is that many px per drawing unit; the masks' scale is against the picture's px)
+  const z = spec.zoom || 1, k0 = Math.min(1, 1000 / Math.max(spec.w || W, spec.h || H)), k = k0 / z, m = spec.layers.map((_, i) => {
+    const c = paint(spec, k0, i), d = c.getContext("2d").getImageData(0, 0, c.width, c.height);
     const a = new Uint8Array(c.width * c.height); for (let j = 0; j < a.length; j++) a[j] = d.data[j * 4 + 3] >= 128 ? 1 : 0;
     return { w: c.width, h: c.height, a };
   });
@@ -337,7 +370,7 @@ function matches(drawn, thread) {
 }
 
 // ---------- the Picture tab's path ----------
-let worker = null, seq = 0;
+let worker = null, seq = 0, FORCE;   // (FORCE: smooth or not, whatever the picture; undefined: by the picture)
 const job = (msg) => new Promise((ok, no) => {
   const id = ++seq, t = setTimeout(() => no(new Error("timeout")), 90000);
   worker.onmessage = (e) => { if (e.data.id === id) { clearTimeout(t); ok(e.data); } };
@@ -346,10 +379,10 @@ const job = (msg) => new Promise((ok, no) => {
 });
 // as sewPicture in app.js: measure, then sized by sewSized (the same tries the page makes)
 async function sew(bitmap, c) {
-  const box = c.edge ? { sx: 0, sy: 0, sw: bitmap.width, sh: bitmap.height } : contentBox(bitmap), key = `${c.tag}`, k = LEARN / Math.max(box.sw, box.sh);
+  const box = c.edge ? { sx: 0, sy: 0, sw: bitmap.width, sh: bitmap.height } : contentBox(bitmap), key = `${c.tag}:${FORCE}`, k = LEARN / Math.max(box.sw, box.sh);
   const learn = pictureImage(bitmap, box, Math.max(1, Math.round(box.sw * k)), Math.max(1, Math.round(box.sh * k)));
   const hoop = c.turn ? { ...HOOP, w: HOOP.h, h: HOOP.w } : HOOP;
-  const opts = { colors: c.colors, scale: k, removeBackground: true, fillAngle: 45, density: DENSITY.standard, skip: [], hoop, turn: !!c.turn, palette: null, style: c.style, cross: c.cross || 2.5, line: undefined, edge: c.edge || undefined, details: Q.get("details") || undefined };   // (?details=all: the Small details choice; the page's own default without)
+  const opts = { colors: c.colors, scale: k, removeBackground: true, fillAngle: 45, density: DENSITY.standard, skip: [], hoop, turn: !!c.turn, palette: null, style: c.style, cross: c.cross || 2.5, line: undefined, edge: c.edge || undefined, details: Q.get("details") || undefined, ...(FORCE === undefined ? {} : { smooth: FORCE }) };   // (?details=all: the Small details choice; the page's own default without)
   const m = await job({ key, learn, opts });
   if (!m.ok) return { error: m.error, code: m.code };
   const r = await sewSized((pl) => job({ key, ref: c.tag.split(`_${c.style}_`)[0], learn, img: pictureImage(bitmap, pl.crop, pl.w, pl.h), crop: pl.frac, opts }),
@@ -479,6 +512,11 @@ async function run(spec) {
     cases++;
     const res = { tag, ms: Math.round(ms) };
     if (ms > ((spec.w || W) * (spec.h || H) > 4e6 ? 40000 : 20000)) bad.push(`slow ${Math.round(ms / 1000)} s`);
+    // smoothed when it is textured, and only then (class: a clean logo smoothed loses its thin lines; a picture drawn
+    // to look stitched unsmoothed loses its shades)
+    if (s.r) res.flat = `${s.r.flat.toFixed(2)}${s.r.smooth ? " smoothed" : ""}`;
+    // (a clean picture is never smoothed: its thin lines would wear away)
+    if (s.r && s.r.smooth && !(spec.smooth || spec.noise || spec.rough)) bad.push(`a clean picture smoothed (flat ${s.r.flat.toFixed(2)})`);
     if (spec.empty) {
       if (s.code !== "empty") bad.push(`expected "nothing to stitch", got ${s.error ? s.code + ": " + s.error : "a design"}`);
     } else if (s.error) {
@@ -497,6 +535,7 @@ async function run(spec) {
       const toMm = (j, p) => { const X = (j % p.w) / p.k + 0.5 / p.k, Y = Math.floor(j / p.w) / p.k + 0.5 / p.k; return [((X - sx) * plan.w) / plan.crop.sw / r.res - plan.w / 2 / r.res, ((Y - sy) * plan.h) / plan.crop.sh / r.res - plan.h / 2 / r.res]; };
       const at = threadMap(pat, turn), thread = pat.threads.map((t) => t.color);
       const pxMm = mmPerPx / reg.k;   // mm per mask px
+      const sewnAs = new Map();   // drawn colour -> the thread most of its biggest piece is sewn in
       // trims and loose jumps; the pieces a sewer would count (sewable ones), and the area sewn
       let trims = 0, loose = 0, last = null, sewnMm2 = 0, need = 0, drawn = 0, drawnMm2 = 0, gone = 0, goneMm2 = 0;
       for (let i = 0; i < pat.stitches.length; i++) {
@@ -561,11 +600,13 @@ async function run(spec) {
           if (!why) bad.push(`${name} ${style === "line" ? "not traced" : "not sewn"} (${Math.round(100 * f)}%)`);
         }
         // its thread: the one sewing most of it, in the drawn colour's family (when there are threads enough)
+        if (style === "fill" && votes.size && p.col && !(sewnAs.get(p.col)?.[1] >= areaMm2)) sewnAs.set(p.col, [thread[[...votes.entries()].sort((a, q) => q[1] - a[1])[0][0]], areaMm2]);
         if (style === "fill" && spec.colours !== false && colors >= spec.n && votes.size) {
           const b = [...votes.entries()].sort((a, q) => q[1] - a[1])[0][0], th = thread[b];
           if (th && !(p.cols || [p.col]).some((x) => matches(x, th))) bad.push(`${name} sewn in ${th} (${family(th)}), drawn ${family(p.col || p.cols[0])}`);
         }
       }
+      for (const [a, b] of (style === "fill" && spec.distinct) || []) if (sewnAs.get(a) && sewnAs.get(a)[0] === sewnAs.get(b)?.[0]) bad.push(`${a} and ${b} are sewn in one thread (${sewnAs.get(a)[0]})`);
       // what's left out is said (class: etsy_7's doodles, a drawing's sun rays in cross-stitch, a 1.5 mm eye, all left
       // out while the dialog said "Checked"): much left out by this page's measure and no lost note fails, and so does a
       // lost note with nothing left out
@@ -607,8 +648,25 @@ async function run(spec) {
     const known = KNOWN[tag];
     res.bad = bad; res.known = !!(known && bad.length); results.push(res);
     if (bad.length && !known) problems++;
-    log(`  ${bad.length ? (known ? "KNOWN" : "FAIL") : "ok  "}${known && bad.length ? " (" + known + ")" : ""} ${tag} ${res.ms} ms ${res.stitches ?? ""} st ${res.trims ?? ""} trims ${res.loose ?? ""} loose peak ${res.peak ?? ""} ${res.size ?? ""} lost ${res.kept ?? ""} (drawn ${res.gone ?? ""})${res.note ? " NOTE" : ""} tries ${res.tries?.length ?? ""}${s.r?.smooth ? ` smoothed ${s.r.flat.toFixed(2)}` : ""}${res.holes ? ` holes ${res.holes.mm2} mm² ${(100 * res.holes.share).toFixed(1)}% ${res.holes.blobs}` : ""}${bad.map((b) => "\n       " + b).join("")}`);
+    log(`  ${bad.length ? (known ? "KNOWN" : "FAIL") : "ok  "}${known && bad.length ? " (" + known + ")" : ""} ${tag} ${res.ms} ms ${res.stitches ?? ""} st ${res.trims ?? ""} trims ${res.loose ?? ""} loose peak ${res.peak ?? ""} ${res.size ?? ""} lost ${res.kept ?? ""} (drawn ${res.gone ?? ""})${res.note ? " NOTE" : ""} tries ${res.tries?.length ?? ""} flat ${res.flat ?? ""}${res.holes ? ` holes ${res.holes.mm2} mm² ${(100 * res.holes.share).toFixed(1)}% ${res.holes.blobs}` : ""}${bad.map((b) => "\n       " + b).join("")}`);
   }
+}
+// The separate parts of a picture (findParts): as many as were drawn apart, none for a picture of one thing, and each
+// part sews on its own, clean, with the texture read as it is in the whole picture
+async function parts(spec) {
+  const bitmap = await picture(spec), found = findParts(bitmap), n = found ? found.parts.length : 0, bad = [], flats = [];
+  if (n !== (spec.parts || 0) && spec.parts !== undefined) bad.push(`${n} parts found, ${spec.parts} drawn`);
+  for (let q = 0; spec.parts && q < n; q++) {
+    const tag = `pc_${spec.name}_part${q + 1}`, s = await sew(await createImageBitmap(cutPart(bitmap, found, q)), { tag: `${tag}_fill_x`, style: "fill", size: 100, colors: 6 }).catch((e) => ({ error: e.message }));
+    if (s.error) { bad.push(`part ${q + 1}: ${s.error}`); continue; }
+    await fetch(`/save/${tag}.pes`, { method: "POST", body: s.r.bytes });
+    for (const v of verdictOf(s.r.bytes)) bad.push(`part ${q + 1} quality ${v.key}`);
+    flats.push(`${s.r.flat.toFixed(2)}${s.r.smooth ? "s" : ""}`);
+    if (s.r.smooth && !(spec.smooth || spec.noise || spec.rough)) bad.push(`part ${q + 1} of a clean picture smoothed (flat ${s.r.flat.toFixed(2)})`);
+    if (RENDER) await renderLabels(tag, s.r);
+  }
+  cases++; if (bad.length) problems++;
+  log(`  ${bad.length ? "FAIL" : "ok  "} pc_${spec.name}_parts ${n} flat ${flats.join(" ")}${bad.map((b) => "\n       " + b).join("")}`);
 }
 worker = new Worker(new URL("../../js/worker.js", import.meta.url), { type: "module" });
 window.corpus = { PICS, picture, regions, sew, contentBox, pictureImage, LEARN };   // (for poking at one case from the console)
@@ -626,7 +684,20 @@ for (const name of Q.get("ext")?.split(",") || []) {
     log(`  ${tag} ${Math.round(performance.now() - t1)} ms ${st.stitches} st ${st.trims} trims, ${Math.round(Math.max(st.widthMm, st.heightMm))} mm, threads ${s.r.pattern.threads.map((t) => t.description).join(", ")}, left out ${s.r.fine.kept.lost}/${s.r.fine.kept.parts} ${(100 * s.r.fine.kept.share).toFixed(1)}%${lostMuch(s.r.fine.kept) ? " NOTE" : ""}${verdictOf(s.r.bytes).map((q) => " QUALITY " + q.key).join("")} flat ${s.r.flat?.toFixed(2)}${s.r.smooth ? " smoothed" : ""}${style === "fill" ? ((hl) => ` holes ${hl.mm2} mm² ${(100 * hl.share).toFixed(1)}% ${hl.blobs}`)(holes(s.r, threadMap(s.r.pattern, false))) : ""}`);
   }
 }
-for (const spec of PICS) if (!ONLY || ONLY.includes(spec.name)) await run(spec);
+// (?ext pictures' parts, each on its own: how flat it reads, smoothed or not, and its threads)
+for (const name of Q.has("extparts") ? Q.get("ext")?.split(",") || [] : []) {
+  let bitmap = null;
+  for (const type of ["jpg", "png"]) try { bitmap ||= await createImageBitmap(await (await fetch(`../external/images/${name}.${type}`)).blob()); } catch {}
+  const found = bitmap && findParts(bitmap);
+  for (let q = 0; found && q < found.parts.length; q++) for (const smooth of [undefined, true, false]) {
+    const tag = `ext_${name}_part${q + 1}${smooth === undefined ? "" : smooth ? "_smooth" : "_rough"}`, bm = await createImageBitmap(cutPart(bitmap, found, q));
+    FORCE = smooth; const s = await sew(bm, { tag: `${tag}_fill_x`, style: "fill", size: 100, colors: 6 }); FORCE = undefined;
+    if (s.error) { log(`  ${tag}: ${s.error}`); continue; }
+    if (RENDER) await renderLabels(tag, s.r);
+    log(`  ${tag} flat ${s.r.flat.toFixed(2)}${s.r.smooth ? " smoothed" : ""}, threads ${s.r.pattern.threads.map((t) => t.description).join(", ")}`);
+  }
+}
+for (const spec of PICS) if (!ONLY || ONLY.includes(spec.name)) { await run(spec); if (!spec.empty) await parts(spec); }
 window.RESULTS = results;
 { const hs = results.filter((x) => x.holes); log(`holes: ${hs.reduce((t, x) => t + x.holes.mm2, 0).toFixed(1)} mm² in ${hs.reduce((t, x) => t + x.holes.blobs, 0)} bare patches over ${hs.length} filled cases`); }
 await fetch("/save/picture_corpus.json", { method: "POST", body: JSON.stringify(results) });
