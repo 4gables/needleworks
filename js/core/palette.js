@@ -322,7 +322,7 @@ export function learnColours(img, opts = {}) {
   // person chose, else by the picture. `scale`: the copy's px per picture px. Tried: the colours learned from the
   // picture as it is and only its areas from the smoothed copy; the stitched cup was flat white again.)
   let P = pixels(img);
-  const step = Math.max(1, Math.min(6, Math.round(2 * (o.scale || 0.5)))), share = flatShare(P, step), smooth = o.smooth ?? share < TEXTURED;
+  const step = Math.max(1, Math.min(6, Math.round(2 * (o.scale || 0.5)))), share = flatShare(P, step), smooth = o.smooth ?? (!!o.scale && share < TEXTURED);   // (judged only when the scale is known: the page always says it)
   if (smooth) { img = smoothed(img, Math.max(2, step)); P = pixels(img); }
   const { w, h, n, opaque, hasAlpha } = P, { data } = img;
   const cut = o.removeBackground && !hasAlpha;
@@ -754,8 +754,9 @@ export function pictureInk(img, ref) {
   for (let i = 0; i < n; i++) if (cl[i] && (len[cl[i]] || half[cl[i]] <= 1.5)) data[i] = 1;
   return { w, h, data };
 }
+// (as the worker does it: a line drawing leaves the fabric's colour inside the design as fabric)
 export function analyze(img, opts = {}) {
-  return labelWith(img, learnColours(img, opts));
+  return labelWith(img, learnColours(img, opts), undefined, { inside: opts.style === "line" || opts.inside === "none" ? "none" : "all", res: opts.res || DEFAULTS.res });
 }
 // ---------- build ----------
 // "Use only my threads": every colour becomes the nearest of `palette` (hex, by Lab), and colours that land on the
