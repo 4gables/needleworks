@@ -375,9 +375,30 @@ function threadMap(pattern, turn) {
   return (x, y) => { const X = Math.round((x - x0) / G), Y = Math.round((y - y0) / G); if (X < 0 || Y < 0 || X >= w || Y >= h) return [Infinity, -1]; const i = Y * w + X; return [all[i] * G, who[i]]; };
 }
 
+// Holes: what the picture's own colours say is sewn (the worker's labels, the fabric left out), 0.35 mm or more inside
+// the sewn shape, with no thread of any colour within 0.45 mm (rows 0.4 mm apart leave 0.2 mm, the map's grid 0.14 mm
+// more: a bare patch 0.9 mm across or wider). Ashley's jersey (2026-11): gaps in blocks of colour that the 80% rule
+// above passed. Returns { mm2, share (of the sewn area), blobs (bare patches of 0.5 mm² and over) }.
+function holes(r, at) {
+  const { labels, w, h, res } = r, fabric = new Set(r.colors.filter((c) => c.background).map((c) => c.id));
+  const ink = { w, h, data: new Uint8Array(w * h) };
+  for (let i = 0; i < w * h; i++) ink.data[i] = labels[i] >= 0 && !fabric.has(labels[i]) ? 1 : 0;
+  const deep = distanceTransform(ink), bare = { w, h, data: new Uint8Array(w * h) };
+  let n = 0, k = 0;
+  for (let i = 0; i < w * h; i++) {
+    if (deep[i] < 0.35 * res) continue;
+    n++;
+    const x = i % w, y = (i - x) / w;
+    if (at((x + 0.5 - w / 2) / res, (y + 0.5 - h / 2) / res)[0] > 0.45) { bare.data[i] = 1; k++; }
+  }
+  const { labels: bl, count } = label(bare), size = new Int32Array(count + 1);
+  for (let i = 0; i < w * h; i++) if (bl[i]) size[bl[i]]++;
+  return { mm2: +(k / res / res).toFixed(1), share: +(k / Math.max(1, n)).toFixed(4), blobs: size.filter((v) => v >= 0.5 * res * res).length };
+}
+
 // ?render: each case as a PNG (the drawn regions faint, the stitches over them in their threads), 8 px per mm
 async function render(tag, pat, turn, reg, toMm) {
-  const S = 8, pts = pat.stitches.map(([x, y, c]) => (turn ? [y / 10, -x / 10, c] : [x / 10, y / 10, c]));
+  const S = Q.has("thick") ? 16 : 8, pts = pat.stitches.map(([x, y, c]) => (turn ? [y / 10, -x / 10, c] : [x / 10, y / 10, c]));
   let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
   for (const [x, y, c] of pts) if (c === STITCH) { x0 = Math.min(x0, x); y0 = Math.min(y0, y); x1 = Math.max(x1, x); y1 = Math.max(y1, y); }
   x0 -= 5; y0 -= 5; x1 += 5; y1 += 5;
@@ -385,7 +406,8 @@ async function render(tag, pat, turn, reg, toMm) {
   g.fillStyle = "#fff"; g.fillRect(0, 0, c.width, c.height);
   const f = new OffscreenCanvas(c.width, c.height), fg = f.getContext("2d");
   for (const p of reg.pieces) { fg.fillStyle = p.col || p.cols[0]; for (const j of p.px) { const [x, y] = toMm(j, p); fg.fillRect((x - x0) * S - 1, (y - y0) * S - 1, 3, 3); } }
-  g.globalAlpha = 0.2; g.drawImage(f, 0, 0); g.globalAlpha = 1; g.lineWidth = 1;
+  g.globalAlpha = 0.2; g.drawImage(f, 0, 0); g.globalAlpha = 1; g.lineWidth = Q.has("thick") ? 0.38 * S : 1; g.lineCap = "round";   // (?thick: as wide as thread, on grey: what shows through)
+  if (Q.has("thick")) { g.fillStyle = "#8a8f98"; g.fillRect(0, 0, c.width, c.height); }
   let b = 0, prev = null;
   for (const [x, y, cmd] of pts) {
     if (cmd === COLOR_CHANGE) { b++; prev = null; continue; }
@@ -394,6 +416,18 @@ async function render(tag, pat, turn, reg, toMm) {
     prev = [x, y];
   }
   await fetch(`/save/${tag}.png`, { method: "POST", body: await c.convertToBlob() });
+}
+
+// ?render, for ?ext pictures: what each working pixel was read as (its thread's colour; fabric a pale checker)
+async function renderLabels(tag, r) {
+  const { labels, w, h } = r, c = new OffscreenCanvas(w, h), g = c.getContext("2d"), d = g.createImageData(w, h);
+  const rgb = r.colors.map((q) => (q.background ? null : [1, 3, 5].map((k) => parseInt(q.hex.slice(k, k + 2), 16))));
+  for (let i = 0; i < w * h; i++) {
+    const q = labels[i] >= 0 ? rgb[labels[i]] : null, v = ((i % w) >> 3) + (Math.floor(i / w) >> 3) & 1 ? 225 : 240;
+    d.data.set(q ? [...q, 255] : [v, v, v + 10, 255], i * 4);
+  }
+  g.putImageData(d, 0, 0);
+  await fetch(`/save/${tag}_labels.png`, { method: "POST", body: await c.convertToBlob() });
 }
 
 // Open cases: what's still wrong and why it's left
@@ -555,31 +589,35 @@ async function run(spec) {
       const budget = Math.round(1.2 * need + 2 * thread.length + 2 + sewnMm2 / 100);
       if (trims > budget) bad.push(`${trims} trims (budget ${budget}: ${need} pieces, ${(sewnMm2 / 100).toFixed(1)} cm²)`);
       if (RENDER) await render(tag, pat, turn, reg, toMm);
+      if (style === "fill") res.holes = holes(r, at);
       Object.assign(res, { stitches: st.stitches, trims, loose, peak: pk, threads: thread.length, size: `${st.widthMm.toFixed(0)}x${st.heightMm.toFixed(0)}`, perCm2: +(trims / Math.max(0.01, sewnMm2 / 100)).toFixed(2), lost: +(r.fine?.lost || 0).toFixed(3), kept: r.fine?.kept && `${r.fine.kept.lost}/${r.fine.kept.parts} ${(100 * r.fine.kept.share).toFixed(1)}% big ${r.fine.kept.big.toFixed(1)}`, note: lostMuch(r.fine?.kept), gone: `${gone}/${drawn}`, tries: r.tries });
     }
     // (cases still open, said so rather than hidden: they print as KNOWN and don't count)
     const known = KNOWN[tag];
     res.bad = bad; res.known = !!(known && bad.length); results.push(res);
     if (bad.length && !known) problems++;
-    log(`  ${bad.length ? (known ? "KNOWN" : "FAIL") : "ok  "}${known && bad.length ? " (" + known + ")" : ""} ${tag} ${res.ms} ms ${res.stitches ?? ""} st ${res.trims ?? ""} trims ${res.loose ?? ""} loose peak ${res.peak ?? ""} ${res.size ?? ""} lost ${res.kept ?? ""} (drawn ${res.gone ?? ""})${res.note ? " NOTE" : ""} tries ${res.tries?.length ?? ""}${bad.map((b) => "\n       " + b).join("")}`);
+    log(`  ${bad.length ? (known ? "KNOWN" : "FAIL") : "ok  "}${known && bad.length ? " (" + known + ")" : ""} ${tag} ${res.ms} ms ${res.stitches ?? ""} st ${res.trims ?? ""} trims ${res.loose ?? ""} loose peak ${res.peak ?? ""} ${res.size ?? ""} lost ${res.kept ?? ""} (drawn ${res.gone ?? ""})${res.note ? " NOTE" : ""} tries ${res.tries?.length ?? ""}${res.holes ? ` holes ${res.holes.mm2} mm² ${(100 * res.holes.share).toFixed(1)}% ${res.holes.blobs}` : ""}${bad.map((b) => "\n       " + b).join("")}`);
   }
 }
 worker = new Worker(new URL("../../js/worker.js", import.meta.url), { type: "module" });
 window.corpus = { PICS, picture, regions, sew, contentBox, pictureImage, LEARN };   // (for poking at one case from the console)
 // ?ext=etsy_6,etsy_7: pictures from tests/external/images (not committed) through the same path: stats and renders only
 for (const name of Q.get("ext")?.split(",") || []) {
-  let bitmap; try { bitmap = await createImageBitmap(await (await fetch(`../external/images/${name}.jpg`)).blob()); } catch { log(`skip ${name}`); continue; }
-  for (const [style, size, colors] of Q.has("extall") ? [["fill", 60, 6], ["fill", 120, 6], ["line", 60, 4], ["line", 120, 4], ["cross", 60, 4], ["cross", 100, 4]] : [["fill", 120, 6], ["line", 120, 4], ["cross", 100, 4]]) {
+  let bitmap = null;
+  for (const type of ["jpg", "png"]) try { bitmap ||= await createImageBitmap(await (await fetch(`../external/images/${name}.${type}`)).blob()); } catch {}
+  if (!bitmap) { log(`skip ${name}`); continue; }
+  for (const [style, size, colors] of Q.has("extall") ? [["fill", 60, 6], ["fill", 120, 6], ["line", 60, 4], ["line", 120, 4], ["cross", 60, 4], ["cross", 100, 4]] : [["fill", +Q.get("size") || 120, +Q.get("colors") || 6], ...(Q.has("fillonly") ? [] : [["line", 120, 4], ["cross", 100, 4]])]) {
     const tag = `ext_${name}_${style}_s${size}_c${colors}`, t1 = performance.now(), s = await sew(bitmap, { tag, style, size, colors });
     if (s.error) { log(`  ${tag}: ${s.code} ${s.error}`); continue; }
     const st = designStats(s.r.pattern), sx = s.plan.crop.sx, sy = s.plan.crop.sy;
     await fetch(`/save/${tag}.pes`, { method: "POST", body: s.r.bytes });
-    if (RENDER) await render(tag, s.r.pattern, false, { pieces: [] }, () => [0, 0]);
-    log(`  ${tag} ${Math.round(performance.now() - t1)} ms ${st.stitches} st ${st.trims} trims, ${Math.round(Math.max(st.widthMm, st.heightMm))} mm, threads ${s.r.pattern.threads.map((t) => t.description).join(", ")}, left out ${s.r.fine.kept.lost}/${s.r.fine.kept.parts} ${(100 * s.r.fine.kept.share).toFixed(1)}%${lostMuch(s.r.fine.kept) ? " NOTE" : ""}${verdictOf(s.r.bytes).map((q) => " QUALITY " + q.key).join("")}`);
+    if (RENDER) { await render(tag, s.r.pattern, false, { pieces: [] }, () => [0, 0]); await renderLabels(tag, s.r); }
+    log(`  ${tag} ${Math.round(performance.now() - t1)} ms ${st.stitches} st ${st.trims} trims, ${Math.round(Math.max(st.widthMm, st.heightMm))} mm, threads ${s.r.pattern.threads.map((t) => t.description).join(", ")}, left out ${s.r.fine.kept.lost}/${s.r.fine.kept.parts} ${(100 * s.r.fine.kept.share).toFixed(1)}%${lostMuch(s.r.fine.kept) ? " NOTE" : ""}${verdictOf(s.r.bytes).map((q) => " QUALITY " + q.key).join("")}${style === "fill" ? ((hl) => ` holes ${hl.mm2} mm² ${(100 * hl.share).toFixed(1)}% ${hl.blobs}`)(holes(s.r, threadMap(s.r.pattern, false))) : ""}`);
   }
 }
 for (const spec of PICS) if (!ONLY || ONLY.includes(spec.name)) await run(spec);
 window.RESULTS = results;
+{ const hs = results.filter((x) => x.holes); log(`holes: ${hs.reduce((t, x) => t + x.holes.mm2, 0).toFixed(1)} mm² in ${hs.reduce((t, x) => t + x.holes.blobs, 0)} bare patches over ${hs.length} filled cases`); }
 await fetch("/save/picture_corpus.json", { method: "POST", body: JSON.stringify(results) });
 log(`DONE ${cases} cases, ${problems} with problems`);
 document.title = `DONE ${cases} ${problems}`;
