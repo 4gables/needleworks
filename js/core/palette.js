@@ -159,6 +159,60 @@ export function pixels(img) {
   }
   return { w, h, n, lab, opaque, hasAlpha: clear > n * 0.02 };
 }
+// A textured picture: under TEXTURED of its opaque pixels are flat (ΔE under 6 to all four neighbours). Clip art and
+// logos are flat but for their edges (0.66-0.82 on the samples); a picture drawn to look stitched is not (0.23).
+// Photos and noisy scans lie between (0.39-0.43) and are left as they are: smoothed, a sheet of embroidered roses
+// lost its reds and pinks to one mauve; the page's "Smooth the picture first" does it for those who ask. Ashley's julep cup (2026-11), drawn as stitches: each area was a salt-and-pepper mix of light and dark
+// pixels, the cup's grey and a jersey's white were learned as one colour at any count, and the cup sewed as a flat
+// white shape.
+const TEXTURED = 0.3;
+export function flatShare(P) {
+  const { w, n, lab, opaque } = P;
+  if (!opaque.length) return 1;
+  const d2 = (i, j) => (lab[i * 3] - lab[j * 3]) ** 2 + (lab[i * 3 + 1] - lab[j * 3 + 1]) ** 2 + (lab[i * 3 + 2] - lab[j * 3 + 2]) ** 2;
+  let k = 0;
+  for (const i of opaque) { const x = i % w; if (x === 0 || x === w - 1 || i < w || i >= n - w || Math.max(d2(i, i - 1), d2(i, i + 1), d2(i, i - w), d2(i, i + w)) < 36) k++; }
+  return k / opaque.length;
+}
+// Such a picture is smoothed before its colours are learned and before it is labelled: each pixel takes the mean of
+// the calmest of the four squares that meet at it (Kuwahara's filter, 1976: texture flattens, edges stay where they
+// are, where a blur would smear them into blend colours). `r`: the squares are r + 1 px across; twice over. Only
+// opaque pixels count, and see-through ones stay as they are. Returns a new image.
+export function smoothed(img, r = 2, passes = 2) {
+  const { width: w, height: h } = img, W = w + 1, n = w * h;
+  let data = img.data;
+  for (let pass = 0; pass < passes; pass++) {
+    // summed-area tables of r, g, b, luminance, its square, and the count of opaque pixels
+    const S = Array.from({ length: 6 }, () => new Float64Array(W * (h + 1)));
+    for (let y = 0; y < h; y++) {
+      let row = [0, 0, 0, 0, 0, 0];
+      for (let x = 0; x < w; x++) {
+        const i = (y * w + x) * 4;
+        if (data[i + 3] >= 128) { const R = data[i], G = data[i + 1], B = data[i + 2], L = 0.2126 * R + 0.7152 * G + 0.0722 * B; row[0] += R; row[1] += G; row[2] += B; row[3] += L; row[4] += L * L; row[5]++; }
+        const j = (y + 1) * W + x + 1;
+        for (let q = 0; q < 6; q++) S[q][j] = S[q][j - W] + row[q];
+      }
+    }
+    const box = (q, x0, y0, x1, y1) => S[q][(y1 + 1) * W + x1 + 1] - S[q][y0 * W + x1 + 1] - S[q][(y1 + 1) * W + x0] + S[q][y0 * W + x0];
+    const out = new Uint8ClampedArray(data);
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+      const i = (y * w + x) * 4;
+      if (data[i + 3] < 128) continue;
+      let best = null, bv = Infinity;
+      for (const [dx, dy] of [[-r, -r], [0, -r], [-r, 0], [0, 0]]) {
+        const x0 = Math.max(0, x + dx), y0 = Math.max(0, y + dy), x1 = Math.min(w - 1, x + dx + r), y1 = Math.min(h - 1, y + dy + r), k = box(5, x0, y0, x1, y1);
+        if (!k) continue;
+        const m = box(3, x0, y0, x1, y1) / k, v = box(4, x0, y0, x1, y1) / k - m * m;
+        if (v < bv) { bv = v; best = [x0, y0, x1, y1, k]; }
+      }
+      if (!best) continue;
+      const [x0, y0, x1, y1, k] = best;
+      out[i] = box(0, x0, y0, x1, y1) / k; out[i + 1] = box(1, x0, y0, x1, y1) / k; out[i + 2] = box(2, x0, y0, x1, y1) / k;
+    }
+    data = out;
+  }
+  return { width: w, height: h, data };
+}
 // (the clusters from `first` on are those learned from thin lines: a pixel further than ΔE 12 from one, and a blend of
 // its nearest other cluster and another, takes that nearest. The anti-aliased edge of green lettering, nearer a teal
 // rule's colour than to the green or the white, sewed teal slivers)
@@ -236,7 +290,12 @@ function cluster(P, k, skip, lines = false) {
 // Returns { C: fine clusters (Lab), map: fine cluster -> colour id, colors, bg (the background's id, or -1), frame
 // (a mask over img, or null), boxes: each colour's extent as fractions of img [x0, y0, x1, y1], merged, empty }.
 export function learnColours(img, opts = {}) {
-  const o = { ...DEFAULTS, ...opts }, P = pixels(img), { w, h, n, opaque, hasAlpha } = P, { data } = img;
+  const o = { ...DEFAULTS, ...opts };
+  // (a textured picture is learned from its smoothed copy, and labelled from one: `smooth` false turns it off)
+  let P = pixels(img);
+  const share = flatShare(P), smooth = o.smooth ?? share < TEXTURED;
+  if (smooth) { img = smoothed(img); P = pixels(img); }
+  const { w, h, n, opaque, hasAlpha } = P, { data } = img;
   const cut = o.removeBackground && !hasAlpha;
   let { C, labels, real } = cluster(P, FINE, null, true), frame = null;
   // a frame (a band at the picture's edge) isn't part of the design, and isn't the background: learn again without it
@@ -527,7 +586,7 @@ export function learnColours(img, opts = {}) {
   }
   // (a shade or fringe left out on purpose is no lost line)
   const lost = groups.length ? lostLines(P, labels.map((l) => (l < 0 ? -1 : fringe[l] ? -2 : map[l])), colors) / Math.max(w, h) : 0;
-  return { w, h, C, first: C.first ?? C.length, map, colors, bg: bgId, inside, frame, boxes, hasAlpha,
+  return { w, h, C, first: C.first ?? C.length, map, colors, bg: bgId, inside, frame, boxes, hasAlpha, smooth, flat: share,
     merged: Math.max(0, o.colors - groups.length), empty, lost };
 }
 // Label a picture's pixels with the colours learned from it (possibly from a copy at another size). `crop`
@@ -541,7 +600,9 @@ export function learnColours(img, opts = {}) {
 // 2.5 mm across: the hole in a small e) or nowhere 0.6 mm across (the blend between a fill and its outline, read as
 // the background's colour) stays fabric. Returns `closed` too: the share of the picture that is closed in.
 export function labelWith(img, model, crop = [0, 0, 1, 1], { inside = "all", res = 0 } = {}) {
-  const P = pixels(img), { w, h, n, lab, opaque } = P;
+  // (labelled from a gentler smoothing than the colours were learned from, squares 2 px across: at 3 px a script
+  // title's 0.8 mm strokes wore away)
+  const P = pixels(model.smooth ? smoothed(img, 1, 3) : img), { w, h, n, lab, opaque } = P;
   let labels = new Int16Array(n).fill(-1);
   // the frame's pixels, found in the learned copy
   let frame = null;

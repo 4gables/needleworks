@@ -912,10 +912,27 @@ document.addEventListener("drop", (e) => {
   document.querySelectorAll(".drop.over").forEach((d) => d.classList.remove("over"));
   route(e.dataTransfer.files[0]);
 });
+// (a picture copied from a web page or a chat can come as an item with no file: read too. One with no type is a
+// picture when the browser can draw it.)
+const pasted = (f) => (f.type || /\.[a-z0-9]+$/i.test(f.name) ? f : new File([f], "pasted.png", { type: "image/png" }));
 document.addEventListener("paste", (e) => {
-  const f = [...(e.clipboardData?.files || [])][0];
-  if (f) { e.preventDefault(); route(f); }
+  const cd = e.clipboardData, f = [...(cd?.files || [])][0] || [...(cd?.items || [])].find((i) => i.kind === "file")?.getAsFile();
+  if (f) { e.preventDefault(); route(pasted(f)); }
 });
+// "Paste a picture": a phone has no Ctrl+V, so the picture copied in Photos or a chat had no way in but saving it
+// first. Shown where the browser can read a picture from the clipboard (it asks the person each time).
+if (navigator.clipboard?.read) {
+  $("pic-paste").hidden = false;
+  $("pic-paste").onclick = async () => {
+    try {
+      for (const item of await navigator.clipboard.read()) {
+        const type = item.types.find((t) => t.startsWith("image/"));
+        if (type) { const blob = await item.getType(type); route(new File([blob], `pasted.${type.split("/")[1].replace("jpeg", "jpg").replace(/\+.*/, "")}`, { type })); return; }
+      }
+      showError("There's no picture to paste yet. Copy one first (press and hold a picture, then Copy), then tap Paste a picture.");
+    } catch { showError("The picture couldn't be pasted. Copy it again, allow Paste when asked, or save it and use Choose a picture."); }
+  };
+}
 // skip links move focus without changing the address (its #hash is the tab)
 for (const a of document.querySelectorAll(".skip")) a.onclick = (e) => { e.preventDefault(); const t = $(a.hash.slice(1)); t.focus({ preventScroll: true }); t.scrollIntoView({ block: "start" }); };
 addEventListener("hashchange", () => { const m = location.hash.slice(1); if (m === "bookmark" || (m !== state.mode && MODES.includes(m))) setMode(m, false); });

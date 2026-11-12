@@ -607,7 +607,7 @@ async function run(spec) {
     const known = KNOWN[tag];
     res.bad = bad; res.known = !!(known && bad.length); results.push(res);
     if (bad.length && !known) problems++;
-    log(`  ${bad.length ? (known ? "KNOWN" : "FAIL") : "ok  "}${known && bad.length ? " (" + known + ")" : ""} ${tag} ${res.ms} ms ${res.stitches ?? ""} st ${res.trims ?? ""} trims ${res.loose ?? ""} loose peak ${res.peak ?? ""} ${res.size ?? ""} lost ${res.kept ?? ""} (drawn ${res.gone ?? ""})${res.note ? " NOTE" : ""} tries ${res.tries?.length ?? ""}${res.holes ? ` holes ${res.holes.mm2} mm² ${(100 * res.holes.share).toFixed(1)}% ${res.holes.blobs}` : ""}${bad.map((b) => "\n       " + b).join("")}`);
+    log(`  ${bad.length ? (known ? "KNOWN" : "FAIL") : "ok  "}${known && bad.length ? " (" + known + ")" : ""} ${tag} ${res.ms} ms ${res.stitches ?? ""} st ${res.trims ?? ""} trims ${res.loose ?? ""} loose peak ${res.peak ?? ""} ${res.size ?? ""} lost ${res.kept ?? ""} (drawn ${res.gone ?? ""})${res.note ? " NOTE" : ""} tries ${res.tries?.length ?? ""}${s.r?.smooth ? ` smoothed ${s.r.flat.toFixed(2)}` : ""}${res.holes ? ` holes ${res.holes.mm2} mm² ${(100 * res.holes.share).toFixed(1)}% ${res.holes.blobs}` : ""}${bad.map((b) => "\n       " + b).join("")}`);
   }
 }
 worker = new Worker(new URL("../../js/worker.js", import.meta.url), { type: "module" });
@@ -623,7 +623,7 @@ for (const name of Q.get("ext")?.split(",") || []) {
     const st = designStats(s.r.pattern), sx = s.plan.crop.sx, sy = s.plan.crop.sy;
     await fetch(`/save/${tag}.pes`, { method: "POST", body: s.r.bytes });
     if (RENDER) { await render(tag, s.r.pattern, false, { pieces: [] }, () => [0, 0]); await renderLabels(tag, s.r); }
-    log(`  ${tag} ${Math.round(performance.now() - t1)} ms ${st.stitches} st ${st.trims} trims, ${Math.round(Math.max(st.widthMm, st.heightMm))} mm, threads ${s.r.pattern.threads.map((t) => t.description).join(", ")}, left out ${s.r.fine.kept.lost}/${s.r.fine.kept.parts} ${(100 * s.r.fine.kept.share).toFixed(1)}%${lostMuch(s.r.fine.kept) ? " NOTE" : ""}${verdictOf(s.r.bytes).map((q) => " QUALITY " + q.key).join("")}${style === "fill" ? ((hl) => ` holes ${hl.mm2} mm² ${(100 * hl.share).toFixed(1)}% ${hl.blobs}`)(holes(s.r, threadMap(s.r.pattern, false))) : ""}`);
+    log(`  ${tag} ${Math.round(performance.now() - t1)} ms ${st.stitches} st ${st.trims} trims, ${Math.round(Math.max(st.widthMm, st.heightMm))} mm, threads ${s.r.pattern.threads.map((t) => t.description).join(", ")}, left out ${s.r.fine.kept.lost}/${s.r.fine.kept.parts} ${(100 * s.r.fine.kept.share).toFixed(1)}%${lostMuch(s.r.fine.kept) ? " NOTE" : ""}${verdictOf(s.r.bytes).map((q) => " QUALITY " + q.key).join("")} flat ${s.r.flat?.toFixed(2)}${s.r.smooth ? " smoothed" : ""}${style === "fill" ? ((hl) => ` holes ${hl.mm2} mm² ${(100 * hl.share).toFixed(1)}% ${hl.blobs}`)(holes(s.r, threadMap(s.r.pattern, false))) : ""}`);
   }
 }
 for (const spec of PICS) if (!ONLY || ONLY.includes(spec.name)) await run(spec);

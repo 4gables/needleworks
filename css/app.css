@@ -118,7 +118,17 @@ input[type="range"] { width: 100%; accent-color: var(--accent); min-height: 32px
 .check.small { font-size: 14px; color: var(--muted); }
 .turn { min-height: 34px; padding: 4px 10px; font-size: 14px; }
 .turn[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); }
-#pic-rotate { justify-self: start; }
+#pic-rotate, #pic-paste { justify-self: start; }
+.pic-verdict { margin: 0; padding: 8px 12px; border-radius: 10px; border: 1.5px solid var(--line); background: var(--panel); }
+.pic-verdict[data-kind="photo"] { border-color: var(--accent); }
+.pic-more-threads { margin: 8px 0 2px; }
+.pic-more-threads summary { cursor: pointer; color: var(--accent); font-weight: 600; padding: 6px 0; }
+.pic-chart { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0 8px; }
+.pic-chart button, .pic-chart .custom { width: 32px; height: 32px; border-radius: 50%; padding: 0; border: 1.5px solid rgba(0,0,0,.18); cursor: pointer; flex: none; }
+.pic-chart button[aria-pressed="true"] { outline: 2.5px solid var(--accent); outline-offset: 2px; }
+.pic-chart .custom { display: inline-block; position: relative; overflow: hidden; background: conic-gradient(#e33, #ec3, #3c6, #39e, #a3e, #e33); }
+.pic-chart .custom input { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%; }
+@media (pointer: coarse) { .pic-chart button, .pic-chart .custom { width: 40px; height: 40px; } }
 .off { opacity: .4; pointer-events: none; }
 
 .fonts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
@@ -550,7 +560,7 @@ label:has(> .sr-file:focus-visible), label:has(+ .sr-file:focus-visible) { outli
 }
 /* Windows high contrast: keep thread colours (they're the content) and mark what's chosen with a real outline */
 @media (forced-colors: active) {
-  .swatches button, .doc-blk i, .chips i, .palette i, .pic-near i, .pic-own, .threads i, .pieces .pick i, .st-steps i, #view, .cards canvas, .along canvas { forced-color-adjust: none; }
+  .swatches button, .pic-chart button, .pic-chart .custom, .doc-blk i, .chips i, .palette i, .pic-near i, .pic-own, .threads i, .pieces .pick i, .st-steps i, #view, .cards canvas, .along canvas { forced-color-adjust: none; }
   .swatches .custom { forced-color-adjust: none; outline: 1px solid CanvasText; outline-offset: 1px; }   /* ("Any colour": its rainbow vanished) */
   [aria-pressed="true"], [aria-selected="true"], [aria-current="true"], .primary { outline: 2px solid Highlight; outline-offset: 1px; }
 }

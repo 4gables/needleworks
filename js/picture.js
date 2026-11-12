@@ -14,7 +14,7 @@ import { lab } from "./core/brands.js";
 import { COLORS as LINE_THREADS } from "./studio/ui.js";
 import { $, forgetPicture, hoop, keepPicture, kept, square, state, store, turned } from "./state.js";
 import { next } from "./focus.js";
-import { nearOwn, ownedPalette, owns, threadHtml } from "./threadui.js";
+import { nearOwn, ownedPalette, owns, threadHtml, threadLabel } from "./threadui.js";
 import { mmText } from "./words.js";
 import { jobQueue } from "./jobs.js";
 import { busy, escapeHtml, openDesign, paint, setMode, setView, showError, studio, warnUI } from "./app.js";   // (used when things happen, never while this file loads: app.js loads after it)
@@ -37,7 +37,7 @@ const picJobs = picWorker(), picChecks = picWorker();
 const DETAILS = ["all", "most"], detailsOf = (p) => (DETAILS.includes(p.details) ? p.details : "most");
 function picSettings(over = {}) {
   const p = state.pic, h = hoop(), turn = !!state.turn.picture && !square();
-  return { size: p.size, style: p.style, cross: p.cross, skip: p.skip, swap: p.swap, colors: p.colors, bg: p.bg, angle: p.angle, density: p.density, details: detailsOf(p),
+  return { size: p.size, style: p.style, cross: p.cross, skip: p.skip, swap: p.swap, colors: p.colors, bg: p.bg, angle: p.angle, density: p.density, details: detailsOf(p), inside: p.inside === "none" ? "none" : "all", smooth: p.smooth,
     line: p.line, edge: p.edge, turn, hoop: turn ? { ...h, w: h.h, h: h.w } : h, palette: ownedPalette(), ...over };
 }
 // the fit each exact setting was sewn at (sewing it again gives the same file, at once)
@@ -50,10 +50,10 @@ async function sewPicture(s, wk, isStale = () => false) {
   // (the whole picture when its edge band is sewn: the content box is what differs from the edge, so it cut the band
   // down to its inner 2 px)
   const box = s.bg && !s.edge ? (p.box ||= contentBox(bitmap)) : { sx: 0, sy: 0, sw: bitmap.width, sh: bitmap.height };
-  const key = `${p.key}:${s.colors}:${s.bg}:${s.edge ? 1 : 0}:${box.sx},${box.sy},${box.sw},${box.sh}`, k = LEARN / Math.max(box.sw, box.sh);
+  const key = `${p.key}:${s.colors}:${s.bg}:${s.edge ? 1 : 0}:${s.smooth ?? "auto"}:${box.sx},${box.sy},${box.sw},${box.sh}`, k = LEARN / Math.max(box.sw, box.sh);
   if (p.learn?.key !== key) p.learn = { key, img: pictureImage(bitmap, box, Math.max(1, Math.round(box.sw * k)), Math.max(1, Math.round(box.sh * k))) };
   const learn = p.learn.img;
-  const opts = { colors: s.colors, removeBackground: s.bg, fillAngle: s.angle, density: DENSITY[s.density] || DENSITY.standard, details: s.details, skip: s.skip, ...(s.swap && Object.keys(s.swap).length ? { swap: s.swap } : {}), hoop: s.hoop, turn: s.turn, palette: s.palette, style: s.style, cross: s.cross, line: s.line || undefined, edge: s.edge || undefined };
+  const opts = { colors: s.colors, removeBackground: s.bg, fillAngle: s.angle, density: DENSITY[s.density] || DENSITY.standard, details: s.details, inside: s.inside, ...(s.smooth == null ? {} : { smooth: s.smooth }), skip: s.skip, ...(s.swap && Object.keys(s.swap).length ? { swap: s.swap } : {}), hoop: s.hoop, turn: s.turn, palette: s.palette, style: s.style, cross: s.cross, line: s.line || undefined, edge: s.edge || undefined };
   // (kept per colour count: the checks try other counts)
   if (!p.models.has(key)) {
     const m = await wk.run({ key, learn, opts });
@@ -64,7 +64,7 @@ async function sewPicture(s, wk, isStale = () => false) {
   const fk = JSON.stringify([key, s.size, opts]);
   const r = await sewSized(async (pl) => {
     if (isStale()) return { ok: false, stale: true };
-    const q = await wk.run({ key, ref: `${p.key}:${s.bg}:${s.edge ? 1 : 0}`, learn, img: pictureImage(bitmap, pl.crop, pl.w, pl.h), crop: pl.frac, opts });
+    const q = await wk.run({ key, ref: `${p.key}:${s.bg}:${s.edge ? 1 : 0}:${s.smooth ?? "auto"}`, learn, img: pictureImage(bitmap, pl.crop, pl.w, pl.h), crop: pl.frac, opts });
     return isStale() ? { ok: false, stale: true } : q;
   }, (fit) => picturePlan(box, sewn, s.size, s.hoop, undefined, fit), { style: s.style, cross: s.cross, fit: picFits.get(fk) });
   if (r.stale || isStale()) return { stale: true };
@@ -83,7 +83,7 @@ export async function makePicture() {
   busy(false);
   if (r.plan) sizeRange(r.plan.max);
   if (!r.ok && r.code === "empty" && !p.sample) forgetPicture();
-  if (!r.ok) { state.views.picture = null; $("pic-use").hidden = $("pic-size-note").hidden = true; if (state.mode === "picture") { setView(null); pictureError(r); } return; }
+  if (!r.ok) { verdictUI(null); state.views.picture = null; $("pic-use").hidden = $("pic-size-note").hidden = true; if (state.mode === "picture") { setView(null); pictureError(r); } return; }
   showError("");
   // (in the order they're sewn, then any left out)
   const byId = new Map(r.colors.map((c) => [c.id, c]));
@@ -95,6 +95,10 @@ export async function makePicture() {
   // (a band of one colour round the edge is taken as a frame and left out (`findFrame`): said, it went with no word)
   state.pic.framed = !!r.framed; if (r.framed) p.edgeSeen = true;
   state.pic.owned = r.owned || null;
+  // (the fabric's colour closed in by the design: sewn, or left out, and said: insideNote)
+  // (smoothed on its own when the picture is textured: the tick shows what was done)
+  $("pic-smooth").checked = !!r.smooth; verdictUI(r);
+  state.pic.closed = r.closed || 0; state.pic.fabric = r.colors.find((c) => c.background) || null;
   // (flecks sewn in the colour round them, `foldFlecks`: said in the panel when it's more than a handful, as what
   // happened; not a problem, so not on the sew sheet)
   state.pic.folded = r.fine?.folded >= FLECKS ? r.fine.folded : 0;
@@ -207,11 +211,54 @@ export function paletteUI() {
   else if (edge) $("pic-merged").insertAdjacentHTML("beforeend", `${state.pic.merged ? " " : ""}<span>The band round the picture's edge is sewn too. <button type="button" class="link" data-edge="0">Leave it out</button></span>`);
   detailsNote();
   ownedNote();
+  insideNote();
   const open = state.pic.swapOpen;
   $("pic-palette").innerHTML = cols.map((c) => `<button type="button" data-id="${c.id}" aria-pressed="${!state.pic.skip.includes(c.id)}" aria-expanded="${c.id === open}" aria-controls="pic-swap">
     <i style="background:${c.hex}"></i><span>${threadHtml(c.hex, state.pic.machineName?.get(c.hex) || c.thread.name, "")}</span></button>`).join("");
   swapUI(cols);
 }
+// Is this picture simple enough to stitch? Said under it as soon as it is sewn, from how much of it is flat colour
+// (core/palette.js `flatShare`): clip art and logos are flat but for their edges; a picture drawn with shading or
+// texture is smoothed into flat colours first, and says so; a photo says what thread can't do and what to try. (The
+// page said only "Photos won't stitch well", before any picture was chosen: a shaded cup sewed as a flat white shape
+// and nothing said why.)
+function verdictUI(r) {
+  const p = state.pic, el = $("pic-verdict"), flat = r?.flat;
+  el.hidden = !r || p.sample || typeof flat !== "number"; if (el.hidden) { el.textContent = ""; return; }
+  const line = p.style === "line" ? "" : ` <button type="button" class="link" data-verdict="line">Sew it as a line drawing</button>`;
+  el.dataset.kind = r.smooth ? "smoothed" : flat >= 0.6 ? "good" : "photo";
+  el.innerHTML = r.smooth
+    ? `<b>Shaded or textured.</b> Thread sews flat colours, so this picture was smoothed into flat areas first. Look over the preview: fine details and soft shading are simplified. <button type="button" class="link" data-verdict="rough">Don't smooth it</button>`
+    : flat >= 0.6 ? `<b>Good for stitching:</b> flat colours with clean edges.`
+    : `<b>This looks like a photo or a shaded picture.</b> Thread sews flat colours, so shading turns into patches. Clip art or a simple drawing sews cleaner. <button type="button" class="link" data-verdict="smooth">Smooth it first</button>${line}`;
+}
+$("pic-verdict").onclick = (e) => {
+  const b = e.target.closest("[data-verdict]"), p = state.pic; if (!b) return;
+  if (b.dataset.verdict === "line") { p.style = "line"; styleUI(); }
+  else { p.smooth = b.dataset.verdict === "smooth"; p.skip = []; p.swap = {}; }
+  makePicture();
+};
+// The fabric's colour inside the design (white lettering on a badge, a jersey's white diamonds) is part of it and is
+// sewn; the same colour round the design is the fabric. Both said, with the one tap that leaves it out or sews it again:
+// white parts went unsewn with no word, and nothing on the page said why.
+function insideNote() {
+  const p = state.pic, el = $("pic-inside"), f = p.fabric, show = !!f && p.closed > 0 && p.style !== "line";
+  el.hidden = !show; if (!show) { el.textContent = ""; return; }
+  const name = escapeHtml(nearestBrotherThread(f.hex).name.toLowerCase());
+  el.innerHTML = p.inside === "none"
+    ? `The ${name} closed in by the design is left as fabric, like the ${name} round it. <button type="button" class="link" data-inside="all">Sew it in ${name}</button>`
+    : `The ${name} round the design is the fabric and isn't sewn. The ${name} closed in by the design is part of it, so it is sewn. <button type="button" class="link" data-inside="none">Leave it out</button>`;
+}
+$("pic-inside").onclick = (e) => {
+  const b = e.target.closest("[data-inside]"); if (!b) return;
+  state.pic.inside = b.dataset.inside; state.pic.skip = []; state.pic.swap = {}; makePicture();
+};
+// Every Brother thread, by hue then light to dark (greys last), for "More colours"
+const CHART = (() => {
+  const seen = new Set(), all = PEC_MATCH.map((t, i) => t && pecThread(i)).filter((t) => t && !seen.has(t.hex) && seen.add(t.hex));
+  const key = (t) => { const [L, a, b] = lab(hexToRgb(t.hex)), c = Math.hypot(a, b); return c < 12 ? [400, -L] : [Math.round((((Math.atan2(b, a) * 180) / Math.PI + 360) % 360) / 30), -L]; };
+  return all.map((t) => ({ t, k: key(t) })).sort((x, y) => x.k[0] - y.k[0] || x.k[1] - y.k[1]).map((x) => x.t);
+})();
 // A colour's chip, tapped: leave it out (or sew it again), or swap its thread for one of the nearest Brother threads to
 // the picture's own colour that no other colour sews (a violet logo matched Brother Magenta, the nearest by eye and
 // the matcher's choice, and there was no way to sew it in Violet or Purple instead)
@@ -229,6 +276,9 @@ function swapUI(cols = state.pic.colorsInfo.filter((c) => !c.background && c.are
   const was = p.swap[c.id]?.was, line = p.style === "line";
   box.innerHTML = `<p class="hint"><b>${threadHtml(c.hex, name(c), " ")}</b>${out ? " is left out." : ` sews the picture's <i class="pic-own" style="background:${c.picture || c.hex}" title="The picture's colour"></i> colour.`}</p>`
     + (!out && !line ? `<div class="pic-near" role="group" aria-label="Sew it in another thread instead">${near.map((t) => `<button type="button" data-hex="${t.hex}" aria-pressed="${t.hex === c.hex}"><i style="background:${t.hex}"></i><span>${threadHtml(t.hex, t.name, "")}</span></button>`).join("")}</div>` : "")
+    // (any thread at all: the six nearest were the only ones offered, and a picture's red could not be sewn in blue)
+    + (!out && !line ? `<details class="pic-more-threads"${p.swapMore ? " open" : ""}><summary>More colours</summary><div class="pic-chart" role="group" aria-label="Every Brother thread">${CHART.filter((t) => !others.has(t.hex)).map((t) => `<button type="button" data-hex="${t.hex}" aria-pressed="${t.hex === c.hex}" style="background:${t.hex}" title="${escapeHtml(threadLabel(t.hex, t.name).name)}" aria-label="${escapeHtml(threadLabel(t.hex, t.name).name)}"></button>`).join("")}`
+      + `<span class="custom" title="Any colour"><input type="color" id="pic-swap-any" value="${c.hex}" aria-label="Any colour: sewn in the nearest Brother thread"></span></div><p class="hint">Or pick any colour: it is sewn in the nearest Brother thread no other colour here uses.</p></details>` : "")
     + `<p class="pic-swap-do"><button type="button" class="link" data-do="skip">${out ? "Sew it again" : "Leave it out"}</button>`
     + `${was && !out ? ` · <button type="button" class="link" data-do="back">Back to ${escapeHtml(was.name)}</button>` : ""}</p>`;
 }
@@ -258,16 +308,28 @@ $("pic-palette").onclick = (e) => {
   const id = +b.dataset.id;
   state.pic.swapOpen = state.pic.swapOpen === id ? null : id; paletteUI();
 };
+// (with the thread it had first, to go back to)
+function swapTo(id, hex) {
+  const p = state.pic, c = p.colorsInfo.find((x) => x.id === id);
+  const was = p.swap[id]?.was || (c && { hex: c.hex, name: p.machineName?.get(c.hex) || c.thread.name });
+  p.swap = { ...p.swap, [id]: { hex, was } };
+  if (was?.hex === hex) delete p.swap[id];
+}
+$("pic-swap").addEventListener("toggle", (e) => { if (e.target.matches?.(".pic-more-threads")) state.pic.swapMore = e.target.open; }, true);
+// any colour: the nearest Brother thread that no other colour of the picture sews (two colours never share a thread)
+$("pic-swap").onchange = (e) => {
+  const p = state.pic, id = p.swapOpen; if (e.target.id !== "pic-swap-any" || id == null) return;
+  const others = new Set(p.colorsInfo.filter((x) => x.id !== id && !x.background && x.area > 0).map((x) => x.hex)), want = swapLab(e.target.value);
+  const t = CHART.filter((q) => !others.has(q.hex)).map((q) => ({ q, d: Math.hypot(...swapLab(q.hex).map((v, k) => v - want[k])) })).sort((a, b) => a.d - b.d)[0]?.q;
+  if (!t || t.hex === p.colorsInfo.find((x) => x.id === id)?.hex) return;
+  swapTo(id, t.hex); paletteUI(); makePicture();
+};
 $("pic-swap").onclick = (e) => {
   const b = e.target.closest("button"), p = state.pic, id = p.swapOpen; if (!b || id == null) return;
   const c = p.colorsInfo.find((x) => x.id === id);
   if (b.dataset.hex === c?.hex) return;
-  if (b.dataset.hex) {
-    // (with the thread it had first, to go back to)
-    const was = p.swap[id]?.was || (c && { hex: c.hex, name: p.machineName?.get(c.hex) || c.thread.name });
-    p.swap = { ...p.swap, [id]: { hex: b.dataset.hex, was } };
-    if (was?.hex === b.dataset.hex) delete p.swap[id];
-  } else if (b.dataset.do === "back") { p.swap = { ...p.swap }; delete p.swap[id]; }
+  if (b.dataset.hex) swapTo(id, b.dataset.hex);
+  else if (b.dataset.do === "back") { p.swap = { ...p.swap }; delete p.swap[id]; }
   else if (b.dataset.do === "skip") p.skip = p.skip.includes(id) ? p.skip.filter((x) => x !== id) : [...p.skip, id];
   paletteUI(); makePicture();
 };
@@ -435,7 +497,8 @@ $("pic-line").onclick = (e) => {
 $("pic-line-any").onchange = (e) => { state.pic.line = nearestBrotherThread(e.target.value).hex; lineUI(); makePicture(); };
 $("pic-style").onclick = (e) => { const b = e.target.closest("button"); if (!b || b.dataset.s === state.pic.style) return; state.pic.style = b.dataset.s; styleUI(); makePicture(); };
 styleUI();
-$("pic-bg").onchange = (e) => { state.pic.bg = e.target.checked; state.pic.skip = []; state.pic.swap = {}; makePicture(); };
+$("pic-smooth").onchange = (e) => { state.pic.smooth = e.target.checked; state.pic.skip = []; state.pic.swap = {}; makePicture(); };
+$("pic-bg").onchange = (e) => { state.pic.bg = e.target.checked; state.pic.skip = []; state.pic.swap = {}; state.pic.inside = "all"; makePicture(); };
 // first visit: show a sample so the page opens on real stitches, not an empty box
 async function loadSample() {
   try {
@@ -472,7 +535,7 @@ export async function loadPicture(file, sample = false, again = false) {
     // (the Small details choice is about one picture: a new one starts with specks left out, as the panel shows.
     // "Keep" taken for the last picture stayed on for the next with nothing said.)
     if (!again && state.pic.details === "all") { state.pic.details = "most"; detailsUI(); }
-    Object.assign(state.pic, { file, bitmap, sample, box: null, key: state.pic.key + 1, skip: [], swap: {}, edge: false, edgeSeen: false, models: new Map(), autoLine: "" });
+    Object.assign(state.pic, { file, bitmap, sample, box: null, key: state.pic.key + 1, skip: [], swap: {}, inside: "all", smooth: null, edge: false, edgeSeen: false, models: new Map(), autoLine: "" });
     setThumb(file); $("pic-rotate").hidden = false;
     $("pic-drop").querySelector(".drop-text").innerHTML = sample ? "<b>Choose your own picture</b> or drop it here." : `${again ? "Your last picture, " : ""}<b>${escapeHtml(file.name)}</b> · choose another`;
     $("pic-sample-note").hidden = !sample;

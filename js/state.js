@@ -64,7 +64,7 @@ export const state = {
   // their spools from brands not charted here (Madeira), matched by colour: [{ brand, num, hex }]. Ticking the nearest
   // Brother spool stood for it, and every surface then said "Your Brother 079 Salmon Pink", a spool they didn't own
   mine: (store.get("myspools", []) || []).filter((o) => o && typeof o.brand === "string" && /^#[0-9a-f]{6}$/i.test(o.hex)),
-  pic: { mine: store.get("pic.mine", false), style: "fill", cross: 2.5, file: null, bitmap: null, key: 0, skip: [], swap: {}, colors: 6, size: 100, angle: 45, bg: true, loads: 0, sample: false, density: store.get("pic.density", "standard"), req: 0, colorsInfo: [], line: "", edge: false, models: new Map() },
+  pic: { mine: store.get("pic.mine", false), style: "fill", cross: 2.5, file: null, bitmap: null, key: 0, skip: [], swap: {}, colors: 6, size: 100, angle: 45, bg: true, loads: 0, sample: false, density: store.get("pic.density", "standard"), req: 0, colorsInfo: [], line: "", edge: false, inside: "all", smooth: null, models: new Map() },
 };
 if (!MACHINES[state.machine]) state.machine = DEFAULT_MACHINE;
 export const hoop = () => getHoop(state.machine, state.hoopId);
