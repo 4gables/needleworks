@@ -57,6 +57,7 @@ const FILES = {
   "js/core/palette.js": "981c9378a3b36cb0d46c774f4adef8b1c96d5413bff597d5008b03e79bcde6b0",
   "js/core/recipes.js": "b0de8c11d3598a1bae5aceb72c56bb99d14dc94acd8c03828b6e09f6e3142d2f",
   "js/core/raster.js": "ae1885a4450df9ac59e1e37cb253bf729a0c2d680b0a3aa54239f0df9a355baa",
+  "js/core/regions.js": "0000000000000000000000000000000000000000000000000000000000000000",
   "js/core/text.js": "a253f11cfeafe6c9dd630fb3c2f010f0a88b37771923e92ffa9db70f32ff0378",
   "js/core/typed.js": "bca3a62351d99bff324c3012869f3910ec697bdc744906cf74a18f013df99e38",
   "js/core/threads.js": "2f843722671915cef7d2aad9344f171040e59d2cf70aa43b139da9dd4229fc1f",

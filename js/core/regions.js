@@ -58,9 +58,9 @@ function measure(R, w, h) {
 }
 
 // labels: Int16Array of colour ids (-1 see-through), colors: the analysis's colours (background flagged), res: px/mm.
-// opts.img: the working copy the labels are of (a blend pixel goes to the colour it is nearer). opts.keep: "all" keeps every fleck (the Details choice "Keep all"); the blend bands and the smoothing still apply.
-// Returns { labels (a new array), regions (see `shapeTable`), merged: regions folded, slivers: blend px moved, smoothed: px
-// changed by the smoothing }.
+// opts.img: the working copy the labels are of (a blend pixel goes to the colour it covers most). opts.keep: "all"
+// keeps every fleck (the Details choice "Keep all"); the blend bands and the smoothing still apply.
+// Returns { labels (a new array), merged: pieces folded, slivers: blend px moved, smoothed: px changed by the smoothing }.
 export function cleanShapes(labels0, w, h, colors, res, opts = {}) {
   // (the fabric: see-through or the background's colour the picture's edge reaches. `inside`: the background's colour
   // closed in by the design, sewn, but a piece of it is never folded away: it is a letter's counter or an eye's white)
@@ -76,11 +76,11 @@ export function cleanShapes(labels0, w, h, colors, res, opts = {}) {
   const out = { merged: 0, slivers: 0, smoothed: 0 };
 
   // 1. Blend bands. Where two colours meet, a picture's soft edge is a band of in-between pixels that the palette read
-  // as a third colour (a dark outline's grey ring on a yellow bird; a rose's mid-red rim between red and pink). Each such
-  // pixel, within `band` mm of both colours, goes to the nearer. Only there: a grey stem that runs past a black leaf
-  // keeps the rest of its length (as build()'s rule did for the fabric's side alone).
-  const X = globalThis.PX1 || "bfsL";
-  if (X.includes("b")) {
+  // as a third colour (a dark outline's grey ring on a yellow bird; a rose's mid-red rim between red and pink), sewn as
+  // a line of its own with its own trims. Each such pixel within `band` mm of both colours goes to the one that covers
+  // more of it, outward from both a step at a time. Only there: a grey stem that runs past a black leaf keeps the rest
+  // of its length (as build()'s rule did for the fabric's side alone).
+  {
     const R = regionsOf(labels, w, h), M = measure(R, w, h), band = SHAPES.band * res;
     const to = new Map();   // region -> [colour a, colour b]
     for (let r = 0; r < R.count; r++) {
@@ -121,12 +121,17 @@ export function cleanShapes(labels0, w, h, colors, res, opts = {}) {
         return d;
       };
       const cols = new Set([...to.values()].flat()), dist = new Map([...cols].map((c) => [c, near(c)]));
+      // (linear light: a pixel's colour is the mix of what covers it, so half covered is half way in light, not in
+      // Lab. Halved in Lab, a pixel a fifth covered by a dark line was the line's, and a mandala's 0.6 mm lines sewed
+      // 1 mm wide: its look fell 5 points)
+      const lin = (v) => { v /= 255; return v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; };
+      const rgbLin = (l) => { const c = colors[l < 0 && bg ? bg.id : l]; return hexToRgb(c.picture || c.hex).map(lin); };
       const pick = (i, t, da, db) => {
         // (to the colour the pixel itself is nearer, as the picture has it, when it is known: a pixel more than half
         // covered by a thin dark stroke is the stroke's. By distance, the tan blend that was most of a script F's
         // hairlines went to the panel round it and "Flowers" lost its F)
         if (img && img.data[i * 4 + 3] >= 128) {
-          const P = srgbToLab(img.data[i * 4], img.data[i * 4 + 1], img.data[i * 4 + 2]), A = lab(t[0]), B = lab(t[1]);
+          const P = [lin(img.data[i * 4]), lin(img.data[i * 4 + 1]), lin(img.data[i * 4 + 2])], A = rgbLin(t[0]), B = rgbLin(t[1]);
           const ab = [B[0] - A[0], B[1] - A[1], B[2] - A[2]], q = (P[0] - A[0]) * ab[0] + (P[1] - A[1]) * ab[1] + (P[2] - A[2]) * ab[2];
           return q <= 0.5 * (ab[0] ** 2 + ab[1] ** 2 + ab[2] ** 2) ? t[0] : t[1];
         }
@@ -177,7 +182,7 @@ export function cleanShapes(labels0, w, h, colors, res, opts = {}) {
   // hole in a small e is a letter's counter) and never takes a fleck here: a dot on the fabric is build()'s to judge
   // (an i's dot, a full stop).
   const regionsNow = () => { const R = regionsOf(labels, w, h); return { R, M: measure(R, w, h) }; };
-  if (opts.keep !== "all" && X.includes("f")) {
+  if (opts.keep !== "all") {
     const { R, M } = regionsNow(), fleck = SHAPES.fleck * res * res, root = R.lab.map((_, i) => i), col = R.lab.slice();
     const find = (i) => (root[i] === i ? i : (root[i] = find(root[i])));
     const order = [];
@@ -210,9 +215,10 @@ export function cleanShapes(labels0, w, h, colors, res, opts = {}) {
   // 3. Smooth edges (Merriman, Bence & Osher's threshold dynamics, 1992: each colour's area blurred, each pixel to the
   // colour strongest there; one step moves every edge toward a smooth curve by its curvature, so pixel stairs and
   // a JPEG's ragged edges go and the colours still meet with no gap or overlap). The blur is three box passes,
-  // `smooth` mm across in all (σ about a third of it). Never changed: the lines (under `thin` mm wide), the kept dots and
-  // the fabric's pieces closed in by the design (a letter's counter), which a blur that wide would close up.
-  if (SHAPES.smooth > 0 && X.includes("s")) {
+  // `smooth` mm across in all (σ about a third of it). Never changed: the lines (under `thin` mm wide), pieces under 4 mm²
+  // (an apostrophe rounded off at both ends came out under the 2 mm a mark needs and was left out) and the fabric's
+  // pieces closed in by the design (a letter's counter), which a blur that wide would close up.
+  if (SHAPES.smooth > 0) {
     const R = regionsOf(labels, w, h), M = measure(R, w, h);
     const fixed = new Uint8Array(n), thin = SHAPES.thin * res;
     const touchesEdge = new Uint8Array(R.count);
@@ -220,7 +226,7 @@ export function cleanShapes(labels0, w, h, colors, res, opts = {}) {
     for (let y = 0; y < h; y++) { touchesEdge[R.id[y * w]] = 1; touchesEdge[R.id[y * w + w - 1]] = 1; }
     for (let i = 0; i < n; i++) {
       const r = R.id[i], L = R.lab[r];
-      if (2 * M.half[r] < thin || ((fabric(L) || inside(L)) && !touchesEdge[r] && M.area[r] < 4 * res * res)) fixed[i] = 1;
+      if (2 * M.half[r] < thin || (M.area[r] < 4 * res * res && (!(fabric(L) || inside(L)) || !touchesEdge[r]))) fixed[i] = 1;
     }
     // and a wide region's thin parts: no disc `thin` mm across inside the region reaches them (a stem out of its leaf, a
     // letter's hairline: the blur took the thin strokes off "Embroidered Flowers" and left the thick ones)
@@ -267,36 +273,3 @@ export function cleanShapes(labels0, w, h, colors, res, opts = {}) {
   return { labels, ...out };
 }
 
-// Back to front (research I3; how a person digitizes: the shape behind sewn first and whole, what lies on it after).
-// Colour b is in front of colour a when most of b's edge (`front` of it) lies on a, and its share is twice a's share
-// on b: a rose's dark shading lies on its pink; the pink isn't on the shading. Otherwise light before dark, as before
-// (dark details sewn last show on top). ids: the colours to sew, light first. Returns them in sewing order.
-export function layerOrder(labels, w, h, cols) {
-  const K = cols.length, at = new Map(cols.map((c, k) => [c.id, k])), E = new Float64Array(K * K), tot = new Float64Array(K), n = w * h;
-  const edge = (a, b) => {
-    const ka = at.get(a), kb = at.get(b);
-    if (ka !== undefined) tot[ka]++;
-    if (kb !== undefined) tot[kb]++;
-    if (ka !== undefined && kb !== undefined) { E[ka * K + kb]++; E[kb * K + ka]++; }
-  };
-  for (let i = 0; i < n; i++) {
-    const x = i % w;
-    if (x < w - 1 && labels[i + 1] !== labels[i]) edge(labels[i], labels[i + 1]);
-    if (i + w < n && labels[i + w] !== labels[i]) edge(labels[i], labels[i + w]);
-  }
-  // before[b]: the colours b lies on
-  const before = Array.from({ length: K }, () => new Set());
-  for (let a = 0; a < K; a++) for (let b = 0; b < K; b++) {
-    if (a === b || !tot[a] || !tot[b]) continue;
-    const onA = E[a * K + b] / tot[b], onB = E[a * K + b] / tot[a];
-    if (onA >= SHAPES.front && onA >= 2 * onB) before[b].add(a);
-  }
-  const out = [], done = new Uint8Array(K);
-  while (out.length < K) {
-    // (the first colour, light first, whose colours behind are all sewn; none when they ring each other: light first)
-    let k = cols.findIndex((_, q) => !done[q] && [...before[q]].every((a) => done[a]));
-    if (k < 0) k = cols.findIndex((_, q) => !done[q]);
-    done[k] = 1; out.push(cols[k]);
-  }
-  return out;
-}

@@ -8,9 +8,8 @@ import { FILL, FILL_PATTERNS, SEWN, WORN, fillPolygon, makeRouter, routeBudget, 
 import { arclen, followRun } from "./geom.js";
 import { MARGIN } from "./machines.js";
 import { LIMITS, PICTURES, ROWS, SHAPES } from "./recipes.js";
-const X1 = () => globalThis.PX1 || "bfsL";
 import { distanceTransform as wholeDT, label, order, skeletonEdges } from "./raster.js";
-import { cleanShapes, layerOrder } from "./regions.js";
+import { cleanShapes } from "./regions.js";
 import { PEC_MATCH, hexToRgb, nearestBrotherThread, pecThread, pyRound, rgbToHex } from "./threads.js";
 import { DEFAULTS, across, deltaE2000, pixels, srgbToLab } from "./palette.js";
 export { DEFAULTS, analyze, labelWith, learnColours, pictureInk, toPalette } from "./palette.js";
@@ -226,9 +225,8 @@ function build(img, analysis, opts) {
   const hoop = o.hoop;
   const cx = w / 2, cy = h / 2, toMm = (p) => p.map(([x, y]) => [(x - cx) / res, (y - cy) / res]);
   const d = new Design(hoop);
-  const light = colors.filter((c) => !c.background && c.area > 0 && !(o.skip || []).includes(c.id))
+  const used = colors.filter((c) => !c.background && c.area > 0 && !(o.skip || []).includes(c.id))
     .sort((a, b) => b.lightness - a.lightness);   // light first, dark details on top
-  const used = X1().includes("O") ? layerOrder(labels, w, h, light) : light;
   const summary = [], stitched = new Set(used.map((c) => c.id));
   const fine = { narrowMm2: 0, hairlines: 0, inkMm2: 0, folded, left: 0 };   // details too small to stitch cleanly (shown as a hint)
   for (let i = 0; i < w * h; i++) if (stitched.has(labels[i])) fine.inkMm2++;
@@ -371,15 +369,15 @@ function build(img, analysis, opts) {
       const toCore = distanceTo(core, r + 0.5);
       for (let i = 0; i < w * h; i++) if (cl[i] && toCore[i] > r + 0.5) { thin.data[i] = 1; anyThin = true; }
     }
-    // Layers: a hole in this colour's shapes that only colours sewn later fill (a rose's dark shading, a bird's eye
-    // ring, the outline strokes across a petal), up to SHAPES.layer mm deep, is sewn under them, as a person digitizes
+    // Layers: a hole or bay in this colour's shapes that only colours sewn later fill (a rose's dark shading, the
+    // outline strokes across a petal), under SHAPES.layer mm across, is sewn under them, as a person digitizes
     // the shape behind whole and lays the front on top (research I3, "Illustrator's Depth" / amodal completion: the
     // hidden part completed). Cut round, each such hole split the rows round it into parts, stranded behind finished
     // rows or trimmed to, and opened gaps at every join. Never a hole with fabric or an earlier colour in it (a letter's
     // counter stays open).
-    if (later.size && SHAPES.layer && X1().includes("L")) {
+    if (later.size && SHAPES.layer) {
       // (what a closing of the colour's shapes, SHAPES.layer mm across, covers: holes and bays narrower than that.
-      // Holes alone were too few: a rose's shading reaches its edge)
+      // Enclosed holes alone were too few to matter: a rose's shading reaches its edge)
       const R = (SHAPES.layer / 2) * res, off = { w, h, data: new Uint8Array(w * h) };
       for (let i = 0; i < w * h; i++) off.data[i] = cl[i] ? 0 : 1;
       const to = distanceTo(off, R + 1), dil = { w, h, data: new Uint8Array(w * h) };
