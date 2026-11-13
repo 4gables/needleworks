@@ -3,8 +3,8 @@
 // `fillPolygon` for a shape given as outlines. Pictures (digitize.js), patches and motifs (studio/pieces.js) and the
 // Open tab's re-stitching (doctor.js) all fill through here. (Part of digitize.js until 2026-11.)
 import { distanceTransform, label } from "./raster.js";
-import { resample } from "./geom.js";
-import { CONTOUR, FILLS, ROWS, TATAMI } from "./recipes.js";
+import { arclen, resample, smooth } from "./geom.js";
+import { CONTOUR, FILLS, FORM, PICTURES, ROWS, TATAMI } from "./recipes.js";
 
 // the fill angle (degrees) and working pixels per mm when nothing else is asked (8: 5 lost the narrow notches of
 // small lettering, e.g. an M)
@@ -29,13 +29,19 @@ export const FILL_PATTERNS = {
 // share(f): this layer's part of the full density at f, how far across the shape (0-1) the row lies: rows are
 // spaced spacing / share, none where the share is under 0.15 (a colour blend: two layers whose spacings change
 // gradually, so neither skips rows and leaves long links)
+// comp.form (a picture's automatic direction): the angle the caller asks for when the part has no direction of its
+// own; its rows then lie at the part's own angle (`formPick`), turned by however far `angle` is from comp.form (the
+// underlay's 90 degrees), or, asked for at comp.form itself, curve with it where that suits the part better
 export function tatami(mask, comp, res, { angle, spacing, stitch, inset = 0, pull = 0.15, pattern = "tatami", share = null }) {
+  let field = null;
+  if (comp.form != null) { const f = formOf(comp, mask, res, comp.form); if (angle === comp.form && !share) field = f.field; angle = f.angle + (angle - comp.form); }
   const { w, h } = mask, th = (angle * Math.PI) / 180;
   const U = [Math.cos(th), Math.sin(th)], V = [-Math.sin(th), Math.cos(th)];
   const inside = (x, y) => {
     const X = Math.round(x), Y = Math.round(y);
     return X >= 0 && Y >= 0 && X < w && Y < h && comp.labels[Y * w + X] === comp.id && (!inset || comp.dt[Y * w + X] > inset * res);
   };
+  if (field) { const c = curvedRows(comp, mask, res, comp.dt, { spacing, stitch, pull, pattern, inside, fd: field }); if (c) return c.paths; }
   let u0 = Infinity, u1 = -Infinity, v0 = Infinity, v1 = -Infinity;
   for (const i of comp.pixels) {
     const x = i % w, y = (i - x) / w, u = x * U[0] + y * U[1], v = x * V[0] + y * V[1];
@@ -623,6 +629,442 @@ function ringFill(px, shape, comp, res, { spacing, edge, across, cell }) {
   }
   return out;
 }
+// --- Rows that follow the form (PX3; docs/stitch-model.md "Direction that follows the form", numbers in recipes.js
+// FORM) ---
+// A part's outline, smooth: the marching-squares line at 0.5 through its mask blurred twice by a 3 x 3 box (a picture's
+// mask is stair-stepped; its raw outline runs only at 0, 45 and 90 degrees). comp: { id, labels, pixels }. In px.
+function traceComp(comp, w) {
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+  for (const i of comp.pixels) { const x = i % w, y = (i - x) / w; if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
+  const cx = x0 - 3, cy = y0 - 3, cw = x1 - x0 + 7, ch = y1 - y0 + 7;
+  let f = new Float32Array(cw * ch), g = new Float32Array(cw * ch);
+  for (const i of comp.pixels) { const x = i % w, y = (i - x) / w; f[(y - cy) * cw + (x - cx)] = 1; }
+  for (let pass = 0; pass < 2; pass++) {
+    for (let y = 1; y < ch - 1; y++) for (let x = 1; x < cw - 1; x++) {
+      let s = 0;
+      for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) s += f[(y + dy) * cw + x + dx];
+      g[y * cw + x] = s / 9;
+    }
+    [f, g] = [g, f];
+  }
+  return (levelRings(f, cw, ch, 0.5, 1)[0] || []).map((r) => r.map(([x, y]) => [x + cx, y + cy]));
+}
+// (the angle between a line at a and one at b, degrees, folded to 0..90)
+const apart = (a, b) => { const d = (((a - b) % 180) + 180) % 180; return d > 90 ? 180 - d : d; };
+// How rows at angle th (degrees) would lie in a part (rings: its outline, px): `ends`, the row ends at rows 0.5 mm
+// apart, per mm across (fewer: longer rows); `sections`, how many runs of rows can be sewn back and forth without leaving the part (each
+// more is travel or a trim; `sewRows`' rule); `ragged`, mm of outline the rows meet at a grazing angle (FORM.ragged:
+// each row end steps spacing / sin(angle) along the edge, a saw-tooth from about 1 mm, which a 3 mm diamond's edge 15
+// degrees off the rows showed).
+function rowsAt(rings, th, res) {
+  const t = (th * Math.PI) / 180, U = [Math.cos(t), Math.sin(t)], V = [-Math.sin(t), Math.cos(t)];
+  const { v0, v1, at } = outlineRows(rings, U, V, 0);
+  let ends = 0, sections = 0, prev = [];
+  for (let v = v0 + res / 4; v <= v1; v += res / 2) {
+    const cur = at(v).filter(([a, b]) => b - a >= 0.6 * res).map((iv) => ({ iv, reg: null }));
+    ends += cur.length;
+    for (const c of cur) {
+      const over = prev.filter((p) => p.iv[0] < c.iv[1] && c.iv[0] < p.iv[1]);
+      if (over.length === 1 && cur.filter((q) => q.iv[0] < over[0].iv[1] && over[0].iv[0] < q.iv[1]).length === 1 && over[0].reg.open) c.reg = over[0].reg;
+      if (!c.reg) { c.reg = { open: true }; sections++; }
+    }
+    for (const p of prev) if (!cur.some((c) => c.reg === p.reg)) p.reg.open = false;
+    prev = cur;
+  }
+  let ragged = 0;
+  const [lo, hi, fade] = FORM.ragged;
+  for (const r of rings) for (let i = 0; i < r.length; i++) {
+    const p = r[i], q = r[(i + 1) % r.length], len = Math.hypot(q[0] - p[0], q[1] - p[1]);
+    if (!len) continue;
+    const a = apart((Math.atan2(q[1] - p[1], q[0] - p[0]) * 180) / Math.PI, th);
+    ragged += (len / res) * (a < lo ? a / lo : a <= hi ? 1 : a < hi + fade ? (hi + fade - a) / fade : 0);
+  }
+  return { ends, sections, ragged };
+}
+// The three readings of a part's own direction (degrees), each a candidate:
+//   axis:  the principal axis of its area (the long way of an ellipse fitted to it)
+//   edges: its edges' dominant direction (length-weighted, over FORM.blur degrees either side)
+//   runs:  the rows with the fewest ends (the longest straight runs across it), every FORM.step degrees
+function readings(rings, pixels, w, res) {
+  let n = 0, mx = 0, my = 0;
+  for (const i of pixels) { const x = i % w; mx += x; my += (i - x) / w; n++; }
+  mx /= n; my /= n;
+  let sxx = 0, syy = 0, sxy = 0;
+  for (const i of pixels) { const x = i % w - mx, y = (i - (i % w)) / w - my; sxx += x * x; syy += y * y; sxy += x * y; }
+  const axis = (0.5 * Math.atan2(2 * sxy, sxx - syy) * 180) / Math.PI, round = Math.hypot(sxx - syy, 2 * sxy) / (sxx + syy || 1);
+  const hist = new Float64Array(180);
+  let perim = 0;
+  for (const r of rings) {
+    const q = resample(r, 0.5 * res, true);
+    for (let i = 0; i < q.length; i++) {
+      const a = q[i], b = q[(i + 1) % q.length], len = Math.hypot(b[0] - a[0], b[1] - a[1]);
+      hist[Math.round(((((Math.atan2(b[1] - a[1], b[0] - a[0]) * 180) / Math.PI) % 180) + 180) % 180) % 180] += len; perim += len;
+    }
+  }
+  let edges = 0, best = -1;
+  for (let a = 0; a < 180; a++) {
+    let s = 0;
+    for (let d = -FORM.blur; d <= FORM.blur; d++) s += hist[(a + d + 180) % 180] * (FORM.blur + 1 - Math.abs(d));
+    if (s > best) { best = s; edges = a; }
+  }
+  const sweep = [];
+  for (let a = 0; a < 180; a += FORM.step) sweep.push({ a, ...rowsAt(rings, a, res) });
+  const runs = sweep.reduce((m, s) => (s.ends < m.ends || (s.ends === m.ends && s.sections < m.sections) ? s : m)).a;
+  // (the baseline: Goldman's expired patent US 6,804,573, the fewest fragments of 16 angles, the first on a tie)
+  let fewest = 0, fs = Infinity;
+  for (let k = 0; k < 16; k++) { const s = rowsAt(rings, k * 11.25, res).sections; if (s < fs) { fs = s; fewest = k * 11.25; } }
+  return { axis, edges, runs, fewest, round, perim: perim / res, sweep };
+}
+// testing only (measuring which reading to sew by): "cost" (as sewn), "axis", "edges", "runs" or "fewest"
+export const FORM_TRY = { method: "cost", curved: true };
+// A part's rows: { angle } (degrees), or { angle, field } where curved rows (`rowField`) suit it better. `prefer`
+// where its shape doesn't say (a round part: the caller's angle, so neighbouring colours still alternate). Measured,
+// not guessed: every candidate (the sweep, the three readings and the curved rows) is scored by its rows as they would
+// lie, ends against the fewest any gives, plus ragged outline and sections beyond the fewest, weighted by FORM, among
+// those with no more sections than the caller's angle; within FORM.keep of the best straight angle, the caller's
+// angle wins, then the axis; curved rows only when better than the best straight by FORM.curve.
+// comp: { id, labels, pixels }; dt: each pixel's distance to the part's edge (px), for the curved rows' field.
+function formPick(comp, mask, res, prefer, dt, spacing = ROWS.standard) {
+  const { w } = mask, pixels = comp.pixels;
+  if (pixels.length < FORM.least * res * res) return { angle: prefer };
+  // (its outline evened over FORM.even mm, then every 0.5 mm: the drawing's steps stay in the traced line, and a
+  // bar at 5 degrees read from 0 to 13, its straight edges as ragged)
+  const k = 2 * Math.round((FORM.even * res) / 2) + 1;
+  const rings = traceComp(comp, w).filter((r) => r.length > 2 * k).map((r) => resample(smooth(r, k, true), 0.5 * res, true)).filter((r) => r.length >= 3);
+  if (!rings.length) return { angle: prefer };
+  const R = readings(rings, pixels, w, res);
+  if (FORM_TRY.method !== "cost") return { angle: R[FORM_TRY.method] };
+  // (never more sections than the caller's angle gives: each is travel or a trim, and thin wavy strokes cut along
+  // their length gained 8 trims and 3 loose threads over the picture corpus when they were only weighed)
+  const mine = { a: prefer, ...rowsAt(rings, prefer, res) }, axis = { a: R.axis, ...rowsAt(rings, R.axis, res) };
+  const cands = [...R.sweep, mine, axis, { a: R.edges, ...rowsAt(rings, R.edges, res) }].filter((c) => c.sections <= mine.sections);
+  // the curved rows, where the part is big enough to be worth it and the straight rows leave room to gain
+  let curved = null;
+  if (FORM_TRY.curved && dt && pixels.length >= FORM.curvedLeast * res * res) {
+    const fd = rowField(comp, w, mask.h, res, dt);
+    const lab = comp.labels, id = comp.id, inside = (x, y) => { const X = Math.round(x), Y = Math.round(y); return X >= 0 && Y >= 0 && X < w && Y < mask.h && lab[Y * w + X] === id; };
+    // (its runs as the travel joins them, swept from either side, the fewer kept: a crescent's outer rows are cut by
+    // its inner arc, as straight rows are, and run on through rows still to sew)
+    let c = null, parts = Infinity;
+    if (fd) for (const rev of [false, true]) {
+      const t = curvedRows(comp, mask, res, dt, { spacing, stitch: TATAMI.stitch, pull: 0, inside, fd, rev });
+      const n = t ? routeFill([t.paths], comp, mask, res, routeBudget(), Infinity, true).length : Infinity;
+      if (n < parts) { parts = n; c = t; fd.rev = rev; }
+    }
+    if (c && parts <= mine.sections) curved = { a: null, fd, ends: c.ends, sections: parts, ragged: fieldRagged(rings, fd, res) };
+  }
+  const scorer = (list) => {
+    const e0 = Math.min(...list.map((c) => c.ends)), s0 = Math.min(...list.map((c) => c.sections));
+    return (c) => c.ends / Math.max(e0, 1) + (FORM.rag * c.ragged) / Math.max(R.perim, 1) + FORM.sec * (c.sections - s0);
+  };
+  // the straight angle (the underlay's too, turned), among the straight candidates alone
+  const cost = scorer(cands);
+  let best = cands[0], bc = Infinity;
+  for (const c of cands) { const k = cost(c); if (k < bc - 1e-9) { bc = k; best = c; } }
+  // (near ties: the caller's angle, then the axis: a leaf scored alike from 145 to 160 degrees, and along its vein
+  // it reads as one)
+  let angle = best.a;
+  for (const c of [axis, mine]) if (cands.includes(c) && cost(c) - bc <= FORM.keep) angle = c.a;
+  const both = curved && scorer([best, curved]);
+  if (curved && both(curved) < both(best) - FORM.curve) return { angle, field: curved.fd };
+  return { angle };
+}
+// mm of outline the curved rows meet at a grazing angle (as `rowsAt`), the rows' direction taken from the field's
+// nearest cell
+function fieldRagged(rings, fd, res) {
+  const [lo, hi, fade] = FORM.ragged;
+  let ragged = 0;
+  for (const r of rings) for (let i = 0; i < r.length; i++) {
+    const p = r[i], q = r[(i + 1) % r.length], len = Math.hypot(q[0] - p[0], q[1] - p[1]);
+    if (!len) continue;
+    const gx = Math.min(fd.gw - 1, Math.max(0, Math.round((p[0] - fd.bx) / fd.C))), gy = Math.min(fd.gh - 1, Math.max(0, Math.round((p[1] - fd.by) / fd.C))), c = gy * fd.gw + gx;
+    const row = (Math.atan2(fd.NX[c], -fd.NY[c]) * 180) / Math.PI, a = apart((Math.atan2(q[1] - p[1], q[0] - p[0]) * 180) / Math.PI, row);
+    ragged += (len / res) * (a < lo ? a / lo : a <= hi ? 1 : a < hi + fade ? (hi + fade - a) / fade : 0);
+  }
+  return ragged;
+}
+// The part's rows, kept on the part (a picture's underlay and fill ask for them in turn)
+// A picture's part sews its own angle only where that, sewn as the picture sews it (underlay, then rows 0.4 mm apart,
+// routed nearer end first with travel along the edge), ends in no more parts than the caller's angle: measured on the
+// rows alone, parts under 100 mm² and a few bigger ones (a one-colour cat, 0 trims -> 3) gained trims on the
+// picture corpus through the travel between sections.
+const forms = new WeakMap();
+function formOf(comp, mask, res, prefer) {
+  if (forms.has(comp)) return forms.get(comp);
+  let f = comp.pixels.length < FORM.picture * res * res ? { angle: prefer } : formPick(comp, mask, res, prefer, comp.dt);
+  if (f.angle !== prefer || f.field) {
+    const plain = { ...comp, form: null }, sew = (a, field) => {
+      const under = tatami(mask, plain, res, { angle: a + 90, spacing: 2.5, stitch: 3, inset: 0.4, pull: 0 });
+      const fill = field ? curvedRows(plain, mask, res, comp.dt, { spacing: ROWS.standard, stitch: TATAMI.stitch, pull: 0.15, fd: field, inside: (x, y) => { const X = Math.round(x), Y = Math.round(y); return X >= 0 && Y >= 0 && X < mask.w && Y < mask.h && comp.labels[Y * mask.w + X] === comp.id; } })?.paths : tatami(mask, plain, res, { angle: a, spacing: ROWS.standard, stitch: TATAMI.stitch, pull: 0.15 });
+      return fill ? routeFill([under, fill], comp, mask, res, routeBudget(), WORN, false, 0, null, PICTURES.edge).length : Infinity;
+    };
+    const was = sew(prefer, null);
+    if (f.field && sew(f.angle, f.field) > was) f = { angle: f.angle };
+    if (!f.field && f.angle !== prefer && sew(f.angle, null) > was) f = { angle: prefer };
+  }
+  forms.set(comp, f);
+  return f;
+}
+// --- Curved rows (PX3): rows that bend with a part's form, evenly spaced ---
+// The rows are the level lines of one field phi over the part, fitted so its gradient follows the part's own direction
+// field: rows as the level lines of a stripe pattern (Knöppel, Crane, Pinkall, Schröder, "Stripe patterns on
+// surfaces", 2015), here without singularities, so one sparse least-squares solve. The direction field is the
+// structure tensor of the distance-to-edge gradient, smoothed across the part (edge tangent flow: Kang, Lee, Chui,
+// "Coherent line drawing", 2007): near an edge the rows lie along it, and both sides of a band agree. Rows lie
+// `spacing` apart where phi's gradient is 1; it is scaled so they are never closer than that (density met where the
+// rows are made, not by taking stitches out after) and the field is used only where they are nowhere further apart
+// than FORM.stretch times. On a grid of FORM.cell mm, the part and a ring of two cells round it (so rows reach the
+// edge and their pull past it).
+function rowField(comp, w, h, res, dt) {
+  const C = FORM.cell * res, id = comp.id, lab = comp.labels;
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity, maxDt = 0;
+  for (const i of comp.pixels) { const x = i % w, y = (i - x) / w; if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; if (dt[i] > maxDt) maxDt = dt[i]; }
+  const bx = x0 - 3 * C, by = y0 - 3 * C, gw = Math.ceil((x1 - bx) / C) + 4, gh = Math.ceil((y1 - by) / C) + 4, n = gw * gh;
+  const at = (X, Y) => { const x = Math.round(X), y = Math.round(Y); return x >= 0 && y >= 0 && x < w && y < h && lab[y * w + x] === id ? y * w + x : -1; };
+  const ins = new Uint8Array(n), Jxx = new Float64Array(n), Jxy = new Float64Array(n), Jyy = new Float64Array(n);
+  for (let gy = 0; gy < gh; gy++) for (let gx = 0; gx < gw; gx++) {
+    const X = bx + gx * C, Y = by + gy * C, c = gy * gw + gx;
+    if (at(X, Y) < 0) continue;
+    ins[c] = 1;
+    const d = (dx, dy) => { const i = at(X + dx, Y + dy); return i < 0 ? 0 : dt[i]; };
+    const gX = d(1, 0) - d(-1, 0), gY = d(0, 1) - d(0, -1);
+    Jxx[c] = gX * gX; Jxy[c] = gX * gY; Jyy[c] = gY * gY;
+  }
+  // (smoothed across the part, over about its half width, inside cells only)
+  const r = Math.max(2, Math.min(FORM.blurMax, Math.round((FORM.blurK * maxDt) / C)));
+  for (const J of [Jxx, Jxy, Jyy]) for (let pass = 0; pass < 2; pass++) {
+    const t = new Float64Array(n);
+    for (let gy = 0; gy < gh; gy++) { let s = 0, k = 0; for (let gx = -r; gx < gw; gx++) { const a = gx + r, b = gx - r - 1; if (a < gw) { s += J[gy * gw + a]; k += ins[gy * gw + a]; } if (b >= 0) { s -= J[gy * gw + b]; k -= ins[gy * gw + b]; } if (gx >= 0) t[gy * gw + gx] = k ? s / k : 0; } }
+    for (let gx = 0; gx < gw; gx++) { let s = 0, k = 0; for (let gy = -r; gy < gh; gy++) { const a = gy + r, b = gy - r - 1; if (a < gh) { s += t[a * gw + gx]; k += ins[a * gw + gx]; } if (b >= 0) { s -= t[b * gw + gx]; k -= ins[b * gw + gx]; } if (gy >= 0) J[gy * gw + gx] = ins[gy * gw + gx] ? (k ? s / k : 0) : 0; } }
+  }
+  // the rows' normal at each cell (a direction, sign still free) and how sure: (l1 - l2) / (l1 + l2)
+  const NX = new Float64Array(n), NY = new Float64Array(n), coh = new Float64Array(n);
+  for (let c = 0; c < n; c++) if (ins[c]) {
+    const t = 0.5 * Math.atan2(2 * Jxy[c], Jxx[c] - Jyy[c]); NX[c] = Math.cos(t); NY[c] = Math.sin(t);
+    coh[c] = Math.hypot(Jxx[c] - Jyy[c], 2 * Jxy[c]) / (Jxx[c] + Jyy[c] || 1);
+  }
+  // the ring round the part takes its nearest inside cell's direction (breadth first)
+  const dom = ins.slice();
+  let front = [];
+  for (let c = 0; c < n; c++) if (ins[c]) front.push(c);
+  for (let ring = 0; ring < 2; ring++) {
+    const next = [];
+    for (const c of front) { const cx = c % gw, cy = (c - cx) / gw; for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const x = cx + dx, y = cy + dy, m = y * gw + x; if (x >= 0 && y >= 0 && x < gw && y < gh && !dom[m]) { dom[m] = 2; NX[m] = NX[c]; NY[m] = NY[c]; next.push(m); } } }
+    front = next;
+  }
+  // one sign for the whole field, from its surest cell outward; a turn it can't take (a disc's middle, a star's) is
+  // a singularity, and the part keeps straight rows
+  let seed = -1;
+  for (let c = 0; c < n; c++) if (ins[c] && (seed < 0 || coh[c] > coh[seed])) seed = c;
+  if (seed < 0) return null;
+  const seen = new Uint8Array(n), q = [seed]; seen[seed] = 1;
+  for (let k = 0; k < q.length; k++) {
+    const c = q[k], cx = c % gw, cy = (c - cx) / gw;
+    for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const x = cx + dx, y = cy + dy, m = y * gw + x; if (x >= 0 && y >= 0 && x < gw && y < gh && dom[m] && !seen[m]) { if (NX[m] * NX[c] + NY[m] * NY[c] < 0) { NX[m] = -NX[m]; NY[m] = -NY[m]; } seen[m] = 1; q.push(m); } }
+  }
+  let pairs = 0, bad = 0;
+  for (let c = 0; c < n; c++) if (ins[c]) for (const m of [c + 1, c + gw]) if (m < n && ins[m]) { pairs++; if (NX[m] * NX[c] + NY[m] * NY[c] < 0) bad++; }
+  if (bad > FORM.turns * pairs + 2) return null;
+  // phi: least squares over every pair of neighbouring cells, phi(b) - phi(a) = the mean normal . (b - a) (mm);
+  // conjugate gradients, Jacobi preconditioned
+  const cells = q, idx = new Int32Array(n).fill(-1);
+  cells.forEach((c, k) => (idx[c] = k));
+  // (a pair within FORM.hug mm of the edge counts up to FORM.hugW times: there the rows must lie along it, or they
+  // graze it and come apart into sections of their own, an S curve's outer rows)
+  const near = (c) => { const X = Math.round(bx + (c % gw) * C), Y = Math.round(by + Math.floor(c / gw) * C); const i = at(X, Y); return i < 0 ? 0 : dt[i] / res; };
+  const wt = (c) => 1 + (FORM.hugW - 1) * Math.max(0, 1 - near(c) / FORM.hug);
+  const N = cells.length, W = new Float64Array(n), start = new Int32Array(N + 1), to = new Int32Array(4 * N), wv = new Float64Array(4 * N);
+  const diag = new Float64Array(N), bv = new Float64Array(N), phi = new Float64Array(N), eps = 1e-6;
+  for (const c of cells) W[c] = ins[c] ? wt(c) : FORM.hugW;
+  let m0 = 0;
+  cells.forEach((c, i) => {
+    start[i] = m0; diag[i] = eps;
+    const cx = c % gw;
+    for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      const m = c + dy * gw + dx; if (cx + dx < 0 || cx + dx >= gw || m < 0 || m >= n || idx[m] < 0) continue;
+      let ax = NX[c] + NX[m], ay = NY[c] + NY[m]; const L = Math.hypot(ax, ay) || 1; ax /= L; ay /= L;
+      const wgt = Math.min(W[c], W[m]);
+      to[m0] = idx[m]; wv[m0] = wgt; m0++; diag[i] += wgt; bv[i] -= wgt * FORM.cell * (ax * dx + ay * dy);
+    }
+  });
+  start[N] = m0;
+  const A = (x, out) => { for (let i = 0; i < N; i++) { let s = diag[i] * x[i]; for (let k = start[i]; k < start[i + 1]; k++) s -= wv[k] * x[to[k]]; out[i] = s; } };
+  const R = bv.slice(), Z = new Float64Array(N), P = new Float64Array(N), AP = new Float64Array(N);
+  for (let i = 0; i < N; i++) { Z[i] = R[i] / diag[i]; P[i] = Z[i]; }
+  let rz = 0; for (let i = 0; i < N; i++) rz += R[i] * Z[i];
+  let b2 = 0; for (let i = 0; i < N; i++) b2 += bv[i] * bv[i];
+  for (let it = 0; it < FORM.iters && rz > 0; it++) {
+    A(P, AP);
+    let pap = 0; for (let i = 0; i < N; i++) pap += P[i] * AP[i];
+    const al = rz / pap; let rr = 0;
+    for (let i = 0; i < N; i++) { phi[i] += al * P[i]; R[i] -= al * AP[i]; rr += R[i] * R[i]; }
+    if (rr < 1e-8 * b2) break;
+    let rz2 = 0; for (let i = 0; i < N; i++) { Z[i] = R[i] / diag[i]; rz2 += R[i] * Z[i]; }
+    const be = rz2 / rz; rz = rz2;
+    for (let i = 0; i < N; i++) P[i] = Z[i] + be * P[i];
+  }
+  // how far apart rows of one phi step lie: 1 / |grad phi| (mm per mm), over the part's own cells
+  const F = new Float64Array(n).fill(NaN);
+  cells.forEach((c, k) => (F[c] = phi[k]));
+  const grads = [];
+  for (const c of cells) if (ins[c]) {
+    const g = (a, z) => (Number.isNaN(F[a]) || Number.isNaN(F[z]) ? null : (F[a] - F[z]) / (2 * FORM.cell));
+    const cx = c % gw, gX = cx > 0 && cx < gw - 1 ? g(c + 1, c - 1) : null, gY = g(c + gw, c - gw);
+    if (gX != null && gY != null) grads.push(Math.hypot(gX, gY));
+  }
+  if (grads.length < 8) return null;
+  grads.sort((p, z) => p - z);
+  const hi = grads[Math.floor(0.99 * (grads.length - 1))], lo = grads[Math.floor(0.02 * (grads.length - 1))];
+  if (!(hi > 0)) return null;
+  for (const c of cells) F[c] /= hi;
+  return { F, gw, gh, C, bx, by, NX, NY, ins, stretch: hi / Math.max(lo, 1e-9) };
+}
+// The level lines of the field at phi = (k + 0.5) x step, on its grid (marching squares over squares of four cells
+// all in the field), joined end to end. Returns [{ k, p: [[x, y] px, ...], closed }].
+function fieldLines(fd, step) {
+  const { F, gw, gh, C, bx, by } = fd, segs = new Map();   // level -> six numbers a piece, as levelRings
+  for (let y = 0; y < gh - 1; y++) for (let x = 0; x < gw - 1; x++) {
+    const i = y * gw + x, a = F[i], b = F[i + 1], c = F[i + gw + 1], d = F[i + gw];
+    if (Number.isNaN(a) || Number.isNaN(b) || Number.isNaN(c) || Number.isNaN(d)) continue;
+    const lo = Math.min(a, b, c, d), hi = Math.max(a, b, c, d);
+    for (let k = Math.ceil(lo / step - 0.5); (k + 0.5) * step <= hi; k++) {
+      const L = (k + 0.5) * step, bits = (a >= L ? 8 : 0) | (b >= L ? 4 : 0) | (c >= L ? 2 : 0) | (d >= L ? 1 : 0);
+      if (!bits || bits === 15) continue;
+      if (!segs.has(k)) segs.set(k, []);
+      const g = segs.get(k);
+      const T = () => g.push(2 * i, x + (L - a) / (b - a), y), B = () => g.push(2 * (i + gw), x + (L - d) / (c - d), y + 1);
+      const Lf = () => g.push(2 * i + 1, x, y + (L - a) / (d - a)), R = () => g.push(2 * (i + 1) + 1, x + 1, y + (L - b) / (c - b));
+      const mid = (a + b + c + d) / 4 >= L;
+      switch (bits) {
+        case 1: case 14: Lf(); B(); break; case 2: case 13: B(); R(); break; case 3: case 12: Lf(); R(); break;
+        case 4: case 11: T(); R(); break; case 6: case 9: T(); B(); break; case 7: case 8: T(); Lf(); break;
+        case 5: if (mid) { T(); Lf(); B(); R(); } else { T(); R(); Lf(); B(); } break;
+        case 10: if (mid) { T(); R(); Lf(); B(); } else { T(); Lf(); B(); R(); } break;
+      }
+    }
+  }
+  const out = [];
+  for (const k of [...segs.keys()].sort((p, q) => p - q)) {
+    const g = segs.get(k), m = g.length / 6, ends = new Map();
+    for (let s = 0; s < m; s++) for (const e of [g[6 * s], g[6 * s + 3]]) { if (!ends.has(e)) ends.set(e, []); ends.get(e).push(s); }
+    const used = new Uint8Array(m);
+    const walk = (s0, e0) => {   // from piece s0 leaving by its end e0's other end
+      const line = []; let s = s0, from = e0;
+      for (;;) {
+        used[s] = 1;
+        const fw = g[6 * s] === from, P1 = fw ? [g[6 * s + 1], g[6 * s + 2]] : [g[6 * s + 4], g[6 * s + 5]], P2 = fw ? [g[6 * s + 4], g[6 * s + 5]] : [g[6 * s + 1], g[6 * s + 2]], to = fw ? g[6 * s + 3] : g[6 * s];
+        if (!line.length) line.push(P1);
+        line.push(P2);
+        const nx = (ends.get(to) || []).find((t) => !used[t]);
+        if (nx == null) return { line, closed: to === e0 };
+        s = nx; from = to;
+      }
+    };
+    // (open lines from their ends first, then what is left is closed)
+    for (const [e, ss] of ends) if (ss.length === 1 && !used[ss[0]]) { const r = walk(ss[0], e); out.push({ k, p: r.line, closed: false }); }
+    for (let s = 0; s < m; s++) if (!used[s]) { const r = walk(s, g[6 * s]); out.push({ k, p: r.line, closed: true }); }
+  }
+  for (const o of out) o.p = o.p.map(([x, y]) => [bx + x * C, by + y * C]);
+  return out;
+}
+// Curved rows of a part as stitches (px paths), or null where the field won't do (a singularity, rows spread too far,
+// a ring of closed rows). The rows are cut by the part (its labels, and `inside` for an inset), each stretch pulled
+// out by `pull` px at both ends, sewn back and forth in runs as `sewRows` does: a run goes on while a stretch has
+// just one neighbour in the next row and that one just it. Needle points every L px along a row, staggered by the
+// pattern from the stretch's start. Also returns { sections, ends (per mm across at `spacing`), ragged }.
+function curvedRows(comp, mask, res, dt, { spacing, stitch, pull, pattern = "tatami", inside, fd = rowField(comp, mask.w, mask.h, res, dt), rev = fd?.rev || false }) {
+  if (!fd || fd.stretch > FORM.stretch) return null;
+  const sp = spacing, L = stitch * res, P = pull * res;
+  const lines = fieldLines(fd, sp);
+  if (lines.some((l) => l.closed && l.p.length > 8)) return null;
+  // (a step between rows may leave the part by the pull and 0.15 mm, as in `fillPolygon`)
+  const far = P + 0.15 * res, RING = [[1, 0], [-1, 0], [0, 1], [0, -1], [0.7, 0.7], [0.7, -0.7], [-0.7, 0.7], [-0.7, -0.7]];
+  // stretches inside the part, sampled every half pixel along each line
+  const rows = new Map();
+  for (const { k, p } of lines) {
+    const q = resample(p, 0.5), s = arclen(q), n = q.length;
+    let a = -1;
+    for (let i = 0; i <= n; i++) {
+      const ok = i < n && inside(q[i][0], q[i][1]);
+      if (ok && a < 0) a = i;
+      if (!ok && a >= 0) {
+        // (a row along the edge leaves and comes back over the drawing's steps: stretches FORM.gap mm apart are one)
+        // (or any gap that stays within the pull and 0.15 mm of the part: a row grazing an edge it nearly follows)
+        const s0 = Math.max(0, s[a] - P), s1 = Math.min(s[n - 1], s[i - 1] + P), mine = rows.get(k), last = mine?.[mine.length - 1];
+        const hugs = () => { for (let j = 0; j < n; j++) if (s[j] > last.s1 && s[j] < s0 && !inside(q[j][0], q[j][1]) && !RING.some(([dx, dy]) => inside(q[j][0] + dx * far, q[j][1] + dy * far))) return false; return true; };
+        if (last && last.q === q && (s0 - last.s1 <= FORM.gap * res || hugs())) last.s1 = s1;
+        else if (s1 - s0 >= 0.6 * res) { if (!mine) rows.set(k, []); rows.get(k).push({ k, q, s, s0, s1 }); }
+        a = -1;
+      }
+    }
+  }
+  const ks = [...rows.keys()].sort((p, q) => (rev ? q - p : p - q));
+  // neighbours in the next row: some point of one within 1.5 rows (+0.15 mm) of the other's, on a hash of 0.25 mm
+  const near = 1.5 * sp * res + 0.15 * res, cellOf = (x, y) => `${Math.floor(x / near)},${Math.floor(y / near)}`;
+  const pts = (st) => { const out = []; for (let i = 0; i < st.q.length; i++) if (st.s[i] >= st.s0 && st.s[i] <= st.s1) out.push(st.q[i]); return out.filter((_, i) => i % 4 === 0); };
+  const regions = [];
+  let prev = [], prevK = null;
+  for (const k of ks) {
+    const cur = rows.get(k).map((st) => ({ st, region: null, nb: [] }));
+    if (prevK === k + (rev ? 1 : -1)) {
+      const hash = new Map();
+      prev.forEach((p, j) => { for (const [x, y] of pts(p.st)) { const c = cellOf(x, y); if (!hash.has(c)) hash.set(c, new Set()); hash.get(c).add(j); } });
+      for (const c of cur) {
+        const found = new Set();
+        for (const [x, y] of pts(c.st)) { const gx = Math.floor(x / near), gy = Math.floor(y / near); for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) for (const j of hash.get(`${gx + dx},${gy + dy}`) || []) found.add(j); }
+        c.nb = [...found];
+      }
+    }
+    // (unlike straight rows, a run goes on where a row splits or two meet: into the longest stretch beside its last
+    // row; the rest begin runs of their own. Kept to sewRows' rule, an S curve's outer rows, cut where they graze its
+    // edge, ended the body's run and stranded a piece behind it)
+    const len = (st) => st.s1 - st.s0, taken = new Set();
+    for (const c of [...cur].sort((x, y) => len(y.st) - len(x.st))) {
+      const p = c.nb.map((j) => prev[j]).filter((o) => o.region.open && !taken.has(o.region)).sort((x, y) => len(y.st) - len(x.st))[0];
+      if (p) { c.region = p.region; taken.add(p.region); }
+    }
+    // (a run that branches off another, or ends beside one, is sewn before it (`of`, `order` below)
+    for (const c of cur) {
+      if (!c.region) { c.region = { rows: [], open: true, of: c.nb.length ? prev[c.nb[0]].region : null }; regions.push(c.region); }
+      c.region.rows.push(c.st);
+    }
+    for (const [j, p] of prev.entries()) if (!cur.some((c) => c.region === p.region)) { p.region.open = false; const nx = cur.find((c) => c.nb.includes(j)); if (nx && !p.region.of) p.region.of = nx.region; }
+    prev = cur; prevK = k;
+  }
+  const leaves = (p, z) => {
+    const m = Math.ceil(Math.hypot(z[0] - p[0], z[1] - p[1]) / (0.2 * res));
+    for (let i = 1; i < m; i++) { const x = p[0] + ((z[0] - p[0]) * i) / m, y = p[1] + ((z[1] - p[1]) * i) / m; if (!inside(x, y) && !RING.some(([dx, dy]) => inside(x + dx * far, y + dy * far) || inside(x + dx * far * 0.5, y + dy * far * 0.5))) return true; }
+    return false;
+  };
+  const along = (st, t) => { let j = 1; while (j < st.s.length - 1 && st.s[j] < t) j++; const f = (t - st.s[j - 1]) / (st.s[j] - st.s[j - 1] || 1); return [st.q[j - 1][0] + (st.q[j][0] - st.q[j - 1][0]) * f, st.q[j - 1][1] + (st.q[j][1] - st.q[j - 1][1]) * f]; };
+  // (branches before their trunk, deepest first: the needle goes on to the trunk through rows still to sew)
+  const order = [], done = new Set();
+  const visit = (r) => { if (done.has(r)) return; done.add(r); for (const q of regions) if (q.of === r) visit(q); order.push(r); };
+  for (const r of regions) if (!r.of) visit(r);
+  for (const r of regions) visit(r);
+  const paths = [];
+  for (const reg of order) {
+    let cur = [];
+    paths.push(cur);
+    for (const st of reg.rows) {
+      const off = (FILL_PATTERNS[pattern] || FILL_PATTERNS.tatami).off(st.k) * L, a = st.s0, b = st.s1, line = [a];
+      for (let t = a + off + (off < 0.3 * L ? L : 0); t < b; t += L) if (t - a > L * 0.3 && b - t > L * 0.3) line.push(t);
+      line.push(b);
+      for (let i = line.length - 1; i > 0; i--) if (line[i] - line[i - 1] > TATAMI.loose * res) line.splice(i, 0, (line[i] + line[i - 1]) / 2);
+      // (whichever way round starts nearer the needle)
+      let ps = line.map((t) => along(st, t));
+      const end = cur[cur.length - 1];
+      if (end && Math.hypot(ps[ps.length - 1][0] - end[0], ps[ps.length - 1][1] - end[1]) < Math.hypot(ps[0][0] - end[0], ps[0][1] - end[1])) ps = ps.reverse();
+      if (end && leaves(end, ps[0])) { cur = []; paths.push(cur); }
+      const z = cur[cur.length - 1], m = z ? Math.ceil(Math.hypot(ps[0][0] - z[0], ps[0][1] - z[1]) / (3 * res)) : 1;
+      for (let i = 1; i < m; i++) cur.push([z[0] + ((ps[0][0] - z[0]) * i) / m, z[1] + ((ps[0][1] - z[1]) * i) / m]);
+      cur.push(...ps);
+    }
+  }
+  let ends = 0;
+  for (const k of ks) ends += rows.get(k).length;
+  return { paths: paths.filter((p) => p.length), sections: regions.length, ends: (ends * sp) / 0.5, fd };
+}
 // opts.pull: how far each row runs past the outline at both ends (mm; the fabric's, core/recipes.js FILLS)
 // opts.cover: mm inside the first outline that a border sewn later covers (a patch's satin edge reaches 1.2 mm over
 // its fill): travel there is hidden whatever is sewn already, so a section stranded behind finished rows is reached
@@ -643,8 +1085,11 @@ export function fillPolygon(poly, { angle = FILL.angle, density = ROWS.solid, re
     for (let id = 1; id <= count; id++) {
       const comp = { id, labels, dt: shape.dt, pixels: parts[id] };
       if (comp.pixels.length < 1.5 * res * res) continue;
-      const under = underlay ? tatami(mask, comp, res, { angle: angle + 90, spacing: 2.5, stitch: 3, inset: 0.4, pull: 0 }) : [];
-      const fill = tatami(mask, comp, res, { angle, spacing: density, stitch, pull: 0.15, pattern, share });
+      // (angle "auto": the part's own, `formPick`, through comp.form as a picture's)
+      if (angle === "auto") comp.form = FILL.angle;
+      const a = angle === "auto" ? FILL.angle : angle;
+      const under = underlay ? tatami(mask, comp, res, { angle: a + 90, spacing: 2.5, stitch: 3, inset: 0.4, pull: 0 }) : [];
+      const fill = tatami(mask, comp, res, { angle: a, spacing: density, stitch, pull: 0.15, pattern, share });
       paths.push(...routeFill([under, fill], comp, mask, res).map(toMm));
     }
     return paths;
@@ -662,13 +1107,15 @@ export function fillPolygon(poly, { angle = FILL.angle, density = ROWS.solid, re
     }
     return false;
   };
-  const across = underlay && underlay !== "edge" ? exactRows(px, shape, res, { angle: angle + 90, spacing: UNDER.rows, inset: inset + UNDER.inset, pull: 0 }) : null;
+  // (angle "auto": each part's own, `formPick`, its rows worked out part by part below; no shared grid)
+  const auto = angle === "auto", under = (a) => (underlay && underlay !== "edge" ? exactRows(px, shape, res, { angle: a + 90, spacing: UNDER.rows, inset: inset + UNDER.inset, pull: 0 }) : null);
+  const across = auto ? null : under(angle);
   // (rings: not a blend's layers, which thin out across the shape as only rows can)
   const rings = !!FILL_PATTERNS[pattern]?.rings && !share;
   // (the grid in the drawing's pixels: px = (mm - x0, y0) x res - 0.5)
-  const th = (angle * Math.PI) / 180, gV = [-Math.sin(th), Math.cos(th)];
-  const gridPx = grid == null || share ? null : res * (grid - gV[0] * x0 - gV[1] * y0) - 0.5 * (gV[0] + gV[1]);
-  const along = rings ? null : exactRows(px, shape, res, { angle, spacing: density, inset, pull, share, grid: gridPx });
+  const th = auto ? 0 : (angle * Math.PI) / 180, gV = [-Math.sin(th), Math.cos(th)];
+  const gridPx = grid == null || share || auto ? null : res * (grid - gV[0] * x0 - gV[1] * y0) - 0.5 * (gV[0] + gV[1]);
+  const along = rings || auto ? null : exactRows(px, shape, res, { angle, spacing: density, inset, pull, share, grid: gridPx });
   const of = (R, id, stitch, pat) => sewRows(R.rows.map((row) => ({ ...row, ivs: row.ivs.filter((iv) => iv.part === id) })), R.U, R.V, res, stitch * res, pat, leaves);
   // the covered band: every pixel within `cover` of the first outline
   let band = null;
@@ -698,14 +1145,28 @@ export function fillPolygon(poly, { angle = FILL.angle, density = ROWS.solid, re
     // 1 mm wide once inset, too thin for the router's 0.5 mm cells to join up)
     const cell = inset ? (x, y) => (labels[y * mask.w + x] === id ? (band && band[y * mask.w + x] ? 2 : 1) : shape.whole[y * mask.w + x] ? 2 : 0)
       : band ? (x, y) => (labels[y * mask.w + x] === id ? (band[y * mask.w + x] ? 2 : 1) : 0) : null;
-    if (rings) { paths.push(...ringFill(px, shape, comp, res, { spacing: density, edge, across: across ? of(across, id, UNDER.stitch, "tatami") : [], cell }).map(toMm)); continue; }
-    const groups = [edge, across ? of(across, id, UNDER.stitch, "tatami") : [], of(along, id, stitch, pattern)];
+    let A = along, C = across, curved = null;
+    if (auto) {
+      const f = formPick(comp, mask, res, FILL.angle, rings || share ? null : shape.dt, density);
+      C = under(f.angle); A = rings ? null : exactRows(px, shape, res, { angle: f.angle, spacing: density, inset, pull, share });
+      // (curved rows are cut by the drawing, 0.125 mm a pixel, where straight rows are cut by the outline itself)
+      if (f.field) curved = curvedRows(comp, mask, res, shape.dt, { spacing: density, stitch, pull, pattern, fd: f.field, inside: (x, y) => { const X = Math.round(x), Y = Math.round(y); return X >= 0 && Y >= 0 && X < mask.w && Y < mask.h && labels[Y * mask.w + X] === id; } });
+    }
+    if (rings) { paths.push(...ringFill(px, shape, comp, res, { spacing: density, edge, across: C ? of(C, id, UNDER.stitch, "tatami") : [], cell }).map(toMm)); continue; }
+    const groups = [edge, C ? of(C, id, UNDER.stitch, "tatami") : [], curved ? curved.paths : of(A, id, stitch, pattern)];
     let best = routeFill(groups, comp, mask, res, undefined, undefined, true, 1, cell);
     if (best.length > 1) {
       const other = routeFill([edge, groups[1], groups[2].map((p) => p.slice().reverse()).reverse()], comp, mask, res, undefined, undefined, true, 1, cell);
       if (other.length < best.length) best = other;
     }
+    // (curved rows that still end in more parts than straight rows at the part's own angle: the straight rows)
+    if (curved && best.length > 1) {
+      const flat = routeFill([edge, groups[1], of(A, id, stitch, pattern)], comp, mask, res, undefined, undefined, true, 1, cell);
+      if (flat.length < best.length) best = flat;
+    }
     paths.push(...best.map(toMm));
   }
   return paths;
 }
+// (testing only: tests measure the readings and the rows they give)
+export const formTest = { rowsAt, traceComp, readings, rowField, curvedRows, fieldLines };

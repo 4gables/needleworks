@@ -114,6 +114,29 @@ export const fillRecipe = (fabric) => FILLS[fabric] || FILLS.cotton;
 // `loose` mm (a row's short remainder merged into its last stitch) is halved, since one that long lies loose on top.
 export const TATAMI = { stitch: 3.5, loose: 4 };
 
+// --- PX3: fill direction that follows the form (core/fill.js `formAngle`; docs/stitch-model.md) ---
+//   least, picture: a part under this many mm² keeps the caller's angle; a picture's part under `picture`: on the
+//           picture corpus, letters and doodles at 60 mm turned to their own angles gained trims and loose threads
+//           (13 cases: from 4 mm² +10 trims and +6 loose, from 30 the same, from 100 +2 and -2)
+//   ragged: rows meet an edge at a grazing angle between lo and hi degrees (from none at 0 and to none at hi + fade,
+//           evenly): each row end steps spacing / sin(angle) along the edge, 1 to 5 mm at 0.35 mm rows, a saw-tooth one
+//           sees; at 0 a row lies along the edge
+//   even:   the traced outline is evened over this many mm before it is measured (the drawing's steps)
+//   blur, step: the edge histogram's smoothing either side, and the sweep's step (degrees)
+//   rag, sec: the weight of a fully ragged outline and of each section more than the fewest, against row ends (1 =
+//           as many again as the fewest any angle gives)
+//   keep:   the caller's angle stays unless another scores this much better (a near tie isn't worth losing the
+//           neighbouring colours' alternation)
+//   cell, blurMax, iters: curved rows' grid (mm), the most cells the direction is smoothed over, and the solver's
+//           most steps
+//   turns:  share of neighbouring cells whose directions can't be given one sign before the field is a singularity
+//   stretch: curved rows may lie up to this many times their spacing apart where the field spreads (never closer)
+//   hug, hugW: within hug mm of the edge the field's fit counts up to hugW times (the rows lie along the edge)
+//   curvedLeast, curve: curved rows are tried on parts of this many mm² or more, and sewn where they score this much
+//           better than the best straight angle
+//   gap:    a curved row that leaves the part for up to this many mm (along an edge it grazes) is sewn as one
+export const FORM = { least: 4, picture: 100, ragged: [4, 25, 20], blur: 4, step: 5, rag: 1, sec: 1.5, keep: 0.1, cell: 0.5, blurMax: 24, blurK: 1.0, iters: 600, turns: 0.002, stretch: 1.3, gap: 1, hug: 1, hugW: 4, curvedLeast: 30, curve: 0.15, even: 1.6 };
+
 // --- Z1a: a piece's own fill settings (studio/settings.js; docs/design-tab.md "Stitch settings") ---
 // What a person (or a saved file, or an agent) may set, clamped so no setting can break a rule of AGENTS.md. Each is
 // [least, most, the editor's step].

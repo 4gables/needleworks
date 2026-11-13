@@ -141,7 +141,7 @@ Reference for this part of Needleworks: the rules, the reason for each (it stops
   `stitches: { fill: { angle, spacing, length, pull, underlay } }`.
   | Field | Unset (patch / filled motif) | Range (`recipes.js` `FILL_SET`) |
   |---|---|---|
-  | `angle` (°: 0 rows across, 90 up and down, + clockwise) | 45 (`fill.js` `FILL.angle`) | kept in (-90, 90] (135 is -45) |
+  | `angle` (°: 0 rows across, 90 up and down, + clockwise) | 45 (`fill.js` `FILL.angle`) | kept in (-90, 90] (135 is -45), or `"auto"` |
   | `spacing` (mm between rows) | the fabric's rows, + 0.05 on 30 wt (`fillFor`) | 0.35 (`ROWS.solid`) to 0.8 |
   | `length` (mm, stitches along a row) | 3.5 (`TATAMI.stitch`) | 1.5 to 4 (`TATAMI.loose`) |
   | `pull` (mm each row runs past its outline) | patch: felt's 0.2; motif: the fabric's | 0 to 0.6 |
@@ -149,6 +149,9 @@ Reference for this part of Needleworks: the rules, the reason for each (it stops
   Why each limit is where it is: `recipes.js` `FILL_SET`. A value out of range is clamped wherever it is read
   (`cleanPiece` on open and paste, `fillOpts` in every build: an agent's design that skips `cleanPiece` is clamped
   too); an unknown field or group is dropped, said as "had settings this page doesn't have".
+- **Follow the shape** (`angle: "auto"`, PX3; `docs/stitch-model.md` "Direction that follows the form"): each part of
+  the fill takes its own measured angle, or rows that curve with it (a crescent moon); no shared grid (its angle is the
+  part's own). The editor's fifth direction choice, drawn as curved rows; moving the slider sets a number again.
 - Which pieces: a patch frame's fill (blend layers too) and a filled motif (rows or rings). Not the motif either side
   of lettering, nor appliqué (its fabric is the fill), nor pictures (`digitize.js` fills through `tatami` on its own
   drawing, a different path). Rings take `spacing` and `underlay` only.

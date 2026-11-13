@@ -388,7 +388,7 @@ function build(img, analysis, opts) {
     const turnOf = used.slice(0, k).filter((c) => !c.inside).length, angle = o.fillAngle + ((col.inside ? turnOf + 1 : turnOf) % 2) * 90;
     const dt = distanceTransform(mask);
     const comps = [];
-    for (let id = 1; id <= count; id++) comps.push({ id, pixels: [], labels: cl, dt });
+    for (let id = 1; id <= count; id++) comps.push({ id, pixels: [], labels: cl, dt, ...(o.direction === "auto" ? { form: angle } : {}) });
     for (let i = 0; i < w * h; i++) if (cl[i]) comps[cl[i] - 1].pixels.push(i);
     let blocks = [];
     const filled = new Uint8Array(count + 1);   // shapes sewn as fills

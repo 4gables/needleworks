@@ -11,6 +11,12 @@ What was tried and rejected (don't retry without new numbers) and what is known 
 - Picture matcher for #803CC8: Brother Magenta (ΔE00 9.9) over Violet (11.8, 12 L darker); Violet stays in the swaps.
 - Busy pictures' trims are their separate shapes: no safe win.
 
+- Fill direction (PX3): any one reading alone (principal axis, edges' dominant direction, fewest row ends, Goldman's
+  fewest fragments of 16): each split a crescent or an S curve into two parts or left bars and diamonds ragged
+  (`docs/stitch-model.md`). Sections weighed against row ends instead of held to the caller's count: +8 trims, +3
+  loose threads on the picture corpus. Curved rows sewn by `sewRows`' one-to-one rule (a crescent 7 parts), or with
+  the direction smoothed over twice the half width (rows stop following the edges: more parts).
+
 ## Open
 - Machine: does the PE900 also cut 0x20 trims of 5 mm or less (the loose-thread count assumes not)? Sew along's
   "Sewed with the wrong thread?" wording is unchecked on a PE900.

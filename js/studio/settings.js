@@ -3,7 +3,8 @@
 // optional, each unset field meaning today's value for the design's fabric and thread weight (core/recipes.js). The
 // record is grouped by the kind of stitches it changes, so later rounds add groups or fields without reshaping it:
 //   p.stitches = { fill: { angle, spacing, length, pull, underlay } }   (satin settings, start and end points, trim and
-//   pause after: their own keys beside `fill`)
+//   pause after: their own keys beside `fill`). angle may be "auto": rows that follow the shape (PX3, core/fill.js
+//   `formPick`: each part its own angle, or rows that curve with it)
 // Every number is clamped to recipes.js `FILL_SET` wherever it is read (a saved file, a paste, an agent's design),
 // so no setting can break a rule of AGENTS.md.
 import { FILL_SET, UNDERLAYS } from "../core/recipes.js";
@@ -24,7 +25,7 @@ function cleanFill(f) {
   if (!f || typeof f !== "object" || Array.isArray(f)) return null;
   const out = {};
   for (const k of FIELDS) {
-    const v = k === "angle" ? angleOf(f[k]) : clamp(f[k], FILL_SET[k]);
+    const v = k === "angle" ? (f[k] === "auto" ? "auto" : angleOf(f[k])) : clamp(f[k], FILL_SET[k]);
     if (v != null) out[k] = v;
   }
   if (UNDERLAYS.includes(f.underlay) && f.underlay !== "both") out.underlay = f.underlay;
@@ -49,7 +50,8 @@ export const hasFill = (p) => (p?.kind === "frame" && p.border === "patch") || (
 // by side, have rows that line up. The piece is built in its own coordinates and then turned (`rot`), mirrored
 // (`flip`) and moved (`x`, `y`); across the rows, its own coordinate and the design's differ only by the move along
 // the design's row normal, whichever way it is mirrored, so the grid in its coordinates is that move's remainder.
-// Not for a blend's layers (`share`: spaced unevenly) nor rings.
+// Not for a blend's layers (`share`: spaced unevenly) nor rings, nor rows that follow the shape ("auto": their angle is
+// the part's own, so no two pieces' rows are meant to line up).
 export function fillOpts(p, base) {
   const f = hasFill(p) && ownFill(p);
   if (!f) return base;
@@ -59,7 +61,7 @@ export function fillOpts(p, base) {
   if (f.length != null) o.stitch = f.length;
   if (f.pull != null) o.pull = f.pull;
   if (f.underlay) o.underlay = { rows: "rows", edge: "edge", none: false }[f.underlay];
-  if (!o.share && o.pattern !== "contour") o.grid = gridAt(p, o.angle ?? FILL.angle, o.density);
+  if (!o.share && o.pattern !== "contour" && o.angle !== "auto") o.grid = gridAt(p, o.angle ?? FILL.angle, o.density);
   return o;
 }
 // where the shared grid lies in a piece's own coordinates (mm across its rows, 0 <= g < spacing, to 0.001 mm)
