@@ -316,15 +316,30 @@ function cluster(P, k, skip, lines = false) {
 // The picture's threads, learned from `img` (any size: the Picture tab sends the same copy whatever the Size).
 // Returns { C: fine clusters (Lab), map: fine cluster -> colour id, colors, bg (the background's id, or -1), frame
 // (a mask over img, or null), boxes: each colour's extent as fractions of img [x0, y0, x1, y1], merged, empty }.
-// One thread colour chosen means one thread sewn (owner, 2026-11-13: a BYU logo at one colour came out Ultramarine
-// and White): the one thread is the design's and the background's colour closed in by the design stays fabric
-// (`spare`), sewn only when the person asks ("Sew it": labelWith's inside "all"). From two colours up the closed-in
-// colour is still a thread past the count: giving it a slot (the design learned one colour fewer) merged distinct
-// inks on the corpus (red text sewn purple at 3, a purple stroke green at 4), so which colour to give up is left to
-// a measure of what each costs the look (roadmap PX1).
+// The Thread colours count is every thread sewn, the background's colour closed in by the design (`inside`) included
+// (owner, 2026-11-13: a BYU logo at one colour came out Ultramarine and White, at two Prussian Blue, Cornflower Blue
+// and White). When the design's own colours fill the count and some of it is closed in (0.2 % of the learned copy),
+// it gives up a slot only where that costs the look little: the design learned one colour fewer (merged pairwise as
+// always, cheapest first) loses only a near-duplicate shade (`NEAR`) or a blend of two colours it keeps (BYU at six
+// learns Black and Dark Gray from the soft edges). Else the closed-in colour stays fabric (`spare`), sewn only when the
+// person asks ("Sew it": labelWith's inside "all"). One colour is always so. Worse: one colour fewer whenever white is
+// closed in, whatever was lost (red text sewn purple at 3 colours, a purple stroke green at 4: six corpus cases).
+const NEAR = 15;
 export function learnColours(img, opts = {}) {
   const n = opts.colors ?? DEFAULTS.colors, m = learnOnce(img, opts);
-  if (n > 1 || m.empty || m.inside < 0 || !m.colors[m.inside]?.inside || opts.style === "line") return m;
+  if (m.empty || m.inside < 0 || !m.colors[m.inside]?.inside || opts.style === "line") return m;
+  const own = (q) => q.colors.filter((c) => !c.background && !c.inside);
+  if (own(m).length + 1 <= n) return m;
+  if (n > 1 && labelWith(img, m, undefined, { inside: "all" }).closed > 0.002) {
+    const f = learnOnce(img, { ...opts, colors: n - 1 }), lab = (c) => srgbToLab(...hexToRgb(c.picture || c.hex));
+    const keep = [...own(f), ...f.colors.filter((c) => c.background)].map(lab);
+    // (what the count one fewer lost: the colour of the n farthest from all the n - 1 keep)
+    let lost = null, far = -1;
+    for (const c of own(m)) { const d = Math.min(...own(f).map((k) => deltaE2000(lab(c), lab(k)))); if (d > far) { far = d; lost = lab(c); } }
+    const e = (p, q) => Math.hypot(p[0] - q[0], p[1] - q[1], p[2] - q[2]);
+    const blend = lost && keep.some((A, i) => keep.some((B, j) => j > i && e(A, lost) + e(lost, B) <= 1.25 * e(A, B)));
+    if (f.inside >= 0 && f.colors[f.inside]?.inside && (far < NEAR || (blend && far < 2 * NEAR))) return { ...f, gave: true };
+  }
   return { ...m, spare: true };
 }
 function learnOnce(img, opts = {}) {
