@@ -357,6 +357,15 @@
     <div class="row"><button type="submit" class="ghost" value="cancel">Cancel</button><button type="button" class="primary" id="rename-save">Save name</button></div>
   </form>
 </dialog>
+<dialog id="machines" class="names" aria-labelledby="machines-title">
+  <form method="dialog">
+    <h2 id="machines-title">Which machine is yours?</h2>
+    <input type="search" id="machines-find" placeholder="Its maker or model, like Janome or PE900" aria-label="Find your machine" aria-describedby="machines-none" autocomplete="off" spellcheck="false">
+    <div id="machines-list" class="machine-list"></div>
+    <p class="hint" id="machines-none" hidden></p>
+    <div class="row"><button type="submit" class="ghost" value="cancel">Cancel</button></div>
+  </form>
+</dialog>
 <dialog id="spools" class="names" aria-labelledby="spools-title">
   <form method="dialog">
     <h2 id="spools-title">Threads I own</h2>

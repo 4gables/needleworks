@@ -62,7 +62,8 @@ export const state = {
   turn: { picture: false, design: false, open: false, ...store.get("turn", {}) },
   brand: BRANDS[store.get("brand", "")] ? store.get("brand", "") : "",   // thread brand for spool numbers ("" = Brother only)
   spools: store.get("spools", {}),   // { brand: [spool numbers owned] }
-  // the file Download makes: pes (Brother, the one the checks are for), dst, exp or vp3 (formats-out.js); remembered
+  // the file Download makes: pes, dst, exp or vp3 (formats-out.js), set by the machine chosen (`machineFormat`) unless
+  // "File for" is changed after; remembered
   fileFormat: OUT_FORMATS[store.get("fileFormat", "pes")] ? store.get("fileFormat", "pes") : "pes",
   // their spools from brands not charted here (Madeira), matched by colour: [{ brand, num, hex }]. Ticking the nearest
   // Brother spool stood for it, and every surface then said "Your Brother 079 Salmon Pink", a spool they didn't own
@@ -73,6 +74,9 @@ if (!MACHINES[state.machine]) state.machine = DEFAULT_MACHINE;
 export const hoop = () => getHoop(state.machine, state.hoopId);
 // the chosen file format ({ ext, short, label, machines }), and a .pes name as that format's
 export const fileFormat = () => OUT_FORMATS[state.fileFormat];
+// the file a machine gets: the first its manual lists that this site writes (a Janome reads JEF and DST: DST, until JEF
+// is made here)
+export const machineFormat = (id = state.machine) => MACHINES[id].reads.find((f) => OUT_FORMATS[f]) || "dst";
 export const outName = (name) => name.replace(/\.pes$/i, "." + state.fileFormat);
 // (a square hoop turned is the same hoop: the turn is off there, or a 4x4 file came out sideways with a turn note)
 export const square = () => { const h = hoop(); return h.w === h.h; };
