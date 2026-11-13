@@ -15,7 +15,8 @@ it finishes in time. Run: tests/picture_corpus.sh CDP_PORT HTTP_PORT OUT (or ser
 this page; ?only=name,name runs some images, ?quick one case each). Title: DONE &lt;cases&gt; &lt;problems&gt;.</p>
 <pre id="log"></pre>
 <script type="module">
-import { DENSITY, LEARN, contentBox, cutPart, findParts, lostMuch, picturePlan, pictureImage, sewSized } from "../../js/core/digitize.js";
+import { DENSITY, LEARN, MOST, contentBox, cutPart, findParts, lostMuch, picturePlan, pictureImage, sewSized } from "../../js/core/digitize.js";
+import { artSaid } from "../../js/artwords.js";
 import { COLOR_CHANGE, JUMP, STITCH, TRIM, designStats, readEmbroidery, validatePES } from "../../js/core/formats.js";
 import { lookScore, pageColour, renderThreads, sourceGrid, toRGBA, variantRules, variants } from "../look.js";
 import { ART } from "./art.js";
@@ -81,14 +82,14 @@ function text(c, str, x, y, f, col, align = "center") { c.font = f; c.fillStyle 
 const W = 800, H = 600;
 const PICS = [
   // (round 8: KENJI'S lost its apostrophe at 60 mm, and its 120 mm line drawing was garbled and failed on tiny stitches)
-  { name: "logo_bold_1c", n: 1, extra: [["line", 120, 1], ["fill", 100, 1, true]], layers: [
+  { name: "logo_bold_1c", check: { never: ["text", "small", "thin", "blend", "colours", "background"] }, n: 1, extra: [["line", 120, 1], ["fill", 100, 1, true]], layers: [
     { role: "text", col: "#111111", draw: (c) => text(c, "KENJI'S", 400, 300, font("bold", 170), "#111111") },
     { role: "text", col: "#111111", draw: (c) => text(c, "fine tea co.", 400, 420, font("bold", 80), "#111111") }] },
   { name: "logo_regular_2c", n: 2, layers: [
     { role: "text", col: "#1d2f6f", draw: (c) => text(c, "Bob's Bakery.", 400, 280, font("regular", 110), "#1d2f6f") },
     { role: "stroke", col: "#c8102e", width: 6, lines: [[[120, 330], [680, 330]]], draw: (c, r, L) => { c.strokeStyle = L.col; polyStroke(c, L.lines[0], 6, "butt"); } },
     { role: "ink", col: "#c8102e", draw: (c) => { heartPath(c, 400, 450, 130); c.fillStyle = "#c8102e"; c.fill(); } }] },
-  { name: "logo_thin_3c", n: 3, layers: [
+  { name: "logo_thin_3c", check: { say: ["text", "thin"] }, n: 3, layers: [
     { role: "ink", col: "#f28c28", draw: (c) => { circle(c, 400, 230, 120); c.fillStyle = "#f28c28"; c.fill(); } },
     { role: "text", col: "#1f5f3a", draw: (c) => text(c, "fine & dainty", 400, 450, font("josefin", 60), "#1f5f3a") },
     { role: "text", col: "#1f5f3a", draw: (c) => text(c, "est. 2026 · hand made", 400, 520, font("regular", 30), "#1f5f3a") },
@@ -119,7 +120,7 @@ const PICS = [
     });
     return out;
   })() },
-  { name: "outline_vs_filled", n: 2, layers: [
+  { name: "outline_vs_filled", check: { never: ["small", "thin", "blend", "background"] }, n: 2, layers: [
     { role: "ink", col: "#6a0dad", draw: (c) => { starPath(c, 200, 180, 140, 60); c.fillStyle = "#6a0dad"; c.fill(); } },
     { role: "stroke", col: "#6a0dad", width: 12, lines: [], draw: (c) => { starPath(c, 580, 180, 140, 60); c.strokeStyle = "#6a0dad"; c.lineWidth = 12; c.lineJoin = "round"; c.stroke(); } },
     { role: "ink", col: "#0a7e4a", draw: (c) => { circle(c, 200, 450, 110); c.fillStyle = "#0a7e4a"; c.fill(); } },
@@ -132,7 +133,7 @@ const PICS = [
     { role: "ink", col: "#1f5fbf", draw: (c) => { c.strokeStyle = "#1f5fbf"; c.lineWidth = 46; c.lineCap = "round"; c.beginPath(); c.moveTo(60, 470); c.bezierCurveTo(170, 300, 260, 620, 380, 450); c.stroke(); } },
     { role: "ink", col: "#c62828", draw: (c) => { c.fillStyle = "#c62828"; c.beginPath(); c.arc(520, 450, 110, 0, 2 * Math.PI); c.arc(520, 450, 65, 0, 2 * Math.PI, true); c.fill("evenodd"); } },
     { role: "ink", col: "#6a1b9a", draw: (c) => { starPath(c, 700, 430, 85, 34); c.fillStyle = "#6a1b9a"; c.fill(); } }] },
-  { name: "gradient", n: 3, colours: false, layers: [
+  { name: "gradient", check: { say: ["blend"] }, n: 3, colours: false, layers: [
     { role: "ink", cols: ["#d7263d", "#f4d35e"], draw: (c) => { const g = c.createLinearGradient(80, 0, 420, 0); g.addColorStop(0, "#d7263d"); g.addColorStop(1, "#f4d35e"); c.fillStyle = g; c.fillRect(80, 100, 340, 220); } },
     { role: "ink", cols: ["#1b4f9c", "#9ec5f0"], draw: (c) => { const g = c.createRadialGradient(590, 230, 10, 590, 230, 140); g.addColorStop(0, "#9ec5f0"); g.addColorStop(1, "#1b4f9c"); c.fillStyle = g; circle(c, 590, 230, 140); c.fill(); } },
     { role: "text", col: "#222222", draw: (c) => text(c, "SUNSET", 400, 500, font("slab", 100), "#222222") }] },
@@ -148,10 +149,10 @@ const PICS = [
     { role: "ink", col: "#e85d9b", draw: (c) => { c.fillStyle = "#e85d9b"; for (let k = 0; k < 6; k++) { const a = (k * Math.PI) / 3; c.beginPath(); c.ellipse(400 + 85 * Math.cos(a), 220 + 85 * Math.sin(a), 70, 40, a, 0, 2 * Math.PI); c.fill(); } } },
     { role: "ink", col: "#f6c90e", draw: (c) => { circle(c, 400, 220, 50); c.fillStyle = "#f6c90e"; c.fill(); } },
     { role: "text", col: "#3a2e6b", draw: (c) => text(c, "Bloom", 650, 560, font("script", 70), "#3a2e6b") }] })),
-  { name: "jpeg_logo", n: 2, jpeg: 0.25, layers: [
+  { name: "jpeg_logo", check: { never: ["background"] }, n: 2, jpeg: 0.25, layers: [
     { role: "text", col: "#0b3d91", draw: (c) => text(c, "O'Neil & Co.", 400, 260, font("slab", 95), "#0b3d91") },
     { role: "text", col: "#e03c31", draw: (c) => text(c, "plumbing · heating", 400, 400, font("regular", 56), "#e03c31") }] },
-  { name: "png_clear", n: 2, back: null, layers: [
+  { name: "png_clear", check: { never: ["background"] }, n: 2, back: null, layers: [
     { role: "ink", col: "#2b9348", draw: (c) => { starPath(c, 400, 260, 200, 90); c.fillStyle = "#2b9348"; c.fill(); } },
     { role: "text", col: "#1b1b1b", draw: (c) => text(c, "Lucky", 400, 560, font("bold", 120), "#1b1b1b") }] },
   // see-through round a coloured badge: the badge is the design
@@ -166,7 +167,7 @@ const PICS = [
     { role: "ink", col: "#1e6091", draw: (c) => { circle(c, 1800, 2000, 1300); c.fillStyle = "#1e6091"; c.fill(); } },
     { role: "ink", col: "#ffd166", draw: (c) => { starPath(c, 1800, 2000, 1000, 420); c.fillStyle = "#ffd166"; c.fill(); } },
     { role: "text", col: "#ef476f", draw: (c) => text(c, "Huge!", 4500, 2400, font("bold", 1100), "#ef476f") }] },
-  { name: "one_colour", n: 1, layers: [
+  { name: "one_colour", check: { never: ["text", "small", "thin", "blend", "colours", "background"] }, n: 1, layers: [
     { role: "ink", col: "#000000", draw: (c) => { c.fillStyle = "#000"; c.beginPath(); c.ellipse(400, 380, 170, 140, 0, 0, 2 * Math.PI); c.fill(); circle(c, 400, 200, 100); c.fill();
       c.beginPath(); c.moveTo(320, 140); c.lineTo(330, 60); c.lineTo(380, 115); c.fill(); c.beginPath(); c.moveTo(480, 140); c.lineTo(470, 60); c.lineTo(420, 115); c.fill(); } }] },
   { name: "all_one_colour", n: 0, empty: true, back: "#3a7d44", layers: [] },
@@ -292,7 +293,13 @@ const PICS = [
     const out = [{ role: "ink", col: "#e63946", draw: (c) => { c.fillStyle = "#e63946"; for (let y = 0; y < 5; y++) for (let x = 0; x < 8; x++) { circle(c, 80 + x * 90 + (y % 2) * 45, 80 + y * 110, 16); c.fill(); } } },
       { role: "text", col: "#1d3557", draw: (c) => text(c, "dots", 400, 590, font("bold", 60), "#1d3557") }];
     return out;
-  })() },
+  })(), check: { say: ["text"] } },
+  // (AI art on a busy background: tiles and confetti to the edge. The check says so and offers to leave its colours
+  // out; the tiles may be sewn, so they are `shade`, and `busy`: their threads and trims aren't counted)
+  { name: "busy_back", n: 4, busy: true, cases: [["fill", 100, 6]], check: { say: ["background"] }, layers: [
+    { role: "shade", col: "#9bc1bc", draw: (c, r) => { const cols = ["#9bc1bc", "#f4f1bb", "#5ca4a9", "#e6ebe0", "#c5d86d", "#ed6a5a"]; for (let y = 0; y < 600; y += 25) for (let x = 0; x < 800; x += 25) { c.fillStyle = cols[Math.floor(r() * cols.length)]; c.fillRect(x, y, 25, 25); } } },
+    { role: "ink", col: "#d7263d", draw: (c) => { c.fillStyle = "#d7263d"; c.beginPath(); c.moveTo(250, 300); c.lineTo(400, 150); c.lineTo(550, 300); c.closePath(); c.fill(); } },
+    { role: "ink", col: "#1b4f9c", draw: (c) => { c.fillStyle = "#1b4f9c"; c.fillRect(280, 300, 240, 200); } }] },
 ];
 
 // Looks like the picture (tests/look.js): every case is rendered as thread from its own file and scored against the
@@ -387,6 +394,15 @@ function matches(drawn, thread) {
   if (Cb < 6) return false;
   const d = Math.abs(hueOf(a) - hueOf(b)) % 360;
   return Math.min(d, 360 - d) <= 35 || family(drawn) === family(thread);
+}
+
+// What the check of a picture says (artwords.js `artSaid`, as picture.js asks it), one line per finding: ?art logs it
+// under each case, and the "said" lists below are checked against it.
+function artOf(r, c, plan) {
+  const flat = !r.smooth && r.flat >= 0.55, sewn = (r.colors || []).filter((q) => !q.background && q.area > 0).length;
+  const said = artSaid(r.art, { size: Math.min(c.size, plan.max), max: plan.max, colors: c.colors, most: MOST, style: c.style, flat, smoothed: !!r.smooth, lost: lostMuch(r.fine?.kept), bg: true, skip: [], sewn });
+  return { ids: said.bad.map((b) => b.id), text: [`${r.smooth ? "smoothed" : flat ? "flat" : "photo"} (flat ${r.flat.toFixed(2)}, ${r.art.colours} colours, blend ${r.art.blend}, edge ${r.art.edge})`,
+    ...said.bad.map((b) => `${b.id}: ${b.text} [${b.fix ? b.fix.label : b.else}]${b.spots?.length ? ` (${b.spots.length} ringed)` : ""}`), said.good].filter(Boolean) };
 }
 
 // ---------- the Picture tab's path ----------
@@ -722,15 +738,20 @@ async function run(spec) {
       if (style === "fill" && spec.colours !== false && colors >= spec.n) {
         // (nor the page's own colour where the design closes it in, sewn in the page's thread: the hole of a big O)
         const drawn = spec.layers.filter((L) => L.role !== "bg" || c.edge).flatMap((L) => L.cols || [L.col]), page = r.colors.find((q) => q.inside)?.hex;
-        for (const th of thread) if (th !== page && !drawn.some((x) => matches(x, th))) bad.push(`thread ${th} (${family(th)}) matches nothing drawn`);
+        for (const th of thread) if (!spec.busy && th !== page && !drawn.some((x) => matches(x, th))) bad.push(`thread ${th} (${family(th)}) matches nothing drawn`);
       }
       // trims: a jump per sewable piece at most, plus two a colour (cross-stitch and line drawings join pieces), and
       // no more than 1 per cm² sewn beyond that
       const budget = Math.round(1.2 * need + 2 * thread.length + 2 + sewnMm2 / 100);
-      if (trims > budget && !spec.art) bad.push(`${trims} trims (budget ${budget}: ${need} pieces, ${(sewnMm2 / 100).toFixed(1)} cm²)`);
+      if (trims > budget && !spec.art && !spec.busy) bad.push(`${trims} trims (budget ${budget}: ${need} pieces, ${(sewnMm2 / 100).toFixed(1)} cm²)`);
       if (RENDER) await render(tag, pat, turn, reg, toMm);
       if (style === "fill") res.holes = holes(r, at);
       res.look = await look(tag, src, r, plan, turn);
+      res.art = artOf(r, c, plan);
+      // what the check of the picture says (artwords.js): `say` at 100 mm (each is drawn to need saying there),
+      // `never` from 100 mm up (smaller, anything may be too small)
+      if (style === "fill" && size === 100) for (const id of spec.check?.say || []) if (!res.art.ids.includes(id)) bad.push(`the check doesn't say ${id}`);
+      if (style === "fill" && size >= 100) for (const id of spec.check?.never || []) if (res.art.ids.includes(id)) bad.push(`the check says ${id}: ${res.art.text.find((t) => t.startsWith(id))}`);
       Object.assign(res, { stitches: st.stitches, trims, loose, peak: pk, threads: thread.length, size: `${st.widthMm.toFixed(0)}x${st.heightMm.toFixed(0)}`, perCm2: +(trims / Math.max(0.01, sewnMm2 / 100)).toFixed(2), lost: +(r.fine?.lost || 0).toFixed(3), kept: r.fine?.kept && `${r.fine.kept.lost}/${r.fine.kept.parts} ${(100 * r.fine.kept.share).toFixed(1)}% big ${r.fine.kept.big.toFixed(1)}`, note: lostMuch(r.fine?.kept), gone: `${gone}/${drawn}`, tries: r.tries });
     }
     // (cases still open, said so rather than hidden: they print as KNOWN and don't count)
@@ -738,7 +759,7 @@ async function run(spec) {
     Object.assign(res, { name: spec.name, kind: spec.kind, style });
     res.bad = bad; res.known = !!(known && bad.length); results.push(res);
     if (bad.length && !known) problems++;
-    log(`  ${bad.length ? (known ? "KNOWN" : "FAIL") : "ok  "}${known && bad.length ? " (" + known + ")" : ""} ${tag} ${res.ms} ms ${res.stitches ?? ""} st ${res.trims ?? ""} trims ${res.loose ?? ""} loose peak ${res.peak ?? ""} ${res.size ?? ""} lost ${res.kept ?? ""} (drawn ${res.gone ?? ""})${res.note ? " NOTE" : ""} tries ${res.tries?.length ?? ""} flat ${res.flat ?? ""}${res.look ? ` look ${res.look.look} (c ${res.look.colour} s ${res.look.shape} o ${res.look.outline} d ${res.look.detail} st ${res.look.structure})` : ""}${res.holes ? ` holes ${res.holes.mm2} mm² ${(100 * res.holes.share).toFixed(1)}% ${res.holes.blobs}` : ""}${bad.map((b) => "\n       " + b).join("")}`);
+    log(`  ${bad.length ? (known ? "KNOWN" : "FAIL") : "ok  "}${known && bad.length ? " (" + known + ")" : ""} ${tag} ${res.ms} ms ${res.stitches ?? ""} st ${res.trims ?? ""} trims ${res.loose ?? ""} loose peak ${res.peak ?? ""} ${res.size ?? ""} lost ${res.kept ?? ""} (drawn ${res.gone ?? ""})${res.note ? " NOTE" : ""} tries ${res.tries?.length ?? ""} flat ${res.flat ?? ""}${res.look ? ` look ${res.look.look} (c ${res.look.colour} s ${res.look.shape} o ${res.look.outline} d ${res.look.detail} st ${res.look.structure})` : ""}${res.holes ? ` holes ${res.holes.mm2} mm² ${(100 * res.holes.share).toFixed(1)}% ${res.holes.blobs}` : ""}${bad.map((b) => "\n       " + b).join("")}${Q.has("art") && res.art ? res.art.text.map((t) => "\n       art " + t).join("") : ""}`);
   }
 }
 // The separate parts of a picture (findParts): as many as were drawn apart, none for a picture of one thing, and each
@@ -773,7 +794,7 @@ for (const name of Q.get("ext")?.split(",") || []) {
     const d0 = g0.getImageData(0, 0, c0.width, c0.height).data, lk = await look(tag, { d: d0, w: c0.width, h: c0.height, fabric: pageColour(d0, c0.width, c0.height) }, s.r, s.plan, false);
     await fetch(`/save/${tag}.pes`, { method: "POST", body: s.r.bytes });
     if (RENDER) { await render(tag, s.r.pattern, false, { pieces: [] }, () => [0, 0]); await renderLabels(tag, s.r); }
-    log(`  ${tag} ${Math.round(performance.now() - t1)} ms ${st.stitches} st ${st.trims} trims, ${Math.round(Math.max(st.widthMm, st.heightMm))} mm, threads ${s.r.pattern.threads.map((t) => t.description).join(", ")}, left out ${s.r.fine.kept.lost}/${s.r.fine.kept.parts} ${(100 * s.r.fine.kept.share).toFixed(1)}%${lostMuch(s.r.fine.kept) ? " NOTE" : ""}${verdictOf(s.r.bytes).map((q) => " QUALITY " + q.key).join("")} flat ${s.r.flat?.toFixed(2)}${s.r.smooth ? " smoothed" : ""} look ${lk.look} (c ${lk.colour} s ${lk.shape} o ${lk.outline} d ${lk.detail} st ${lk.structure})${style === "fill" ? ((hl) => ` holes ${hl.mm2} mm² ${(100 * hl.share).toFixed(1)}% ${hl.blobs}`)(holes(s.r, threadMap(s.r.pattern, false))) : ""}`);
+    log(`  ${tag} ${Math.round(performance.now() - t1)} ms ${st.stitches} st ${st.trims} trims, ${Math.round(Math.max(st.widthMm, st.heightMm))} mm, threads ${s.r.pattern.threads.map((t) => t.description).join(", ")}, left out ${s.r.fine.kept.lost}/${s.r.fine.kept.parts} ${(100 * s.r.fine.kept.share).toFixed(1)}%${lostMuch(s.r.fine.kept) ? " NOTE" : ""}${verdictOf(s.r.bytes).map((q) => " QUALITY " + q.key).join("")} flat ${s.r.flat?.toFixed(2)}${s.r.smooth ? " smoothed" : ""} look ${lk.look} (c ${lk.colour} s ${lk.shape} o ${lk.outline} d ${lk.detail} st ${lk.structure})${style === "fill" ? ((hl) => ` holes ${hl.mm2} mm² ${(100 * hl.share).toFixed(1)}% ${hl.blobs}`)(holes(s.r, threadMap(s.r.pattern, false))) : ""}${Q.has("art") ? artOf(s.r, { style, size, colors }, s.plan).text.map((t) => "\n       art " + t).join("") : ""}`);
   }
 }
 // (?ext pictures' parts, each on its own: how flat it reads, smoothed or not, and its threads)

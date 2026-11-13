@@ -242,3 +242,36 @@ Reference for this part of Needleworks: the rules, the reason for each (it stops
   (`forgetPicture` in app.js). Kept like any other, a blank picture opened the tab on its own error every visit after,
   in place of the sample. It showed as ui_sweep's Picture state "never ready" in 1-2 of 330 cases, at v12 too:
   whichever tab had run the blank-picture state before the plain one. Guard: ui_sweep `picture-after-blank`.
+- Art that stitches well (PX6; `js/core/artcheck.js` measures, `js/artwords.js` says, numbers `recipes.js` `ART`).
+  Makers bring art from AI image tools that looks clean on screen and sews badly; the page said "Good for
+  stitching" of a logo whose 3 mm lettering closed up. Two parts:
+  - The guide, "Make art that stitches well" (a `<details>` under the picture, opened also from the check's "How to
+    make art that stitches well"): the rules with their numbers for this hoop filled, as mm and as px on a 1024 px
+    picture (what AI tools make; PX-R: "rules in mm become rules in pixels once the sewn size is known"), and a
+    prompt to copy, filled in from the subject typed, the hoop's shape (nearest of 1:1, 4:5, 3:4, 2:3, 9:16; turned
+    when the hoop is) and the threads owned (Threads I own: their colour words and hex). The prompt asks for
+    `ART.ask` (2) times the least line and detail: it is worked out for the hoop filled and art is often sewn at
+    half that. Styles named from Brother's Artspira AI (PX-R): flat, pop, simple, silhouette and line art go to
+    embroidery; crayon, sketch, watercolour and manga don't. Copy: `navigator.clipboard`, else the text is selected.
+  - The check, in the v29 verdict box under the picture (`verdictUI`): the texture headline stays (smoothed / shaded
+    like a photo / flat), then what won't sew well and why, each with "Show where" (its places ringed on the
+    picture, drawn bigger while shown: at 64 px a ring was a dot) and its one-tap fix where one mends it, else what to
+    do; then "Sews well at N mm: …". Measured on the picture at the sewn size, in the worker beside `keptParts`:
+    `artPicture` once per picture and colour count on the learned copy, `artShapes` on the labelled working copy
+    (`res` px per mm, the digitizer's own labels).
+  | Finding | Measure | Said when | Fix |
+  |---|---|---|---|
+  | `text` | rows of 3+ letter-like pieces of one colour (0.8-40 mm tall, at most 1.6x as wide, stroke at most 0.45 of the height, 12-75 % of the box inked; neighbours overlapping half the smaller height, under 1.8x taller, under 0.8 of the taller apart; not all one size; strokes within 30 %; 7 in 10 on one baseline), joined letters beside them absorbed | the smallest row's middle height under `ART.text` 6 mm (any style) | the smallest Size in 5 mm steps that brings it to 6 mm, if the hoop holds it; else "add the words in Design your own" |
+  | `small` | pieces of one colour 0.5 mm² (keptParts' part) to `ART.dot` 4 mm² and under `ART.detail` 2.5 mm across, not lettering | 3 or more, Filled, not a photo, no left-out note (that one rings and fixes them) | the Size that brings three in four to 2.5 mm |
+  | `thin` | ridges of each colour's own (3,4) chamfer distance under `ART.line` 1 mm wide along 3 mm or more, not lettering. A ridge: along x or y, both ways, the colour's edge within its own width and nothing deeper (a plain "local top" took stair-steps on slanted edges and every straight edge: 64 lines on a bold logo) | Filled, not a photo | the Size that brings three in four to 1 mm |
+  | `blend` | share of the ink in smooth ramps: over 17 px of the learned copy the colour moves 3-50 ΔE with no step over a third and no back and forth | flat picture, share at least `ART.blend` 0.12 (the corpus gradient 0.32; JPEG logos 0.06-0.11, clean art under 0.03) | `ART.fewest` 4 thread colours: fewer, bolder bands |
+  | `colours` | flat pixels (under 4 ΔE to their four neighbours) grouped 12 apart, groups of 1 % or more | flat picture, more than the colours sewn (not asked: the fabric's colour closed in is one more) | as many thread colours as that, up to 8 |
+  | `background` | the picture's border (1 % deep) grouped 10 apart: its main group's share | under `ART.page` 0.8, not see-through, no frame, background left unstitched | leave out the sewn colours holding 10 % of the border or more |
+  - Texture and photos are the headline's (`flatShare`): for a photo the specks and thin lines are its texture and
+    are not counted one by one; colours and blends are judged only on a flat picture.
+  - What the external pictures and the corpus get: `picture_corpus.sh ... "art"` logs it under each case (and
+    `ext=etsy_1,…&fillonly&art` for `tests/external/images`). Guard: the corpus's `check: { say, never }` per drawing
+    (a bold logo and one colour say nothing; the gradient says `blend`, the thin logo `text` and `thin`, `busy_back`
+    `background`, polka dots' 5 mm "dots" `text`).
+  - Known: a row of three florets on one baseline can read as lettering (etsy_3); script lettering joined into one
+    piece is not found as lettering; the colour count of a soft picture is high, so it is said only on flat ones.

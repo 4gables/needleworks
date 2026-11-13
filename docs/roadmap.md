@@ -291,8 +291,8 @@ stitch round ends with a small sew-out pack.
   the makers' published specs (machines.js, cited); the machine sets the file, the checks use its field and limits.
   Left: JEF once Janome's thread order is measured (a Janome trial in the VM), Singer and the no-jump-trim machines
   (a loose-thread count for machines that cut nothing between parts), fields past 409.6 mm (writer-changes W1c)
-- [ ] **PX6 Art that stitches well**: an "ask your AI for…" guide and a check of the uploaded picture saying what
-  will and won't sew well, and why
+- [x] **PX6 Art that stitches well**: an "ask your AI for…" guide and a check of the uploaded picture saying what
+  will and won't sew well, and why (`artcheck.js`, `artwords.js`, `recipes.js` `ART`; docs/pictures.md)
 
 ## Verdict
 Strong, and kept: the machine layer (locked writer, PEC box, palette, locks, the 5 mm loose-thread rule, 24 hits

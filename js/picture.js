@@ -10,11 +10,13 @@ import { fix } from "./doctor.js";
 import { moves } from "./quality.js";
 import { LOOK, TIP, isolate } from "./words.js";
 import { safeName } from "./core/typed.js";
-import { lab } from "./core/brands.js";
+import { colourWord, lab } from "./core/brands.js";
+import { MARGIN } from "./core/machines.js";
+import { artGuide, artSaid } from "./artwords.js";
 import { COLORS as LINE_THREADS } from "./studio/ui.js";
 import { $, forgetPicture, hoop, keepPicture, kept, square, state, store, turned } from "./state.js";
 import { next } from "./focus.js";
-import { nearOwn, ownedPalette, owns, threadHtml, threadLabel } from "./threadui.js";
+import { nearOwn, ownedPalette, ownedSpools, owns, threadHtml, threadLabel } from "./threadui.js";
 import { mmText } from "./words.js";
 import { jobQueue } from "./jobs.js";
 import { busy, escapeHtml, openDesign, paint, setMode, setView, showError, studio, warnUI } from "./app.js";   // (used when things happen, never while this file loads: app.js loads after it)
@@ -221,20 +223,73 @@ export function paletteUI() {
 // flat colours first, and says so. Either way one tap does the other: the test is a guess, and the person can see
 // which sews better. (The page said only "Photos won't stitch well", before any picture was chosen: a shaded cup
 // sewed as a flat white shape and nothing said why.)
+// Under it, the check of the picture at the size it is sewn (PX6: core/artcheck.js measures, artwords.js says): what
+// won't sew well and why (lettering, details and lines too small, soft blends, more colours than threads, a busy
+// background), each with "Show where" (ringed on the picture above) and its one-tap fix where one mends it, then what
+// sews well. Makers bring art from AI image tools that looks clean on screen and sews badly; "Good for stitching"
+// was said of a logo whose 3 mm lettering closed up.
 function verdictUI(r) {
   const p = state.pic, el = $("pic-verdict");
-  el.hidden = !r || p.sample || typeof r.flat !== "number"; if (el.hidden) { el.textContent = ""; return; }
-  el.dataset.kind = r.smooth ? "smoothed" : p.smooth === false || r.flat < 0.55 ? "photo" : "good";
-  el.innerHTML = r.smooth
+  el.hidden = !r || p.sample || typeof r.flat !== "number"; if (el.hidden) { el.textContent = ""; p.art = null; return; }
+  const flat = !r.smooth && p.smooth !== false && r.flat >= 0.55, sewn = (r.colors || []).filter((c) => !c.background && c.area > 0 && !p.skip.includes(c.id)).length;
+  const said = artSaid(r.art, { size: Math.min(p.size, p.max || p.size), max: p.max || p.size, colors: p.colors, most: MOST, style: p.style, flat, smoothed: !!r.smooth, lost: lostMuch(r.fine?.kept), bg: p.bg, skip: p.skip, sewn });
+  p.art = said; p.artShown = null; $("pic-thumb").classList.remove("showing");
+  el.dataset.kind = r.smooth ? "smoothed" : !flat ? "photo" : said.bad.length ? "check" : "good";
+  const head = r.smooth
     ? `<b>Shaded or textured.</b> Thread sews flat colours, so this picture was smoothed into flat areas first. Look over the preview: fine details and soft shading are simplified. <button type="button" class="link" data-verdict="rough">Don't smooth it</button>`
     : p.smooth === false ? `<b>Not smoothed.</b> Shading and texture are sewn as they are, in patches of colour. <button type="button" class="link" data-verdict="smooth">Smooth it first</button>`
-    : r.flat < 0.55 ? `<b>This picture looks shaded, like a photo.</b> Thread sews flat colours, so shading turns into patches. If areas come out flat or in the wrong colour: <button type="button" class="link" data-verdict="smooth">Smooth it first</button>`
-    : `<b>Good for stitching:</b> flat colours with clean edges.`;
+    : !flat ? `<b>This picture looks shaded, like a photo.</b> Thread sews flat colours, so shading turns into patches. If areas come out flat or in the wrong colour: <button type="button" class="link" data-verdict="smooth">Smooth it first</button>`
+    : said.bad.length ? `<b>Flat colours with clean edges</b>, but some of it won't sew well:` : `<b>Good for stitching:</b> flat colours with clean edges.`;
+  // (the sentence, what to do when no tap mends it, then the taps: "Show where" ran into the advice after it)
+  const items = said.bad.map((b, i) => `<li data-art="${b.id}">${escapeHtml(b.text)}${b.fix ? "" : ` ${escapeHtml(b.else)}`}<span class="art-do">`
+    + (b.spots?.length ? `<button type="button" class="link" data-art-show="${i}" aria-pressed="false">Show where</button>` : "")
+    + (b.fix ? `<button type="button" class="link" data-art-fix="${i}">${escapeHtml(b.fix.label)}</button>` : "") + "</span></li>").join("");
+  const help = said.bad.length || !flat ? ` <button type="button" class="link" data-art-guide>How to make art that stitches well</button>` : "";
+  el.innerHTML = `<p>${head}</p>${items ? `<ul class="art-list">${items}</ul>` : ""}${said.good || help ? `<p>${escapeHtml(said.good)}${help}</p>` : ""}`;
 }
 $("pic-verdict").onclick = (e) => {
-  const b = e.target.closest("[data-verdict]"), p = state.pic; if (!b) return;
+  const p = state.pic;
+  const show = e.target.closest("[data-art-show]");
+  if (show) {
+    // (ringed on the picture above, in place of the parts left out; tapped again, back to those)
+    const i = +show.dataset.artShow, on = p.artShown !== i;
+    p.artShown = on ? i : null;
+    for (const b of $("pic-verdict").querySelectorAll("[data-art-show]")) b.setAttribute("aria-pressed", String(on && +b.dataset.artShow === i));
+    // (the picture drawn bigger while its places are ringed: at a phone's 64 px a ring was a dot)
+    markThumb(on ? p.art.bad[i].spots : lostMuch(p.fine?.kept) ? p.fine.kept.spots : null);
+    $("pic-thumb").classList.toggle("showing", on);
+    if (on) $("pic-thumb").scrollIntoView({ block: "nearest", behavior: "smooth" });
+    return;
+  }
+  const fx = e.target.closest("[data-art-fix]");
+  if (fx) {
+    const o = p.art?.bad[+fx.dataset.artFix]?.fix?.over; if (!o) return;
+    if (o.size) { p.size = o.size; $("pic-size").value = o.size; $("pic-size-out").textContent = sizeLabel(o.size); }
+    if (o.colors) { p.colors = o.colors; p.skip = []; p.swap = {}; $("pic-colors").value = o.colors; $("pic-colors-out").textContent = String(o.colors); }
+    if (o.skip) p.skip = o.skip;
+    makePicture(); return;
+  }
+  if (e.target.closest("[data-art-guide]")) { const g = $("pic-guide"); g.open = true; guideUI(); g.querySelector("summary").focus(); g.scrollIntoView({ block: "nearest", behavior: "smooth" }); return; }
+  const b = e.target.closest("[data-verdict]"); if (!b) return;
   p.smooth = b.dataset.verdict === "smooth"; p.skip = []; p.swap = {};
   makePicture();
+};
+// "Make art that stitches well": the rules with their numbers at the size this hoop sews (recipes.js `ART`), and a
+// prompt to copy into an AI image tool, filled in from what they type, the hoop's shape and the threads they own.
+function guideUI() {
+  const h = hoop(), turn = !!state.turn.picture && !square(), w = (turn ? h.h : h.w) - 2 * MARGIN, ht = (turn ? h.w : h.h) - 2 * MARGIN;
+  const colours = owns() ? [...new Map(ownedSpools().map((s) => [s.hex.toLowerCase(), { name: colourWord(s.hex), hex: s.hex }])).values()] : [];
+  const g = artGuide({ sizeMm: Math.max(w, ht), w, h: ht, colours, most: MOST, subject: $("pic-guide-subject").value });
+  $("pic-guide-rules").innerHTML = g.rules.map((t) => `<li>${escapeHtml(t)}</li>`).join("");
+  $("pic-guide-prompt").value = g.prompt; $("pic-guide-tip").textContent = g.tip;
+}
+$("pic-guide").addEventListener("toggle", () => { if ($("pic-guide").open) guideUI(); });
+$("pic-guide-subject").addEventListener("input", guideUI);
+$("pic-guide-copy").onclick = async () => {
+  guideUI();
+  const t = $("pic-guide-prompt"), said = $("pic-guide-said");
+  try { await navigator.clipboard.writeText(t.value); said.textContent = "Copied: paste it into your AI tool."; }
+  catch { t.focus(); t.select(); said.textContent = "Selected: copy it with Ctrl+C (⌘C on a Mac)."; }
 };
 // The fabric's colour inside the design (white lettering on a badge, a jersey's white diamonds) is part of it and is
 // sewn; the same colour round the design is the fabric. Both said, with the one tap that leaves it out or sews it again:
@@ -585,6 +640,7 @@ function setThumb(blob) {
 // The parts of the picture left out, ringed on its thumbnail (`spots`: fractions of the copy the colours were learned
 // from, keptParts); none: the plain picture again. ("A very thin line is left out" didn't say which: a child's
 // dinosaur had lost its eye and nobody could see where.)
+// Also the places the check of the picture points at ("Show where", verdictUI).
 function markThumb(spots) {
   const p = state.pic, b = p.bitmap, thumb = $("pic-thumb"), key = spots?.length ? JSON.stringify([p.key, p.bg, p.edge, spots]) : "";
   if (!b || key === (p.marked || "")) return;
@@ -596,8 +652,9 @@ function markThumb(spots) {
   const box = p.bg && !p.edge && p.box ? p.box : { sx: 0, sy: 0, sw: b.width, sh: b.height }, u = Math.max(c.width, c.height) / 90;
   for (const [x0, y0, x1, y1] of spots) {
     const X = (box.sx + ((x0 + x1) / 2) * box.sw) * k, Y = (box.sy + ((y0 + y1) / 2) * box.sh) * k;
-    const r = Math.max(((x1 - x0) * box.sw * k) / 2, ((y1 - y0) * box.sh * k) / 2, u) + 1.5 * u;
-    g.beginPath(); g.arc(X, Y, r, 0, 2 * Math.PI);
+    // (an ellipse round the part's box: a circle round a line of lettering covered the whole picture)
+    const rx = Math.max(((x1 - x0) * box.sw * k) / 2, u) + 1.5 * u, ry = Math.max(((y1 - y0) * box.sh * k) / 2, u) + 1.5 * u;
+    g.beginPath(); g.ellipse(X, Y, rx * (rx > 3 * ry ? 1.08 : 1), ry, 0, 0, 2 * Math.PI);
     g.lineWidth = 2.2 * u; g.strokeStyle = "#fff"; g.stroke(); g.lineWidth = 1.2 * u; g.strokeStyle = "#d1005a"; g.stroke();
   }
   thumb.src = c.toDataURL(); thumb.alt = "Your picture, with the parts that are left out ringed";

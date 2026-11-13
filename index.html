@@ -128,8 +128,24 @@
         <div id="pic-parts" class="pic-parts" role="group" aria-label="Which part to sew"></div>
         <p class="hint">Sewn on its own, a part gets all the thread colours and the whole Size to itself.</p>
       </fieldset>
-      <p class="hint pic-verdict" id="pic-verdict" role="status" hidden></p>
+      <div class="hint pic-verdict" id="pic-verdict" role="status" hidden></div>
       <p class="hint" id="pic-sample-note" hidden>Showing a sample flower. Choose your own picture above to stitch it instead.</p>
+      <details class="pic-guide" id="pic-guide">
+        <summary>Make art that stitches well</summary>
+        <p class="hint">Making a picture with ChatGPT, Gemini, Midjourney or another AI image tool, or drawing one? Art like this sews cleanly:</p>
+        <ul class="pic-guide-rules" id="pic-guide-rules"></ul>
+        <div class="field">
+          <label for="pic-guide-subject">What should the picture show?</label>
+          <input id="pic-guide-subject" type="text" autocomplete="off" placeholder="a fox curled up asleep">
+        </div>
+        <div class="field">
+          <label for="pic-guide-prompt">Ask your AI tool for it like this</label>
+          <textarea id="pic-guide-prompt" rows="7" readonly></textarea>
+          <p class="pic-guide-do"><button type="button" class="ghost" id="pic-guide-copy">Copy the prompt</button> <span class="hint inline" id="pic-guide-said" role="status"></span></p>
+          <p class="hint" id="pic-guide-tip"></p>
+          <p class="hint">Then save the picture it makes and choose it above: the check under the picture says what will sew well.</p>
+        </div>
+      </details>
       <div id="pic-settings" class="settings" hidden>
         <fieldset class="field">
           <legend>Style</legend>

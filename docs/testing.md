@@ -95,7 +95,8 @@ Automated checks that each guard a bug class (add a line with every new guard):
     parts get: compare failures with the same `--only` set. Open: a corpus name with a line-separator character
     (\u2028/\v) is two names in the names batch (the app's `tidy` splits it) but one in the test's `refused` check.
   - Pictures unlike the samples: `tests/picture_corpus.sh CDP HP OUT [query]` (~1.5 min; 26 seeded drawings x styles x
-    sizes; open cases in its `KNOWN` list with a reason; `?ext=etsy_N` renders the external samples).
+    sizes; open cases in its `KNOWN` list with a reason; `?ext=etsy_N` renders the external samples; `art` logs what
+    the check of the picture says under each case, and each drawing's `check: { say, never }` is checked always (`check`, not `art`: `spec.art` marks PX0's AI-style pictures)).
   - Pictures that don't look like the picture: `picture_corpus.sh` scores every case (below, "Looks like the
     picture") and fails when a kind's mean look falls 2 points under `tests/fixtures/look.json`.
   - Starters open warning-free and fit (typing "Maximilian" too): `node tests/starters.mjs CDP http://127.0.0.1:HP` (~3 min). Its first check
