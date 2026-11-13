@@ -125,6 +125,19 @@ input[type="range"] { width: 100%; accent-color: var(--accent); min-height: 32px
 .pic-parts img { max-width: 72px; max-height: 48px; object-fit: contain; }
 .pic-verdict { margin: 0; padding: 8px 12px; border-radius: 10px; border: 1.5px solid var(--line); background: var(--panel); }
 .pic-verdict[data-kind="photo"] { border-color: var(--accent); }
+.pic-verdict[data-kind="check"] { border-color: var(--warn, var(--accent)); }
+.pic-verdict p { margin: 0; }
+.pic-verdict .art-list { margin: 6px 0; padding-left: 20px; display: grid; gap: 6px; }
+.pic-verdict .art-do { display: inline-flex; flex-wrap: wrap; gap: 4px 14px; margin-left: 8px; }
+.pic-verdict .art-list .link { white-space: nowrap; }
+.drop img.showing { max-height: min(360px, 55vh); }
+.pic-guide > summary { cursor: pointer; color: var(--accent); font-weight: 600; padding: 6px 0; }
+.pic-guide[open] { display: grid; gap: 10px; padding: 4px 12px 12px; border: 1.5px solid var(--line); border-radius: 12px; background: var(--panel); }
+.pic-guide p { margin: 0; }
+.pic-guide-rules { margin: 0; padding-left: 20px; display: grid; gap: 4px; font-size: 15px; line-height: 1.45; }
+.pic-guide textarea { width: 100%; box-sizing: border-box; font: 16px/1.4 var(--body); padding: 8px 10px; border: 1.5px solid var(--field-line); border-radius: 10px; background: var(--bg); color: var(--ink); resize: vertical; }
+.pic-guide input[type="text"] { box-sizing: border-box; font: 16px/1.4 var(--body); min-height: 40px; padding: 7px 10px; border-radius: 10px; background: var(--bg); }
+.pic-guide-do { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .pic-more-threads { margin: 8px 0 2px; }
 .pic-more-threads summary { cursor: pointer; color: var(--accent); font-weight: 600; padding: 6px 0; }
 .pic-chart { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0 8px; }

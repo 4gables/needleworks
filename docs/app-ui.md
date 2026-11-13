@@ -161,6 +161,17 @@ Reference for this part of Needleworks: the rules, the reason for each (it stops
   sews the picture once more with specks kept and rings what only that has (`v.marks`, render.js `marks`). A new
   picture starts from "Leave out specks". A busy picture (150 cuts or more) says its stitches and pieces and offers
   fewer colours.
+- The verdict under the picture (`#pic-verdict`, a `div` since it holds a list) says the texture headline, then
+  the check of the picture (PX6, docs/pictures.md "Art that stitches well"): one item a finding, its sentence, what
+  to do when no tap mends it, then its links ("Show where", a fix) on their own line (beside the advice, "Show
+  where Draw them bigger…" read as one sentence). A fix sets the slider it changes (Size, Thread colours) or the
+  skipped colours and sews again; the redraw's focus is `refocus`'s. "Show where" is `aria-pressed`, rings the
+  places as ellipses round each box (a circle round a line of lettering covered the picture) and draws the
+  picture up to 360 px tall (`.showing`) while shown. Its words are `js/artwords.js`, not words.js: words.js is in
+  the first load and these are only the Picture tab's.
+- "Make art that stitches well" (`#pic-guide`) is a `details` under the verdict, reachable by Tab like every other:
+  rules, a subject box, the prompt in a read-only textarea (16 px: iOS zooms into smaller text boxes) and "Copy
+  the prompt" with its status beside it.
 - The loose-threads chip comes second in the row, and a phone's one-line row fades at its right edge.
 - The file's name: appliqué letters count with straight words (the biggest names it); the Rename dialog says the rule.
 - Sewing words explained where first used (words.js `GLOSSARY`): basting, floating, fusible web, cutter file, tacking

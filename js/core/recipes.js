@@ -83,6 +83,25 @@ export const ROWS = { solid: 0.35, standard: 0.4 };
 export const PICTURES = { fleck: 3, enclosed: 0.8, eyes: 6, start: 4, edge: 0.75,
   details: { all: { start: 0, share: 0, lone: 0 }, most: { start: 7, share: 0.1, lone: 8 } } };
 
+// Art that stitches well (PX6: the Picture tab's guide for making a picture, and its check of a picture; core/artcheck.js,
+// docs/pictures.md). What a picture needs, measured at the size it is sewn, from the digitizer's own rules:
+//   line:    mm. A line or part narrower than this gets no fill: it is sewn as one running line along its centre,
+//            thinner than drawn (digitize.js: "lines under 1 mm sew a triple run"; Ink/Stitch's satin columns from 1 mm).
+//   detail, dot: a separate piece under `dot` mm² and under `detail` mm across is a speck: left out, or sewn in the
+//            colour round it (digitize.js's specks and flecks: 4 mm² and 2.5 mm).
+//   gap:     mm. Gaps between parts of one colour narrower than this close up once sewn (digitize.js `MIN_GAP`).
+//   text:    mm tall. Lettering in a picture is sewn as filled shapes; a bold letter's strokes are about a sixth of its
+//            height, so under 6 mm they fall under `line` and its holes under `gap`. (Typed lettering in Design your
+//            own is sewn as lettering, from 4 mm: docs/lettering.md.)
+//   fewest:  thread colours a picture is asked for in the guide: 4 to digitize.js `MOST` (the Thread colours slider's
+//            top). Fewer than 4 flattens most illustrations; each one more is a thread change.
+//   blend:   share of a picture's ink in smooth colour ramps (gradients) over which they are said: they sew as bands.
+//   page:    share of the picture's edge one colour must hold for the background to be plain (found and left
+//            unsewn); under it the background is busy and sewn as part of the design.
+//   ask:     the guide's prompt asks for lines and details this many times the least, as shares of the picture: it
+//            is worked out for the hoop filled, and art is often sewn at half that; an AI tool's "thick" also varies.
+export const ART = { line: 1, detail: 2.5, dot: 4, gap: 0.5, text: 6, fewest: 4, blend: 0.12, page: 0.8, ask: 2 };
+
 // --- S1: pieces sewn in one go ---
 // Two pieces of script lettering are stitched across, not trimmed apart, when their columns are at most `gap` mm
 // apart (each is its width and `pull` mm wide), the centre lines at most `most` mm apart, or the next starts under

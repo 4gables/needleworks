@@ -276,8 +276,8 @@ stitch round ends with a small sew-out pack.
 - [ ] **PX4 Shading** (after PX1): two-colour blends by density, colour mixing for photos and gradients
 - [ ] **PX5 Every machine**: machines and hoops of Janome, Bernina, Husqvarna/Pfaff, Tajima-format machines from
   the makers' published specs; JEF once Janome's thread order is measured
-- [ ] **PX6 Art that stitches well**: an "ask your AI for…" guide and a check of the uploaded picture saying what
-  will and won't sew well, and why
+- [x] **PX6 Art that stitches well**: an "ask your AI for…" guide and a check of the uploaded picture saying what
+  will and won't sew well, and why (`artcheck.js`, `artwords.js`, `recipes.js` `ART`; docs/pictures.md)
 
 ## Verdict
 Strong, and kept: the machine layer (locked writer, PEC box, palette, locks, the 5 mm loose-thread rule, 24 hits

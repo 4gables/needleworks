@@ -4,6 +4,7 @@ import { DEFAULTS, MOST, digitize, keptParts, labelWith, learnColours, pictureIn
 import { writePES } from "./core/formats.js";
 import { turnForMachine } from "./core/design.js";
 import { nearestBrotherThread } from "./core/threads.js";
+import { artPicture, artShapes } from "./core/artcheck.js";
 
 // The colours learned from the picture's fixed-size copy, kept per picture and colour count (Size, Turn hoop and the
 // fill settings reuse them), and the last labelled working copy (moving sliders that don't change it is fast); `ref`:
@@ -33,10 +34,13 @@ self.onmessage = (e) => {
     model.full ||= labelWith(learn, m);
     if (ref?.key !== e.data.ref) ref = { key: e.data.ref, ink: pictureInk(learn, labelWith(learn, learnColours(learn, { ...opts, colors: MOST }))) };
     fine.kept = keptParts(ref.ink, model.full, design.pattern(), { w: img.width, h: img.height, res, origin }, crop, opts);
+    // what will sew well and what won't (core/artcheck.js): the picture once per colour count, its shapes at this size
+    model.art ||= artPicture(learn, model.full);
+    const art = { ...model.art, ...artShapes(analysis, res, crop, opts.skip || []) };
     // digitized in the sideways hoop when turned; the file always loads in the machine's orientation
     const pattern = opts.turn ? turnForMachine(design.pattern()) : design.pattern();
     const bytes = writePES(pattern);
-    self.postMessage({ id, ok: true, pattern, bytes, summary, fine,
+    self.postMessage({ id, ok: true, pattern, bytes, summary, fine, art,
       colors: a.colors, merged: analysis.merged, closed: analysis.closed || 0, flat: m.flat, smooth: !!m.smooth, framed: !!analysis.frame, owned: a.owned, labels: a.labels, w: a.w, h: a.h, res }, [bytes.buffer]);
   } catch (err) {
     self.postMessage({ id, ok: false, error: err.message || String(err), code: err.code });

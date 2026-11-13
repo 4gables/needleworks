@@ -95,7 +95,8 @@ Automated checks that each guard a bug class (add a line with every new guard):
     parts get: compare failures with the same `--only` set. Open: a corpus name with a line-separator character
     (\u2028/\v) is two names in the names batch (the app's `tidy` splits it) but one in the test's `refused` check.
   - Pictures unlike the samples: `tests/picture_corpus.sh CDP HP OUT [query]` (~1.5 min; 26 seeded drawings x styles x
-    sizes; open cases in its `KNOWN` list with a reason; `?ext=etsy_N` renders the external samples).
+    sizes; open cases in its `KNOWN` list with a reason; `?ext=etsy_N` renders the external samples; `art` logs what
+    the check of the picture says under each case, and each drawing's `art: { say, never }` is checked always).
   - Starters open warning-free and fit (typing "Maximilian" too): `node tests/starters.mjs CDP http://127.0.0.1:HP` (~3 min). Its first check
     (every starter opens on the 5x7 with no problem above a tip and Download on) also runs in steps_lint's starter
     loop; the 4x4, long-name and turned cut-file passes are starters.mjs's alone. Not folded into studio_batch: the
