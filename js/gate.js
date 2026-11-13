@@ -6,7 +6,11 @@
 // goes back with it to be said in plain words. Until 2026-10-31 each exit made its own checks: a 121-colour PES was
 // saved byte for byte, and a names ZIP was saved before its files were judged. tests/gate.test.mjs fails if any other
 // file starts a download or a share.
-import { validatePES } from "./core/formats.js";
+// Other machines' files (DST, EXP, VP3: `format`, docs/formats-out-spec.md section 8): the PES of the same pattern is
+// judged exactly as above (stitches, fit, the machine's rules: the only check there is), then the file is written from
+// that pattern and read back: the same needle points and colour changes, or nothing is handed over.
+import { readEmbroidery, validatePES } from "./core/formats.js";
+import { WRITERS, validateOut } from "./core/formats-out.js";
 import { HARD, verdictOf } from "./quality.js";
 import { zip } from "./zip.js";
 import { safeName, uniqueName } from "./core/typed.js";
@@ -62,37 +66,47 @@ function judgeJSON(f) {
   return { ...f, ok: true, error: "", problems: [], hard: [] };
 }
 
-// One file: { name, bytes, against? (the pattern it was written from) } -> the same with ok, error
-// (why it's refused), problems (quality.js verdict) and hard (the problems the machine can't take).
-export function judge(f, hoop = null) {
+// One file: { name, bytes (an embroidery file's are always PES), against? (the pattern it was written from) } -> the
+// same with ok, error (why it's refused), problems (quality.js verdict) and hard (the problems the machine can't take).
+// `format` dst, exp or vp3: bytes become that file's (named so), the PES judged kept as `pes`.
+const EMB = /\.(pes|dst|exp|vp3)$/i;
+export function judge(f, hoop = null, format = "pes") {
   if (/\.svg$/i.test(f.name)) return judgeSVG(f);
   if (/\.dxf$/i.test(f.name)) return judgeDXF(f);
   if (/\.json$/i.test(f.name)) return judgeJSON(f);
-  if (!/\.pes$/i.test(f.name)) return no(f, "This page only saves PES files.");
+  if (!EMB.test(f.name)) return no(f, "This page only saves embroidery files.");
   const check = validatePES(f.bytes, f.against || null, hoop);
   if (!check.ok) return no(f, check.error);
   const problems = verdictOf(f.bytes), hard = problems.filter((q) => HARD.has(q.key));
-  return { ...f, ok: !hard.length, error: hard.map((q) => q.text).join(" "), problems, hard };
+  const out = { ...f, ok: !hard.length, error: hard.map((q) => q.text).join(" "), problems, hard };
+  if (!WRITERS[format] || !out.ok) return out;
+  try {
+    const pattern = f.against || readEmbroidery(f.bytes, "x.pes"), bytes = WRITERS[format](pattern, f.name.replace(EMB, ""));
+    const back = validateOut(bytes, format, pattern);
+    if (!back.ok) return no(f, back.error);
+    return { ...out, name: f.name.replace(EMB, "." + format), bytes, pes: f.bytes };
+  } catch (err) { return no(f, `The ${format.toUpperCase()} file couldn't be written: ${err.message}`); }
 }
 
-const TYPES = { pes: "application/octet-stream", zip: "application/zip", svg: "image/svg+xml", dxf: "application/dxf", json: "application/json" };
-// Every file judged, then saved (one file, or a .zip of them all when `zip` names it) or shared (`share`: { title,
-// text }, the phone's share sheet). Nothing is handed over when any file is refused. Returns { ok, files (judged),
+const TYPES = { pes: "application/octet-stream", dst: "application/octet-stream", exp: "application/octet-stream", vp3: "application/octet-stream", zip: "application/zip", svg: "image/svg+xml", dxf: "application/dxf", json: "application/json" };
+// Every file judged (`format`: embroidery files handed out as pes, dst, exp or vp3), then saved (one file, or a .zip
+// of them all when `zip` names it) or shared (`share`: { title, text }, the phone's share sheet). Nothing is handed over when any file is refused. Returns { ok, files (judged),
 // refused (the files refused), error }; a share resolves when the sheet closes.
 // File names leave as the machine's USB reader can show them (`safeName` in core/typed.js: ASCII letters, digits, _ and
 // -, never a Windows device name); a name that isn't is spelled that way here, and names in one ZIP differing only by
 // case get _2, _3 (one file on a Mac, Windows or the USB stick).
-const OK_NAME = /^[A-Za-z0-9_-]+(\.[A-Za-z]+)+$/;
+// (an extension may hold digits after its first letter: .vp3)
+const OK_NAME = /^[A-Za-z0-9_-]+(\.[A-Za-z][A-Za-z0-9]*)+$/;
 function fileName(n, used) {
-  const ext = /(\.[A-Za-z]+)+$/.exec(n)?.[0] || "", base = n.slice(0, n.length - ext.length);
+  const ext = /(\.[A-Za-z][A-Za-z0-9]*)+$/.exec(n)?.[0] || "", base = n.slice(0, n.length - ext.length);
   const b = OK_NAME.test(n) && !/^(con|prn|aux|nul|com[1-9]|lpt[1-9])$/i.test(base) ? base : safeName(base, "design");
   return uniqueName(b, used) + ext;
 }
-export function handOut(files, { hoop = null, zip: zipName = "", share = null } = {}) {
+export function handOut(files, { hoop = null, zip: zipName = "", share = null, format = "pes" } = {}) {
   const used = new Set();
-  files = files.map((f) => ({ ...f, name: fileName(f.name, used) }));
+  files = files.map((f) => ({ ...f, name: fileName(EMB.test(f.name) ? f.name.replace(EMB, "." + format) : f.name, used) }));
   if (zipName) zipName = fileName(zipName, new Set());
-  const judged = files.map((f) => judge(f, hoop)), refused = judged.filter((f) => !f.ok);
+  const judged = files.map((f) => judge(f, hoop, format)), refused = judged.filter((f) => !f.ok);
   const out = { ok: !refused.length, files: judged, refused, error: refused.map((f) => (files.length > 1 ? `${f.name}: ` : "") + f.error).join(" ") };
   if (!out.ok) return out;
   const name = zipName || files[0].name, ext = name.slice(name.lastIndexOf(".") + 1).toLowerCase();

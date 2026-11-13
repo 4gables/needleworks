@@ -6,7 +6,12 @@ Uses pyembroidery (the reader/writer Ink/Stitch ships, whose PES files are sewn 
 plus a raw byte walk of the PEC block, so it shares no code with js/core/formats.js.
 
 usage: .venv/bin/python tests/pe900_check.py [--writer-only] file.pes [more.pes ...]   -> exit 1 if any file fails
+
+A DST, EXP or VP3 file beside a PES (same name: the batch pages save them, docs/formats-out-spec.md section 9) is read
+with pyembroidery and must sew the PES file's needle points, as the Brother machine reads them from the PEC block,
+with as many colour changes.
 """
+import os
 import io
 import math
 import struct
@@ -326,7 +331,60 @@ def check(path):
     info["short_jumps"] = short
 
     info.update(stitches=len(pts), blocks=blocks, threads=len(p.threadlist))
+    more, seen = other_formats(path, cmds)
+    errs += more
+    if seen:
+        info["same_as"] = "+".join(seen)
     return errs, info
+
+
+def needle_points(entries):
+    """Spec 2.6: STITCH positions, less one at the needle point kept before it. Entries are (kind, x, y)."""
+    out = []
+    for k, x, y in entries:
+        if k == "STITCH" and (not out or out[-1] != (x, y)):
+            out.append((x, y))
+    return out
+
+
+def other_formats(path, cmds):
+    """The DST / EXP / VP3 beside a PES, read by pyembroidery, against the machine's reading of the PES (raw_pec)."""
+    errs, seen = [], []
+    # (a stitch at a jump's end is PEC's anchor: the PES writer adds it, the other formats carry only the pattern's)
+    anchor = [k == "STITCH" and i and cmds[i - 1][0] in ("JUMP", "TRIM") and cmds[i - 1][1:] == (x, y) for i, (k, x, y) in enumerate(cmds)]
+    pes_pts = []
+    for (k, x, y), a in zip(cmds, anchor):
+        if k == "STITCH" and (not pes_pts or pes_pts[-1][:2] != (x, y)):
+            pes_pts.append((x, y, a))
+    pes_changes = sum(1 for k, _, _ in cmds if k == "COLOR")
+    names = {pe.STITCH: "STITCH", pe.JUMP: "JUMP", pe.TRIM: "TRIM", pe.COLOR_CHANGE: "COLOR", pe.END: "END"}
+    for ext in ("dst", "exp", "vp3"):
+        other = path[:-4] + "." + ext
+        if not os.path.exists(other):
+            continue
+        seen.append(ext)
+        p = pe.read(other)
+        if p is None:
+            errs.append(f"{ext}: pyembroidery can't read it"); continue
+        got = needle_points([(names.get(c & pe.COMMAND_MASK, "?"), x, y) for x, y, c in p.stitches])
+        i = j = 0
+        while i < len(pes_pts) and j < len(got):
+            if abs(pes_pts[i][0] - got[j][0]) < 1e-6 and abs(pes_pts[i][1] - got[j][1]) < 1e-6:
+                i += 1; j += 1
+            elif pes_pts[i][2]:
+                i += 1
+            else:
+                break
+        while i < len(pes_pts) and pes_pts[i][2]:
+            i += 1
+        if i < len(pes_pts) or j < len(got):
+            errs.append(f"{ext}: needle point {j + 1} isn't the PES file's ({len(got)} points, the PES {len(pes_pts)})")
+        changes = sum(1 for _, _, c in p.stitches if c & pe.COMMAND_MASK == pe.COLOR_CHANGE)
+        if changes != pes_changes:
+            errs.append(f"{ext}: {changes} colour changes, the PES {pes_changes}")
+        if not p.stitches or p.stitches[-1][2] & pe.COMMAND_MASK != pe.END:
+            errs.append(f"{ext}: no END")
+    return errs, seen
 
 
 # --writer-only: judge the file format only, not stitch quality (the golden files freeze old stitches on purpose)

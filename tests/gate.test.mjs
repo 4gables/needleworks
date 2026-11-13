@@ -7,6 +7,7 @@
 import { readFileSync, readdirSync } from "fs";
 import { COLOR_CHANGE, END, STITCH, readEmbroidery, writePES } from "../js/core/formats.js";
 import { handOut, judge } from "../js/gate.js";
+import { readBack, validateOut } from "../js/core/formats-out.js";
 import { cutDXF, cutName, cutSVG } from "../js/sheet.js";
 
 let bad = 0, n = 0;
@@ -54,7 +55,7 @@ const design = (blocks, threads = blocks) => {
   return { stitches: st, threads: Array.from({ length: threads }, (_, i) => ({ color: ["#ed171f", "#0e1f7c", "#00673e"][i % 3] })) };
 };
 const good = design(2), goodBytes = writePES(good);
-const golden = readdirSync("tests/fixtures/golden").map((f) => ({ name: f, bytes: new Uint8Array(readFileSync(`tests/fixtures/golden/${f}`)) }));
+const golden = readdirSync("tests/fixtures/golden").filter((f) => f.endsWith(".pes")).map((f) => ({ name: f, bytes: new Uint8Array(readFileSync(`tests/fixtures/golden/${f}`)) }));
 for (const g of golden) ok(judge(g).ok, `golden ${g.name} refused: ${judge(g).error}`);
 ok(judge({ name: "a.pes", bytes: goodBytes, against: good }, hoop).ok, "a good file refused");
 // doesn't read back as the design it was written from
@@ -107,6 +108,24 @@ ok(!judge({ name: "x_cut.svg", bytes: cutSVG([[loop]], "x").replace('width="30mm
 ok(judge({ name: "d.needleworks.json", bytes: JSON.stringify({ needleworks: 1, pieces: [{ kind: "text", text: "Emma" }] }) }).ok, "a saved design refused");
 ok(!judge({ name: "d.needleworks.json", bytes: "{" }).ok && !judge({ name: "d.needleworks.json", bytes: '{"needleworks":1,"pieces":[]}' }).ok, "a broken saved design passed");
 ok(!judge({ name: "x.exe", bytes: new Uint8Array(10) }).ok, "an unknown file passed");
+// other machines' files (DST, EXP, VP3): the PES judged as ever, then the file written from the same pattern and read
+// back; the name and bytes are the format's, the PES kept for a fixed copy; anything the PES fails is refused too
+for (const fmt of ["dst", "exp", "vp3"]) {
+  saved = [];
+  const j = judge({ name: "a." + fmt, bytes: goodBytes, against: good }, hoop, fmt);
+  ok(j.ok && j.name === "a." + fmt && j.pes === goodBytes && validateOut(j.bytes, fmt, good).ok && readBack(j.bytes, fmt).changes === 1, `${fmt}: a good file refused or not written`);
+  r = handOut([{ name: "a.pes", bytes: goodBytes, against: good }], { hoop, format: fmt });
+  ok(r.ok && saved[0] === "a." + fmt && r.files[0].bytes !== goodBytes, `${fmt}: a good file wasn't saved as .${fmt} (${saved})`);
+  r = handOut([{ name: "a.pes", bytes: goodBytes, against: good }, { name: "a_2.pes", bytes: goodBytes, against: good }], { hoop, zip: "x.zip", format: fmt });
+  ok(r.ok && saved.at(-1) === "x.zip" && r.files.every((f) => f.name.endsWith("." + fmt)), `${fmt}: a zip of good files wasn't saved as .${fmt} files`);
+  saved = [];
+  r = handOut([{ name: "c.pes", bytes: writePES(many), against: many }], { hoop, format: fmt });
+  ok(!r.ok && !saved.length && r.files[0].hard.some((q) => q.key === "blocks"), `${fmt}: 110 colours passed`);
+  ok(!judge({ name: "a.pes", bytes: goodBytes, against: design(3) }, hoop, fmt).ok, `${fmt}: a file that isn't its design passed`);
+  // an opened file has no pattern beside it: written from the PES itself
+  const opened = judge({ name: "o.pes", bytes: goodBytes }, hoop, fmt);
+  ok(opened.ok && opened.name === "o." + fmt && validateOut(opened.bytes, fmt, readEmbroidery(goodBytes, "o.pes")).ok, `${fmt}: an opened file wasn't written`);
+}
 
 console.log(`gate: ${n} checks, ${bad} failed`);
 process.exit(bad ? 1 : 0);

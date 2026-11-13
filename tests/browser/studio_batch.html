@@ -9,6 +9,7 @@ lettering. Each is checked with <code>validatePES</code> and POSTed to <code>/sa
 <script type="module">
 import { hoop as getHoop } from "../../js/core/machines.js";
 import { readEmbroidery, writePES, validatePES } from "../../js/core/formats.js";
+import { WRITERS, validateOut } from "../../js/core/formats-out.js";
 import { APPLIQUE_FONTS, FONTS } from "../../js/core/fonts.js";
 import { BORDERS, SHAPES, compose, fileBlocks, followFrame, splitPieces } from "../../js/studio/pieces.js";
 import { STARTERS } from "../../js/studio/ui.js";
@@ -28,7 +29,17 @@ async function save(name, pieces, hoopId = "5x7", expectTooBig = false, opts = {
   const bytes = writePES(pattern), v = validatePES(bytes, pattern, hoop);
   if (!v.ok) { bad++; log(`INVALID ${name}: ${v.error}`); }
   await fetch(`/save/${name}.pes`, { method: "POST", body: bytes });
+  await saveOthers(name, pattern);
   n++;
+}
+// the same pattern as DST, EXP and VP3 beside the PES (gate's read-back here, pyembroidery's in pe900_check.py)
+async function saveOthers(name, pattern) {
+  for (const [fmt, write] of Object.entries(WRITERS)) {
+    let b; try { b = write(pattern); } catch (e) { bad++; log(`INVALID ${name}.${fmt}: ${e.message}`); continue; }
+    const r = validateOut(b, fmt, pattern);
+    if (!r.ok) { bad++; log(`INVALID ${name}.${fmt}: ${r.error}`); }
+    await fetch(`/save/${encodeURIComponent(name)}.${fmt}`, { method: "POST", body: b });
+  }
 }
 const P = (o) => ({ id: id++, x: 0, y: 0, rot: 0, color: "#0e1f7c", ...o });
 
@@ -161,7 +172,7 @@ for (const [tag, ps] of [
   for (const [i, pt] of parts.entries()) {
     const pattern = compose(pt.pieces, hoop, { marks: { pts: pt.marks, end: pt.end } }).design.pattern(), bytes = writePES(pattern), v = validatePES(bytes, pattern, hoop);
     if (!v.ok) { bad++; log(`INVALID split_${tag}_${i + 1}: ${v.error}`); }
-    await fetch(`/save/st_split_${tag}_${i + 1}.pes`, { method: "POST", body: bytes }); n++;
+    await fetch(`/save/st_split_${tag}_${i + 1}.pes`, { method: "POST", body: bytes }); await saveOthers(`st_split_${tag}_${i + 1}`, pattern); n++;
   }
 }
 log("split: done");
