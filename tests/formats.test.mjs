@@ -279,6 +279,16 @@ ok(!validatePES(new TextEncoder().encode("#PES0060" + "x".repeat(5000))).ok, "ju
       oracles++;
     }
   }
+  // a second witness, pyembroidery's own writers (spec 9; `tests/make_fixture.py pywriter`): a centred design of even
+  // size, its jumps split already. EXP and DST identical; VP3 only its stitch count (0x59-0x5C: they count every entry)
+  {
+    const c = JSON.parse(readFileSync("tests/fixtures/centred_commands.json")), p = { stitches: c.commands, threads: c.threads.map((t) => ({ color: t.color, description: t.description, brand: "" })) };
+    for (const [fmt, write] of Object.entries(WRITERS)) {
+      const ours = write(p), py = new Uint8Array(readFileSync(`tests/fixtures/centred_py.${fmt}`)), allowed = fmt === "vp3" ? [0x59, 0x5a, 0x5b, 0x5c] : [];
+      const diff = [...ours.keys()].filter((i) => ours[i] !== py[i] && !allowed.includes(i));
+      ok(ours.length === py.length && !diff.length, `${fmt}: differs from pyembroidery's writer at ${diff.slice(0, 8)} (${ours.length} vs ${py.length} bytes)`);
+    }
+  }
   // errors, as writePES words them
   for (const [fmt, write] of Object.entries(WRITERS)) {
     let e = ""; try { write({ stitches: [[0, 0, J], [0, 0, E]], threads: [] }); } catch (err) { e = err.message; }
@@ -300,7 +310,7 @@ ok(!validatePES(new TextEncoder().encode("#PES0060" + "x".repeat(5000))).ok, "ju
       console.log(`${fmt}: damage caught ${caught}/50 (a flip in the header text or a thread name can't move a stitch)`);
     }
   }
-  console.log(`other formats: ${checked} golden files (Appendix B byte for byte), ${oracles} read back by pyembroidery as written`);
+  console.log(`other formats: ${checked} golden files (Appendix B byte for byte), ${oracles} read back by pyembroidery as written; a centred one as pyembroidery's writers write it`);
 }
 
 console.log(fail ? `${fail} failures` : "all passed");

@@ -49,7 +49,8 @@ Automated checks that each guard a bug class (add a line with every new guard):
 - Other formats (DST, EXP, VP3; `docs/formats-out-spec.md` 9): golden files and Appendix B's SHA-256 in
   `formats.test.mjs`, compared there with pyembroidery's reading of them (`tests/make_fixture.py oracle
   tests/fixtures/golden/*.{dst,exp,vp3}` by hand after a golden file changes; the JSON is committed); every
-  re-encoded sample and fuzz design read back by `validateOut`. `pe900_check.py` reads a DST/EXP/VP3 beside a PES
+  re-encoded sample and fuzz design read back by `validateOut`; a centred design against pyembroidery's own writers
+  (`make_fixture.py pywriter`: EXP and DST identical, VP3 but its stitch count). `pe900_check.py` reads a DST/EXP/VP3 beside a PES
   with pyembroidery and wants the PES's needle points as the machine reads the PEC (anchor stitches after jumps
   aside) and as many changes; the batch pages save all three beside each PES (504 of 504 at W5).
 - Writer drift: golden bytes (`formats.test.mjs`). Machine-readable PEC: `pe900_check.py`, `validatePES` on every

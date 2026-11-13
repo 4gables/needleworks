@@ -8,7 +8,12 @@ Read our DST / EXP / VP3 golden files back (docs/formats-out-spec.md section 9, 
 file changes, the JSON is committed beside it):
   .venv/bin/python tests/make_fixture.py oracle tests/fixtures/golden/*.dst tests/fixtures/golden/*.exp tests/fixtures/golden/*.vp3
 Each FILE gets FILE.json: { stitches: [[x, y, "STITCH" | "JUMP" | "TRIM" | "COLOR_CHANGE" | "STOP" | "END"]], threads }.
+
+pyembroidery's own DST / EXP / VP3 writers as a second witness (spec section 9): a commands JSON already normalised,
+its jumps split here by spec section 2.4 (so pyembroidery re-encodes nothing), written to PREFIX.dst/.exp/.vp3:
+  .venv/bin/python tests/make_fixture.py pywriter tests/fixtures/centred_commands.json tests/fixtures/centred_py
 """
+import math
 import json
 import sys
 
@@ -26,6 +31,31 @@ def oracle(path):
     with open(path + ".json", "w") as f:
         json.dump({"stitches": stitches, "threads": threads}, f, separators=(",", ":"))
         f.write("\n")
+
+
+def pywriter(src, prefix):
+    ref = json.load(open(src))
+    cmd = {0: pe.STITCH, 1: pe.JUMP, 2: pe.TRIM, 3: pe.STOP, 4: pe.END, 5: pe.COLOR_CHANGE}
+    for fmt, limit in (("dst", 121), ("exp", 127), ("vp3", 127)):
+        p = pe.EmbPattern()
+        for t in ref["threads"]:
+            th = pe.EmbThread()
+            th.set_color(*[int(t["color"][i:i + 2], 16) for i in (1, 3, 5)])
+            th.description = t.get("description")
+            th.brand = ""
+            p.add_thread(th)
+        ex = ey = 0
+        for x, y, c in ref["commands"]:
+            if c in (0, 1):
+                dx, dy = x - ex, y - ey
+                n = math.ceil(max(abs(dx), abs(dy)) / limit)
+                for i in range(1, n):  # (round() is half-to-even, as pyRound)
+                    p.add_stitch_absolute(pe.JUMP, ex + round(dx * i / n), ey + round(dy * i / n))
+                p.add_stitch_absolute(cmd[c], x, y)
+                ex, ey = x, y
+            else:
+                p.add_stitch_absolute(cmd[c], ex, ey)
+        pe.write(p, f"{prefix}.{fmt}")
 
 
 def main(src, dst, version="6"):
@@ -46,5 +76,7 @@ if __name__ == "__main__":
     if sys.argv[1] == "oracle":
         for f in sys.argv[2:]:
             oracle(f)
+    elif sys.argv[1] == "pywriter":
+        pywriter(*sys.argv[2:])
     else:
         main(*sys.argv[1:])
