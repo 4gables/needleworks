@@ -80,6 +80,14 @@ export const ROWS = { solid: 0.35, standard: 0.4 };
 //             piece of a colour that needs a start of its own is left out when it would sew under `start` mm of
 //             thread and under `share` of its colour's biggest piece; so is one that only a jump reaches and that
 //             sews under `lone` mm. "all" leaves nothing out (v26).
+// Clean shapes (core/regions.js `cleanShapes`), before a picture's stitches are planned. `band` mm: a blend band's
+// pixels within this of both colours go to the nearer (pieces up to twice it wide); `between`: a colour is a blend of
+// two when its Lab distances to them add to under this times theirs; `side`: the second colour has this share of the
+// band's edge at least. `fleck` mm²: pieces under it, `enclosed` of their edge on sewn colours, join the colour they
+// touch most, unless of `dot` mm² or more and `contrast` ΔE00 to it. `smooth` mm: the edge blur's
+// width; `thin` mm: regions narrower are lines and keep their edges. `layer` mm: a hole in a colour that only later colours
+// fill, this deep at most, is sewn under them (digitize.js build).
+export const SHAPES = { band: 0.5, between: 1.25, side: 0.2, fleck: 3, enclosed: 0.8, contrast: 25, dot: 0.3, smooth: 0.5, thin: 1, layer: 3, front: 0.5 };
 export const PICTURES = { fleck: 3, enclosed: 0.8, eyes: 6, start: 4, edge: 0.75,
   details: { all: { start: 0, share: 0, lone: 0 }, most: { start: 7, share: 0.1, lone: 8 } } };
 
