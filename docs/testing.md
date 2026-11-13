@@ -96,6 +96,8 @@ Automated checks that each guard a bug class (add a line with every new guard):
     (\u2028/\v) is two names in the names batch (the app's `tidy` splits it) but one in the test's `refused` check.
   - Pictures unlike the samples: `tests/picture_corpus.sh CDP HP OUT [query]` (~1.5 min; 26 seeded drawings x styles x
     sizes; open cases in its `KNOWN` list with a reason; `?ext=etsy_N` renders the external samples).
+  - Pictures that don't look like the picture: `picture_corpus.sh` scores every case (below, "Looks like the
+    picture") and fails when a kind's mean look falls 2 points under `tests/fixtures/look.json`.
   - Starters open warning-free and fit (typing "Maximilian" too): `node tests/starters.mjs CDP http://127.0.0.1:HP` (~3 min). Its first check
     (every starter opens on the 5x7 with no problem above a tip and Download on) also runs in steps_lint's starter
     loop; the 4x4, long-name and turned cut-file passes are starters.mjs's alone. Not folded into studio_batch: the
@@ -128,3 +130,37 @@ Automated checks that each guard a bug class (add a line with every new guard):
   - One thread label per colour on every surface: surfaces.mjs "threads:" cases; damaged/short Open and empty lettering
     cases too. Monkey flags a fix that changes the pieces but not the stitches (`--start <starter id>`); ui_sweep
     `focus-back`, `menu-left-open`.
+### Looks like the picture (`tests/look.js`, roadmap PX0)
+The scoreboard and `pe900_check` say how a file sews; this says how much the sewn result looks like the picture it
+came from. Every picture_corpus case that makes a file is scored; the run ends with a table per kind and style.
+- **Render.** The file's own bytes (`readEmbroidery`, as the preview), each stitch a 0.4 mm thread lit as a cylinder
+  from the upper left with a highlight along its direction (Kajiya-Kay), later stitches over earlier ones, on the
+  picture's page colour (the commonest colour of its outermost pixels; white when see-through), 10 px per mm. Pure
+  JS: Node and the browser give the same numbers. `render` in the query writes `NAME_look.png`: the picture at the
+  stitched size beside the render. Not `js/render.js` (canvas and DOM, screen-sized, not reproducible to the bit).
+- **Picture.** The sized crop (`plan.crop`) mapped onto the same mm box (the design plus 2 mm), area-averaged.
+- **Score** (both at 0.2 mm pixels, blurred by a 0.35 mm Gaussian first, so the 0.4 mm rows and grooves of thread
+  are not error and a 2 mm shape still is; S-CIELAB's idea). Parts, each 0-1:
+  - colour: mean CIEDE2000 where both are inked (ΔE00 over 8 from the fabric); 0 at ΔE 25. Wrong threads.
+  - shape: intersection over union of the inked areas. Parts left out, bloat, a shadow sewn.
+  - outline: chamfer distance between the two edge maps (Lab gradient over 10 ΔE per mm, thinned), each edge pixel
+    capped at 2 mm, both ways; 0 at 2 mm. Edges in the wrong place, jagged or extra.
+  - detail: the share of the picture's edges with a stitched edge within 0.5 mm. Small things kept.
+  - structure: SSIM of L* at 0.4 mm pixels over the inked area and 1 mm round it (coarse scale only). Shading and
+    light/dark layout.
+  - look = 100 x (0.30 colour + 0.25 shape + 0.15 outline + 0.15 detail + 0.15 structure).
+- **Trusted because** variants of four pictures rank as a person ranks them on every run (`lookSelfTest`, failing the
+  run if not): a copy given thread rows and grooves scores 99+, and blurred (1.2 mm), shifted 1 mm, recoloured,
+  thinned (parts under 1.6 mm gone) and two-tone copies all score lower, each with its own part lowest (recoloured:
+  colour; blurred: detail; shifted: outline; thinned: shape).
+- **Reading it.** Compare a row with itself over time, not rows with each other: a line drawing and cross-stitch
+  are meant to look unlike a filled picture (line drawing ~40-45, cross-stitch ~30-45, Filled ~75-90 at the
+  baseline). A change of 1 point in a row's mean is real (the score is deterministic); 2 points down fails the run;
+  cases 3+ points down or up are listed as `worse:`/`better:`. The stitch columns beside it (stitches, trims, loose)
+  are the price: a better look bought with twice the trims is a choice, not a win.
+- **Re-save** after a round that is meant to move it: `LOOK_SAVE=1 zsh tests/picture_corpus.sh CDP HP OUT` copies
+  the run's `look.json` to `tests/fixtures/look.json`.
+- **Weak spots**: the page colour stands in for the fabric (a photo's backdrop that is not one colour counts as ink
+  left out); no pull, push or puckering, no fabric showing through thin fill; the colour part only looks where both
+  have ink, so a part left out costs shape and detail, not colour; a line drawing is scored against the filled
+  picture; the weights are chosen, not fitted to people's ratings (no rating data yet).
