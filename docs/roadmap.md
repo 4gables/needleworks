@@ -239,7 +239,9 @@ leaves a design with no setting byte-identical.
   with it, clamped (`recipes.js` `FILL_SET`); a fill's angle on a shared row grid, rows apart, stitch length, reach
   past the edge, what goes underneath; the editor's Stitches section
   - [x] record, fills and the editor (`settings.js`); batches byte-identical with no setting; `st_fillset_*` cases
-  - [ ] proven: check.sh, screenshots, merged
+  - [x] proven: check.sh (534 of 534 files pass the checker; sw.test stale hashes only, written at the release),
+    the editor at desktop and phone width
+  - [ ] merged and released
 - [ ] **Z1b Satin settings per piece** (spec 1.3)
 - [ ] **Z1c Start and end points, trim or pause after a piece** (spec 1.5, 1.6)
 - [ ] **Z2 SVG import** (spec 2)
