@@ -4,10 +4,10 @@
 # checks that have caught real bugs: ui_sweep --quick (layout, keyboard, focus), monkey (Design-tab invariants), files_flow
 # (every exit). Stitch code changed: both batches, pe900_check and the byte compare with BASELINE_DIR (then the VM).
 # Area checks only when their area changed. The rest (surfaces, files_flow --matrix, text_fuzz, engine_fuzz) are on demand.
-# Needs the venv; starts its own server (8796) and Chrome (9396, 9397); every check has a time limit.
+# Needs the venv; starts its own server (HP, default 8796; uses HP..HP+2) and Chrome (CDP, default 9396; CDP..CDP+4): parallel rounds set their own HP and CDP; every check has a time limit.
 set -u
 cd "${0:A:h}/.."
-REF=${1:-origin/main}; BASE=${2:-}; HP=8796; CDP=9396; U=http://127.0.0.1:$HP
+REF=${1:-origin/main}; BASE=${2:-}; HP=${HP:-8796}; CDP=${CDP:-9396}; U=http://127.0.0.1:$HP
 PY=/Volumes/4TB_SSD/needleworks/.venv/bin/python; OUT=${TMPDIR:-/tmp}/nw-check; mkdir -p $OUT/batch
 to() { perl -e 'alarm shift; exec @ARGV' "$@"; }   # (no `timeout` on macOS; a hung check ended a run at 0 % CPU)
 fail=0; say() { print -- "$@"; }; run() { local name=$1 secs=$2; shift 2; say "== $name"; to $secs "$@" 2>&1 | grep -E "FAIL|PROBLEM|problem|DONE|passed|failed|bad|ok:" | tail -6; (( ${pipestatus[1]} )) && fail=1; }
