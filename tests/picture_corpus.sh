@@ -4,7 +4,9 @@
 # three styles, asserts what's sewn against what was drawn (see the page's header), then runs tests/pe900_check.py on
 # every file it wrote. Takes ~2 minutes.
 # usage: tests/picture_corpus.sh CDP_PORT HTTP_PORT OUT [query]   (query e.g. "only=crayon,rules&render": render
-# writes a PNG per case beside the PES files: the drawn regions faint, the stitches over them)
+# writes a PNG per case beside the PES files: the drawn regions faint, the stitches over them; and NAME_look.png: the
+# picture at the stitched size beside its thread render). The run ends with "looks like the picture" by kind and
+# style (tests/look.js), against tests/fixtures/look.json; LOOK_SAVE=1 saves this run's as the new baseline.
 # Both ports must be free; the script starts and stops its own server and headless Chrome. Exit 1 on any problem.
 set -u
 CDP=$1 HP=$2 OUT=${3:A} Q=${4:-}
@@ -19,13 +21,16 @@ d stop > /dev/null 2>&1; d start $OUT/chrome > /dev/null; sleep 2; d nocache > /
 t=""
 for attempt in 1 2 3; do
   d goto "http://127.0.0.1:$HP/tests/browser/picture_corpus.html?v=$RANDOM&$Q" > /dev/null
-  for i in $(seq 1 120); do t=$(d eval document.title); case "$t" in *DONE*) break;; esac; sleep 5; done
+  for i in $(seq 1 200); do t=$(d eval document.title); case "$t" in *DONE*) break;; esac; sleep 5; done
   case "$t" in *DONE*) break;; esac
 done
 d eval 'document.getElementById("log").textContent' | sed 's/\\n/\n/g' > $OUT/picture_corpus.txt
 d stop > /dev/null; kill $SRV
 grep -A30 "FAIL" $OUT/picture_corpus.txt | grep -v "^  ok" | grep -v "pieces (" | grep -v "^--"
 $PY -I tests/pe900_check.py $OUT/pc_*.pes > $OUT/pe900_check.txt 2>&1
+sed -n '/^looks like the picture/,/^DONE/p' $OUT/picture_corpus.txt | grep -v '^DONE'
+grep "look check" $OUT/picture_corpus.txt | cut -c1-200
+[ "${LOOK_SAVE:-}" = 1 ] && cp $OUT/look.json tests/fixtures/look.json && echo "saved tests/fixtures/look.json"
 echo "page: $t; pe900_check: $(grep -c '^ok' $OUT/pe900_check.txt) ok, $(grep -c '^FAIL' $OUT/pe900_check.txt) failed"
 grep '^FAIL' $OUT/pe900_check.txt | cut -c1-200
 case "$t" in *"DONE "*" 0"*) ;; *) exit 1;; esac

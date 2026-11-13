@@ -2,6 +2,12 @@
 
 Reference for this part of Needleworks: the rules, the reason for each (it stops someone undoing it) and the number that proved it. Hard rules are in `AGENTS.md`. Add a lesson where its topic is, never as a round log.
 
+- Looks like the picture (roadmap PX0): `picture_corpus.sh` renders every file as thread and scores it against the
+  picture (colour, shape, outline, detail, structure; 0-100), per kind (logo, cartoon, mascot, sticker, line art,
+  watercolour, pet photo, gradient, flat illustration, and the corpus's own drawings, shapes and photos) and style,
+  against `tests/fixtures/look.json`. A picture round is better when its kinds' look rises and the stitch numbers
+  beside it don't get worse; what each part means and how to read it: `docs/testing.md`. The AI-style art is drawn
+  in `tests/browser/art.js` (ours to commit); `?ext=etsy_N` pictures get a look on their line, outside the baseline.
 - One job at a time, newest kept; restarted after 60 s. Styles: Filled (`build`), Line drawing (`lineArt`),
   Cross-stitch (`crossStitch`). No fabric selector: density is the only fabric knob.
 - Colours are learned once per picture (`learnColours`, `LEARN` 800 px copy of the content box) and labelled onto any

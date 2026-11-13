@@ -16,7 +16,9 @@ this page; ?only=name,name runs some images, ?quick one case each). Title: DONE 
 <pre id="log"></pre>
 <script type="module">
 import { DENSITY, LEARN, contentBox, cutPart, findParts, lostMuch, picturePlan, pictureImage, sewSized } from "../../js/core/digitize.js";
-import { COLOR_CHANGE, JUMP, STITCH, TRIM, designStats, validatePES } from "../../js/core/formats.js";
+import { COLOR_CHANGE, JUMP, STITCH, TRIM, designStats, readEmbroidery, validatePES } from "../../js/core/formats.js";
+import { lookScore, pageColour, renderThreads, sourceGrid, toRGBA, variantRules, variants } from "../look.js";
+import { ART } from "./art.js";
 import { hoop as getHoop } from "../../js/core/machines.js";
 import { distanceTransform, label } from "../../js/core/raster.js";
 import { peak, verdictOf } from "../../js/quality.js";
@@ -293,6 +295,16 @@ const PICS = [
   })() },
 ];
 
+// Looks like the picture (tests/look.js): every case is rendered as thread from its own file and scored against the
+// picture; reported per kind and style with the change from tests/fixtures/look.json. The corpus's own drawings by kind,
+// and the AI-style art of tests/browser/art.js (no drawn regions to check: only the file's checks and the look)
+const KINDS = { logo: "logo_bold_1c logo_regular_2c logo_thin_3c text_dots jpeg_logo lavender_title", drawing: "rules crayon marker pastel_lines doodle_sheet child_drawing ground_line ground_line_inset",
+  shapes: "outline_vs_filled png_clear png_badge tiny_50px huge_6000px one_colour near_identical framed panel very_dark dark_on_black white_inside white_diamonds polka_dots",
+  gradient: "gradient soft_shadow", photo: "photo_noise jpeg_flower" };
+for (const p of PICS) p.kind = Object.keys(KINDS).find((k) => KINDS[k].split(" ").includes(p.name)) || (p.name.startsWith("stitched_") ? "stitched sheet" : "other");
+for (const a of ART) PICS.push({ ...a, art: true, colours: false, n: 6, layers: [{ role: "art", draw: (c, r) => a.draw(c, r) }],
+  cases: [["fill", 100, 6], ["fill", 60, 6], ["line", 100, 4], ["cross", 100, 4]] });
+
 // draw a picture's layers onto canvas c at scale k; `only`: draw that layer alone in black (its mask)
 function paint(spec, k, only = -1) {
   const w = Math.round((spec.w || W) * k), h = Math.round((spec.h || H) * k), c = new OffscreenCanvas(w, h), ctx = c.getContext("2d", { willReadFrequently: true });
@@ -481,6 +493,72 @@ async function renderLabels(tag, r) {
   await fetch(`/save/${tag}_labels.png`, { method: "POST", body: await c.convertToBlob() });
 }
 
+// ---------- looks like the picture (tests/look.js) ----------
+// The file as the preview reads it (its own bytes, its own thread colours), drawn as thread at 10 px per mm on the
+// picture's page colour, against the picture at the stitched size over the same box (the sized crop and 2 mm round it).
+const PPM = 10, WORSE = 2;   // (WORSE: a kind's mean look this many points under the baseline fails the run)
+async function look(tag, src, r, plan, turn) {
+  const Wmm = plan.w / r.res, Hmm = plan.h / r.res, box = [-Wmm / 2 - 2, -Hmm / 2 - 2, Wmm / 2 + 2, Hmm / 2 + 2];
+  const A = sourceGrid(src.d, src.w, src.h, { box, ppm: PPM, fabric: src.fabric, map: [plan.crop.sx + plan.crop.sw / 2, plan.crop.sy + plan.crop.sh / 2, plan.crop.sw / Wmm, plan.crop.sh / Hmm] });
+  // (the file's coordinates start where its writer put them: moved onto the pattern's, which the plan is centred on)
+  const file = readEmbroidery(r.bytes), a = designStats(r.pattern).bounds, b = designStats(file).bounds;
+  const B = renderThreads(file, { box, ppm: PPM, fabric: src.fabric, turn, shift: [a[0] - b[0], a[1] - b[1]] });
+  if (RENDER) await savePair(`${tag}_look`, A, B);
+  return lookScore(A.img, B.img, A.w, A.h, PPM, src.fabric);
+}
+// ?render: the picture at the stitched size beside its thread render
+async function savePair(name, A, B) {
+  const c = new OffscreenCanvas(A.w * 2 + 20, A.h), g = c.getContext("2d");
+  g.fillStyle = "#808080"; g.fillRect(0, 0, c.width, c.height);
+  g.putImageData(new ImageData(toRGBA(A.img, A.w, A.h), A.w, A.h), 0, 0); g.putImageData(new ImageData(toRGBA(B.img, B.w, B.h), B.w, B.h), A.w + 20, 0);
+  await fetch(`/save/${name}.png`, { method: "POST", body: await c.convertToBlob() });
+}
+// the score's own check: made-up variants of a few pictures (texture, blur, a shift, wrong colours, thin parts gone,
+// two tones) must rank as a person ranks them (tests/look.js variantRules)
+async function lookSelfTest() {
+  const bad = [];
+  for (const name of ["logo_regular_2c", "art_cartoon_cat", "art_photo_dog", "art_water_flowers"]) {
+    const spec = PICS.find((p) => p.name === name), bitmap = await picture(spec), box = contentBox(bitmap), Wmm = 80, Hmm = (80 * box.sh) / box.sw;
+    const c = new OffscreenCanvas(bitmap.width, bitmap.height), g = c.getContext("2d"); g.drawImage(bitmap, 0, 0);
+    const d = g.getImageData(0, 0, c.width, c.height).data, fabric = pageColour(d, c.width, c.height);
+    const A = sourceGrid(d, c.width, c.height, { box: [-Wmm / 2 - 2, -Hmm / 2 - 2, Wmm / 2 + 2, Hmm / 2 + 2], ppm: PPM, fabric, map: [box.sx + box.sw / 2, box.sy + box.sh / 2, box.sw / Wmm, box.sh / Hmm] });
+    const v = variants(A.img, A.w, A.h, PPM, fabric), broken = variantRules(v);
+    log(`  look check ${name}: ${Object.entries(v).map(([k, s]) => `${k} ${s.look}`).join(", ")}${broken.map((b) => "\n       FAIL " + b).join("")}`);
+    bad.push(...broken);
+  }
+  return bad;
+}
+async function lookReport() {
+  const selfBad = await lookSelfTest();
+  if (selfBad.length) problems++;
+  let base = null;
+  try { base = await (await fetch(`../fixtures/look.json?v=${Math.random()}`)).json(); } catch {}
+  const rows = new Map(), out = { cases: {}, kinds: {} }, worse = [], drops = [];
+  for (const x of results) if (x.look) {
+    const k = `${x.kind} ${x.style}`; if (!rows.has(k)) rows.set(k, []); rows.get(k).push(x);
+    out.cases[x.tag] = { kind: x.kind, style: x.style, ...x.look, stitches: x.stitches, trims: x.trims, loose: x.loose };
+    const was = base?.cases?.[x.tag]; if (was) drops.push([x.look.look - was.look, x.tag, was.look, x.look.look]);
+  }
+  const mean = (xs, f) => xs.reduce((t, x) => t + f(x), 0) / Math.max(1, xs.length), f1 = (v) => v.toFixed(1), f2 = (v) => v.toFixed(2);
+  log(`\nlooks like the picture, by kind and style (look 0-100; parts 0-1; [change from tests/fixtures/look.json on the same cases])`);
+  log(`  ${"kind style".padEnd(26)} cases  look   [chg]  colour shape outline detail struct  dE00  | stitches trims loose`);
+  for (const [k, xs] of [...rows].sort((p, q) => p[0].localeCompare(q[0]))) {
+    const m = (f) => mean(xs, f), common = xs.filter((x) => base?.cases?.[x.tag]);
+    const chg = common.length ? mean(common, (x) => x.look.look) - mean(common, (x) => base.cases[x.tag].look) : null;
+    if (chg !== null && chg <= -WORSE) worse.push(`${k} ${f1(chg)}`);
+    out.kinds[k] = { cases: xs.length, look: +f1(m((x) => x.look.look)), colour: +f2(m((x) => x.look.colour)), shape: +f2(m((x) => x.look.shape)), outline: +f2(m((x) => x.look.outline)), detail: +f2(m((x) => x.look.detail)), structure: +f2(m((x) => x.look.structure)), dE: +f1(m((x) => x.look.dE)), stitches: Math.round(m((x) => x.stitches)), trims: +f1(m((x) => x.trims)), loose: +f1(m((x) => x.loose)) };
+    const o = out.kinds[k];
+    log(`  ${k.padEnd(26)} ${String(xs.length).padStart(5)} ${f1(o.look).padStart(5)} ${(chg === null ? "[new]" : `[${chg >= 0 ? "+" : ""}${f1(chg)}]`).padStart(7)}  ${f2(o.colour).padStart(6)} ${f2(o.shape).padStart(5)} ${f2(o.outline).padStart(7)} ${f2(o.detail).padStart(6)} ${f2(o.structure).padStart(6)} ${f1(o.dE).padStart(5)}  | ${String(o.stitches).padStart(8)} ${f1(o.trims).padStart(5)} ${f1(o.loose).padStart(5)}`);
+  }
+  const all = results.filter((x) => x.look);
+  log(`  ${"all".padEnd(26)} ${String(all.length).padStart(5)} ${f1(mean(all, (x) => x.look.look)).padStart(5)}`);
+  drops.sort((p, q) => p[0] - q[0]);
+  for (const [d, tag, a, b] of drops.filter((x) => x[0] <= -3).slice(0, 10)) log(`  worse: ${tag} ${f1(a)} -> ${f1(b)}`);
+  for (const [d, tag, a, b] of drops.filter((x) => x[0] >= 3).slice(-5).reverse()) log(`  better: ${tag} ${f1(a)} -> ${f1(b)}`);
+  if (worse.length) { problems += worse.length; log(`  FAIL look worse by ${WORSE}+ points: ${worse.join(", ")}`); }
+  await fetch("/save/look.json", { method: "POST", body: JSON.stringify(out, null, 1) });
+}
+
 // Open cases: what's still wrong and why it's left
 const KNOWN = {
   pc_soft_shadow_fill_s60_c2: "2 threads for 3 colours: the shadow's darkest core, where it meets the lettering, joins the orange; with 3 threads or more it's left out",
@@ -508,7 +586,9 @@ const results = [];
 let cases = 0, problems = 0;
 const out = [];
 async function run(spec) {
-  const t0 = performance.now(), bitmap = await picture(spec), reg = spec.empty ? null : regions(spec);
+  const t0 = performance.now(), bitmap = await picture(spec), reg = spec.empty ? null : spec.art ? { pieces: [], k: 1 } : regions(spec);
+  // (the picture's own pixels and page colour, for the look score)
+  const src = (() => { const c = new OffscreenCanvas(bitmap.width, bitmap.height), g = c.getContext("2d"); g.drawImage(bitmap, 0, 0); const d = g.getImageData(0, 0, c.width, c.height).data; return { d, w: c.width, h: c.height, fabric: pageColour(d, c.width, c.height) }; })();
   const list = spec.cases || (QUICK ? [["fill", 100, Math.max(1, spec.n)]] : [["fill", 60, Math.max(1, spec.n)], ["fill", 120, 6], ["line", 100, Math.max(1, spec.n)], ["cross", 100, Math.max(1, spec.n)], ...(spec.extra || [])]);
   log(`${spec.name}: ${bitmap.width}x${bitmap.height}, ${reg ? reg.pieces.length : 0} pieces (${Math.round(performance.now() - t0)} ms)`);
   for (const [style, size, colors, turn, edge] of list) {
@@ -618,7 +698,7 @@ async function run(spec) {
       // what's left out is said (class: etsy_7's doodles, a drawing's sun rays in cross-stitch, a 1.5 mm eye, all left
       // out while the dialog said "Checked"): much left out by this page's measure and no lost note fails, and so does a
       // lost note with nothing left out
-      const note = lostMuch(r.fine?.kept), much = (gone >= 3 && gone >= 0.2 * drawn) || goneMm2 >= 0.1 * drawnMm2;
+      const note = lostMuch(r.fine?.kept), much = drawn > 0 && ((gone >= 3 && gone >= 0.2 * drawn) || goneMm2 >= 0.1 * drawnMm2);
       if (much && !note) bad.push(`${gone} of ${drawn} drawn pieces (${(100 * goneMm2 / Math.max(drawnMm2, 1e-9)).toFixed(0)}% of the area) left out without a note`);
       if (!note && spec.lost?.includes(`${style}_s${size}`)) bad.push(`no lost note (${r.fine?.kept?.lost} of ${r.fine?.kept?.parts} parts left out)`);
       if (note && !gone && goneMm2 < 0.01 * drawnMm2) bad.push(`a lost note (${r.fine.kept.lost} of ${r.fine.kept.parts} parts) with nothing drawn left out`);
@@ -647,16 +727,18 @@ async function run(spec) {
       // trims: a jump per sewable piece at most, plus two a colour (cross-stitch and line drawings join pieces), and
       // no more than 1 per cm² sewn beyond that
       const budget = Math.round(1.2 * need + 2 * thread.length + 2 + sewnMm2 / 100);
-      if (trims > budget) bad.push(`${trims} trims (budget ${budget}: ${need} pieces, ${(sewnMm2 / 100).toFixed(1)} cm²)`);
+      if (trims > budget && !spec.art) bad.push(`${trims} trims (budget ${budget}: ${need} pieces, ${(sewnMm2 / 100).toFixed(1)} cm²)`);
       if (RENDER) await render(tag, pat, turn, reg, toMm);
       if (style === "fill") res.holes = holes(r, at);
+      res.look = await look(tag, src, r, plan, turn);
       Object.assign(res, { stitches: st.stitches, trims, loose, peak: pk, threads: thread.length, size: `${st.widthMm.toFixed(0)}x${st.heightMm.toFixed(0)}`, perCm2: +(trims / Math.max(0.01, sewnMm2 / 100)).toFixed(2), lost: +(r.fine?.lost || 0).toFixed(3), kept: r.fine?.kept && `${r.fine.kept.lost}/${r.fine.kept.parts} ${(100 * r.fine.kept.share).toFixed(1)}% big ${r.fine.kept.big.toFixed(1)}`, note: lostMuch(r.fine?.kept), gone: `${gone}/${drawn}`, tries: r.tries });
     }
     // (cases still open, said so rather than hidden: they print as KNOWN and don't count)
     const known = KNOWN[tag];
+    Object.assign(res, { name: spec.name, kind: spec.kind, style });
     res.bad = bad; res.known = !!(known && bad.length); results.push(res);
     if (bad.length && !known) problems++;
-    log(`  ${bad.length ? (known ? "KNOWN" : "FAIL") : "ok  "}${known && bad.length ? " (" + known + ")" : ""} ${tag} ${res.ms} ms ${res.stitches ?? ""} st ${res.trims ?? ""} trims ${res.loose ?? ""} loose peak ${res.peak ?? ""} ${res.size ?? ""} lost ${res.kept ?? ""} (drawn ${res.gone ?? ""})${res.note ? " NOTE" : ""} tries ${res.tries?.length ?? ""} flat ${res.flat ?? ""}${res.holes ? ` holes ${res.holes.mm2} mm² ${(100 * res.holes.share).toFixed(1)}% ${res.holes.blobs}` : ""}${bad.map((b) => "\n       " + b).join("")}`);
+    log(`  ${bad.length ? (known ? "KNOWN" : "FAIL") : "ok  "}${known && bad.length ? " (" + known + ")" : ""} ${tag} ${res.ms} ms ${res.stitches ?? ""} st ${res.trims ?? ""} trims ${res.loose ?? ""} loose peak ${res.peak ?? ""} ${res.size ?? ""} lost ${res.kept ?? ""} (drawn ${res.gone ?? ""})${res.note ? " NOTE" : ""} tries ${res.tries?.length ?? ""} flat ${res.flat ?? ""}${res.look ? ` look ${res.look.look} (c ${res.look.colour} s ${res.look.shape} o ${res.look.outline} d ${res.look.detail} st ${res.look.structure})` : ""}${res.holes ? ` holes ${res.holes.mm2} mm² ${(100 * res.holes.share).toFixed(1)}% ${res.holes.blobs}` : ""}${bad.map((b) => "\n       " + b).join("")}`);
   }
 }
 // The separate parts of a picture (findParts): as many as were drawn apart, none for a picture of one thing, and each
@@ -687,9 +769,11 @@ for (const name of Q.get("ext")?.split(",") || []) {
     const tag = `ext_${name}_${style}_s${size}_c${colors}`, t1 = performance.now(), s = await sew(bitmap, { tag, style, size, colors });
     if (s.error) { log(`  ${tag}: ${s.code} ${s.error}`); continue; }
     const st = designStats(s.r.pattern), sx = s.plan.crop.sx, sy = s.plan.crop.sy;
+    const c0 = new OffscreenCanvas(bitmap.width, bitmap.height), g0 = c0.getContext("2d"); g0.drawImage(bitmap, 0, 0);
+    const d0 = g0.getImageData(0, 0, c0.width, c0.height).data, lk = await look(tag, { d: d0, w: c0.width, h: c0.height, fabric: pageColour(d0, c0.width, c0.height) }, s.r, s.plan, false);
     await fetch(`/save/${tag}.pes`, { method: "POST", body: s.r.bytes });
     if (RENDER) { await render(tag, s.r.pattern, false, { pieces: [] }, () => [0, 0]); await renderLabels(tag, s.r); }
-    log(`  ${tag} ${Math.round(performance.now() - t1)} ms ${st.stitches} st ${st.trims} trims, ${Math.round(Math.max(st.widthMm, st.heightMm))} mm, threads ${s.r.pattern.threads.map((t) => t.description).join(", ")}, left out ${s.r.fine.kept.lost}/${s.r.fine.kept.parts} ${(100 * s.r.fine.kept.share).toFixed(1)}%${lostMuch(s.r.fine.kept) ? " NOTE" : ""}${verdictOf(s.r.bytes).map((q) => " QUALITY " + q.key).join("")} flat ${s.r.flat?.toFixed(2)}${s.r.smooth ? " smoothed" : ""}${style === "fill" ? ((hl) => ` holes ${hl.mm2} mm² ${(100 * hl.share).toFixed(1)}% ${hl.blobs}`)(holes(s.r, threadMap(s.r.pattern, false))) : ""}`);
+    log(`  ${tag} ${Math.round(performance.now() - t1)} ms ${st.stitches} st ${st.trims} trims, ${Math.round(Math.max(st.widthMm, st.heightMm))} mm, threads ${s.r.pattern.threads.map((t) => t.description).join(", ")}, left out ${s.r.fine.kept.lost}/${s.r.fine.kept.parts} ${(100 * s.r.fine.kept.share).toFixed(1)}%${lostMuch(s.r.fine.kept) ? " NOTE" : ""}${verdictOf(s.r.bytes).map((q) => " QUALITY " + q.key).join("")} flat ${s.r.flat?.toFixed(2)}${s.r.smooth ? " smoothed" : ""} look ${lk.look} (c ${lk.colour} s ${lk.shape} o ${lk.outline} d ${lk.detail} st ${lk.structure})${style === "fill" ? ((hl) => ` holes ${hl.mm2} mm² ${(100 * hl.share).toFixed(1)}% ${hl.blobs}`)(holes(s.r, threadMap(s.r.pattern, false))) : ""}`);
   }
 }
 // (?ext pictures' parts, each on its own: how flat it reads, smoothed or not, and its threads)
@@ -705,10 +789,11 @@ for (const name of Q.has("extparts") ? Q.get("ext")?.split(",") || [] : []) {
     log(`  ${tag} flat ${s.r.flat.toFixed(2)}${s.r.smooth ? " smoothed" : ""}, threads ${s.r.pattern.threads.map((t) => t.description).join(", ")}`);
   }
 }
-for (const spec of PICS) if (!ONLY || ONLY.includes(spec.name)) { await run(spec); if (!spec.empty) await parts(spec); }
+for (const spec of PICS) if (!ONLY || ONLY.includes(spec.name)) { await run(spec); if (!spec.empty && !spec.art) await parts(spec); }
 window.RESULTS = results;
 { const hs = results.filter((x) => x.holes); log(`holes: ${hs.reduce((t, x) => t + x.holes.mm2, 0).toFixed(1)} mm² in ${hs.reduce((t, x) => t + x.holes.blobs, 0)} bare patches over ${hs.length} filled cases`); }
 await fetch("/save/picture_corpus.json", { method: "POST", body: JSON.stringify(results) });
+await lookReport();
 log(`DONE ${cases} cases, ${problems} with problems`);
 document.title = `DONE ${cases} ${problems}`;
 </script>
