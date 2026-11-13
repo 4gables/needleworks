@@ -15,7 +15,8 @@ measurements behind each number are in the code's comments.
   `opened.js` (Open tab), `along.js` (Sew along, names dialog), `threadui.js` (thread labels, brands, Threads I
   own), `focus.js`, `onitem.js`. A section never uses app.js while it loads, only when something happens. Picture and Open code is
   loaded after the first design is up, or at once when its tab or a dropped file needs it (app.js `tabCode`).
-- `js/core/`: `formats.js` (PES writer, readers, `validatePES`), `threads.js` (PEC palette), `recipes.js` (every
+- `js/core/`: `formats.js` (PES writer, readers, `validatePES`), `formats-out.js` (DST, EXP, VP3 writers and the
+  gate's read-back of them, from `docs/formats-out-spec.md`; never touches `formats.js`), `threads.js` (PEC palette), `recipes.js` (every
   stitch number and limit, with its reason: read here, never re-typed), `design.js` (`Design`, locks, `finish`,
   `relieve`), `density.js` (hits per mm² at every offset), `geom.js`, `colour.js`, `raster.js` (skeleton, stroke
   graph), `text.js` (`renderWord`), `fonts.js`, `glyphs.js`, `fill.js` (tatami, travel router, `fillPolygon`),
@@ -73,7 +74,8 @@ measurements behind each number are in the code's comments.
   `write_pes(..., {"version": 6})` plus the box; coordinates half-to-even (`pyRound`); stitches over 7 mm and jumps
   over 121 mm split; every jump written as a trim (no uncut-jump flag 0x10).
 - **Every download goes through `validatePES()`**: the source's needle movements (PEC's zero-length anchors after
-  jumps ignored), an END, enough threads, toggle bytes 2,1,2… (as Brother writes), fit in the field less 2 mm.
+  jumps ignored), an END, enough threads, toggle bytes 2,1,2… (as Brother writes), fit in the field less 2 mm. A DST, EXP
+  or VP3 is the PES of the same pattern judged so, then read back (`validateOut`): the same needle points and changes.
 - **PEC palette:** 62-64 are appliqué codes on Brother machines, not pyembroidery's Orange/Cream Yellow:
   `PEC_MATCH` excludes them (inkstitch/pyembroidery#140). Two colours never share a thread, so label threads with
   `machineThreads()` (or an opened file's palette), never plain `nearestBrotherThread()`, or site and machine disagree.

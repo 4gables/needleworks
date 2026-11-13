@@ -53,7 +53,9 @@ function sameCover(f, src, p, scale) {
 const dirs = ["tests/fixtures/golden", "tests/external/pes"].filter(existsSync);
 let n = 0, bad = 0, sorted = 0;
 const bounds = (p) => { const s = p.stitches.filter((q) => q[2] === 0 || q[2] === 1), xs = s.map((q) => q[0]), ys = s.map((q) => q[1]); return [Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys)]; };
-for (const dir of dirs) for (const f of readdirSync(dir).filter((x) => /\.(pes|dst)$/i.test(x))) {
+// (the golden PES files and the samples; the golden DST/EXP/VP3 are the writers' own vectors, one with an empty
+// colour block on purpose, which this doesn't open as a design: docs/formats-out-spec.md 2.3)
+for (const dir of dirs) for (const f of readdirSync(dir).filter((x) => (dir.endsWith("golden") ? /\.pes$/i : /\.(pes|dst)$/i).test(x))) {
   const d = readEmbroidery(new Uint8Array(readFileSync(`${dir}/${f}`)), f);
   checkup(d);
   const src = coverage(d);

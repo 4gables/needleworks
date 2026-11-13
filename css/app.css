@@ -393,6 +393,11 @@ ul.problems { margin: 0; padding-left: 18px; list-style: disc; display: grid; ga
 .extras { flex-basis: 100%; display: flex; justify-content: flex-end; gap: 18px; margin: -4px 2px 0; }
 .extras .link:disabled { opacity: .45; cursor: default; }
 .cut-files { white-space: nowrap; color: var(--muted); font-size: 14px; }
+/* which machine the file is for (PES unless changed), and what that means when it isn't Brother's */
+.file-for { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); font-size: 14px; white-space: nowrap; }
+.file-for select { min-height: 32px; padding: 4px 8px; font-size: 14px; color: var(--ink); max-width: 100%; }
+.file-for-note { flex-basis: 100%; order: 9; text-align: right; }
+@media (max-width: 699px), (max-height: 559px) { .file-for-note { text-align: center; } }
 @media (max-width: 699px), (max-height: 559px) { .extras { justify-content: center; } }
 
 /* sew sheet: only printed, black on white, 1:1 */

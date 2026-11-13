@@ -48,6 +48,7 @@ const FILES = {
   "js/core/fonts.js": "17f00207b7a5ae85ec8ae5059a1a7122a0ab059cd27a70f27e607db74790e5ce",
   "js/core/glyphs.js": "5923a80f5f9c7d8be7e271af557783d7b3ee46c00bf0c4185f8840f344e99433",
   "js/core/formats.js": "6c635b29d843e7eb112ad773f92f79b26ea0ad17769889104b271faa2915b76e",
+  "js/core/formats-out.js": "",
   "js/core/geom.js": "63e2280fc822305b2b65dc8822f567108e9df2ebdeb18a0f40b5ea9be929ef0a",
   "js/core/colour.js": "6d55cc04f540ea7ad064709d4c3bd5160d07a87ae4a6e60fa02d857312a7d559",
   "js/core/density.js": "fc507b2818e7cdb700d52d88ac328a784b89ddac6f609fcc469b95c4805a237e",

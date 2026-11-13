@@ -13,7 +13,8 @@ import { BLOCK, LOOK, LOOK_HEAD, TIP, TIP_HEAD, isolate, problemsHtml, problemsI
 import { brief, monogramHelp, safeName, tidy, uniqueName, withSwash } from "./core/typed.js";
 import { BRANDS, apart, brotherNum, chartSpools, exampleSpools, lab, nearestSpool, nearestSpools, ownSpoolOf, spools } from "./core/brands.js";
 import { COLORS as LINE_THREADS, initStudio, savedDesign } from "./studio/ui.js";
-import { $, designHoop, designTurned, forgetPicture, hoop, keepPicture, kept, shownHoop, square, state, store, toMachine, turnCut, turned, turnedFile } from "./state.js";
+import { $, designHoop, designTurned, fileFormat, forgetPicture, hoop, keepPicture, kept, outName, shownHoop, square, state, store, toMachine, turnCut, turned, turnedFile } from "./state.js";
+import { OUT_FORMATS } from "./core/formats-out.js";
 import { keepFocus, keyboard, live, next } from "./focus.js";
 import "./onitem.js";   // (it sets itself up: nothing here calls into it)
 import { along, namesFor } from "./along.js";
@@ -101,7 +102,7 @@ export function setView(v) {
   if (state.step != null && !(v?.steps > state.step)) showStep(null);   // the design changed under a step view
   $("turn").setAttribute("aria-pressed", turned());
   $("turn").disabled = square(); $("turn").title = square() ? "A square hoop is the same either way round." : "Turn the hoop sideways, so a long design can use the hoop's long side.";
-  if (!v) { $("rename-open").hidden = $("another-open").hidden = true; $("dl-warn").hidden = true; $("facts").innerHTML = ""; $("threads").innerHTML = ""; $("download").disabled = true; $("download").textContent = "Download PES"; $("share").disabled = true; $("sheet-print").disabled = $("along-open").disabled = true; $("cut-files").hidden = true; $("names-open").hidden = true; paint(); return; }
+  if (!v) { $("rename-open").hidden = $("another-open").hidden = true; $("dl-warn").hidden = true; $("facts").innerHTML = ""; $("threads").innerHTML = ""; $("download").disabled = true; $("download").textContent = `Download ${fileFormat().short}`; $("share").disabled = true; $("sheet-print").disabled = $("along-open").disabled = true; $("cut-files").hidden = true; $("names-open").hidden = true; paint(); return; }
   // the preview is the file: decode the PES bytes and draw those, not the design they were made from
   if (!v.file) {
     // (a design moved onto the hoop's centre to be written, `shift`: drawn back where its pieces are, so the selection
@@ -191,7 +192,7 @@ export function setView(v) {
   if (fits && !v.split && !v.verdict) qTimer = setTimeout(() => { if (state.view === v) { v.verdict = verdictOf(v.bytes); warnUI(v); } }, 250);
   // (and the size controls: "Largest that fits the 5x7" stayed after the hoop was changed to 4x4 on another tab)
   if (state.mode === "open" && state.opened) { tabs.opened.openInfo(v, st, fits); if ($("doc-scale")) tabs.opened.sizeUI(); }
-  $("download").textContent = v.split ? `Download ${v.split.length} files (.zip)` : !fits ? "Too big for this hoop" : blocked ? v.blockLabel || "Fix the lettering first" : v.action || `Download ${v.filename}`;
+  $("download").textContent = v.split ? `Download ${v.split.length} files (.zip)` : !fits ? "Too big for this hoop" : blocked ? v.blockLabel || "Fix the lettering first" : v.action || `Download ${outName(v.filename)}`;
   // (the whole name where the button cuts it short)
   $("download").title = $("download").textContent;
   paint();
@@ -492,7 +493,8 @@ $("share").hidden = !canShareFile();
 function shareText(v) {
   const blocks = v.cache?.blocks || [], mt = machineThreadList(v), sheet = told(v.sheet, blocks, mt, v.filename), steps = sheet.steps;
   // (copy it to a USB stick: how it's picked on the machine is step 1, as everywhere)
-  const lines = [`Embroidery file for a ${hoop().machineName} (${hoop().name}). Copy it to a USB stick.`];
+  const f = fileFormat(), lines = [state.fileFormat === "pes" ? `Embroidery file for a ${hoop().machineName} (${hoop().name}). Copy it to a USB stick.`
+    : `Embroidery file (${f.short}) for ${f.machines} machines. Copy it to a USB stick. ${formatNote()}`];
   if (turnedFile()) lines.push("", $("done-turn").textContent);
   // (what's still wrong, and worth knowing, as every other surface says it: before the steps, so a long list of steps
   // can't cut it off)
@@ -511,7 +513,7 @@ function shareText(v) {
 }
 $("share").onclick = async () => {
   const v = state.view; if (!v) return;
-  const r = handOut([{ name: v.filename, bytes: v.bytes, against: v.verifyAgainst }], { hoop: hoop(), share: { title: v.filename, text: shareText(v) } });
+  const r = handOut([{ name: v.filename, bytes: v.bytes, against: v.verifyAgainst }], { hoop: hoop(), format: state.fileFormat, share: { title: outName(v.filename), text: shareText(v) } });
   if (!r.ok) { toast("Sending stopped: " + r.error); return; }
   try {
     await r.shared;
@@ -528,7 +530,7 @@ addEventListener("keydown", (e) => {
   e.preventDefault();
   if (document.querySelector("dialog[open]")) return;
   const b = $("download");
-  if (b.disabled) { toast(`${b.textContent.trim() === "Download PES" ? "Nothing to download yet" : b.textContent.trim()}${$("error").textContent ? ": the note over the preview says why." : "."}`); return; }
+  if (b.disabled) { toast(`${/^Download [A-Z0-9]+$/.test(b.textContent.trim()) ? "Nothing to download yet" : b.textContent.trim()}${$("error").textContent ? ": the note over the preview says why." : "."}`); return; }
   b.focus(); b.scrollIntoView({ block: "nearest" });
 });
 $("download").onclick = () => {
@@ -538,7 +540,7 @@ $("download").onclick = () => {
   // opened file's PEC header listing 2 threads for 1 block was saved "Checked")
   // (a design in two hoopings: one file per hooping, in a .zip, each proven like any other download)
   const files = v.split ? v.split.map((p) => ({ name: p.filename, bytes: writePES(p.pattern), against: p.pattern })) : [{ name: v.filename, bytes: v.bytes, against: v.verifyAgainst }];
-  const r = handOut(files, { hoop: hoop(), zip: v.split ? v.filename : "" });
+  const r = handOut(files, { hoop: hoop(), zip: v.split ? v.filename : "", format: state.fileFormat });
   // (a file the machine can't take isn't saved: the dialog says why and offers a fixed copy when one helps)
   if (!r.ok && !r.files.some((f) => f.hard.length)) { showError("Download stopped: " + r.error); return; }
   if (r.ok && v === state.views.design) studio.downloaded();
@@ -567,13 +569,14 @@ function fixedCopy(bytes, problems) {
 export const fixedName = (name) => name.replace(/_fixed(?=[_.])/g, "").replace(/(\.\w+)$/, "_fixed$1");
 // files [{ name, bytes, problems }] that fail, with their fixed copies: the fixes and what's still wrong, in words
 function badFiles(files) {
-  return files.filter((f) => f.problems.length).map((f) => ({ ...f, fixed: fixedCopy(f.bytes, f.problems) }));
+  // (judged as another format, a file's PES is `pes`: the fix works on that)
+  return files.filter((f) => f.problems.length).map((f) => ({ ...f, fixed: fixedCopy(f.pes || f.bytes, f.problems) }));
 }
 // the fixed copies saved: one file, or the whole zip again with the bad files swapped
 function saveFixed(files, bad, zipName) {
-  if (!zipName) return handOut([{ name: fixedName(bad[0].name), ...bad[0].fixed }], { hoop: hoop() });
+  if (!zipName) return handOut([{ name: fixedName(bad[0].name), ...bad[0].fixed }], { hoop: hoop(), format: state.fileFormat });
   const swap = new Map(bad.filter((b) => b.fixed).map((b) => [b.name, b.fixed]));
-  return handOut(files.map((f) => ({ name: f.name, ...(swap.get(f.name) || { bytes: f.bytes, against: f.against }) })), { hoop: hoop(), zip: fixedName(zipName) });
+  return handOut(files.map((f) => ({ name: f.name, ...(swap.get(f.name) || { bytes: f.pes || f.bytes, against: f.against }) })), { hoop: hoop(), zip: fixedName(zipName), format: state.fileFormat });
 }
 // what's wrong with saved files, in plain words, and a button for the fixed copies when every one could be fixed
 export function badReport(el, files, zipName) {
@@ -647,12 +650,16 @@ function downloaded(v, zipped, files = [], saved = true) {
   document.querySelector("#done .done-steps").hidden = !saved;
   $("done-checked").textContent = hardBad ? `${saved ? "It may not open or sew right" : "It wouldn't open or sew right"} ${what}: ${bad.length > 1 ? `${bad.length} of the files break` : zipped ? "one of the files breaks" : "it breaks"} a rule the machine needs.`
     : bad.length ? `It opens ${what}, but ${bad.length > 1 ? `${bad.length} of the files` : zipped ? "one of the files" : "it"} may not sew well:`
-    : part ? `It opens ${what}, but only part of the design is in it: the file it came from ends early. Download that file again if you can.` : `Checked: it opens ${what}.`;
+    : part ? `It opens ${what}, but only part of the design is in it: the file it came from ends early. Download that file again if you can.` : state.fileFormat === "pes" ? `Checked: it opens ${what}.` : `Its stitches checked as a Brother PES file: it opens ${what}.`;
   $("done-checked").className = bad.length || part ? "warn" : "good";
   $("done-zip").hidden = !zipped;
   // (as many files as were handed out: "Copy the file to a USB stick" for a ZIP of two hoopings)
-  const pes = files.filter((f) => /\.pes$/i.test(f.name)).length, many = pes > 1;
-  $("done-copy").textContent = many ? `Copy the ${pes} .pes files to a USB stick.` : "Copy the file to a USB stick.";
+  // (in the format chosen: "Copy the 2 .dst files")
+  const ext = "." + fileFormat().ext, pes = files.filter((f) => f.name.toLowerCase().endsWith(ext)).length, many = pes > 1;
+  $("done-copy").textContent = many ? `Copy the ${pes} ${ext} files to a USB stick.` : "Copy the file to a USB stick.";
+  $("done-zip").textContent = `It's a .zip: open it first (double-click it) and copy the ${ext} files inside, not the .zip. The machine can't read a .zip.`;
+  // (another machine's file: only its PES twin was checked, and what that means at the machine)
+  $("done-format").hidden = state.fileFormat === "pes"; $("done-format").textContent = formatNote();
   if (saved) savedNames().add(v.filename);
   ownNote(saved && v.filename);
   $("done-phone").hidden = !matchMedia("(pointer: coarse)").matches;
@@ -683,7 +690,30 @@ function downloaded(v, zipped, files = [], saved = true) {
   $("done-cut").hidden = !saved || !v.sheet?.cut?.length;
   modal($("done"));
 }
-$("done-turn").insertAdjacentHTML("afterbegin", TURN_PIC);   // (the note's text stays its textContent)
+$("done-turn").insertAdjacentHTML("afterbegin", TURN_PIC);
+
+// ---------- the file's format ----------
+// Brother's PES (the default, the only one checked against the machine chosen) or another machine's file with the
+// same stitches (formats-out.js; docs/formats-out-spec.md): DST for Tajima and most machines, EXP for Melco and
+// Bernina, VP3 for Husqvarna Viking and Pfaff. The machine and hoop checks stay Brother's: a DST is judged as the PES
+// it was written beside. Remembered (store `fileFormat`).
+export function formatNote() {
+  const f = fileFormat(); if (state.fileFormat === "pes") return "";
+  return `Only PES files are checked for your ${hoop().machineName}. This ${f.short} file has the same stitches, untested on ${f.machines} machines${state.fileFormat === "vp3" ? "" : ", and no thread colours (follow the thread list)"}.`;
+}
+function formatUI() {
+  $("file-for").value = state.fileFormat;
+  const note = formatNote();
+  $("file-for-note").hidden = !note; $("file-for-note").textContent = note;
+  const b = $("download");
+  if (/\.(pes|dst|exp|vp3)$/i.test(b.textContent) || /^Download [A-Z0-9]+$/.test(b.textContent)) b.textContent = b.title = b.textContent.replace(/\.(pes|dst|exp|vp3)$/i, "." + state.fileFormat).replace(/^Download [A-Z0-9]+$/, `Download ${fileFormat().short}`);
+}
+$("file-for").innerHTML = Object.entries(OUT_FORMATS).map(([k, f]) => `<option value="${k}">${f.label}</option>`).join("");
+$("file-for").onchange = (e) => {
+  state.fileFormat = OUT_FORMATS[e.target.value] ? e.target.value : "pes"; store.set("fileFormat", state.fileFormat); formatUI();
+  toast(state.fileFormat === "pes" ? `Downloads are Brother PES files, checked for the ${hoop().machineName}.` : `Downloads are ${fileFormat().short} files now, for ${fileFormat().machines} machines.`);
+};
+formatUI();   // (the note's text stays its textContent)
 // the dialog's “How to stitch it”: closed, the steps opened and shown, focus on their heading
 $("done").addEventListener("click", (e) => {
   if (!e.target.closest("[data-steps-link]")) return;

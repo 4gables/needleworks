@@ -5,6 +5,7 @@
 import { turnForMachine } from "./core/design.js";
 import { DEFAULT_MACHINE, MACHINES, hoop as getHoop } from "./core/machines.js";
 import { BRANDS, spools } from "./core/brands.js";
+import { OUT_FORMATS } from "./core/formats-out.js";
 import { toast } from "./app.js";   // (used when the browser won't keep a design: by then app.js is running)
 
 export const $ = (id) => document.getElementById(id);
@@ -61,6 +62,8 @@ export const state = {
   turn: { picture: false, design: false, open: false, ...store.get("turn", {}) },
   brand: BRANDS[store.get("brand", "")] ? store.get("brand", "") : "",   // thread brand for spool numbers ("" = Brother only)
   spools: store.get("spools", {}),   // { brand: [spool numbers owned] }
+  // the file Download makes: pes (Brother, the one the checks are for), dst, exp or vp3 (formats-out.js); remembered
+  fileFormat: OUT_FORMATS[store.get("fileFormat", "pes")] ? store.get("fileFormat", "pes") : "pes",
   // their spools from brands not charted here (Madeira), matched by colour: [{ brand, num, hex }]. Ticking the nearest
   // Brother spool stood for it, and every surface then said "Your Brother 079 Salmon Pink", a spool they didn't own
   mine: (store.get("myspools", []) || []).filter((o) => o && typeof o.brand === "string" && /^#[0-9a-f]{6}$/i.test(o.hex)),
@@ -68,6 +71,9 @@ export const state = {
 };
 if (!MACHINES[state.machine]) state.machine = DEFAULT_MACHINE;
 export const hoop = () => getHoop(state.machine, state.hoopId);
+// the chosen file format ({ ext, short, label, machines }), and a .pes name as that format's
+export const fileFormat = () => OUT_FORMATS[state.fileFormat];
+export const outName = (name) => name.replace(/\.pes$/i, "." + state.fileFormat);
 // (a square hoop turned is the same hoop: the turn is off there, or a 4x4 file came out sideways with a turn note)
 export const square = () => { const h = hoop(); return h.w === h.h; };
 export const turned = () => !!state.turn[state.mode] && !square();
