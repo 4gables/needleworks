@@ -476,6 +476,11 @@ ul.problems { margin: 0; padding-left: 18px; list-style: disc; display: grid; ga
 .st-steps b small { font-weight: 400; color: var(--muted); }
 @media (max-width: 600px) { #brand { max-width: 9.5em; } }
 #brand { max-width: 12em; }
+/* (a machine's full name is long, "Husqvarna Viking Designer EPIC 3": the select sized itself to it and pushed the
+   brand select onto a second line at 1413 px) */
+#machine { max-width: 11.5em; }
+#hoop { max-width: 13em; }
+.machine.long label:not(.sr) { display: none; }
 .doctor { list-style: none; padding: 0; margin: 0; display: grid; gap: 8px; font-size: 15px; }
 .doctor li { padding-left: 24px; position: relative; line-height: 1.4; }
 .doctor li::before { position: absolute; left: 0; top: 0; font-weight: 700; }

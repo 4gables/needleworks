@@ -10,7 +10,8 @@
 //   - `cuts`: what it does with a move between parts. A number: it trims jump stitches itself, all but those up to
 //     that many mm (Brother's "Jump Stitch Trim" and its lowest "length of jump stitch not to trim"); the loose-thread
 //     count (doctor.js shortJumps, MOVES.trimmed) is made for 5. "file": it cuts where the file says (trim codes) and
-//     its maker gives no length. null: not published.
+//     its maker gives no length. "length": it cuts moves longer than a length set on it, the
+//     range not given in words. null: not published. A machine whose maker says it cuts no jumps at all is left out.
 //   - `blocks`, `stitches`: the most colour blocks / stitches in one design, where the maker says. Every machine keeps
 //     the checker's 99 blocks (recipes.js LIMITS.blocks, the PE900's), which no maker here publishes lower.
 // Brother (read 2026-11):
@@ -23,6 +24,34 @@
 //           "embroidery patterns up to a maximum of 26 cm x 16 cm", p.48; "Using the Thread Trimming Function (Jump
 //           Stitch Trim)" and "Selecting the Length of Jump Stitch Not to Trim", pp.39-41; .pes files from a USB
 //           stick); brother-usa.com/products/nq1700e ('6" x 10" Maximum embroidery area').
+//   More Brother (read 2026-11-13; download.brother.com/welcome/<doc>, PDF pages; the manuals name product codes, the
+//   model from the support page that lists them):
+//   NQ3550W: doch102337/888g26_g30_g32_g34_om02en.pdf: extra large 26 x 16, large 18 x 13, medium 10 x 10 cm (p.98);
+//           .pes .phc .pen .dst (p.103); Jump Stitch Trim, its lengths only on the keys ("25 mm": not trimmed at 25 mm
+//           or less), so `cuts` "length" (p.95).
+//   Stellaire XE1 / XJ1: doch101722/882w80_w82_om02en.pdf and doch101717/882w70_om02en.pdf: 36 x 24, 30 x 20,
+//           24 x 24, 20 x 20, 18 x 13, 15 x 15, 10 x 10 cm (XE1 pp.14-15); .pes .phc .phx .dst .pen (XE1 p.118);
+//           "Select a setting from 5 mm to 50 mm in 5 mm increments" (XE1 p.78, XJ1 p.148).
+//   Luminaire XP3: doch102491/xp3_omemb01usca_en.pdf: fields 408 x 272, 272 x 272, 240 x 240, 180 x 130, 100 x 100
+//           (p.29); Jump Stitch Trim, its range only on the keys (p.103); doch102490/xp3_omsew02usca_en.pdf: .pes
+//           .phc .phx .dst .pen (p.196).
+//   Baby Lock (babylock.com/<model>/ pages, their instruction and reference guides and spec sheets):
+//   Flare (flare-blmfl-instruction-and-reference-guide-1): 26 x 16, 18 x 13, 15 x 15, 10 x 10 cm (pp.13-14); .pes
+//           .phc .dst (p.50); Jump Stitch Trim as the NQ3550W (p.43); "up to 200,000 stitches per design" (spec sheet).
+//   Journey (journey-bljy-instruction-and-reference-guide): 300 x 180, 180 x 130, 150 x 150, 100 x 100 (pp.16-17);
+//           .pes .phc .dst (p.232); 500,000 stitches or 125 color changes (p.233); 5 to 50 mm (p.221).
+//   Pathfinder (pathfinder-blpf-instruction-and-reference-guide): 300 x 200, 200 x 200, 180 x 130, 150 x 150,
+//           100 x 100 (pp.15-16); .pes .phc .dst, 500,000 stitches or 125 color changes (p.110); 5 to 50 mm (p.99).
+//   Altair 2 (altair2-blta2-instruction-and-reference-guide-2): 36 x 24 ... 18 x 13, 15 x 15, 10 x 10 (pp.16-17);
+//           .pes .phc .phx .dst (p.198); 5 to 50 mm (p.154).
+//   Solaris 2 (solaris-2-blsa2-instruction-and-reference-guide-embroidery-2): 408 x 272 ... 180 x 130, 100 x 100
+//           (p.31); .pes .pha .phb .phc .dst .phx (p.109); 750,000 stitches or 127 color changes (p.110); 5 to 50 mm
+//           (p.104).
+//   Frames over 160 x 260 mm are left out for now (W1c); the 2 x 6 cm frame too (no machine above lists the design
+//   size it takes). The colour-change numbers are as blocks (125 changes = 126 blocks), above the checker's 99 kept
+//   for all. Not published: the default "not to trim" length (every manual says only "initially on").
+//   Not listed, no Jump Stitch Trim (only "END COLOR TRIM" or a thread cutter): PE800 and SE1900 (doch100741, doch100730:
+//   200,000 stitches or 125 color changes), SE700, SE630, PE535, Baby Lock Aurora.
 // Janome (read 2026-11-13; www.janome.com refuses automated reading, the PDFs under janome.com/wp-content/uploads/
 // open; pages are the PDF's own, not the printed numbers):
 //   Memory Craft 500E: 2015/08/500e-le-instruction-manual.pdf: hoops SQ14b 14 cm square, RE20b 14 by 20 cm, SQ20b
@@ -86,6 +115,9 @@
 // Not listed, and why (docs/app-ui.md):
 //   - 4" x 4" Brother machines (SE700, PE545, SE600, PE535...): Brother's pages name an automatic thread cutter but
 //     no jump-stitch trimming, so every jump would be a thread to snip by hand, which nothing here counts yet.
+// Brother's frames as their manuals give them ("18 cm x 13 cm"), the long side front to back
+const F6x10 = { name: '6" × 10" hoop', w: 160, h: 260 }, F5x7 = { name: '5" × 7" hoop', w: 130, h: 180 };
+const F6x6 = { name: '6" × 6" hoop', w: 150, h: 150 }, F4x4 = { name: '4" × 4" hoop', w: 100, h: 100 };
 // Bernina's hoops for the 5 and 7 Series (each hoop's page lists the machines it fits; Maxi is 7 Series only)
 const BERNINA_5 = {
   "large-oval": { name: "Large Oval hoop", w: 145, h: 255 },
@@ -119,6 +151,39 @@ export const MACHINES = {
       "4x4": { name: '4" × 4" hoop', w: 100, h: 100 },
     },
     defaultHoop: "6x10",
+  },
+  "brother-nq3550w": {
+    brand: "Brother", model: "Innov-is NQ3550W", also: "NQ3550W", name: "Brother NQ3550W", reads: ["pes", "phc", "pen", "dst"], cuts: "length",
+    hoops: { "6x10": F6x10, "5x7": F5x7, "4x4": F4x4 }, defaultHoop: "6x10",
+  },
+  "brother-xe1": {
+    brand: "Brother", model: "Stellaire XE1 / XJ1", also: "XE1 XJ1 Innov-is", name: "Brother Stellaire", reads: ["pes", "phc", "phx", "dst", "pen"], cuts: 5,
+    hoops: { "5x7": F5x7, "6x6": F6x6, "4x4": F4x4 }, defaultHoop: "5x7",
+  },
+  "brother-xp3": {
+    brand: "Brother", model: "Luminaire XP3", also: "XP3 Innov-is", name: "Brother Luminaire XP3", reads: ["pes", "phc", "phx", "dst", "pen"], cuts: "length",
+    hoops: { "5x7": F5x7, "4x4": F4x4 }, defaultHoop: "5x7",
+  },
+  // Baby Lock: made by Brother, the same PES files and Jump Stitch Trim
+  "babylock-flare": {
+    brand: "Baby Lock", model: "Flare", also: "BLMFL", name: "Baby Lock Flare", reads: ["pes", "phc", "dst"], cuts: "length", stitches: 200000,
+    hoops: { "6x10": F6x10, "5x7": F5x7, "6x6": F6x6, "4x4": F4x4 }, defaultHoop: "6x10",
+  },
+  "babylock-journey": {
+    brand: "Baby Lock", model: "Journey", also: "BLJY", name: "Baby Lock Journey", reads: ["pes", "phc", "dst"], cuts: 5, stitches: 500000, blocks: 126,
+    hoops: { "5x7": F5x7, "6x6": F6x6, "4x4": F4x4 }, defaultHoop: "5x7",
+  },
+  "babylock-pathfinder": {
+    brand: "Baby Lock", model: "Pathfinder", also: "BLPF", name: "Baby Lock Pathfinder", reads: ["pes", "phc", "dst"], cuts: 5, stitches: 500000, blocks: 126,
+    hoops: { "5x7": F5x7, "6x6": F6x6, "4x4": F4x4 }, defaultHoop: "5x7",
+  },
+  "babylock-altair2": {
+    brand: "Baby Lock", model: "Altair 2", also: "BLTA2", name: "Baby Lock Altair 2", reads: ["pes", "phc", "phx", "dst"], cuts: 5,
+    hoops: { "5x7": F5x7, "6x6": F6x6, "4x4": F4x4 }, defaultHoop: "5x7",
+  },
+  "babylock-solaris2": {
+    brand: "Baby Lock", model: "Solaris 2", also: "BLSA2", name: "Baby Lock Solaris 2", reads: ["pes", "pha", "phb", "phc", "dst", "phx"], cuts: 5, stitches: 750000, blocks: 128,
+    hoops: { "5x7": F5x7, "4x4": F4x4 }, defaultHoop: "5x7",
   },
   // Janome: JEF is theirs, DST is read too; the DST is what they get here until JEF is made. Jump thread cutting:
   // "trim the threads if the jump thread is 3 mm or longer" (3 to 30 mm or off), and a trim code in a file is cut
@@ -258,4 +323,5 @@ export function hoop(machine = DEFAULT_MACHINE, hoopId) {
   return { ...m.hoops[id], id, machine, machineName: m.name, brand: m.brand, reads: m.reads, cuts: m.cuts, blocks: m.blocks, stitches: m.stitches };
 }
 // a hoop as its choice says it: its own name, with the field's size where the name doesn't give it
-export const hoopLabel = (h) => (/["”]|mm/.test(h.name) ? h.name : `${h.name} (${h.w} × ${h.h} mm)`);
+// (short, "RE20b (140 × 200 mm)": the header holds machine, hoop and thread brand on one line at 1413 px)
+export const hoopLabel = (h) => (/["”]|mm/.test(h.name) ? h.name : `${h.name.replace(/ hoop$/, "")} (${h.w} × ${h.h} mm)`);

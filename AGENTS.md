@@ -96,7 +96,7 @@ measurements behind each number are in the code's comments.
   design block disagreeing with PEC.
 - **Hoops** (`machines.js`): fit the field minus `MARGIN` 2 mm. PE900 5x7 = 130 x 180 mm, 4x4 = 100 x 100 mm. A design
   no 5x7 field holds is written with the 160 x 260 page (writer change W1; unproven on a 6x10 machine). Other
-  makers' machines (Janome, Bernina, Husqvarna Viking, Pfaff, Other machine DST) come with their fields, files, cutting
+  makers' machines (Baby Lock, Janome, Bernina, Husqvarna Viking, Pfaff, Other machine DST) come with their fields, files, cutting
   and limits from the maker's own manuals, each cited there; a number not published is left out. Every file is judged
   as its PES with the chosen machine's field, so no field may pass a PES stitch block's 409.6 mm.
 - **Download names are ASCII** (`safeName`: transliterates Ł ø ß æ œ đ þ, Greek, Cyrillic, Hebrew; `CON_.pes` for

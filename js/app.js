@@ -713,7 +713,7 @@ function snipsTip() {
   const c = hoop().cuts, head = "Short threads between two parts, locked at both ends: snip them after stitching.";
   if (typeof c === "number" && hoop().reads[0] === "pes") return `${head} (The machine only cuts moves longer than its “jump stitch not to trim” setting, ${c} mm at the lowest.)`;
   return typeof c === "number" ? `${head} (Counted as a Brother machine leaves them, 5 mm or less. Yours cuts moves of ${c} mm or more when its jump thread cutting is on: snip any that are left.)`
-    : `${head} (A Brother machine leaves moves of 5 mm or less uncut. ${c === "file" ? "Yours cuts where the file says" : "Your machine's maker doesn't say what it cuts"}: snip any that are left.)`;
+    : `${head} (A Brother machine leaves moves of 5 mm or less uncut. ${c === "file" ? "Yours cuts where the file says" : c === "length" ? "Yours cuts moves longer than the length set on it" : "Your machine's maker doesn't say what it cuts"}: snip any that are left.)`;
 }
 function formatUI() {
   $("file-for").value = state.fileFormat;
@@ -789,6 +789,9 @@ export function fillMachines() {
   if (!m.hoops[state.hoopId]) state.hoopId = m.defaultHoop;
   $("hoop").innerHTML = Object.entries(m.hoops).map(([k, h]) => `<option value="${k}">${escapeHtml(hoopLabel(h))}</option>`).join("");
   $("hoop").value = state.hoopId;
+  // (hoops named with their size, "RE20b (140 × 200 mm)": the MACHINE label makes way, as it does on narrower screens,
+  // or the thread brand went onto a second line at 1413 px)
+  $("hoop").parentElement.classList.toggle("long", Object.values(m.hoops).some((x) => hoopLabel(x).length > 14));
   const h = hoop();
   const max = Math.floor(Math.max(h.w, h.h) - 2 * MARGIN - 2);
   $("pic-size").max = max;
