@@ -265,9 +265,11 @@ joins PX1's shape path). Every round keeps the hard rules of `AGENTS.md`; nothin
 stitch round ends with a small sew-out pack.
 - [x] **PX-R State of the art**: papers, commercial auto-digitizers' published behaviour, where they fail;
   `docs/research/picture-sota.md` (ideas and numbers only, credited; no one's code)
-- [ ] **PX0 Looks like the picture**: a realistic thread render of a file and a score against the source picture,
+- [x] **PX0 Looks like the picture**: a realistic thread render of a file and a score against the source picture,
   beside the stitch scoreboard in the picture corpus; a corpus of AI-style art (flat illustration, logo, cartoon,
-  mascot, photo) drawn or made here
+  mascot, photo) drawn or made here. Done: `tests/look.js` (render + score), 26 pictures in
+  `tests/browser/art.js`, the "looks like the picture" table in `picture_corpus.sh`, baseline
+  `tests/fixtures/look.json` (the numbers PX1-PX4 must beat; reading them: `docs/testing.md`)
 - [ ] **PX1 Picture to clean shapes**: fewer, smoother regions; slivers merged; curves fitted; small details kept
   on purpose
 - [ ] **PX2 Stitch types like a human digitizer** (after PX1): thin strokes as satin columns, outlines as run or
