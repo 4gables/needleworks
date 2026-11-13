@@ -124,11 +124,16 @@ Reference for this part of Needleworks: the rules, the reason for each (it stops
   - The form an imported drawing joins (round Z2): a partition of the working copy into one-colour regions
     (`regionsOf`; with `measure`: area, width, box, edge to each neighbour). An SVG's filled outlines painted in
     sewing order with the later ones' overlaps removed (`docs/zigzag-spec.md` 2.6) give the same labels.
-  - Proof (2026-11, PX1), before -> after. 12 samples in the browser batch: TBD. Five held-out pictures at the same
-    three settings (Node): trims 1,593 -> 1,532, loose 75 -> 63, wasted 43 -> 36, ends 1,413 -> 1,394, bare locks
-    101 -> 97. Corpus (105 filled cases): trims 1,267 -> 1,163, loose 26 -> 22, holes 23.1 -> 22.7 mm²; look by kind
-    within 0.3 of the baseline but line art -1.3 (TBD after the linear-light fix). Bare locks on the samples rise by
-    the dots kept (each kept dot sewn on its own is 10-11 lock hits with no body: three more on etsy_1 and etsy_4).
+  - Proof (2026-11, PX1, with the Thread colours count above), before -> after. The 12 samples in the browser
+    batch: trims 1,238 -> 1,104, loose threads 62 -> 54, wasted moves 47 -> 32, thread ends 1,004 -> 994, bare locks
+    81 -> 80, files at the density limit 6 -> 5, stitches -17 % (white closed in now fabric where no shade gave way).
+    Five held-out pictures at the same three settings (Node): trims 1,593 -> 1,479, loose 75 -> 65, wasted 43 -> 32,
+    ends 1,413 -> 1,391, bare locks 101 -> 104 (one more kept dot: each dot sewn on its own is 10-11 lock hits with no
+    body). Corpus (filled): trims 1,267 -> 1,180, loose 26 -> 23, holes 23.1 -> 22.0 mm² (21 -> 20 patches), every
+    file passing pe900_check; look by kind within 0.3 of PX0's baseline except shapes -1.6 (pc_framed_..._edge: the
+    cream panel inside a sewn frame is closed-in colour and stays fabric at 3 colours, 86 -> 43), line art -1.3
+    (art_line_mandala at 100 mm, 76 -> 70: colour part 0.60 -> 0.45, cause not found), watercolour -0.9, cartoon -0.8
+    (white left as fabric). Digitizing time unchanged (etsy_8's three settings 15.2 s before, 14.3 s after).
   - Tried and dropped: sewing colours back to front by which lies on which (most of a colour's edge on another,
     twice the reverse share): samples trims 1,065 -> 1,046 and loose 44 -> 36, but held-out ends 1,380 -> 1,472;
     light-first stays.
