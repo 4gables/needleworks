@@ -46,6 +46,12 @@ Reference for this part of Needleworks: the rules, the reason for each (it stops
   for a class nothing routine can reach, and retire one it overlaps.
 ### Category checks
 Automated checks that each guard a bug class (add a line with every new guard):
+- Other formats (DST, EXP, VP3; `docs/formats-out-spec.md` 9): golden files and Appendix B's SHA-256 in
+  `formats.test.mjs`, compared there with pyembroidery's reading of them (`tests/make_fixture.py oracle
+  tests/fixtures/golden/*.{dst,exp,vp3}` by hand after a golden file changes; the JSON is committed); every
+  re-encoded sample and fuzz design read back by `validateOut`. `pe900_check.py` reads a DST/EXP/VP3 beside a PES
+  with pyembroidery and wants the PES's needle points as the machine reads the PEC (anchor stitches after jumps
+  aside) and as many changes; the batch pages save all three beside each PES (504 of 504 at W5).
 - Writer drift: golden bytes (`formats.test.mjs`). Machine-readable PEC: `pe900_check.py`, `validatePES` on every
   download, the Brother diff after writer changes.
 - App verdict = checker: `quality.js` agrees with `pe900_check.py` on every batch and sample file.

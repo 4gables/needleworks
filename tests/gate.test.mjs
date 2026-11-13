@@ -44,7 +44,8 @@ for (const [f, want] of Object.entries(EXITS)) {
 // ---- 3. the gate itself ----
 globalThis.document = { createElement: () => ({ click() { saved.push(this.download); }, remove() {} }), body: { append() {} } };
 let saved = [], shared = [];
-URL.createObjectURL = () => "blob:x"; URL.revokeObjectURL = () => {};
+let blob = null;
+URL.createObjectURL = (b) => { blob = b; return "blob:x"; }; URL.revokeObjectURL = () => {};
 Object.defineProperty(globalThis, "navigator", { value: { share: async (d) => { shared.push(d.files[0].name); } }, configurable: true });
 const hoop = { w: 130, h: 180, name: "5x7" };
 const square = (x0, n = 40) => Array.from({ length: n }, (_, i) => [x0 + (i % 2) * 20, i * 4, STITCH]);
@@ -115,9 +116,16 @@ for (const fmt of ["dst", "exp", "vp3"]) {
   const j = judge({ name: "a." + fmt, bytes: goodBytes, against: good }, hoop, fmt);
   ok(j.ok && j.name === "a." + fmt && j.pes === goodBytes && validateOut(j.bytes, fmt, good).ok && readBack(j.bytes, fmt).changes === 1, `${fmt}: a good file refused or not written`);
   r = handOut([{ name: "a.pes", bytes: goodBytes, against: good }], { hoop, format: fmt });
-  ok(r.ok && saved[0] === "a." + fmt && r.files[0].bytes !== goodBytes, `${fmt}: a good file wasn't saved as .${fmt} (${saved})`);
+  const kept = new Uint8Array(await blob.arrayBuffer());
+  ok(r.ok && saved[0] === "a." + fmt && kept.length === r.files[0].bytes.length && kept.every((v, i) => v === r.files[0].bytes[i]) && validateOut(kept, fmt, good).ok, `${fmt}: a good file wasn't saved as a .${fmt} file (${saved})`);
   r = handOut([{ name: "a.pes", bytes: goodBytes, against: good }, { name: "a_2.pes", bytes: goodBytes, against: good }], { hoop, zip: "x.zip", format: fmt });
-  ok(r.ok && saved.at(-1) === "x.zip" && r.files.every((f) => f.name.endsWith("." + fmt)), `${fmt}: a zip of good files wasn't saved as .${fmt} files`);
+  const z = new Uint8Array(await blob.arrayBuffer()), at = (s) => { const t = new TextEncoder().encode(s); return z.findIndex((_, i) => t.every((v, k) => z[i + k] === v)); };
+  ok(r.ok && saved.at(-1) === "x.zip" && r.files.every((f) => f.name.endsWith("." + fmt)) && at("a." + fmt) >= 0 && at("a.pes") < 0, `${fmt}: a zip of good files wasn't saved as .${fmt} files`);
+  // (the share sheet gets the format's file too)
+  shared = [];
+  r = handOut([{ name: "a.pes", bytes: goodBytes, against: good }], { hoop, format: fmt, share: { title: "a", text: "" } });
+  await r.shared;
+  ok(r.ok && shared[0] === "a." + fmt, `${fmt}: shared as ${shared[0]}`);
   saved = [];
   r = handOut([{ name: "c.pes", bytes: writePES(many), against: many }], { hoop, format: fmt });
   ok(!r.ok && !saved.length && r.files[0].hard.some((q) => q.key === "blocks"), `${fmt}: 110 colours passed`);

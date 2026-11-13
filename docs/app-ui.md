@@ -31,11 +31,21 @@ Reference for this part of Needleworks: the rules, the reason for each (it stops
   (`studio.selBox`; off in step view, playback, two hoopings). `showEditor` brings the editor into view. Phones:
   `#bar-undo` in the Download bar; `.link` in running text keeps its line (target grown by a ±6 px `::after`).
   `.font-row` shows each font name in its own lettering (the select stays the keyboard's way).
-- Exit gate: every file leaves through `gate.js` `handOut(files, { hoop, zip, share })` (`judge`: PES = `validatePES`
+- Exit gate: every file leaves through `gate.js` `handOut(files, { hoop, zip, share, format })` (`judge`: PES = `validatePES`
   against its design + no `HARD` rule, the rest of the verdict said in words; cut SVG = mm size, closed shapes; saved
   JSON parses with a piece). Nothing is handed over when one file is refused; a HARD fail says "Not saved" and offers a
   fixed copy; a names ZIP lists refused names under "Couldn't make". `setView` runs quality.js 250 ms after a view
   settles; the done dialog says "Checked" only when it passes, even after "Don't show this again" (`doneSeen`).
+- File for (W5, `#file-for` under Download, store `fileFormat`, default PES): Brother (PES), Tajima & most machines
+  (DST), Melco & Bernina (EXP), Husqvarna Viking & Pfaff (VP3). Every exit that makes an embroidery file takes it:
+  Download, two hoopings' ZIP, Send, the fixed copies and One for each name (a Tajima user making names wants DST
+  files, so the ZIP follows the choice). Callers still hand the gate PES bytes named `.pes`; `handOut` renames them,
+  judges the PES exactly as before (stitches, fit, HARD rules: the machine and hoop checks stay Brother's), then
+  writes the format from the same pattern (an opened file: from the PES itself) and refuses it unless `validateOut`
+  reads back the same needle points and changes. The judged file keeps the PES as `pes` for the fixed copy. Not PES:
+  a note under the choice and in the done dialog says only PES files are checked for the machine chosen, the other
+  file is untested on its machines and (DST, EXP) holds no thread colours; the dialog says "Its stitches checked as a
+  Brother PES file". The preview, sew sheet and steps stay the PES's. JEF isn't offered (spec section 7).
 - Steps (sheet.js): step 1 = how to hoop, which thread, Start; steps name the thread (`threadNames`/`nextThread`); a
   same-thread pause says "Keep the same thread on"; one sentence per action, three or more numbered (`youHtml`).
   Words (`words.js`): "pause"/"thread change" (`stopWords`/`stopsAt` only), never "stop"; "satin stitch(es)"/

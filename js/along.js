@@ -112,8 +112,8 @@ function renameNote() {
   if (cut) el.value = el.value.slice(0, 60);
   const t = tidy(el.value).trim(), as = safeName(t, "");
   $("rename-auto").hidden = !studio.title();
-  $("rename-note").textContent = (cut ? "60 letters and spaces is the most: the rest was left out. " : "") + (!t ? `Left empty, the file is named after the biggest words in the design, so the name follows what you type there: ${studio.autoName()}.pes now. A name typed here stays.`
-    : !as ? "Use some letters or numbers: the machine shows only those." : `The file will be ${as}.pes${as !== t.replace(/\s+/g, "_") ? " (the machine's screen shows plain letters, numbers, - and _)" : ""}. Saved designs, ZIPs and cutter files take this name too.`);
+  $("rename-note").textContent = (cut ? "60 letters and spaces is the most: the rest was left out. " : "") + (!t ? `Left empty, the file is named after the biggest words in the design, so the name follows what you type there: ${studio.autoName()}.${state.fileFormat} now. A name typed here stays.`
+    : !as ? "Use some letters or numbers: the machine shows only those." : `The file will be ${as}.${state.fileFormat}${as !== t.replace(/\s+/g, "_") ? " (the machine's screen shows plain letters, numbers, - and _)" : ""}. Saved designs, ZIPs and cutter files take this name too.`);
 }
 $("rename-name").addEventListener("input", renameNote);
 $("rename-name").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); $("rename-save").click(); } });
@@ -148,7 +148,7 @@ function namesSaid(n) {
   // so the second is saved as Emma_2.pes, as Make names it)
   const used = new Set(), moved = list.filter((t) => !n.refused(t)).map((t) => [t, uniqueName(safeName(t, "name"), used)]).filter(([t, f]) => f !== safeName(t, "name"));
   const said = [twice.length ? `Typed twice, made once: ${twice.map(brief).join(", ")}.` : "",
-    moved.length ? `The USB stick can't tell names apart by capitals alone, so ${moved.map(([t, f]) => `${brief(t)} is saved as ${f}.pes`).join(", ")}.` : "",
+    moved.length ? `The USB stick can't tell names apart by capitals alone, so ${moved.map(([t, f]) => `${brief(t)} is saved as ${f}.${state.fileFormat}`).join(", ")}.` : "",
     no.length ? `Can't be made: ${no.map(([t, why]) => `${brief(t)} (${why})`).join(", ")}.` : "",
     left.length ? `Past 40, left out: ${left.map(brief).join(", ")}. Make them in a second batch.` : ""].filter(Boolean);
   if (!said.length) return { text: one, warn: false };
@@ -184,7 +184,7 @@ $("names-make").onclick = async () => {
       if (!j.ok) { used.delete(f.toLowerCase()); throw new Error(j.error); }
       // (a name whose file name another one already took, ignoring case and accents: "Zoe" and "Zoë" both
       // Zoe, the second saved as Zoe_2.pes with nothing saying which was which)
-      files.push(j); made.push({ name, file: f + ".pes", renamed: f !== safeName(name, "name"), pattern, shown, smaller, pct, lines, thin, sideways, runs, size: [xh, least, own] });
+      files.push(j); made.push({ name, file: `${f}.${state.fileFormat}`, renamed: f !== safeName(name, "name"), pattern, shown, smaller, pct, lines, thin, sideways, runs, size: [xh, least, own] });
     } catch (err) { bad.push(`${brief(name)} (${/hoop fits|too big/i.test(err.message) ? "too long for the hoop" : err.message})`); if (/too long to sew clearly/.test(err.message)) small.push(name); }
   }
   $("names-make").disabled = false;
@@ -209,13 +209,14 @@ $("names-make").onclick = async () => {
   // (how much smaller, said: "(smaller)" was all a name made at 28 % said)
   // (and its loose threads, as the design's chip says them: Björk's 2 and Zoe's 1 were said nowhere)
   const notes = (m) => { const k = shortJumps(m.pattern); return [m.smaller ? `smaller, ${m.pct} %` : "", m.lines ? "on two lines" : "", m.sideways ? "hoop turned" : "", m.runs ? `runs into ${m.runs}` : "", k ? `${k} loose ${k === 1 ? "thread" : "threads"} to snip after` : ""].filter(Boolean).join(", "); };
-  $("names-thumbs").innerHTML = made.map((m, i) => `<figure data-size="${m.size.map((v) => +(v || 0).toFixed(2)).join(" ")}"><canvas data-i="${i}"></canvas><figcaption>${escapeHtml(m.name)}${m.file !== `${m.name}.pes` ? ` · ${escapeHtml(m.file)}` : ""}${notes(m) ? ` (${escapeHtml(notes(m))})` : ""}${m.thin ? `<br><strong class="names-thin">Thin line, not bold</strong>` : ""}</figcaption></figure>`).join("");
+  $("names-thumbs").innerHTML = made.map((m, i) => `<figure data-size="${m.size.map((v) => +(v || 0).toFixed(2)).join(" ")}"><canvas data-i="${i}"></canvas><figcaption>${escapeHtml(m.name)}${m.file !== `${m.name}.${state.fileFormat}` ? ` · ${escapeHtml(m.file)}` : ""}${notes(m) ? ` (${escapeHtml(notes(m))})` : ""}${m.thin ? `<br><strong class="names-thin">Thin line, not bold</strong>` : ""}</figcaption></figure>`).join("");
   for (const c of $("names-thumbs").querySelectorAll("canvas")) {
     const m = made[+c.dataset.i]; draw(c, m.shown || m.pattern, { pad: 6, fabric: "white" });   // (3 px: an arched name's top sat on the edge)
   }
   const zipName = `${n.zip || "names"}_${files.length}_${n.monogram ? "monograms" : "names"}.zip`;
   if (files.length) {
-    const r = handOut(files, { hoop: hoop(), zip: zipName });
+    // (in the format chosen beside Download, as every file the page makes: a Tajima user's names come as DST files)
+    const r = handOut(files, { hoop: hoop(), zip: zipName, format: state.fileFormat });
     if (!r.ok) { bad.push(r.error); files.length = 0; } else $("names-cancel").textContent = "Done";
   }
   // (each file through the same quality check as a single download, with fixed copies when they help)

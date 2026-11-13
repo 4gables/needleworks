@@ -109,8 +109,9 @@ export function handOut(files, { hoop = null, zip: zipName = "", share = null, f
   const judged = files.map((f) => judge(f, hoop, format)), refused = judged.filter((f) => !f.ok);
   const out = { ok: !refused.length, files: judged, refused, error: refused.map((f) => (files.length > 1 ? `${f.name}: ` : "") + f.error).join(" ") };
   if (!out.ok) return out;
-  const name = zipName || files[0].name, ext = name.slice(name.lastIndexOf(".") + 1).toLowerCase();
-  const bytes = zipName ? zip(judged.map((f) => ({ name: f.name, bytes: f.bytes }))) : files[0].bytes;
+  // (the judged file's bytes: as another format they are that file, not the PES it was judged as)
+  const name = zipName || judged[0].name, ext = name.slice(name.lastIndexOf(".") + 1).toLowerCase();
+  const bytes = zipName ? zip(judged.map((f) => ({ name: f.name, bytes: f.bytes }))) : judged[0].bytes;
   if (share) {
     out.shared = navigator.share({ files: [new File([bytes], name, { type: TYPES[ext] || "application/octet-stream" })], title: share.title, text: share.text });
     return out;
