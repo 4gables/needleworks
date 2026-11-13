@@ -83,6 +83,45 @@ Reference for this part of Needleworks: the rules, the reason for each (it stops
   "Sew the edge band too" (`opts.edge`). Lost parts are ringed on the thumbnail (`markThumb`); `#pic-size-note`
   explains a size gap. Filled keeps "eyes" (a dot of 0.6 mm2+ inside another colour, up to 6 per colour). Line drawing:
   outline bands sewn once from `tO >= 0.5 tS`; `oneInk`: no join across bare fabric between different colours.
+- Clean shapes (`regions.js` `cleanShapes`, numbers in `recipes.js` `SHAPES`; Filled only): the labelled picture is
+  made into fewer, cleaner regions before any stitch is planned, as every digitizing guide says to (Wilcom/Hatch/
+  BERNINA "Prepare Bitmap", mySewnet Despeckle, Stitch Era; `docs/research/picture-sota.md` I2, I3). In order:
+  - Blend bands: where two *sewn* colours meet, a band under 1 mm wide (`band` 0.5 mm from each side) of a colour
+    between them (Lab distances adding to under 1.25 x theirs; the second side 20 % of its edge at least) is the soft
+    edge, read as a third colour and sewn as a line of its own. Each of its pixels within 0.5 mm of both goes to the
+    colour covering more of it: the pixel's own colour halved in *linear light* (halved in Lab, a pixel a fifth
+    covered by a dark line was the line's: a mandala's 0.6 mm lines sewed 1 mm wide, look -5), grown outward from
+    both sides a step at a time (by colour alone, pixels apart from their side made dots: etsy_1 +8 magenta starts).
+    Pieces of the band left under 3 mm² go the same way. "Embroidered Flowers" on etsy_8's panel was tan halo
+    around black; now black letters. Not between the fabric and a colour: there a band is a thin thing's edge as
+    often as a blend (a stem's pale rim given to the fabric left the stem 1-2 px and broken: etsy_1 lost branches and
+    gained 38 bare locks); build()'s own rule judges those.
+  - Flecks: a piece of a sewn colour under 3 mm², 80 % of its edge on sewn colours, joins the one with body (4 mm²,
+    1.5 mm wide somewhere) it touches most, smallest first. Kept on purpose: 0.3 mm² or more at ΔE00 25 or more from
+    that colour (an eye, a highlight, a letter's stroke; by shape and a count of 6, as `foldFlecks` keeps eyes, the
+    letters of etsy_8's title went into the tan round them). Into any neighbour, two specks came to over 1.5 mm² and
+    were sewn: etsy_1 +18 trims. `foldFlecks` still runs after it (fills with body only, eyes by count).
+  - Smooth edges: one step of threshold dynamics (Merriman, Bence & Osher 1992): each colour's area blurred (three
+    box passes, 0.5 mm across in all), each pixel to the strongest colour beside it. Pixel stairs and JPEG-ragged
+    edges go, the colours still meet with no gap. Never moved: regions under 1 mm wide, a wide region's parts no
+    1 mm disc reaches (the blur took the hairlines off a script title), pieces under 4 mm² (an apostrophe rounded at
+    both ends fell under the 2 mm a mark needs and was left out) and closed-in fabric under 4 mm² (a counter). At
+    0.8 mm the held-out pictures had 12 more wasted moves and 43 more bare locks.
+  - Layers (`build`, research I3): a hole or bay in a colour's shapes under 3 mm across (`layer`: a closing of the
+    colour) that only later colours fill is sewn under them, as a person sews the shape behind whole. Cut round,
+    the rows split round each piece of shading into parts stranded behind finished rows or trimmed to. Enclosed holes
+    alone were too few to matter (a rose's shading reaches its edge). Never fabric or an earlier colour.
+  - The form an imported drawing joins (round Z2): a partition of the working copy into one-colour regions
+    (`regionsOf`; with `measure`: area, width, box, edge to each neighbour). An SVG's filled outlines painted in
+    sewing order with the later ones' overlaps removed (`docs/zigzag-spec.md` 2.6) give the same labels.
+  - Proof (2026-11, PX1), before -> after. 12 samples in the browser batch: TBD. Five held-out pictures at the same
+    three settings (Node): trims 1,593 -> 1,532, loose 75 -> 63, wasted 43 -> 36, ends 1,413 -> 1,394, bare locks
+    101 -> 97. Corpus (105 filled cases): trims 1,267 -> 1,163, loose 26 -> 22, holes 23.1 -> 22.7 mm²; look by kind
+    within 0.3 of the baseline but line art -1.3 (TBD after the linear-light fix). Bare locks on the samples rise by
+    the dots kept (each kept dot sewn on its own is 10-11 lock hits with no body: three more on etsy_1 and etsy_4).
+  - Tried and dropped: sewing colours back to front by which lies on which (most of a colour's edge on another,
+    twice the reverse share): samples trims 1,065 -> 1,046 and loose 44 -> 36, but held-out ends 1,380 -> 1,472;
+    light-first stays.
 - Filled: shapes 1 mm or wider get tatami following the outline (skeleton satin broke corners); parts under 2 x
   `THIN_PART` and lines under 1 mm sew a triple run, never dropped. Specks: under 4 mm² and 2.5 mm across, groups
   under 6 mm of line, walks under 1.5 mm (`lostLines` reports dropped fine lines). Kept: text dots on the fabric (>= 0.8 mm across, 0.6
@@ -130,7 +169,7 @@ Reference for this part of Needleworks: the rules, the reason for each (it stops
   not a rule.
 - Small details (Picture panel, Filled; `opts.details`, `recipes.js` `PICTURES.details`; Wilcom, Hatch and BERNINA
   have a "Details" slider, Stitch Era deletes 30-50 % of traced shapes): "Leave out specks" is the default, "Keep
-  all" is the rules above and nothing more (v26's bytes). A *piece* is the parts of one colour the needle reaches
+  all" is the rules above and nothing more (the clean shapes' flecks too; their bands, smoothing and layers stay). A *piece* is the parts of one colour the needle reaches
   without a cut (one's end within 2 mm of the next one's start, or in its travel region within `TRAVEL`), measured
   in mm of thread it sews.
   - Left out: a piece under 7 mm and under a tenth of its colour's biggest, and one that only a jump reaches and
