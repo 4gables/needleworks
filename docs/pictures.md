@@ -143,7 +143,9 @@ Reference for this part of Needleworks: the rules, the reason for each (it stops
   mm², within 5 mm of their colour or another such dot) and marks >= 2 mm long, 1.5x longer than wide, within 2 mm of a
   bigger piece of their colour (apostrophes). Thin shapes (< 2 mm) 0.05 mm
   pull, else 0.15. `OVERLAP` 0.35 mm under later colours, shape by shape (growing the raw mask merged specks);
-  neighbours alternate angle (+90°). `DENSITY` Standard 0.4 (the app's default; `DEFAULTS.density` is Dense) / Dense
+  neighbours alternate angle (+90°). With `direction: "auto"` (PX3; digitize.js's `form` on each part) each part takes
+  its own measured angle or curved rows, the alternation kept only where its shape doesn't say (`docs/stitch-model.md`
+  "Direction that follows the form"); the Picture panel doesn't offer it yet. `DENSITY` Standard 0.4 (the app's default; `DEFAULTS.density` is Dense) / Dense
   0.35; 0.3 fails the check (row links under 0.3 mm). Row steps split to 3 mm, row-end stitches over 4 mm halved.
 - What other tools do (public manuals and guides, no code read): the picture is cleaned before any stitch is planned.
   Wilcom EmbroideryStudio / Hatch / BERNINA "Prepare Bitmap": reduce to the threads wanted, merge like colours, and a

@@ -170,6 +170,34 @@ log("rings and borders: done");
   await save("st_fillset_blend", [P({ kind: "frame", shape: "square", border: "patch", w: 90, h: 70, fill: "#e8a900", blend: "#ed171f", color: "#770176", stitches: { fill: { angle: 0, spacing: 0.4, underlay: "edge" } } })]);
   await save("st_fillset_rings", [heart({ pattern: "contour" }, { spacing: 0.6, underlay: "none" })]);
   await save("st_fillset_carved", [patch({ w: 80, h: 80 }, { angle: 90, spacing: 0.45 }), P({ kind: "motif", motif: "star", size: 40, style: "fill", color: "#ffd900", stitches: { fill: { angle: 0 } } })]);
+  // rows that follow the form (PX3, angle "auto"): motifs (a leaf, a crescent moon, a star, a heart), patches turned
+  // and mirrored, a blend, and shapes drawn here, filled as a patch's fill is (a long diagonal leaf, a crescent, an S
+  // curve, a ring, a star, a 4 mm diamond, a bar 5 degrees off level, an L)
+  for (const [m, size] of [["leaf", 70], ["moon", 60], ["star", 50], ["heart", 45], ["fish", 70]]) await save(`st_fillset_form_${m}`, [P({ kind: "motif", motif: m, size, style: "fill", color: "#2d7a2d", stitches: { fill: { angle: "auto" } } })]);
+  await save("st_fillset_form_patches", [patch({ x: -30, shape: "heart", w: 50, h: 46, rot: 20, flip: true }, { angle: "auto" }), patch({ x: 30, shape: "oval", w: 40, h: 70 }, { angle: "auto", spacing: 0.5 })]);
+  await save("st_fillset_form_blend", [P({ kind: "frame", shape: "oval", border: "patch", w: 100, h: 50, fill: "#e8a900", blend: "#ed171f", color: "#770176", stitches: { fill: { angle: "auto" } } })]);
+  const { Design } = await import("../../js/core/design.js"), { fillPolygon } = await import("../../js/core/fill.js");
+  const T = (pts, a) => { const c = Math.cos((a * Math.PI) / 180), s = Math.sin((a * Math.PI) / 180); return pts.map(([x, y]) => [x * c - y * s, x * s + y * c]); };
+  const arc = (cx, cy, r, n = 96) => Array.from({ length: n }, (_, k) => [cx + r * Math.cos((2 * Math.PI * k) / n), cy + r * Math.sin((2 * Math.PI * k) / n)]);
+  const lens = (L, W, a) => { const up = [], dn = []; for (let k = 0; k <= 60; k++) { const t = k / 60, x = (t - 0.5) * L, y = (W / 2) * Math.sin(Math.PI * t) ** 0.8; up.push([x, -y]); dn.push([x, y]); } return [T([...up, ...dn.reverse().slice(1, -1)], a)]; };
+  const crescent = (R, r, off) => { const o = [], i = []; for (let k = 0; k < 360; k++) { const a = (2 * Math.PI * k) / 360, p = [R * Math.cos(a), R * Math.sin(a)], q = [off + r * Math.cos(-a), r * Math.sin(-a)]; if (Math.hypot(p[0] - off, p[1]) >= r) o.push(p); if (Math.hypot(...q) < R) i.push(q); }
+    const ang = (p) => (Math.atan2(p[1], p[0]) + 2 * Math.PI) % (2 * Math.PI), angi = (p) => (Math.atan2(p[1], p[0] - off) + 2 * Math.PI) % (2 * Math.PI);
+    o.sort((p, q) => ang(p) - ang(q)); i.sort((p, q) => angi(q) - angi(p)); return [[...o, ...i]]; };
+  const sband = (len, amp, w) => { const a = [], b = []; for (let k = 0; k <= 120; k++) { const t = k / 120, x = (t - 0.5) * len, y = amp * Math.sin(2 * Math.PI * t), dy = ((amp * 2 * Math.PI) / len) * Math.cos(2 * Math.PI * t), m = Math.hypot(1, dy); a.push([x - ((dy / m) * w) / 2, y + w / 2 / m]); b.push([x + ((dy / m) * w) / 2, y - w / 2 / m]); } return [[...a, ...b.reverse()]]; };
+  const star = (r1, r2) => [Array.from({ length: 10 }, (_, k) => { const a = -Math.PI / 2 + (k * Math.PI) / 5, r = k % 2 ? r2 : r1; return [r * Math.cos(a), r * Math.sin(a)]; })];
+  const SHAPED = { leaf: lens(80, 22, -35), crescent: crescent(32, 26, 12), s_curve: sband(90, 15, 10), ring: [arc(0, 0, 28), arc(0, 0, 17)], star: star(34, 14), diamond: [T([[0, -1.5], [2, 0], [0, 1.5], [-2, 0]], 0)],
+    bar: [T([[-35, -7], [35, -7], [35, 7], [-35, 7]], 5)], l_shape: [[[-25, -25], [25, -25], [25, -13], [-13, -13], [-13, 25], [-25, 25]]] };
+  for (const [name, loops] of Object.entries(SHAPED)) {
+    if (only && !new RegExp(only).test(`st_fillset_form_${name}`)) continue;
+    const hp = getHoop("brother-pe900", "5x7"), d = new Design(hp, { ease: true });
+    d.color("#1f5fbf");
+    for (const q of fillPolygon(loops, { angle: "auto", pull: 0.2 })) d.path(q);
+    const pattern = d.finish({ untiny: true }).pattern(), bytes = writePES(pattern), v = validatePES(bytes, pattern, hp);
+    if (!v.ok) { bad++; log(`INVALID st_fillset_form_${name}: ${v.error}`); }
+    await fetch(`/save/st_fillset_form_${name}.pes`, { method: "POST", body: bytes });
+    await saveOthers(`st_fillset_form_${name}`, pattern);
+    n++;
+  }
   log("fill settings: done");
 }
 

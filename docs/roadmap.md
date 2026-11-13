@@ -278,7 +278,14 @@ stitch round ends with a small sew-out pack.
     (palette), not shapes
 - [ ] **PX2 Stitch types like a human digitizer** (after PX1): thin strokes as satin columns, outlines as run or
   satin, areas as fill, dots as satin; back to front, hidden fill removed, pull by fabric
-- [ ] **PX3 Fill direction that follows the form**: each region's rows at its own angle, or curving with it
+- [x] **PX3 Fill direction that follows the form**: each region's rows at its own angle, or curving with it
+  (`docs/stitch-model.md` "Direction that follows the form")
+  - [x] each part's angle scored over a sweep, the principal axis and the edges' direction (fewer row ends, no
+    ragged edge, never more sections than today's angle); Follow the shape for patches and filled motifs; pictures
+    with `direction: "auto"` (a one-line hook in digitize.js; the Picture panel doesn't offer it yet)
+  - [x] curved rows: level lines of a fitted stripe field, never closer than the spacing, where they beat straight
+  - left: the Picture panel's choice (picture.js), and whether pictures default to it; curved rows with
+    singularities (a disc's, a star's middle) and rows that end inside a narrowing band; sewn proof
 - [ ] **PX4 Shading** (after PX1): two-colour blends by density, colour mixing for photos and gradients
 - [ ] **PX5 Every machine**: machines and hoops of Janome, Bernina, Husqvarna/Pfaff, Tajima-format machines from
   the makers' published specs; JEF once Janome's thread order is measured

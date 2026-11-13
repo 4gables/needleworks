@@ -83,6 +83,73 @@ Reference for this part of Needleworks: the rules, the reason for each (it stops
   and 135°, 0.35 and 0.8 apart, each underlay, 1.5 and 4 mm stitches, 0.6 pull, turned and mirrored, blend, rings,
   carved) all pass the checker with no tiny stitch and no file at the density limit.
 
+## Direction that follows the form (PX3; `fill.js` `formPick`, `rowField`, `curvedRows`; `recipes.js` `FORM`)
+- **Who asks.** A piece whose fill direction is Follow the shape (`stitches.fill.angle: "auto"`, `fillPolygon`'s
+  `angle: "auto"`) and a picture asked for `direction: "auto"` (digitize.js puts `form: angle` on each part, `comp.form`;
+  `tatami` then lays the part's own rows and turns the underlay by the same 90 degrees). Everything else sews as before,
+  byte for byte. The angle is per part (a connected piece of one colour), not per colour.
+- **The angle is measured, not read off one feature.** A part's outline is traced (marching squares through its mask
+  blurred twice, evened over 1.6 mm, every 0.5 mm: the drawing's steps read a 5 degree bar's edges as 0 to 13) and
+  rows are laid at every candidate: every 5 degrees, the caller's angle, the principal axis of the area and the edges'
+  dominant direction. Each is scored by how its rows would lie (rows 0.5 mm apart, cut by the outline):
+  `ends / fewest ends + ragged mm / outline mm + 1.5 x (sections - fewest)`, among candidates with **no more sections
+  than the caller's angle** (each is travel or a trim). Ragged: outline the rows meet between 4 and 25 degrees (rising
+  from 0, fading to 45): each row end steps spacing / sin(angle) along the edge, 1 to 5 mm at 0.35 mm rows, the
+  saw-tooth of the 3 mm diamond 15 degrees off its rows. Within 0.1 of the best the caller's angle stays (a round part
+  keeps the neighbouring colours' alternation), then the axis (a leaf scored alike from 145 to 160 degrees).
+- **Why this and not one reading** (13 test shapes: a diagonal leaf, a crescent, an S curve, a ring, a star, two
+  diamonds, bars at 20 and 5 degrees, an ellipse at 60, a circle, a square, an L; fills with no underlay; ragged: share
+  of outline 4 to 25 degrees off the rows):
+  | Reading | Parts more than one | Stitches vs 45 | Over 30 % ragged |
+  |---|---|---|---|
+  | fixed 45 | 1 (star) | 13,120 | bar 20° 83 %, small diamond 50 %, ellipse 48 % |
+  | fewest fragments of 16 angles (Goldman, US 6,804,573, expired) | 0 | -3.3 % | bars 83 %, diamond 50 %, leaf and crescent 32 %: blind on a convex shape (always 0°) |
+  | principal axis | 2 (S curve, star) | -4.3 % | leaf 69 %, ellipse 50 %, S curve 33 % |
+  | edges' dominant direction | 1 (S curve) | -6.4 % | ellipse 55 %, leaf 48 %, crescent 32 % |
+  | longest runs (fewest row ends) | 2 (crescent, S curve) | -6.7 % | leaf 69 %, ellipse 50 %, crescent 32 %, S 30 % |
+  | **scored** | 0 | -5.9 % | leaf 69 %, ellipse 50 % (along the axis: a third fewer row ends) |
+  | **scored, with curved rows** | 0 | -8.1 % | the same (the crescent's rows curve: 1,306 -> 1,013) |
+  Weighed rather than held to the caller's sections, the picture corpus gained 8 trims and 3 loose threads (thin
+  wavy strokes cut along their length).
+- **Pictures** (`formOf`): a part under 100 mm² keeps the caller's angle (`FORM.picture`; letters and doodles at 60 mm
+  turned to their own angles gained trims and loose threads through the travel between sections: on 13 corpus cases
+  +10 trims and +6 loose from 4 mm², the same from 30, +2 and -2 from 100), and a part's own angle or curved rows are
+  kept only where they, sewn as the picture sews them (underlay, rows 0.4 mm apart, nearer end first, travel along
+  the edge), end in no more parts than the caller's angle (a one-colour cat at 120 mm: 0 trims -> 3 without it).
+  Picture corpus, every filled case at `dir=auto` against today (`picture_corpus.html?dir=auto`): 87 files, trims 739
+  -> 721, loose threads 8 -> 6, wasted moves 19 -> 18, thread ends 558 -> 546, exposed locks 13 -> 13, tiny stitches
+  0 -> 0, at the density limit 0 -> 0, stitches -4 %; bare patches 20.0 -> 20.2 mm² (20 either way); worse in one
+  case of 74 (photo_noise at 120 mm, a trim more and a loose thread fewer); all 177 cases pass. The batch's
+  `pic_*_form` (the five shapes at 100 and 160 mm, the samples at 120 mm): trims 487 -> 489, loose 39 -> 34, stitches
+  -1.7 %. PX0's look score (`tests/look.js`) says neither better nor worse: 126 filled corpus cases 78.72 -> 78.62,
+  swings both ways (two near-identical reds +11.9, rules +11.0; a framed card -5.3, a turned bold logo -4.7; 12 cases
+  down 2 or more, so `dir=auto` would fail the look gate), and the render's sheen turns with the rows, which moves
+  its outline and structure parts at region borders. Not the pictures' default until sewn and judged by eye.
+- **Curved rows** (`rowField`, `curvedRows`): the rows are the level lines of one field phi over the part, fitted so its
+  gradient follows the part's own direction field (stripe patterns, Knöppel et al. 2015, here without singularities:
+  one sparse least-squares solve, conjugate gradients, on 0.5 mm cells). The direction field is the structure tensor
+  of the distance-to-edge gradient smoothed over the part's half width (edge tangent flow, Kang et al. 2007): near an
+  edge the rows lie along it and both sides of a band agree; within 1 mm of the edge the fit counts up to 4 times (else
+  the outer rows graze the edge and come apart). No sign for the whole field (a disc's or a star's middle) is a
+  singularity: straight rows. phi is scaled so rows are **never closer than the spacing** (99th percentile of its
+  gradient) and the field is used only where they are nowhere more than 1.3 x apart: density is met where the rows are
+  made, no stitch is taken out after. Stitches as a tatami row's (pattern stagger from each stretch's start, a short
+  last stitch merged, over 4 mm halved, steps between rows split to 3 mm). Cut by the part's drawing (0.125 mm a pixel),
+  not the outline itself as straight rows are; a row that leaves the part by no more than its pull and 0.15 mm is
+  sewn on through (a row grazing an edge it nearly follows).
+  - Sewing order: runs go on where a row splits or two meet (into the longest stretch); a run that branches off
+    another or ends beside one is sewn before it, so the needle reaches the trunk through rows still to sew; swept from
+    either side, the one the travel joins into fewer parts kept. Kept to `sewRows`' one-to-one rule, a crescent was 7
+    parts and an S curve 2.
+  - Chosen only where it scores 0.15 better than the best straight angle with no more parts once routed (at the
+    part's own spacing); in `fillPolygon`, straight rows again where curved ones still end in more parts. On the test
+    shapes: the crescent (1,611 stitches at 45 -> 1,316, one part, rows round the moon), not the S curve at 0.35 mm
+    (two parts where straight rows make one), not leaves, ellipses or bars (curved within 0.1 of straight).
+  - Limits: no singularities (a disc, a star, a ring's closed rows keep straight rows; Rings is the ring's fill);
+    rows end at a crescent's inner arc and the shorter rows are their own runs; the underlay stays straight at the
+    straight angle + 90; a part under 30 mm² is never tried. Cost: a field solve and two trial sewings per part tried
+    (on the order of 0.1-0.3 s for a 60 mm part in Node).
+
 ## Density at the source (S2)
 - **The rule.** The 24 hits per mm² limit is kept by where the needle goes as a design is built, not by taking
   stitches out afterwards. `Design` with `{ ease: true }` (set by `compose`: the Design tab) counts every hit as it

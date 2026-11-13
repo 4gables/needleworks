@@ -21,23 +21,26 @@ import { MAX_WORDS, swashless, MAX_INITIALS, monogramHelp } from "../core/typed.
 // (a motif's fill has no line round its edge underneath, set or not: the edge run lies 0.4 mm inside the outline,
 // outside the rows inset 0.6 mm from it, so every point of it is left out. Offered only where it sews: a patch.)
 const UNDER_WORDS = { frame: { both: "Edge and rows", rows: "Rows only", edge: "Edge only", none: "Nothing" }, motif: { both: "Rows across", none: "Nothing" } };
-const ROW_WAYS = [[0, "Across"], [45, "Slanted down"], [90, "Up and down"], [-45, "Slanted up"]];
+const ROW_WAYS = [[0, "Across"], [45, "Slanted down"], [90, "Up and down"], [-45, "Slanted up"], ["auto", "Follow the shape"]];
 export function editorPanel(S) {
   const { $, api } = S;
   let stitchesOpen = false;   // (closed until opened; kept open while the panel is redrawn)
   const fmt = (v, unit) => (unit === "°" ? `${v}°` : `${+(+v).toFixed(2)} mm`);
   // the rows' direction drawn as a short line, turned as the rows are (y down, clockwise)
+  // (rows that bend: Follow the shape)
+  const formLine = `<svg class="rowdir" viewBox="-12 -12 24 24" aria-hidden="true"><path d="M-10 -2 Q0 -10 10 -2M-10 3 Q0 -5 10 3M-10 8 Q0 0 10 8" fill="none"/></svg>`;
   const rowLine = (a) => `<svg class="rowdir" viewBox="-12 -12 24 24" aria-hidden="true"><g transform="rotate(${a})"><line x1="-10" y1="-4" x2="10" y2="-4"/><line x1="-10" y1="0" x2="10" y2="0"/><line x1="-10" y1="4" x2="10" y2="4"/></g></svg>`;
   function stitchesUI(p) {
     if (!hasFill(p)) return "";
     const own = ownFill(p) || {}, base = fillBase(p), rings = p.pattern === "contour";
-    const v = { angle: own.angle ?? FILL.angle, spacing: own.spacing ?? base.density, length: own.length ?? TATAMI.stitch, pull: own.pull ?? base.pull };
+    const auto = own.angle === "auto", v = { angle: auto ? FILL.angle : own.angle ?? FILL.angle, spacing: own.spacing ?? base.density, length: own.length ?? TATAMI.stitch, pull: own.pull ?? base.pull };
     const slider = (k, label, unit, [lo, hi, step], [less, more], hint = "") => `<div class="st-set${own[k] != null ? " own" : ""}"><label class="range"><span>${label}</span><input type="range" data-st="${k}" data-unit="${unit}" min="${lo}" max="${hi}" step="${step}" value="${v[k]}"><output>${fmt(v[k], unit)}</output></label>`
       + `<div class="ends" aria-hidden="true"><span>${less}</span><span>${more}</span></div>${hint ? `<p class="hint">${hint}</p>` : ""}</div>`;
     let h = `<p class="hint">How the fill is sewn. Each is set for this piece only; Back to normal goes back to what suits the fabric and thread.</p>`;
     if (!rings) {
       h += `<div class="st-set${own.angle != null ? " own" : ""}"><label class="range"><span>Direction of the rows</span><input type="range" data-st="angle" data-unit="°" min="${FILL_SET.angle[0]}" max="${FILL_SET.angle[1]}" step="${FILL_SET.angle[2]}" value="${v.angle}"><output>${fmt(v.angle, "°")}</output></label>`
-        + `<div class="seg rowways" role="group" aria-label="Direction of the rows">${ROW_WAYS.map(([a, name]) => `<button type="button" data-st-angle="${a}" aria-pressed="${v.angle === a}" title="${name}">${rowLine(a)}<span>${name}</span></button>`).join("")}</div></div>`;
+        + `<div class="seg rowways" role="group" aria-label="Direction of the rows">${ROW_WAYS.map(([a, name]) => `<button type="button" data-st-angle="${a}" aria-pressed="${a === "auto" ? auto : !auto && v.angle === a}" title="${name}">${a === "auto" ? formLine : rowLine(a)}<span>${name}</span></button>`).join("")}</div>`
+        + `${auto ? `<p class="hint">Each part of the shape gets the direction that suits it, and long curving parts get rows that curve with them.</p>` : ""}</div>`;
     }
     h += slider("spacing", "Rows", "mm", FILL_SET.spacing, ["Closer", "Further apart"], "Closer covers the fabric more; further apart is lighter and sews quicker.");
     if (!rings) {
@@ -56,13 +59,13 @@ export function editorPanel(S) {
   edit.addEventListener("input", (e) => {
     const t = e.target.closest("[data-st]"); if (!t) return;
     t.nextElementSibling.textContent = fmt(t.value, t.dataset.unit);
-    if (t.dataset.st === "angle") for (const b of edit.querySelectorAll("[data-st-angle]")) b.setAttribute("aria-pressed", String(+b.dataset.stAngle === +t.value));
+    if (t.dataset.st === "angle") for (const b of edit.querySelectorAll("[data-st-angle]")) b.setAttribute("aria-pressed", String(b.dataset.stAngle !== "auto" && +b.dataset.stAngle === +t.value));
     setFill(t.dataset.st, +t.value);
   });
   edit.addEventListener("change", (e) => { if (e.target.closest("[data-st]")) S.editor(); });
   edit.addEventListener("click", (e) => {
     const a = e.target.closest("[data-st-angle]"), u = e.target.closest("[data-st-under]");
-    if (a) { setFill("angle", +a.dataset.stAngle, true); S.editor(); return; }
+    if (a) { setFill("angle", a.dataset.stAngle === "auto" ? "auto" : +a.dataset.stAngle, true); S.editor(); return; }
     if (u) { setFill("underlay", u.dataset.stUnder === "both" ? null : u.dataset.stUnder, true); S.editor(); return; }
     if (e.target.closest("[data-st-reset]")) { S.change((p) => delete p.stitches, true, true); S.editor(); }
   });
