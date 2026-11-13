@@ -243,10 +243,10 @@ function insideNote() {
   const p = state.pic, el = $("pic-inside"), f = p.fabric, show = !!f && p.closed > 0 && p.style !== "line";
   el.hidden = !show; if (!show) { el.textContent = ""; return; }
   const name = escapeHtml(nearestBrotherThread(f.hex).name.toLowerCase());
-  // (one thread colour chosen: the one thread is the design's, so the closed-in colour stays fabric unless asked for:
-  // `spare`. The count is every thread sewn, this one too)
+  // (the design's colours fill the Thread colours count and none is cheap to give up: the closed-in colour stays fabric
+  // unless asked for, `spare`. The count is every thread sewn, this one too)
   el.innerHTML = p.spare
-    ? `The ${name} closed in by the design is left as fabric: with one thread colour, that thread is the design's. <button type="button" class="link" data-inside="all">Sew it in ${name} too (2 threads)</button>`
+    ? `The ${name} closed in by the design is left as fabric: ${p.colors > 1 ? `the ${p.colors} thread colours are all the design's` : "with one thread colour, that thread is the design's"}. <button type="button" class="link" data-inside="all">Sew it in ${name} too (${p.colors + 1} threads)</button>`
     : p.inside === "none"
     ? `The ${name} closed in by the design is left as fabric, like the ${name} round it. <button type="button" class="link" data-inside="all">Sew it in ${name}</button>`
     : `The ${name} round the design is the fabric and isn't sewn. The ${name} closed in by the design is part of it, so it is sewn. <button type="button" class="link" data-inside="none">Leave it out</button>`;

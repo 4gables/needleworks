@@ -270,8 +270,12 @@ stitch round ends with a small sew-out pack.
   mascot, photo) drawn or made here. Done: `tests/look.js` (render + score), 26 pictures in
   `tests/browser/art.js`, the "looks like the picture" table in `picture_corpus.sh`, baseline
   `tests/fixtures/look.json` (the numbers PX1-PX4 must beat; reading them: `docs/testing.md`)
-- [ ] **PX1 Picture to clean shapes**: fewer, smoother regions; slivers merged; curves fitted; small details kept
-  on purpose
+- [x] **PX1 Picture to clean shapes**: fewer, smoother regions; slivers merged; curves fitted; small details kept
+  on purpose (`regions.js`: blend bands, flecks, smoothed edges; layers under later colours; the Thread colours count
+  holds with the closed-in white; numbers in `docs/pictures.md`)
+  - left: art_line_mandala's look -5; a closed-in panel inside a sewn frame left as fabric at a full count; the
+    dog's shading rim, brown ears sewn near-black and soft drop shadow are thread matching and soft-shade rules
+    (palette), not shapes
 - [ ] **PX2 Stitch types like a human digitizer** (after PX1): thin strokes as satin columns, outlines as run or
   satin, areas as fill, dots as satin; back to front, hidden fill removed, pull by fabric
 - [ ] **PX3 Fill direction that follows the form**: each region's rows at its own angle, or curving with it
