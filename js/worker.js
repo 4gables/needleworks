@@ -1,6 +1,7 @@
 /*! Needleworks (c) 2026 4Gables. All rights reserved. Proprietary, see LICENSE. https://4gables.com/needleworks/ */
 // Runs picture digitizing off the main thread.
 import { DEFAULTS, MOST, digitize, keptParts, labelWith, learnColours, pictureInk, toPalette } from "./core/digitize.js";
+import { insideOf } from "./core/palette.js";
 import { writePES } from "./core/formats.js";
 import { turnForMachine } from "./core/design.js";
 import { nearestBrotherThread } from "./core/threads.js";
@@ -21,7 +22,7 @@ self.onmessage = (e) => {
       return;
     }
     // (a line drawing draws the edges of colours: the fabric's colour inside the design stays fabric)
-    const inside = opts.style === "line" ? "none" : opts.inside === "none" ? "none" : "all", lk = `${key}:${img.width}x${img.height}:${crop.join(",")}:${inside}`;
+    const inside = insideOf(opts), lk = `${key}:${img.width}x${img.height}:${crop.join(",")}:${inside}`;
     if (labelled?.key !== lk) labelled = { key: lk, analysis: labelWith(img, m, crop, { inside, res: DEFAULTS.res }) };
     const analysis = labelled.analysis;
     const p = opts.palette?.length ? toPalette(analysis, opts.palette) : analysis;
@@ -37,7 +38,7 @@ self.onmessage = (e) => {
     const pattern = opts.turn ? turnForMachine(design.pattern()) : design.pattern();
     const bytes = writePES(pattern);
     self.postMessage({ id, ok: true, pattern, bytes, summary, fine,
-      colors: a.colors, merged: analysis.merged, closed: analysis.closed || 0, flat: m.flat, smooth: !!m.smooth, framed: !!analysis.frame, owned: a.owned, labels: a.labels, w: a.w, h: a.h, res }, [bytes.buffer]);
+      colors: a.colors, merged: analysis.merged, closed: analysis.closed || 0, spare: !!m.spare && inside === "auto", flat: m.flat, smooth: !!m.smooth, framed: !!analysis.frame, owned: a.owned, labels: a.labels, w: a.w, h: a.h, res }, [bytes.buffer]);
   } catch (err) {
     self.postMessage({ id, ok: false, error: err.message || String(err), code: err.code });
   }

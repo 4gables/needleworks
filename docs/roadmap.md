@@ -257,6 +257,28 @@ leaves a design with no setting byte-identical.
   - [ ] Open tab: a DST with two colour changes in a row (an empty block) fails the doctor's fixes ("fewer thread
     colours than colour changes"); site files never have one, outside files may
 
+## Cycle 4: picture to stitches, the best there is (owner, 2026-11-13)
+Owner: makers will bring their own art, often made with AI, so turning a picture into stitches is the product:
+"world class at turning picture to stitches, work with all machines, push the state of the art following all
+guidelines and perhaps even come up with novel ways". Cycle 3's remaining rounds wait behind this one (Z2 SVG import
+joins PX1's shape path). Every round keeps the hard rules of `AGENTS.md`; nothing is proven until sewn, so each
+stitch round ends with a small sew-out pack.
+- [x] **PX-R State of the art**: papers, commercial auto-digitizers' published behaviour, where they fail;
+  `docs/research/picture-sota.md` (ideas and numbers only, credited; no one's code)
+- [ ] **PX0 Looks like the picture**: a realistic thread render of a file and a score against the source picture,
+  beside the stitch scoreboard in the picture corpus; a corpus of AI-style art (flat illustration, logo, cartoon,
+  mascot, photo) drawn or made here
+- [ ] **PX1 Picture to clean shapes**: fewer, smoother regions; slivers merged; curves fitted; small details kept
+  on purpose
+- [ ] **PX2 Stitch types like a human digitizer** (after PX1): thin strokes as satin columns, outlines as run or
+  satin, areas as fill, dots as satin; back to front, hidden fill removed, pull by fabric
+- [ ] **PX3 Fill direction that follows the form**: each region's rows at its own angle, or curving with it
+- [ ] **PX4 Shading** (after PX1): two-colour blends by density, colour mixing for photos and gradients
+- [ ] **PX5 Every machine**: machines and hoops of Janome, Bernina, Husqvarna/Pfaff, Tajima-format machines from
+  the makers' published specs; JEF once Janome's thread order is measured
+- [ ] **PX6 Art that stitches well**: an "ask your AI for…" guide and a check of the uploaded picture saying what
+  will and won't sew well, and why
+
 ## Verdict
 Strong, and kept: the machine layer (locked writer, PEC box, palette, locks, the 5 mm loose-thread rule, 24 hits
 per mm² at every offset), the 4 mm satin border and staggered seams (both from real sew-outs), the exit gate, the
