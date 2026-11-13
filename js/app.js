@@ -703,7 +703,8 @@ export function formatNote() {
   const m = MACHINES[state.machine], f = fileFormat(), h = hoop(), other = m.brand === "Other";
   if (proven()) return "";
   // (a file the machine's manual doesn't list)
-  if (!m.reads.includes(state.fileFormat)) return `${other ? "Most machines read DST" : `The ${h.machineName}'s manual lists ${listed(m.reads)} files, not ${f.short}`}: check your machine reads ${f.short} files before you use this one.`;
+  // (only what its manual lists, as read for machines.js: a PE900's manual may list more than was cited)
+  if (!m.reads.includes(state.fileFormat)) return `${other ? "Most machines read DST" : `Only ${listed(m.reads.filter((x) => OUT_FORMATS[x]))} files are checked for the ${h.machineName} here, the ones its manual lists`}: check your machine reads ${f.short} files before you use this one. It has the same stitches, untested on it so far.`;
   const why = m.reads[0] === "jef" && state.fileFormat !== "jef" ? `Janome's own file, JEF, isn't made here yet, so it's ${f.short}, which the machine reads too. ` : "";
   const colours = OUT_FORMATS[state.fileFormat] && !["pes", "vp3"].includes(state.fileFormat) ? `, and ${f.short} files hold no thread colours: follow the thread list` : "";
   return `${why}The stitches, size and thread changes are checked here; the file itself is untested on ${other ? "your machine" : `${m.brand} machines`} so far${colours}.`;
