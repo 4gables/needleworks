@@ -110,6 +110,26 @@ export const FILLS = {
   towel: { pull: 0.4, rows: ROWS.solid },
 };
 export const fillRecipe = (fabric) => FILLS[fabric] || FILLS.cotton;
+// A drawn shape's fill rows (core/fill.js `fillPolygon`): needle points `stitch` mm apart along a row; a stitch over
+// `loose` mm (a row's short remainder merged into its last stitch) is halved, since one that long lies loose on top.
+export const TATAMI = { stitch: 3.5, loose: 4 };
+
+// --- Z1a: a piece's own fill settings (studio/settings.js; docs/design-tab.md "Stitch settings") ---
+// What a person (or a saved file, or an agent) may set, clamped so no setting can break a rule of AGENTS.md. Each is
+// [least, most, the editor's step].
+//   angle:   the rows' direction, degrees, 0 across and 90 up and down; 30 and 210 are one fill, so it is kept in
+//            (-90, 90]. Any angle sews: the travel router and the scrap rule work at every angle.
+//   spacing: rows apart (mm). Never closer than ROWS.solid: at 0.3 the step from one row to the next is the checker's
+//            tiny stitch (and 24 hits per mm² comes nearer at every row end along an edge). 0.8, twice the
+//            standard rows, still reads as a light fill; further the fabric shows between rows.
+//   length:  stitch length along a row (mm). From 1.5 (shorter crowds the row ends, where every row puts two hits)
+//            to TATAMI.loose: longer is halved anyway (a loose stitch lying on top).
+//   pull:    how far each row runs past its outline at both ends (mm; FILLS' pull). 0.6 is towel's 0.4 and a half
+//            again, still well under the satin every drawn fill's row ends lie under (a motif's reaches 1.3 mm past
+//            its rows' ends, a patch's 2.8).
+// underlay: "both" (the edge run and the rows across, as unset), "rows", "edge", "none".
+export const FILL_SET = { angle: [-90, 90, 1], spacing: [ROWS.solid, 0.8, 0.05], length: [1.5, TATAMI.loose, 0.1], pull: [0, 0.6, 0.05] };
+export const UNDERLAYS = ["both", "rows", "edge", "none"];
 
 // --- S1b: locks ---
 // A tie-in's length (mm), first that keeps clear of the run's own next points: 0.7 is the middle of what sold

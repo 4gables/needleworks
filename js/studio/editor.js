@@ -7,12 +7,65 @@ import { COVERS, TRIMS } from "./borders.js";
 import { FILL_PATTERNS } from "../core/fill.js";
 import { NAVY } from "./starters.js";
 import { MOTIFS } from "./motifs.js";
-import { TEXT_SHAPES, followFrame, SHAPES, BORDERS, FILE_SCALE, bulkReady } from "./pieces.js";
+import { TEXT_SHAPES, followFrame, SHAPES, BORDERS, FILE_SCALE, bulkReady, fillBase } from "./pieces.js";
+import { FILL } from "../core/fill.js";
+import { FILL_SET, TATAMI } from "../core/recipes.js";
+import { hasFill, ownFill, withSetting } from "./settings.js";
 import { FONTS, APPLIQUE_FONTS } from "../core/fonts.js";
 import { MAX_WORDS, swashless, MAX_INITIALS, monogramHelp } from "../core/typed.js";
 
+// The Stitches section (a patch's fill, a filled motif): the piece's own fill settings (settings.js), folded away
+// and said in plain words. Unset, each shows what the fabric and thread weight give (`fillBase`); moving one sets it
+// for this piece only, and Back to normal clears them all.
+// (`ends`: what each end of a slider means, under it: a number of mm read as nothing to a newcomer)
+// (a motif's fill has no line round its edge underneath, set or not: the edge run lies 0.4 mm inside the outline,
+// outside the rows inset 0.6 mm from it, so every point of it is left out. Offered only where it sews: a patch.)
+const UNDER_WORDS = { frame: { both: "Edge and rows", rows: "Rows only", edge: "Edge only", none: "Nothing" }, motif: { both: "Rows across", none: "Nothing" } };
+const ROW_WAYS = [[0, "Across"], [45, "Slanted down"], [90, "Up and down"], [-45, "Slanted up"]];
 export function editorPanel(S) {
   const { $, api } = S;
+  let stitchesOpen = false;   // (closed until opened; kept open while the panel is redrawn)
+  const fmt = (v, unit) => (unit === "°" ? `${v}°` : `${+(+v).toFixed(2)} mm`);
+  // the rows' direction drawn as a short line, turned as the rows are (y down, clockwise)
+  const rowLine = (a) => `<svg class="rowdir" viewBox="-12 -12 24 24" aria-hidden="true"><g transform="rotate(${a})"><line x1="-10" y1="-4" x2="10" y2="-4"/><line x1="-10" y1="0" x2="10" y2="0"/><line x1="-10" y1="4" x2="10" y2="4"/></g></svg>`;
+  function stitchesUI(p) {
+    if (!hasFill(p)) return "";
+    const own = ownFill(p) || {}, base = fillBase(p), rings = p.pattern === "contour";
+    const v = { angle: own.angle ?? FILL.angle, spacing: own.spacing ?? base.density, length: own.length ?? TATAMI.stitch, pull: own.pull ?? base.pull };
+    const slider = (k, label, unit, [lo, hi, step], [less, more], hint = "") => `<div class="st-set${own[k] != null ? " own" : ""}"><label class="range"><span>${label}</span><input type="range" data-st="${k}" data-unit="${unit}" min="${lo}" max="${hi}" step="${step}" value="${v[k]}"><output>${fmt(v[k], unit)}</output></label>`
+      + `<div class="ends" aria-hidden="true"><span>${less}</span><span>${more}</span></div>${hint ? `<p class="hint">${hint}</p>` : ""}</div>`;
+    let h = `<p class="hint">How the fill is sewn. Each is set for this piece only; Back to normal goes back to what suits the fabric and thread.</p>`;
+    if (!rings) {
+      h += `<div class="st-set${own.angle != null ? " own" : ""}"><label class="range"><span>Direction of the rows</span><input type="range" data-st="angle" data-unit="°" min="${FILL_SET.angle[0]}" max="${FILL_SET.angle[1]}" step="${FILL_SET.angle[2]}" value="${v.angle}"><output>${fmt(v.angle, "°")}</output></label>`
+        + `<div class="seg rowways" role="group" aria-label="Direction of the rows">${ROW_WAYS.map(([a, name]) => `<button type="button" data-st-angle="${a}" aria-pressed="${v.angle === a}" title="${name}">${rowLine(a)}<span>${name}</span></button>`).join("")}</div></div>`;
+    }
+    h += slider("spacing", "Rows", "mm", FILL_SET.spacing, ["Closer", "Further apart"], "Closer covers the fabric more; further apart is lighter and sews quicker.");
+    if (!rings) {
+      h += slider("length", "Stitch length", "mm", FILL_SET.length, ["Shorter", "Longer"], "Longer stitches catch the light more; shorter ones follow small shapes better.");
+      h += slider("pull", "Reach past the edge", "mm", FILL_SET.pull, ["None", "More"], "Stitches draw the fabric in, so each row runs a little past the outline to still meet the edge.");
+    } else h += `<p class="hint">Rings follow the outline, so they have no direction.</p>`;
+    const words = UNDER_WORDS[p.kind], u = own.underlay && words[own.underlay] ? own.underlay : own.underlay === "rows" ? "both" : own.underlay ? "none" : "both";
+    h += `<div class="field"><span>Underneath</span><div class="seg" role="group" aria-label="Underneath">${Object.entries(words).map(([k, name]) => `<button type="button" data-st-under="${k}" aria-pressed="${k === u}">${name}</button>`).join("")}</div><p class="hint">Stitches sewn first, under the fill, that hold the fabric flat${p.kind === "frame" ? ": a line round the edge and rows across" : ""}.</p></div>`;
+    h += Object.keys(own).length ? `<p><button type="button" class="link" data-st-reset>Back to normal</button></p>` : "";
+    return `<details class="stitches" ${stitchesOpen ? "open" : ""}><summary>Stitches${Object.keys(own).length ? " (changed)" : ""}</summary>${h}</details>`;
+  }
+  const setFill = (k, v, now = false) => S.change((p) => { const s = withSetting(p, "fill", k, v); if (s) p.stitches = s; else delete p.stitches; }, now, true);
+  const edit = $("st-edit");
+  edit.addEventListener("toggle", (e) => { if (e.target.matches("details.stitches")) stitchesOpen = e.target.open; }, true);
+  // (live: the preview follows the slider, as the size slider's does; the panel is redrawn when it's let go)
+  edit.addEventListener("input", (e) => {
+    const t = e.target.closest("[data-st]"); if (!t) return;
+    t.nextElementSibling.textContent = fmt(t.value, t.dataset.unit);
+    if (t.dataset.st === "angle") for (const b of edit.querySelectorAll("[data-st-angle]")) b.setAttribute("aria-pressed", String(+b.dataset.stAngle === +t.value));
+    setFill(t.dataset.st, +t.value);
+  });
+  edit.addEventListener("change", (e) => { if (e.target.closest("[data-st]")) S.editor(); });
+  edit.addEventListener("click", (e) => {
+    const a = e.target.closest("[data-st-angle]"), u = e.target.closest("[data-st-under]");
+    if (a) { setFill("angle", +a.dataset.stAngle, true); S.editor(); return; }
+    if (u) { setFill("underlay", u.dataset.stUnder === "both" ? null : u.dataset.stUnder, true); S.editor(); return; }
+    if (e.target.closest("[data-st-reset]")) { S.change((p) => delete p.stitches, true, true); S.editor(); }
+  });
   function drawEditor() {
     const p = S.current();
     $("st-center").hidden = !p; $("st-drag-hint").hidden = !p;   // (no piece, nothing to drag)
@@ -73,7 +126,7 @@ export function editorPanel(S) {
       h += S.range("size", "Size", 10, 120, p.size);
       h += S.seg("style", { fill: "Filled", outline: "Outline", applique: "Appliqué" }, p.style || "fill");
       // (rows one way across it, or rings that follow its outline)
-      if ((p.style || "fill") === "fill") h += `<div class="field"><span>Fill</span>${S.seg("pattern", { tatami: "Rows", contour: "Rings" }, p.pattern || "tatami")}</div>`;
+      if ((p.style || "fill") === "fill") h += `<div class="field"><span>Fill</span>${S.seg("pattern", { tatami: "Rows", contour: "Rings" }, p.pattern || "tatami")}</div>` + stitchesUI(p);
       if (p.style === "applique") h += `<p class="hint">Sews an outline, pauses for you to lay fabric on and trim it, then sews satin stitch round the edges. 50 mm or bigger cuts most easily.</p>`;
     } else if (p.kind === "letters") {
       h += `<label class="field"><span>Letters</span><input type="text" data-k="text" value="${api.escapeHtml(p.text)}" data-max="${MAX_INITIALS}" autocomplete="off" spellcheck="false"></label>` + cutHint;
@@ -99,6 +152,7 @@ export function editorPanel(S) {
         h += `<details class="more" ${S.moreOpen ? "open" : ""}><summary>More</summary>${S.seg("pattern", Object.fromEntries(Object.entries(FILL_PATTERNS).map(([k, f]) => [k, f.name])), p.pattern || "tatami")}
           <label class="check small"><input type="checkbox" data-blend ${p.blend ? "checked" : ""}> Blend into a second colour</label>
           ${p.blend ? `<div class="swatches">${S.swatches(p, "blend")}</div><p class="hint">Fades from Brother ${S.machineName(p.fill)} to ${S.machineName(p.blend)} across the patch: one more thread change.</p>` : ""}</details>`;
+        h += stitchesUI(p);
       }
       if (p.border !== "patch") h += `<div class="field"><span>Quilting</span>${S.seg("quilt", QUILTS, p.quilt || "none")}</div>`
         + (p.quilt && p.quilt !== "none" ? `<p class="hint">Fills the frame around everything on it, in the frame's thread.</p>` : "");

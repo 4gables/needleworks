@@ -29,7 +29,8 @@ measurements behind each number are in the code's comments.
   `placing.js` (where a piece goes), `threadsaid.js` (thread names in the editor), `toobig.js` (too big for the
   hoop and the ways out), `problems.js` (the problems list), `editor.js` (the piece editor panel), `fixes.js` (one-tap fixes), `stepsui.js` (steps panel), `offpage.js` (worker jobs),
   `outline.js`, `quilt.js`, `motifs.js`, `borders.js` (decorative and blanket-stitch borders), `layout.js` (Arrange: circle,
-  corners, flip, monogram orders), `ownfont.js` (a maker's own font file, kept in the browser). pieces.js still re-exports what moved out of it.
+  corners, flip, monogram orders), `ownfont.js` (a maker's own font file, kept in the browser), `settings.js` (a
+  piece's own stitch settings: checked, clamped, the shared row grid). pieces.js still re-exports what moved out of it.
 - `js/doctor.js` + `doctor-worker.js` (Open tab fixes), `quality.js` (the checker's rules), `words.js` (problems
   list per view, stop/thread vocabulary), `gate.js` (the only exit for files: `handOut`), `sheet.js` (step text, sew
   sheet, cut file), `render.js` (`draw`), `jobs.js` (one job queue for the three workers, with time limits), `worker.js`,

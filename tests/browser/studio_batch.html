@@ -134,6 +134,34 @@ await save("st_trim_square_scallop_quilted", [P({ kind: "frame", shape: "square"
 for (const shape of ["heart", "circle", "square"]) await save(`st_blanket_${shape}_applique`, [P({ kind: "frame", shape, border: "applique", cover: "blanket", w: 84, h: 76, color: "#0e1f7c" }),
   P({ kind: "text", text: "Ashley", font: FONTS[0].family, size: 16, color: "#ed171f" })]);
 log("rings and borders: done");
+// a piece's own fill settings (studio/settings.js): rows at 0, 90, 30 and 135 degrees, the closest and furthest rows,
+// each choice of what goes underneath, on a patch and a filled motif; two patches side by side whose rows line up (the
+// shared grid), turned and mirrored, a blend, rings, the shortest and longest stitches and the most reach
+{
+  const patch = (o, st) => P({ kind: "frame", shape: "circle", border: "patch", w: 70, h: 70, fill: "#0e1f7c", color: "#ed171f", ...o, stitches: { fill: st } });
+  const heart = (o, st) => P({ kind: "motif", motif: "heart", size: 45, style: "fill", color: "#ed171f", ...o, stitches: { fill: st } });
+  for (const angle of [0, 90, 30, 135]) {
+    await save(`st_fillset_patch_a${angle}`, [patch({}, { angle })]);
+    await save(`st_fillset_heart_a${angle}`, [heart({}, { angle })]);
+  }
+  for (const [tag, spacing] of [["close", 0.35], ["far", 0.8]]) for (const angle of [0, 30]) {
+    await save(`st_fillset_patch_${tag}_a${angle}`, [patch({}, { angle, spacing })]);
+    await save(`st_fillset_heart_${tag}_a${angle}`, [heart({}, { angle, spacing })]);
+  }
+  for (const underlay of ["both", "rows", "edge", "none"]) {
+    await save(`st_fillset_patch_under_${underlay}`, [patch({}, { underlay, angle: 90 })]);
+    await save(`st_fillset_heart_under_${underlay}`, [heart({}, { underlay })]);
+  }
+  await save("st_fillset_lengths", [heart({ x: -30 }, { length: 1.5, angle: 0 }), heart({ x: 30, color: "#0e1f7c" }, { length: 4, pull: 0.6, angle: 0 })]);
+  await save("st_fillset_side_by_side", [P({ kind: "frame", shape: "square", border: "patch", w: 50, h: 50, x: -27, fill: "#0e1f7c", color: "#ed171f", stitches: { fill: { angle: 30, spacing: 0.5 } } }),
+    P({ kind: "frame", shape: "square", border: "patch", w: 50, h: 50, x: 27, y: 3.3, fill: "#00673e", color: "#ed171f", stitches: { fill: { angle: 30, spacing: 0.5 } } })]);
+  await save("st_fillset_turned", [patch({ x: -10, rot: 25, flip: true, w: 60, h: 60 }, { angle: -60, spacing: 0.45, pull: 0.3 }), heart({ x: 20, y: 60, rot: -40, size: 30, color: "#e8a900" }, { angle: 15 })]);
+  await save("st_fillset_blend", [P({ kind: "frame", shape: "square", border: "patch", w: 90, h: 70, fill: "#e8a900", blend: "#ed171f", color: "#770176", stitches: { fill: { angle: 0, spacing: 0.4, underlay: "edge" } } })]);
+  await save("st_fillset_rings", [heart({ pattern: "contour" }, { spacing: 0.6, underlay: "none" })]);
+  await save("st_fillset_carved", [patch({ w: 80, h: 80 }, { angle: 90, spacing: 0.45 }), P({ kind: "motif", motif: "star", size: 40, style: "fill", color: "#ffd900", stitches: { fill: { angle: 0 } } })]);
+  log("fill settings: done");
+}
+
 // motifs in every style, sizes from small to large; lettering with motifs either side
 const { MOTIFS } = await import("../../js/studio/motifs.js");
 for (const [k, i] of Object.keys(MOTIFS).map((k, i) => [k, i]))

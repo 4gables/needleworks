@@ -9,7 +9,8 @@ import { distanceTransform, order } from "../core/raster.js";
 import { LINED, contours, quiltOf } from "./quilt.js";
 import { EYE, eyeAt, hasEye, shapeOf } from "./shapes.js";
 import { FABRICS } from "./fabrics.js";
-import { QUILTED, along, ascii, cloud, cut, fittedSizes, inset, inside, insideLoops, label, moved, near, onOutline, own, patchFill, pick, pieceBounds, pieceStages, pieceStitches, placed, placer, plainBorder, recent, seamAt, sewAs, sewWith, sewing, sewn, startAt, wt } from "./pieces.js";
+import { ownFill } from "./settings.js";
+import { QUILTED, along, ascii, cloud, cut, fittedSizes, inset, inside, insideLoops, label, moved, movingNow, near, onOutline, own, patchFill, pick, pieceBounds, pieceStages, pieceStitches, placed, placer, plainBorder, recent, seamAt, sewAs, sewWith, sewing, sewn, startAt, wt } from "./pieces.js";
 
 export function quiltDone(key, paths) { quilted.set(key, paths); if (quilted.size > 12) quilted.delete(quilted.keys().next().value); }
 const quilted = new Map(), lastQuilt = new Map();   // (lastQuilt: per frame, reused while a piece is being dragged)
@@ -198,7 +199,8 @@ function carve(p, stages, above, fab, later = null) {
   }
   let h = 0, cnt = 0;
   for (let i = 0; i < n; i++) if (hole.data[i]) { h = Math.imul(h ^ i, 16777619) | 0; cnt++; }
-  const key = JSON.stringify([shape, h, cnt, fab === "knit", sewing()[1] === "30"]);   // (all `patchFill` reads of them)
+  // (all `patchFill` reads of them; and where the patch is, when its rows lie on the design's grid: settings.js)
+  const key = JSON.stringify([shape, h, cnt, fab === "knit", sewing()[1] === "30", ...(ownFill(p) ? [p.x, p.y, p.rot || 0] : [])]);
   if (!carved.has(key)) {
     const holes = cnt ? contours(hole).map((l) => l.map(([x, y]) => [x0 + x / R, y0 + y / R]))
       .filter((l) => l.length > 8 && Math.abs(l.reduce((s, q, i) => s + q[0] * l[(i + 1) % l.length][1] - l[(i + 1) % l.length][0] * q[1], 0)) / 2 >= 20) : [];
@@ -413,9 +415,9 @@ function trimsFor(trims, own) {
   return `Unless you laid ${cut}, take the hoop off the machine (leave the fabric in the hoop), trim ${what}, and put the hoop back. ${own || "Press Start."}`;
 }
 export function compose(pieces, hoop, opts = {}) {
-  const was = sewing();
+  const was = sewing(), wasMoving = movingNow(opts.dragging);
   sewAs(opts.fabric, opts.thread);
-  try { return build(pieces, hoop, opts); } finally { sewWith(was); }
+  try { return build(pieces, hoop, opts); } finally { sewWith(was); movingNow(wasMoving); }
 }
 function build(pieces, hoop, opts) {
   const fab = FABRICS[opts.fabric] ? opts.fabric : "cotton";

@@ -133,6 +133,38 @@ Reference for this part of Needleworks: the rules, the reason for each (it stops
   units (`tests/browser/motifs.html?sheet=shapes|stitch`). `FACING` ones mirror for deco.
 - `style`: fill (`fillPolygon(loops, { inset: 0.6 })` + 1.4 mm satin edge), outline (`edgeSatin`), applique. Traced
   like letters (`motifOutlines`). Warn under 25 mm filled, 30 mm otherwise. Lettering `deco` puts one either side.
+### Stitch settings (`settings.js`; ZigZag's per-object settings, `docs/zigzag-spec.md` 1.1-1.2)
+- A piece may carry `stitches`, plain data saved with it (Save design, Recent designs, copy-paste, every copy and
+  duplicate: `structuredClone` or a spread), every field optional; unset means what the fabric and thread weight give
+  (`recipes.js`), so a design with none sews byte for byte as before. Grouped by the stitches a group changes, so
+  satin settings and start/end/trim/pause add keys beside `fill` without reshaping it:
+  `stitches: { fill: { angle, spacing, length, pull, underlay } }`.
+  | Field | Unset (patch / filled motif) | Range (`recipes.js` `FILL_SET`) |
+  |---|---|---|
+  | `angle` (°: 0 rows across, 90 up and down, + clockwise) | 45 (`fill.js` `FILL.angle`) | kept in (-90, 90] (135 is -45) |
+  | `spacing` (mm between rows) | the fabric's rows, + 0.05 on 30 wt (`fillFor`) | 0.35 (`ROWS.solid`) to 0.8 |
+  | `length` (mm, stitches along a row) | 3.5 (`TATAMI.stitch`) | 1.5 to 4 (`TATAMI.loose`) |
+  | `pull` (mm each row runs past its outline) | patch: felt's 0.2; motif: the fabric's | 0 to 0.6 |
+  | `underlay` | `both`: edge run and rows across | `both`, `rows`, `edge`, `none` |
+  Why each limit is where it is: `recipes.js` `FILL_SET`. A value out of range is clamped wherever it is read
+  (`cleanPiece` on open and paste, `fillOpts` in every build: an agent's design that skips `cleanPiece` is clamped
+  too); an unknown field or group is dropped, said as "had settings this page doesn't have".
+- Which pieces: a patch frame's fill (blend layers too) and a filled motif (rows or rings). Not the motif either side
+  of lettering, nor appliqué (its fabric is the fill), nor pictures (`digitize.js` fills through `tatami` on its own
+  drawing, a different path). Rings take `spacing` and `underlay` only.
+- **The shared row grid.** A fill with any setting lays its rows on one grid for the whole design: row k at
+  (k + 0.5) x spacing across the rows from the hoop centre, the pattern's stagger numbered by k too, so neighbouring
+  fills at one angle and spacing line up (`gridAt`; `fillPolygon`'s `grid`). The piece is built in its own
+  coordinates; across the rows they differ from the design's only by the move along the row normal, mirrored or not,
+  so the grid there is that move's remainder. Proven in the batch's `st_fillset_*` (every top-layer point of a turned,
+  mirrored patch lies on the design's grid). A fill with no setting keeps rows half a row in from its own edge.
+  Since where it lies changes its rows, its stitch key holds `x, y, rot, flip` (`pieceStages`, `carve`); while it is
+  dragged the last stitches built are moved instead (`movingNow`), refilled on the drop.
+- Editor: "Stitches" under the piece's settings, closed by default and kept open across redraws, "(changed)" in its
+  title when anything is set: Direction of the rows (slider and four drawn choices), Rows (Closer / Further apart),
+  Stitch length, Reach past the edge, Underneath, Back to normal. Each slider says what its two ends mean under it
+  (a number of mm alone means nothing to a newcomer); the preview follows the slider and the panel redraws on release.
+  A motif's Underneath offers only Rows across / Nothing: see `decisions.md` (its edge run never sews).
 ### Placement, fitting, warnings
 - One placement path, `place()`, for add, duplicate, single paste and file add: frame first, where it is if clear,
   `freeRoom`, else a toast; multi-paste uses `spotFor` or "Paste anyway". A piece shrunk to fit must stay `readable`.

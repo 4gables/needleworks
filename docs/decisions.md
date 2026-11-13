@@ -37,6 +37,11 @@ What was tried and rejected (don't retry without new numbers) and what is known 
   traced as tiny lines in line drawings (jpeg_flower).
 - Josefin N/M apex sides 0.5 mm outside the ink. Tiny print (5 mm dates) still leaves loose threads where no start helps.
   Pasting a 30+ letter line is one ~0.6 s drawing. A patch's `clearOf` measures lettering against the whole fill.
+- Fills: a filled motif has no edge run under it, though `stitch-model.md` says it has: `fillPolygon` lays the run
+  0.4 mm inside the outline it is given, and a motif's rows are inset 0.6 mm (`inset`), so every point of the run lies
+  outside the drawn shape and is left out (a 45 mm heart: 2,215 stitches with it on, 2,209 with only the rows). A
+  patch's loops come inset already (`inset` 0), so its run sews. Fixing it changes every filled motif (a stitch
+  round, not Z1a's byte-identical one); until then the editor's Underneath offers a motif only Rows across / Nothing.
 - Flow: fill-internal hidden moves in `fillPolygon`, repeated tie-in holes in `Design.path`, ~47 script moves on arcs.
 - Text: CJK/Arabic names save as design.pes (the fonts lack them anyway).
 - Not built: photo stitch, free-standing lace, 3D puff.

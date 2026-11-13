@@ -4,7 +4,7 @@
 // Open tab's re-stitching (doctor.js) all fill through here. (Part of digitize.js until 2026-11.)
 import { distanceTransform, label } from "./raster.js";
 import { resample } from "./geom.js";
-import { CONTOUR, FILLS, ROWS } from "./recipes.js";
+import { CONTOUR, FILLS, ROWS, TATAMI } from "./recipes.js";
 
 // the fill angle (degrees) and working pixels per mm when nothing else is asked (8: 5 lost the narrow notches of
 // small lettering, e.g. an M)
@@ -98,7 +98,7 @@ function sewRows(rows, U, V, res, L, pattern, leaves) {
       line.push(b);
       // a short remainder at a row's end is merged into the last stitch (up to 1.3 x L, more with pull): halve
       // the ones over 4 mm, which lay loose on top of the fill
-      for (let i = line.length - 1; i > 0; i--) if (line[i] - line[i - 1] > 4 * res) line.splice(i, 0, (line[i] + line[i - 1]) / 2);
+      for (let i = line.length - 1; i > 0; i--) if (line[i] - line[i - 1] > TATAMI.loose * res) line.splice(i, 0, (line[i] + line[i - 1]) / 2);
       const pts = (fwd ? line : line.reverse()).map((u) => toXY(u, row.v)), cur = paths[paths.length - 1];
       if (cur.length && leaves(cur[cur.length - 1], pts[0])) { paths.push(pts); return; }
       // where the edge runs nearly along the rows, the step to the next row is long (up to 7.6 mm): a loose stitch
@@ -425,11 +425,15 @@ function outlineRows(loops, U, V, d) {
 }
 // The rows of a drawn shape at an angle (see `tatami` for spacing, pull and share): each stretch pulled out by `pull`
 // at both ends (two that meet are one) and marked with the part of the shape it lies in (`shape.labels`).
-function exactRows(loops, shape, res, { angle, spacing, inset = 0, pull, share = null }) {
+// grid (px, across the rows): rows on the lines grid + (k + 0.5) x spacing, k numbering them (the shared row grid of
+// a piece with its own settings, `fillPolygon`), instead of half a row in from the shape's own edge
+function exactRows(loops, shape, res, { angle, spacing, inset = 0, pull, share = null, grid = null }) {
   const th = (angle * Math.PI) / 180, U = [Math.cos(th), Math.sin(th)], V = [-Math.sin(th), Math.cos(th)];
   const { v0, v1, at } = outlineRows(loops, U, V, inset * res), { w, h } = shape.mask, sp = spacing * res, P = pull * res, rows = [];
   const part = (u, v) => { const X = Math.round(u * U[0] + v * V[0]), Y = Math.round(u * U[1] + v * V[1]); return X >= 0 && Y >= 0 && X < w && Y < h ? shape.labels[Y * w + X] : 0; };
-  for (let v = v0 + sp / 2, r = 0; v <= v1; r++) {
+  // (the row number a pattern staggers by follows the grid too, kept 0..47: a multiple of every pattern's period)
+  const k0 = grid == null ? 0 : Math.ceil((v0 - grid) / sp - 0.5);
+  for (let v = grid == null ? v0 + sp / 2 : grid + (k0 + 0.5) * sp, r = grid == null ? 0 : ((k0 % 48) + 48) % 48; v <= v1; r++) {
     const k = share ? share((v - v0) / Math.max(v1 - v0, 1e-9)) : 1;
     if (k < 0.15) { v += sp; continue; }
     const ivs = [];
@@ -625,7 +629,13 @@ function ringFill(px, shape, comp, res, { spacing, edge, across, cell }) {
 // round the edge and not by a trim (a carved heart patch: a 27 mm trim between two parts of one region)
 // opts.raster: rows read off the 8 px/mm drawing, as every fill was until 2026-11 (the Open tab's re-stitching: its
 // outlines are traced from a drawing of the file's stitches already, stair-stepped)
-export function fillPolygon(poly, { angle = FILL.angle, density = ROWS.solid, res = FILL.res, inset = 0, pattern = "tatami", share = null, underlay = true, pull = FILLS.cotton.pull, raster = false, cover = 0 } = {}) {
+// opts.stitch: the rows' stitch length (mm)
+// opts.underlay: true (an edge run and rows across), "edge" or "rows" (only that one), false (none)
+// opts.grid (mm): rows on the lines grid + (k + 0.5) x density across them (in the shape's own coordinates), so two
+// fills whose grids agree have rows that line up: a piece with its own settings passes where the design's origin
+// puts them (studio/settings.js `fillOpts`). Without it the first row lies half a row in from the shape's edge.
+// Not with `share` (a blend's rows are spaced unevenly) nor rings.
+export function fillPolygon(poly, { angle = FILL.angle, density = ROWS.solid, res = FILL.res, inset = 0, pattern = "tatami", share = null, underlay = true, pull = FILLS.cotton.pull, raster = false, cover = 0, stitch = TATAMI.stitch, grid = null } = {}) {
   const loops = Array.isArray(poly[0][0]) ? poly : [poly];
   const shape = shaped(loops, inset, res), { x0, y0, mask, labels, count, parts } = shape, paths = [];
   const toMm = (p) => p.map(([x, y]) => [x0 + (x + 0.5) / res, y0 + (y + 0.5) / res]);
@@ -634,7 +644,7 @@ export function fillPolygon(poly, { angle = FILL.angle, density = ROWS.solid, re
       const comp = { id, labels, dt: shape.dt, pixels: parts[id] };
       if (comp.pixels.length < 1.5 * res * res) continue;
       const under = underlay ? tatami(mask, comp, res, { angle: angle + 90, spacing: 2.5, stitch: 3, inset: 0.4, pull: 0 }) : [];
-      const fill = tatami(mask, comp, res, { angle, spacing: density, stitch: 3.5, pull: 0.15, pattern, share });
+      const fill = tatami(mask, comp, res, { angle, spacing: density, stitch, pull: 0.15, pattern, share });
       paths.push(...routeFill([under, fill], comp, mask, res).map(toMm));
     }
     return paths;
@@ -652,10 +662,13 @@ export function fillPolygon(poly, { angle = FILL.angle, density = ROWS.solid, re
     }
     return false;
   };
-  const across = underlay ? exactRows(px, shape, res, { angle: angle + 90, spacing: UNDER.rows, inset: inset + UNDER.inset, pull: 0 }) : null;
+  const across = underlay && underlay !== "edge" ? exactRows(px, shape, res, { angle: angle + 90, spacing: UNDER.rows, inset: inset + UNDER.inset, pull: 0 }) : null;
   // (rings: not a blend's layers, which thin out across the shape as only rows can)
   const rings = !!FILL_PATTERNS[pattern]?.rings && !share;
-  const along = rings ? null : exactRows(px, shape, res, { angle, spacing: density, inset, pull, share });
+  // (the grid in the drawing's pixels: px = (mm - x0, y0) x res - 0.5)
+  const th = (angle * Math.PI) / 180, gV = [-Math.sin(th), Math.cos(th)];
+  const gridPx = grid == null || share ? null : res * (grid - gV[0] * x0 - gV[1] * y0) - 0.5 * (gV[0] + gV[1]);
+  const along = rings ? null : exactRows(px, shape, res, { angle, spacing: density, inset, pull, share, grid: gridPx });
   const of = (R, id, stitch, pat) => sewRows(R.rows.map((row) => ({ ...row, ivs: row.ivs.filter((iv) => iv.part === id) })), R.U, R.V, res, stitch * res, pat, leaves);
   // the covered band: every pixel within `cover` of the first outline
   let band = null;
@@ -676,7 +689,7 @@ export function fillPolygon(poly, { angle = FILL.angle, density = ROWS.solid, re
   for (let id = 1; id <= count; id++) {
     const comp = { id, labels, pixels: parts[id] };
     if (comp.pixels.length < 1.5 * res * res) continue;
-    const edge = underlay ? edgeRuns(px, comp, mask, res, UNDER.inset * res, UNDER.run) : [];
+    const edge = underlay && underlay !== "rows" ? edgeRuns(px, comp, mask, res, UNDER.inset * res, UNDER.run) : [];
     // (sections taken strictly in row order, each from its first row: going to whichever end of the first was nearer
     // sewed it backwards and stranded the rest behind it, 275 parts against 184 over 164 test shapes; each part is a
     // trim. Where that still leaves parts, the sweep from the far side is tried too and the fewer kept: 30 motifs at
@@ -686,7 +699,7 @@ export function fillPolygon(poly, { angle = FILL.angle, density = ROWS.solid, re
     const cell = inset ? (x, y) => (labels[y * mask.w + x] === id ? (band && band[y * mask.w + x] ? 2 : 1) : shape.whole[y * mask.w + x] ? 2 : 0)
       : band ? (x, y) => (labels[y * mask.w + x] === id ? (band[y * mask.w + x] ? 2 : 1) : 0) : null;
     if (rings) { paths.push(...ringFill(px, shape, comp, res, { spacing: density, edge, across: across ? of(across, id, UNDER.stitch, "tatami") : [], cell }).map(toMm)); continue; }
-    const groups = [edge, across ? of(across, id, UNDER.stitch, "tatami") : [], of(along, id, 3.5, pattern)];
+    const groups = [edge, across ? of(across, id, UNDER.stitch, "tatami") : [], of(along, id, stitch, pattern)];
     let best = routeFill(groups, comp, mask, res, undefined, undefined, true, 1, cell);
     if (best.length > 1) {
       const other = routeFill([edge, groups[1], groups[2].map((p) => p.slice().reverse()).reverse()], comp, mask, res, undefined, undefined, true, 1, cell);

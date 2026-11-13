@@ -150,6 +150,7 @@ const KIND = {
   "small print": ["small", "small2"], "arcs and ovals": ["arc", "oval", "ring", "wave", "bridge"], towel: ["towel"],
   "caption starters": ["birth", "bookplate", "pet", "kitchen", "wedding", "tag", "tote"],
   "frames, fills, in-the-hoop": ["frame", "framed", "patch", "pattern", "blend", "carve", "motif", "quilt", "q", "quiltblock", "appl", "applique", "keyfob", "bookmark", "coaster", "mugrug", "ornament", "pouch", "baste", "file", "rings", "trim", "blanket"],
+  "fill settings": ["fillset"],
 };
 export function kind(name) {
   const b = name.replace(/^.*\//, "").replace(/\.(pes|dst)$/i, "");

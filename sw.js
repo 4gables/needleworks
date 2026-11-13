@@ -92,6 +92,7 @@ const FILES = {
   "js/studio/stepsui.js": "195c4f60a2da7a38af9e909171f615b93e630b64f5a0207a84c47884488c8962",
   "js/studio/offpage.js": "c0b87847ff2ae9b4eb42edb737aed59d999f426d3a7912e4614790ec329c0374",
   "js/studio/problems.js": "a6d1419257661a946781747f2006bd501bfdb9aaf87eb2c65ecce07ac897a701",
+  "js/studio/settings.js": "",
   "js/studio/editor.js": "f247cccf23496c7eff2eab3facde606287b3e1ccd63c56876fe7f3c728473c49",
   "js/studio/ui.js": "2b977fea0b9d5a23f6c2cd7206bce09492881d30465a722629b5b61c73581152",
   "js/doctor-worker.js": "3317fbb8ef871771b787b51a9778e16fe4b0d0269e3bedbcc4128c482beed8fc",

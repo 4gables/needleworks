@@ -231,6 +231,22 @@ Unproven until sewn, in the order to sew: fill cover, small print order, script 
 Ask the owner first: other formats out (DST, JEF, EXP, VP3), photo stitch, free-standing lace, 3D puff.
 Not planned: wireless send, FCM cut files, BX fonts, an AI helper.
 
+## Cycle 3: ZigZag parity
+What ZigZag (an open-source embroidery editor) lets a maker set, made here from its clean-room spec
+(`docs/zigzag-spec.md`), wherever it doesn't break a rule of `AGENTS.md` (where it does, ours wins). Each round
+leaves a design with no setting byte-identical.
+- [ ] **Z1a Per-piece settings record and fill settings** (spec 1.1, 1.2): `stitches` on a piece, saved and copied
+  with it, clamped (`recipes.js` `FILL_SET`); a fill's angle on a shared row grid, rows apart, stitch length, reach
+  past the edge, what goes underneath; the editor's Stitches section
+  - [x] record, fills and the editor (`settings.js`); batches byte-identical with no setting; `st_fillset_*` cases
+  - [ ] proven: check.sh, screenshots, merged
+- [ ] **Z1b Satin settings per piece** (spec 1.3)
+- [ ] **Z1c Start and end points, trim or pause after a piece** (spec 1.5, 1.6)
+- [ ] **Z2 SVG import** (spec 2)
+- [ ] **Z3 Stitch types we lack or half have** (spec 3)
+- [ ] **Z4 Test swatches** (spec 4)
+- [ ] **W5 Other formats out** (DST, JEF, EXP, VP3; approved by the owner 2026-11-13)
+
 ## Verdict
 Strong, and kept: the machine layer (locked writer, PEC box, palette, locks, the 5 mm loose-thread rule, 24 hits
 per mm² at every offset), the 4 mm satin border and staggered seams (both from real sew-outs), the exit gate, the

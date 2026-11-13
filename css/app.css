@@ -448,6 +448,15 @@ ul.problems { margin: 0; padding-left: 18px; list-style: disc; display: grid; ga
 .edit textarea { resize: none; field-sizing: content; display: block; }
 .edit details.more > summary { cursor: pointer; color: var(--accent); font-size: 14px; }
 .edit details.more[open] { display: grid; gap: 12px; }
+/* a fill's own settings (studio/editor.js `stitchesUI`): folded away; each slider's two ends said in words under it */
+.edit details.stitches > summary { cursor: pointer; color: var(--accent); font-size: 14px; }
+.edit details.stitches[open] { display: grid; gap: 12px; }
+.edit .st-set { display: grid; gap: 4px; }
+.edit .st-set .ends { display: flex; justify-content: space-between; font-size: 13px; color: var(--muted); margin: -2px 0 0 calc(6.6em + 10px); padding-right: 62px; }
+.edit .rowways button { display: inline-flex; align-items: center; gap: 6px; }
+.rowdir { width: 18px; height: 18px; flex: none; }
+.rowdir line { stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; }
+@media (max-width: 520px) { .edit .st-set .ends { margin-left: 0; padding-right: 0; } }
 .pieces .ops [aria-pressed="true"] { color: var(--accent); }
 .names { border: 0; border-radius: 16px; padding: 22px; width: min(440px, 92vw); background: var(--panel); color: var(--ink); box-shadow: 0 20px 60px rgba(0,0,0,.25); }
 .names::backdrop { background: rgba(30,20,20,.35); }

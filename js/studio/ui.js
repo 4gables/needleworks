@@ -119,6 +119,7 @@ export function initStudio(api) {
     get relabelThreads() { return relabelThreads; },
     get threadTip() { return threadTip; },
     get editor() { return editor; },
+    get change() { return change; },
     get missing() { return missing; },
     get hard() { return hard; },
     get against() { return against; },
