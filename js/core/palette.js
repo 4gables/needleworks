@@ -316,7 +316,18 @@ function cluster(P, k, skip, lines = false) {
 // The picture's threads, learned from `img` (any size: the Picture tab sends the same copy whatever the Size).
 // Returns { C: fine clusters (Lab), map: fine cluster -> colour id, colors, bg (the background's id, or -1), frame
 // (a mask over img, or null), boxes: each colour's extent as fractions of img [x0, y0, x1, y1], merged, empty }.
+// One thread colour chosen means one thread sewn (owner, 2026-11-13: a BYU logo at one colour came out Ultramarine
+// and White): the one thread is the design's and the background's colour closed in by the design stays fabric
+// (`spare`), sewn only when the person asks ("Sew it": labelWith's inside "all"). From two colours up the closed-in
+// colour is still a thread past the count: giving it a slot (the design learned one colour fewer) merged distinct
+// inks on the corpus (red text sewn purple at 3, a purple stroke green at 4), so which colour to give up is left to
+// a measure of what each costs the look (roadmap PX1).
 export function learnColours(img, opts = {}) {
+  const n = opts.colors ?? DEFAULTS.colors, m = learnOnce(img, opts);
+  if (n > 1 || m.empty || m.inside < 0 || !m.colors[m.inside]?.inside || opts.style === "line") return m;
+  return { ...m, spare: true };
+}
+function learnOnce(img, opts = {}) {
   const o = { ...DEFAULTS, ...opts };
   // (a textured picture is learned from its smoothed copy, and labelled from one. `smooth`: true or false as the
   // person chose, else by the picture. `scale`: the copy's px per picture px. Tried: the colours learned from the
@@ -628,7 +639,9 @@ export function learnColours(img, opts = {}) {
 // `res` (working px per mm, when img is the working copy): a piece that is a dot (under 1.5 mm², or under 4 mm² and
 // 2.5 mm across: the hole in a small e) or nowhere 0.6 mm across (the blend between a fill and its outline, read as
 // the background's colour) stays fabric. Returns `closed` too: the share of the picture that is closed in.
-export function labelWith(img, model, crop = [0, 0, 1, 1], { inside = "all", res = 0 } = {}) {
+// `inside`: "auto" sews the closed-in colour unless the model has no thread to spare for it (`spare`), "all" sews it
+// always (the person asked), "none" leaves it as fabric.
+export function labelWith(img, model, crop = [0, 0, 1, 1], { inside = "auto", res = 0 } = {}) {
   // (labelled from a gentler smoothing than the colours were learned from, squares 2 px across: at 3 px a script
   // title's 0.8 mm strokes wore away)
   // (labelled from a gentler smoothing than the colours were learned from: squares one picture pixel across on the
@@ -703,7 +716,7 @@ export function labelWith(img, model, crop = [0, 0, 1, 1], { inside = "all", res
       if (res) for (let c = 1; c <= count; c++)
         if (size[c] < 1.5 * res * res || (size[c] < 4 * res * res && x1[c] - x0[c] < 2.5 * res && y1[c] - y0[c] < 2.5 * res) || 2 * wide[c] < 0.6 * res) keep[c] = 0;
       for (let c = 1; c <= count; c++) if (keep[c]) closed += size[c];
-      if (inside !== "none") for (let i = 0; i < n; i++) if (cl[i] && keep[cl[i]]) labels[i] = model.inside;
+      if (inside === "all" || (inside === "auto" && !model.spare)) for (let i = 0; i < n; i++) if (cl[i] && keep[cl[i]]) labels[i] = model.inside;
     }
   }
   const area = new Array(G).fill(0);
@@ -756,7 +769,11 @@ export function pictureInk(img, ref) {
 }
 // (as the worker does it: a line drawing leaves the fabric's colour inside the design as fabric)
 export function analyze(img, opts = {}) {
-  return labelWith(img, learnColours(img, opts), undefined, { inside: opts.style === "line" || opts.inside === "none" ? "none" : "all", res: opts.res || DEFAULTS.res });
+  return labelWith(img, learnColours(img, opts), undefined, { inside: insideOf(opts), res: opts.res || DEFAULTS.res });
+}
+// the page's choice for the closed-in colour, as labelWith takes it (a line drawing leaves it as fabric)
+export function insideOf(opts) {
+  return opts.style === "line" || opts.inside === "none" ? "none" : opts.inside === "all" ? "all" : "auto";
 }
 // ---------- build ----------
 // "Use only my threads": every colour becomes the nearest of `palette` (hex, by Lab), and colours that land on the
