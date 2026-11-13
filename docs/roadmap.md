@@ -263,7 +263,7 @@ Owner: makers will bring their own art, often made with AI, so turning a picture
 guidelines and perhaps even come up with novel ways". Cycle 3's remaining rounds wait behind this one (Z2 SVG import
 joins PX1's shape path). Every round keeps the hard rules of `AGENTS.md`; nothing is proven until sewn, so each
 stitch round ends with a small sew-out pack.
-- [ ] **PX-R State of the art**: papers, commercial auto-digitizers' published behaviour, where they fail;
+- [x] **PX-R State of the art**: papers, commercial auto-digitizers' published behaviour, where they fail;
   `docs/research/picture-sota.md` (ideas and numbers only, credited; no one's code)
 - [ ] **PX0 Looks like the picture**: a realistic thread render of a file and a score against the source picture,
   beside the stitch scoreboard in the picture corpus; a corpus of AI-style art (flat illustration, logo, cartoon,

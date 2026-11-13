@@ -11,8 +11,8 @@
 // cache.
 // (`SET`: a fingerprint of the list below, written with the hashes. It is part of the cache's name, so a release whose
 // files changed can never install into the cache the running one is serving from, version number bumped or not.)
-const SET = "358909266e5f";
-const CACHE = `needleworks-v30-${SET}`, SHARED = "needleworks-shared";
+const SET = "9466511ebeb1";
+const CACHE = `needleworks-v31-${SET}`, SHARED = "needleworks-shared";
 const FILES = {
   "index.html": "c7c898214c622a11bb71478e8af526afe830d21c9aba7d0f1907647c28df3b19",
   "manifest.webmanifest": "82f627e1def5254866cf364a55a1c2a85e2c3dd61abeeb890829362969fcfb63",
@@ -54,7 +54,7 @@ const FILES = {
   "js/core/density.js": "fc507b2818e7cdb700d52d88ac328a784b89ddac6f609fcc469b95c4805a237e",
   "js/core/fill.js": "bd3e69a18daf8fd88885a7783e32d1dac34010cbb9e7ef80e4f99e7927e954df",
   "js/core/machines.js": "d8dcc65e52b81d23c7eecb1bdcbe2091bbc4d36e505ea7b406f58f939e539a85",
-  "js/core/palette.js": "981c9378a3b36cb0d46c774f4adef8b1c96d5413bff597d5008b03e79bcde6b0",
+  "js/core/palette.js": "27a447f94751ce1475289a0f1ff78ec5ad4cab361bf4c9da087b34e388556d77",
   "js/core/recipes.js": "b0de8c11d3598a1bae5aceb72c56bb99d14dc94acd8c03828b6e09f6e3142d2f",
   "js/core/raster.js": "ae1885a4450df9ac59e1e37cb253bf729a0c2d680b0a3aa54239f0df9a355baa",
   "js/core/text.js": "a253f11cfeafe6c9dd630fb3c2f010f0a88b37771923e92ffa9db70f32ff0378",
@@ -62,7 +62,7 @@ const FILES = {
   "js/core/threads.js": "2f843722671915cef7d2aad9344f171040e59d2cf70aa43b139da9dd4229fc1f",
   "js/doctor.js": "ff80ece0fa4d29d7523fd2d5c2af3247e184fe49d2e6220dba286af39281e64c",
   "js/opened.js": "4a56f6bbcd1d67639d19ca1f052ec421d32b7cde6fedf5a016f827f11ccd4b84",
-  "js/picture.js": "5208ef2d45b57f32ab01754efa7b0371b72d6235a428cf9cf030cf28f40b1026",
+  "js/picture.js": "908dd1778068f6be25235b11124263b0f69f90245f8b1b2f63b97b1a0abce45a",
   "js/threadui.js": "8ceabd64367deaaa390dd1b99ff44ae7f6ee9a461d188c77e9c35263747af525",
   "js/along.js": "5332fceae5092f2989d8fe09ddf64167bbd7d6e0004fb3eed174a149ecd03545",
   "js/onitem.js": "e8f881bc81209ff19ee6a80c75afa0abb9a2f120077228d9370b5c864e054f6d",
@@ -70,7 +70,7 @@ const FILES = {
   "js/quality.js": "195942145d60801fdbef0940746642dcedc1cc2c78cef3f3f4a4aa26dc8345ed",
   "js/render.js": "e4d21a8dcc5f6bf039dc6c4fa009b8848ad50a522a06224b4d152db2d52becf1",
   "js/sheet.js": "27290ea9399e4d587c9a7ed5889603026a51bc0e5edc675c35d6bd2691de4678",
-  "js/state.js": "1620cf8640cb22ba98660c8c0acb0f22619ae9e9d16a9cd6da9b11c50f850468",
+  "js/state.js": "be94895cc288e2d59c8e6b3a53ee9f84e8f70208c0695161c9f2f1a5303ab110",
   "js/studio/motifs.js": "4f60c90573db9bd4f3affcc9d1b845f3a353c08f53c74f4e41f9e141745928cb",
   "js/studio/ownfont.js": "755f1c910f9c13b18bc0691fe3c86cfeabe3bfbd5d393e5b9ce69f8df0f2fb43",
   "js/studio/layout.js": "db1920b82ccbd7b04359e51cc8295a4e9abab86f7d569c29f7e049c692ff65b1",
@@ -98,7 +98,7 @@ const FILES = {
   "js/studio/ui.js": "6176bfbaa9b4c1b3057ff615989a8eb30f863ad9ebb722edd28aa4f18e03643d",
   "js/doctor-worker.js": "3317fbb8ef871771b787b51a9778e16fe4b0d0269e3bedbcc4128c482beed8fc",
   "js/quilt-worker.js": "75ae9e71b130b2bafcb5fee6e169ffdd39e7cea9de949cbb344900bc5b6da76c",
-  "js/worker.js": "22078b367f1dae827cca8011bb6bc5a1df78e3428c58fa0e156ad953376e57fc",
+  "js/worker.js": "1d5092e82751af773f3785443709846d6388193acf592de87a2e7f8ec38a369c",
   "js/zip.js": "d3d529808cf0618975057f7a71bf6044059204da36a7ffc62d4679f627c6fcb3",
   "js/gate.js": "9843b228274d99da133632799a6c5ded327454e5dd4c64280c54a78a6cc3e923",
   "js/jobs.js": "1309a0a2ad6edd8d872c0e7af21e48da0041406b1f901d8a95c3af157a6d6617",
