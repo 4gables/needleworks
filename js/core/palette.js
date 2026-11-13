@@ -320,7 +320,7 @@ function cluster(P, k, skip, lines = false) {
 // (owner, 2026-11-13: a BYU logo at one colour came out Ultramarine and White, at two Prussian Blue, Cornflower Blue
 // and White). When the design's own colours fill the count and some of it is closed in (0.2 % of the learned copy),
 // it gives up a slot only where that costs the look little: the design learned one colour fewer (merged pairwise as
-// always, cheapest first) loses only a near-duplicate shade (`NEAR`) or a blend of two colours it keeps (BYU at six
+// always, cheapest first) loses only a near-duplicate shade (`NEAR`) or a blend of two colours it keeps, all edge (BYU at six
 // learns Black and Dark Gray from the soft edges). Else the closed-in colour stays fabric (`spare`), sewn only when the
 // person asks ("Sew it": labelWith's inside "all"). One colour is always so. Worse: one colour fewer whenever white is
 // closed in, whatever was lost (red text sewn purple at 3 colours, a purple stroke green at 4: six corpus cases).
@@ -330,14 +330,25 @@ export function learnColours(img, opts = {}) {
   if (m.empty || m.inside < 0 || !m.colors[m.inside]?.inside || opts.style === "line") return m;
   const own = (q) => q.colors.filter((c) => !c.background && !c.inside);
   if (own(m).length + 1 <= n) return m;
-  if (n > 1 && labelWith(img, m, undefined, { inside: "all" }).closed > 0.002) {
+  const L = n > 1 ? labelWith(img, m, undefined, { inside: "all" }) : null;
+  if (L && L.closed > 0.002) {
     const f = learnOnce(img, { ...opts, colors: n - 1 }), lab = (c) => srgbToLab(...hexToRgb(c.picture || c.hex));
     const keep = [...own(f), ...f.colors.filter((c) => c.background)].map(lab);
     // (what the count one fewer lost: the colour of the n farthest from all the n - 1 keep)
     let lost = null, far = -1;
-    for (const c of own(m)) { const d = Math.min(...own(f).map((k) => deltaE2000(lab(c), lab(k)))); if (d > far) { far = d; lost = lab(c); } }
-    const e = (p, q) => Math.hypot(p[0] - q[0], p[1] - q[1], p[2] - q[2]);
-    const blend = lost && keep.some((A, i) => keep.some((B, j) => j > i && e(A, lost) + e(lost, B) <= 1.25 * e(A, B)));
+    for (const c of own(m)) { const d = Math.min(...own(f).map((k) => deltaE2000(lab(c), lab(k)))); if (d > far) { far = d; lost = c; } }
+    // (a blend: between two colours kept, and all edge, no pixel of it 2 px from another colour. A lavender title is
+    // between purple and white too, but an ink: merged, "Easter Bouquets" sewed purple, look 86 -> 77)
+    const e = (p, q) => Math.hypot(p[0] - q[0], p[1] - q[1], p[2] - q[2]), M = lost && lab(lost);
+    let blend = !!M && keep.some((A, i) => keep.some((B, j) => j > i && e(A, M) + e(M, B) <= 1.25 * e(A, B)));
+    if (blend) {
+      const mk = { w: L.w, h: L.h, data: new Uint8Array(L.w * L.h) };
+      let all = 0, deep = 0;
+      for (let i = 0; i < mk.data.length; i++) if (L.labels[i] === lost.id) { mk.data[i] = 1; all++; }
+      const dt = distanceTransform(mk);
+      for (let i = 0; i < mk.data.length; i++) if (mk.data[i] && dt[i] > 2) deep++;
+      blend = all > 0 && deep < 0.1 * all;
+    }
     if (f.inside >= 0 && f.colors[f.inside]?.inside && (far < NEAR || (blend && far < 2 * NEAR))) return { ...f, gave: true };
   }
   return { ...m, spare: true };
