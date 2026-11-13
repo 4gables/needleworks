@@ -121,7 +121,10 @@ Reference for this part of Needleworks: the rules, the reason for each (it stops
   0 -> 0, at the density limit 0 -> 0, stitches -4 %; bare patches 20.0 -> 20.2 mm² (20 either way); worse in one
   case of 74 (photo_noise at 120 mm, a trim more and a loose thread fewer); all 177 cases pass. The batch's
   `pic_*_form` (the five shapes at 100 and 160 mm, the samples at 120 mm): trims 487 -> 489, loose 39 -> 34, stitches
-  -1.7 %.
+  -1.7 %. PX0's look score (`tests/look.js`) says neither better nor worse: 126 filled corpus cases 78.72 -> 78.62,
+  swings both ways (two near-identical reds +11.9, rules +11.0; a framed card -5.3, a turned bold logo -4.7; 12 cases
+  down 2 or more, so `dir=auto` would fail the look gate), and the render's sheen turns with the rows, which moves
+  its outline and structure parts at region borders. Not the pictures' default until sewn and judged by eye.
 - **Curved rows** (`rowField`, `curvedRows`): the rows are the level lines of one field phi over the part, fitted so its
   gradient follows the part's own direction field (stripe patterns, Knöppel et al. 2015, here without singularities:
   one sparse least-squares solve, conjugate gradients, on 0.5 mm cells). The direction field is the structure tensor
