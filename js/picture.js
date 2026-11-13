@@ -37,7 +37,7 @@ const picJobs = picWorker(), picChecks = picWorker();
 const DETAILS = ["all", "most"], detailsOf = (p) => (DETAILS.includes(p.details) ? p.details : "most");
 function picSettings(over = {}) {
   const p = state.pic, h = hoop(), turn = !!state.turn.picture && !square();
-  return { size: p.size, style: p.style, cross: p.cross, skip: p.skip, swap: p.swap, colors: p.colors, bg: p.bg, angle: p.angle, density: p.density, details: detailsOf(p), inside: p.inside === "none" ? "none" : "all", smooth: p.smooth,
+  return { size: p.size, style: p.style, cross: p.cross, skip: p.skip, swap: p.swap, colors: p.colors, bg: p.bg, angle: p.angle, density: p.density, details: detailsOf(p), inside: p.inside === "none" || p.inside === "all" ? p.inside : "auto", smooth: p.smooth,
     line: p.line, edge: p.edge, turn, hoop: turn ? { ...h, w: h.h, h: h.w } : h, palette: ownedPalette(), ...over };
 }
 // the fit each exact setting was sewn at (sewing it again gives the same file, at once)
@@ -97,7 +97,7 @@ export async function makePicture() {
   state.pic.owned = r.owned || null;
   // (the fabric's colour closed in by the design: sewn, or left out, and said: insideNote)
   verdictUI(r);
-  state.pic.closed = r.closed || 0; state.pic.fabric = r.colors.find((c) => c.background) || null;
+  state.pic.closed = r.closed || 0; state.pic.spare = !!r.spare; state.pic.fabric = r.colors.find((c) => c.background) || null;
   // (flecks sewn in the colour round them, `foldFlecks`: said in the panel when it's more than a handful, as what
   // happened; not a problem, so not on the sew sheet)
   state.pic.folded = r.fine?.folded >= FLECKS ? r.fine.folded : 0;
@@ -243,7 +243,11 @@ function insideNote() {
   const p = state.pic, el = $("pic-inside"), f = p.fabric, show = !!f && p.closed > 0 && p.style !== "line";
   el.hidden = !show; if (!show) { el.textContent = ""; return; }
   const name = escapeHtml(nearestBrotherThread(f.hex).name.toLowerCase());
-  el.innerHTML = p.inside === "none"
+  // (one thread colour chosen: the one thread is the design's, so the closed-in colour stays fabric unless asked for:
+  // `spare`. The count is every thread sewn, this one too)
+  el.innerHTML = p.spare
+    ? `The ${name} closed in by the design is left as fabric: with one thread colour, that thread is the design's. <button type="button" class="link" data-inside="all">Sew it in ${name} too (2 threads)</button>`
+    : p.inside === "none"
     ? `The ${name} closed in by the design is left as fabric, like the ${name} round it. <button type="button" class="link" data-inside="all">Sew it in ${name}</button>`
     : `The ${name} round the design is the fabric and isn't sewn. The ${name} closed in by the design is part of it, so it is sewn. <button type="button" class="link" data-inside="none">Leave it out</button>`;
 }
@@ -495,7 +499,7 @@ $("pic-line").onclick = (e) => {
 $("pic-line-any").onchange = (e) => { state.pic.line = nearestBrotherThread(e.target.value).hex; lineUI(); makePicture(); };
 $("pic-style").onclick = (e) => { const b = e.target.closest("button"); if (!b || b.dataset.s === state.pic.style) return; state.pic.style = b.dataset.s; styleUI(); makePicture(); };
 styleUI();
-$("pic-bg").onchange = (e) => { state.pic.bg = e.target.checked; state.pic.skip = []; state.pic.swap = {}; state.pic.inside = "all"; makePicture(); };
+$("pic-bg").onchange = (e) => { state.pic.bg = e.target.checked; state.pic.skip = []; state.pic.swap = {}; state.pic.inside = "auto"; makePicture(); };
 // first visit: show a sample so the page opens on real stitches, not an empty box
 async function loadSample() {
   try {
@@ -532,7 +536,7 @@ export async function loadPicture(file, sample = false, again = false) {
     // (the Small details choice is about one picture: a new one starts with specks left out, as the panel shows.
     // "Keep" taken for the last picture stayed on for the next with nothing said.)
     if (!again && state.pic.details === "all") { state.pic.details = "most"; detailsUI(); }
-    Object.assign(state.pic, { file, bitmap, sample, box: null, key: state.pic.key + 1, skip: [], swap: {}, inside: "all", smooth: null, edge: false, edgeSeen: false, models: new Map(), autoLine: "" });
+    Object.assign(state.pic, { file, bitmap, sample, box: null, key: state.pic.key + 1, skip: [], swap: {}, inside: "auto", smooth: null, edge: false, edgeSeen: false, models: new Map(), autoLine: "" });
     Object.assign(state.pic, { whole: bitmap, part: 0, partThumbs: null, found: sample ? null : findParts(bitmap) }); partsUI();
     setThumb(file); $("pic-rotate").hidden = false;
     $("pic-drop").querySelector(".drop-text").innerHTML = sample ? "<b>Choose your own picture</b> or drop it here." : `${again ? "Your last picture, " : ""}<b>${escapeHtml(file.name)}</b> · choose another`;
@@ -556,7 +560,7 @@ $("pic-parts").onclick = async (e) => {
   const cut = n ? cutPart(p.whole, p.found, n - 1) : null, bitmap = cut ? await createImageBitmap(cut) : p.whole;
   // (the picture shown above is what is sewn: its left-out parts are ringed on it)
   setThumb(cut ? (cut.convertToBlob ? await cut.convertToBlob() : await new Promise((r) => cut.toBlob(r))) : p.file);
-  Object.assign(p, { bitmap, part: n, box: null, key: p.key + 1, skip: [], swap: {}, inside: "all", smooth: null, edge: false, edgeSeen: false, models: new Map(), autoLine: "" });
+  Object.assign(p, { bitmap, part: n, box: null, key: p.key + 1, skip: [], swap: {}, inside: "auto", smooth: null, edge: false, edgeSeen: false, models: new Map(), autoLine: "" });
   partsUI(); makePicture(); $("pic-parts").querySelector('[aria-pressed="true"]')?.focus();
 };
 // OffscreenCanvas where available (iOS 16.4+), a plain canvas otherwise
