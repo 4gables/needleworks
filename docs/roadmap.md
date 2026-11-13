@@ -237,19 +237,25 @@ Not planned: wireless send, FCM cut files, BX fonts, an AI helper.
 What ZigZag (an open-source embroidery editor) lets a maker set, made here from its clean-room spec
 (`docs/zigzag-spec.md`), wherever it doesn't break a rule of `AGENTS.md` (where it does, ours wins). Each round
 leaves a design with no setting byte-identical.
-- [ ] **Z1a Per-piece settings record and fill settings** (spec 1.1, 1.2): `stitches` on a piece, saved and copied
+- [x] **Z1a Per-piece settings record and fill settings** (spec 1.1, 1.2): `stitches` on a piece, saved and copied
   with it, clamped (`recipes.js` `FILL_SET`); a fill's angle on a shared row grid, rows apart, stitch length, reach
   past the edge, what goes underneath; the editor's Stitches section
   - [x] record, fills and the editor (`settings.js`); batches byte-identical with no setting; `st_fillset_*` cases
   - [x] proven: check.sh (534 of 534 files pass the checker; sw.test stale hashes only, written at the release),
     the editor at desktop and phone width
-  - [ ] merged and released
+  - [x] merged and released (v30)
+  - left: a filled motif's edge run never sews (laid 0.4 mm inside, rows inset 0.6: every point dropped;
+    `docs/decisions.md`); with "Edge only" underneath, the travel to the first row shows between open rows
 - [ ] **Z1b Satin settings per piece** (spec 1.3)
-- [ ] **Z1c Start and end points, trim or pause after a piece** (spec 1.5, 1.6)
+- [ ] **Z1c Start and end points, trim or pause after a piece** (spec 1.5, 1.6); with it, the underlay's travel
+  to the first row ending where it hides
 - [ ] **Z2 SVG import** (spec 2)
 - [ ] **Z3 Stitch types we lack or half have** (spec 3)
 - [ ] **Z4 Test swatches** (spec 4)
-- [ ] **W5 Other formats out** (DST, JEF, EXP, VP3; approved by the owner 2026-11-13)
+- [x] **W5 Other formats out**: DST, EXP, VP3 released (v30), see Cycle 2's line
+  - [ ] JEF: Janome's thread order measured on Janome's own software (`docs/formats-out-spec.md` §7)
+  - [ ] Open tab: a DST with two colour changes in a row (an empty block) fails the doctor's fixes ("fewer thread
+    colours than colour changes"); site files never have one, outside files may
 
 ## Verdict
 Strong, and kept: the machine layer (locked writer, PEC box, palette, locks, the 5 mm loose-thread rule, 24 hits
