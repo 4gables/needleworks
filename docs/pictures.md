@@ -22,7 +22,14 @@ Reference for this part of Needleworks: the rules, the reason for each (it stops
   is sewn, with "Leave it out" / "Sew it" (`state.pic.inside`). Tried and dropped: sewing it only where the ink
   round it is at least as thick as the piece (a white star in a red ring was left out, and bouquets still gained
   white). Known cost: the hole of a big O, the inside of an outline and gaps in a bouquet are sewn white until
-  tapped off; the 8 Etsy samples each gain a White thread (3-25 % more stitches).
+  tapped off.
+- The Thread colours count is every thread sewn, the closed-in colour included (owner, 2026-11-13: one colour chosen,
+  a BYU logo came out Ultramarine and White). `learnColours`: when the design's colours already fill the count and
+  over 0.2 % of the learned copy is closed in, the design is learned with one colour fewer and the closed-in colour
+  takes the last thread (BYU at 2: Ultramarine, White); at one colour, or with less closed in, it stays fabric
+  (`spare`) and the page offers "Sew it in white too (2 threads)" (`inside` "all"; "auto" is the default, "none"
+  "Leave it out"). Measured on the 8 Etsy samples, BYU and ashley_derby at 1, 2, 3 and 6: threads sewn = the count,
+  every one (v30 sewed one more on every picture with closed-in white).
 - A see-through picture has no background to find: every opaque pixel is sewn, as drawn (the page's lede says so).
 - Separate parts (picture.js `findParts`, `cutPart`): a picture of several things apart from each other (ink
   joined across gaps under 3 % of the picture; 2 to 8 parts of 3 % of the ink or more) offers each "on its own"
