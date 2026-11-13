@@ -150,6 +150,7 @@ const KIND = {
   "small print": ["small", "small2"], "arcs and ovals": ["arc", "oval", "ring", "wave", "bridge"], towel: ["towel"],
   "caption starters": ["birth", "bookplate", "pet", "kitchen", "wedding", "tag", "tote"],
   "frames, fills, in-the-hoop": ["frame", "framed", "patch", "pattern", "blend", "carve", "motif", "quilt", "q", "quiltblock", "appl", "applique", "keyfob", "bookmark", "coaster", "mugrug", "ornament", "pouch", "baste", "file", "rings", "trim", "blanket"],
+  "fill settings": ["fillset"],
 };
 export function kind(name) {
   const b = name.replace(/^.*\//, "").replace(/\.(pes|dst)$/i, "");
@@ -181,7 +182,9 @@ function score(files, opts) {
 if (import.meta.url === `file://${process.argv[1]}`) {
   const args = process.argv.slice(2), opts = new Set(args.filter((a) => a.startsWith("--"))), files = [];
   for (const a of args.filter((x) => !x.startsWith("--"))) {
-    if (statSync(a).isDirectory()) for (const f of readdirSync(a).sort()) { if (/\.(pes|dst)$/i.test(f)) files.push(`${a}/${f}`); }
+    // a .dst beside a .pes of the same name is the batch's copy of that design (W5 saves DST/EXP/VP3 beside every
+    // PES): counted once, as its PES; a .dst on its own is an outside file and counts
+    if (statSync(a).isDirectory()) { const all = readdirSync(a).sort(), pes = new Set(all.filter((f) => /\.pes$/i.test(f)).map((f) => f.slice(0, -4).toLowerCase())); for (const f of all) { if (/\.pes$/i.test(f) || (/\.dst$/i.test(f) && !pes.has(f.slice(0, -4).toLowerCase()))) files.push(`${a}/${f}`); } }
     else files.push(a);
   }
   if (opts.has("--score")) { score(files, opts); process.exit(0); }

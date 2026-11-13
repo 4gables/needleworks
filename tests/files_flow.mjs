@@ -17,6 +17,7 @@
 // - Threads I own: a search for an unlisted brand says it isn't listed; a colour picked shows the nearest spools.
 // - (round 12) One for each name: a name saved under another file name (Zoë as Zoe.pes, a second Emma as Emma_2.pes)
 //   says so under its thumbnail.
+// - (W5) File for DST: Download, the dialog and the names ZIP follow it, the bytes read back, only PES is said checked.
 // - Every kind of project with a modifier, out through every exit (the matrix, below; all of it with --matrix).
 // usage: node tests/cdp.mjs PORT start DIR; serve the site (tests/batch_server.py out/batch HTTP); then
 //        node tests/files_flow.mjs PORT http://127.0.0.1:HTTP [--matrix] [--only kind,kind] [--mods mod,mod]
@@ -268,6 +269,31 @@ for (const [bytes, says, pic] of [[png, /is a picture \(PNG\)/, true], ["new Uin
   check("their own Madeira spool is listed and saved", /Madeira 1147/.test(m.chips) && /"Madeira"/.test(m.saved || ""), JSON.stringify(m));
   check("their own Madeira spool is a swatch named as theirs, never as a Brother spool", m.sw.some((t) => /^Your Madeira 1147 \| Your Madeira 1147/.test(t)) && !m.sw.some((t) => /Your Brother/.test(t)), JSON.stringify(m.sw));
 }
+// ---- (W5) File for: another machine's file. Download, the names ZIP and the dialog follow the choice, the bytes are
+// that format's (read back as the gate does), only the PES is said to be checked, and the choice is remembered
+{
+  await open("#design");
+  const f = await run(`const blobs = []; const make = URL.createObjectURL; URL.createObjectURL = (b) => { blobs.push(b); return make.call(URL, b); };
+    document.querySelector("[data-start=oval]").click(); await __ff.wait(() => !document.getElementById("download").disabled); await new Promise((r) => setTimeout(r, 800));
+    const s = document.getElementById("file-for"); s.value = "dst"; s.dispatchEvent(new Event("change"));
+    const label = document.getElementById("download").textContent, note = document.getElementById("file-for-note").textContent;
+    __ff.got.length = 0; document.getElementById("download").click(); await __ff.wait(() => __ff.got.length >= 1, 5000);
+    const said = document.getElementById("done-format").hidden ? "" : document.getElementById("done-format").textContent; __ff.close();
+    const { readBack } = await import("./js/core/formats-out.js"), dst = new Uint8Array(await blobs.at(-1).arrayBuffer()), back = readBack(dst, "dst");
+    document.getElementById("names-open").click(); document.getElementById("names-list").value = "Ann\\nBo"; document.getElementById("names-make").click();
+    await __ff.wait(() => __ff.got.length >= 2 && !document.getElementById("names-make").disabled, 30000); __ff.close();
+    const zip = new Uint8Array(await blobs.at(-1).arrayBuffer()), text = new TextDecoder("latin1").decode(zip);
+    return { label, note, said, got: __ff.got, dst: back.error || back.stitches.length, inZip: [...text.matchAll(/[A-Za-z_]+\\.(dst|pes)/g)].map((m) => m[0]) };`);
+  check("File for: Download says and saves the DST", /\.dst$/.test(f.label) && /\.dst$/.test(f.got[0] || ""), JSON.stringify(f));
+  check("File for: the DST saved reads back", typeof f.dst === "number" && f.dst > 100, JSON.stringify(f.dst));
+  check("File for: only the PES is said to be checked", /Only PES files are checked/.test(f.note) && /untested/.test(f.said), JSON.stringify([f.note, f.said]));
+  check("File for: the names ZIP holds DST files", f.inZip.length >= 2 && f.inZip.every((n) => /\.dst$/.test(n)), f.inZip.join(" "));
+  await run(`location.reload(); return 1;`).catch(() => 1);
+  await open("#design");
+  const kept = await run(`const v = document.getElementById("file-for").value, l = document.getElementById("download").textContent; const s = document.getElementById("file-for"); s.value = "pes"; s.dispatchEvent(new Event("change")); return [v, l, document.getElementById("download").textContent];`);
+  check("File for: the choice is remembered, and PES puts it back", kept[0] === "dst" && /\.dst$/.test(kept[1]) && /\.pes$/.test(kept[2]), kept.join(" | "));
+}
+
 // ---------- every kind with every modifier, out through every exit (was tests/matrix.mjs) ----------
 // Class guarded: features that each work alone but not together (rounds 9-11: a ganged key fob's monogram, a turned
 // cut file sideways, a names batch past Download's block, two hoopings' files named after the second half, a towel

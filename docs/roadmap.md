@@ -223,13 +223,39 @@ of v28 (agents that had not seen the work) found:
   lengths; an all-colour density limit; cross-stitch in rows; picture trims
 - [ ] **P2 Satin and lettering**: short stitches inside curves, underlay under print columns, towel counters,
   the digits-only size bug, crosshatch travel, locks on opened files
+- [x] **W5 Other formats out** (owner approved 2026-11-13): DST, EXP, VP3 from the clean-room spec, through
+  the gate, a "File for" choice by Download; JEF waits for Janome's measured thread order
 - [ ] **A1 Agent-drivable**: one job format with validation, `make(job)` returning bytes, verdict, steps and
   problems as data (the UI calls it too), page API and link form, a command-line tool (macOS), docs and the skill;
   with it the two-tab reload, the stuck fill job, removing an own font
 Unproven until sewn, in the order to sew: fill cover, small print order, script joins, ring fills, the 6x10 page.
 
-Ask the owner first: other formats out (DST, JEF, EXP, VP3), photo stitch, free-standing lace, 3D puff.
+Ask the owner first: photo stitch, free-standing lace, 3D puff. (Other formats out: W5, JEF still to measure.)
 Not planned: wireless send, FCM cut files, BX fonts, an AI helper.
+
+## Cycle 3: ZigZag parity
+What ZigZag (an open-source embroidery editor) lets a maker set, made here from its clean-room spec
+(`docs/zigzag-spec.md`), wherever it doesn't break a rule of `AGENTS.md` (where it does, ours wins). Each round
+leaves a design with no setting byte-identical.
+- [x] **Z1a Per-piece settings record and fill settings** (spec 1.1, 1.2): `stitches` on a piece, saved and copied
+  with it, clamped (`recipes.js` `FILL_SET`); a fill's angle on a shared row grid, rows apart, stitch length, reach
+  past the edge, what goes underneath; the editor's Stitches section
+  - [x] record, fills and the editor (`settings.js`); batches byte-identical with no setting; `st_fillset_*` cases
+  - [x] proven: check.sh (534 of 534 files pass the checker; sw.test stale hashes only, written at the release),
+    the editor at desktop and phone width
+  - [x] merged and released (v30)
+  - left: a filled motif's edge run never sews (laid 0.4 mm inside, rows inset 0.6: every point dropped;
+    `docs/decisions.md`); with "Edge only" underneath, the travel to the first row shows between open rows
+- [ ] **Z1b Satin settings per piece** (spec 1.3)
+- [ ] **Z1c Start and end points, trim or pause after a piece** (spec 1.5, 1.6); with it, the underlay's travel
+  to the first row ending where it hides
+- [ ] **Z2 SVG import** (spec 2)
+- [ ] **Z3 Stitch types we lack or half have** (spec 3)
+- [ ] **Z4 Test swatches** (spec 4)
+- [x] **W5 Other formats out**: DST, EXP, VP3 released (v30), see Cycle 2's line
+  - [ ] JEF: Janome's thread order measured on Janome's own software (`docs/formats-out-spec.md` §7)
+  - [ ] Open tab: a DST with two colour changes in a row (an empty block) fails the doctor's fixes ("fewer thread
+    colours than colour changes"); site files never have one, outside files may
 
 ## Verdict
 Strong, and kept: the machine layer (locked writer, PEC box, palette, locks, the 5 mm loose-thread rule, 24 hits
@@ -301,7 +327,7 @@ Reading:
 | 8 | Monogram layouts that show which initial goes where | Embrilliance, Artspira | Medium | M | asked three times by testers |
 | 9 | More Brother machines and hoops | all | Medium | S | data in `machines.js` |
 | 10 | Stitch-level editing in Open | Hatch, Embrilliance | Low-medium | M-L | experts only |
-| 11 | Other formats out (DST, JEF, EXP, VP3) | Embrilliance, Hatch | Medium (sharing) | M | ask first; new writer files, `formats.js` untouched |
+| 11 | Other formats out (DST, JEF, EXP, VP3) | Embrilliance, Hatch | Medium (sharing) | M | DST, EXP, VP3 done (W5); JEF waits for the measured Janome order |
 | 12 | Photo stitch | Hatch, PE-DESIGN, mySewnet | Medium | L | ask first; a look shown before any engine |
 | 13 | Free-standing lace, 3D puff | StitchArtist | Low-medium | L | later; unprovable without sew-outs |
 

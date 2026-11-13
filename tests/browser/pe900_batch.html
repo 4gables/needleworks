@@ -10,6 +10,7 @@ import { compose } from "../../js/studio/pieces.js";
 import { STARTERS } from "../../js/studio/ui.js";
 import { hoop as getHoop } from "../../js/core/machines.js";
 import { writePES, validatePES } from "../../js/core/formats.js";
+import { WRITERS, validateOut } from "../../js/core/formats-out.js";
 import { DENSITY, analyze, digitize, workingSize } from "../../js/core/digitize.js";
 
 const hoop = getHoop(), log = (s) => (document.getElementById("log").textContent += s + "\n");
@@ -21,7 +22,17 @@ async function save(name, pattern) {
   const bytes = writePES(pattern), v = validatePES(bytes, pattern, hoop);
   if (!v.ok) { bad++; log(`INVALID ${name}: ${v.error}`); }
   await fetch(`/save/${encodeURIComponent(name)}.pes`, { method: "POST", body: bytes });
+  await saveOthers(name, pattern);
   n++;
+}
+// the same pattern as DST, EXP and VP3 beside the PES (gate's read-back here, pyembroidery's in pe900_check.py)
+async function saveOthers(name, pattern) {
+  for (const [fmt, write] of Object.entries(WRITERS)) {
+    let b; try { b = write(pattern); } catch (e) { bad++; log(`INVALID ${name}.${fmt}: ${e.message}`); continue; }
+    const r = validateOut(b, fmt, pattern);
+    if (!r.ok) { bad++; log(`INVALID ${name}.${fmt}: ${r.error}`); }
+    await fetch(`/save/${encodeURIComponent(name)}.${fmt}`, { method: "POST", body: b });
+  }
 }
 // the Bookmark starter (a Design-tab frame and lettering since 2026-10-31; the files keep their bm_ names)
 const bookmark = (text, font) => turnForMachine(compose(STARTERS.find((s) => s.id === "bookmark").make().map((p) => (p.kind === "text" ? { ...p, text, font } : p)).filter((p) => p.kind !== "text" || text), { ...hoop, w: hoop.h, h: hoop.w }).design.pattern());

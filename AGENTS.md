@@ -15,7 +15,8 @@ measurements behind each number are in the code's comments.
   `opened.js` (Open tab), `along.js` (Sew along, names dialog), `threadui.js` (thread labels, brands, Threads I
   own), `focus.js`, `onitem.js`. A section never uses app.js while it loads, only when something happens. Picture and Open code is
   loaded after the first design is up, or at once when its tab or a dropped file needs it (app.js `tabCode`).
-- `js/core/`: `formats.js` (PES writer, readers, `validatePES`), `threads.js` (PEC palette), `recipes.js` (every
+- `js/core/`: `formats.js` (PES writer, readers, `validatePES`), `formats-out.js` (DST, EXP, VP3 writers and the
+  gate's read-back of them, from `docs/formats-out-spec.md`; never touches `formats.js`), `threads.js` (PEC palette), `recipes.js` (every
   stitch number and limit, with its reason: read here, never re-typed), `design.js` (`Design`, locks, `finish`,
   `relieve`), `density.js` (hits per mm² at every offset), `geom.js`, `colour.js`, `raster.js` (skeleton, stroke
   graph), `text.js` (`renderWord`), `fonts.js`, `glyphs.js`, `fill.js` (tatami, travel router, `fillPolygon`),
@@ -29,7 +30,8 @@ measurements behind each number are in the code's comments.
   `placing.js` (where a piece goes), `threadsaid.js` (thread names in the editor), `toobig.js` (too big for the
   hoop and the ways out), `problems.js` (the problems list), `editor.js` (the piece editor panel), `fixes.js` (one-tap fixes), `stepsui.js` (steps panel), `offpage.js` (worker jobs),
   `outline.js`, `quilt.js`, `motifs.js`, `borders.js` (decorative and blanket-stitch borders), `layout.js` (Arrange: circle,
-  corners, flip, monogram orders), `ownfont.js` (a maker's own font file, kept in the browser). pieces.js still re-exports what moved out of it.
+  corners, flip, monogram orders), `ownfont.js` (a maker's own font file, kept in the browser), `settings.js` (a
+  piece's own stitch settings: checked, clamped, the shared row grid). pieces.js still re-exports what moved out of it.
 - `js/doctor.js` + `doctor-worker.js` (Open tab fixes), `quality.js` (the checker's rules), `words.js` (problems
   list per view, stop/thread vocabulary), `gate.js` (the only exit for files: `handOut`), `sheet.js` (step text, sew
   sheet, cut file), `render.js` (`draw`), `jobs.js` (one job queue for the three workers, with time limits), `worker.js`,
@@ -72,7 +74,8 @@ measurements behind each number are in the code's comments.
   `write_pes(..., {"version": 6})` plus the box; coordinates half-to-even (`pyRound`); stitches over 7 mm and jumps
   over 121 mm split; every jump written as a trim (no uncut-jump flag 0x10).
 - **Every download goes through `validatePES()`**: the source's needle movements (PEC's zero-length anchors after
-  jumps ignored), an END, enough threads, toggle bytes 2,1,2… (as Brother writes), fit in the field less 2 mm.
+  jumps ignored), an END, enough threads, toggle bytes 2,1,2… (as Brother writes), fit in the field less 2 mm. A DST, EXP
+  or VP3 is the PES of the same pattern judged so, then read back (`validateOut`): the same needle points and changes.
 - **PEC palette:** 62-64 are appliqué codes on Brother machines, not pyembroidery's Orange/Cream Yellow:
   `PEC_MATCH` excludes them (inkstitch/pyembroidery#140). Two colours never share a thread, so label threads with
   `machineThreads()` (or an opened file's palette), never plain `nearestBrotherThread()`, or site and machine disagree.

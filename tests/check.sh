@@ -25,7 +25,7 @@ trap 'node tests/cdp.mjs $CDP stop >/dev/null 2>&1; node tests/cdp.mjs $((CDP+1)
 # stitches: anything that builds, writes or reads them
 if has '^js/(core/|studio/(pieces|compose|lettering|shapes|fabrics|files|starters|names|placing|outline|quilt|motifs)|doctor|worker|quilt-worker)'; then
   say "== batches (stitch code changed)"
-  rm -f $OUT/batch/*.pes(N)
+  rm -f $OUT/batch/*.(pes|dst|exp|vp3)(N)
   for pg in pe900_batch studio_batch; do
     node tests/cdp.mjs $CDP goto "$U/tests/browser/$pg.html?v=$RANDOM" >/dev/null; t=""
     for i in $(seq 1 240); do t=$(node tests/cdp.mjs $CDP eval document.title); [[ $t == *DONE* ]] && break; sleep 5; done

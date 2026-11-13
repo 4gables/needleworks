@@ -73,6 +73,15 @@ Reference for this part of Needleworks: the rules, the reason for each (it stops
   against 351 ms for the old rows on the same machine.
 - A piece's stitch cache is kept by what its fill reads of the fabric (`sewnWith`): a patch's rows, a motif's pull and
   rows.
+- **A piece's own settings** (`docs/design-tab.md` "Stitch settings"): `fillPolygon` takes `angle`, `density`,
+  `stitch` (`TATAMI.stitch` 3.5 unset), `pull`, `underlay` (true, `"edge"`, `"rows"`, false) and `grid`. With `grid`
+  the rows lie on the lines grid + (k + 0.5) x spacing across them (the design's shared grid, placed into the shape's
+  coordinates by `settings.js` `gridAt`) and the pattern's stagger is numbered by k; without it, as always, the first
+  row lies half a row in from the shape's edge. No setting can go under the limits: rows never closer than
+  `ROWS.solid` (0.3 makes the step between rows a tiny stitch), stitches never longer than `TATAMI.loose` (halved
+  anyway), pull at most 0.6 (row ends stay under the satin over them). The batch's `st_fillset_*` (rows at 0, 30, 90
+  and 135°, 0.35 and 0.8 apart, each underlay, 1.5 and 4 mm stitches, 0.6 pull, turned and mirrored, blend, rings,
+  carved) all pass the checker with no tiny stitch and no file at the density limit.
 
 ## Density at the source (S2)
 - **The rule.** The 24 hits per mm² limit is kept by where the needle goes as a design is built, not by taking
