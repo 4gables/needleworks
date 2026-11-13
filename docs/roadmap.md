@@ -287,8 +287,10 @@ stitch round ends with a small sew-out pack.
   - left: the Picture panel's choice (picture.js), and whether pictures default to it; curved rows with
     singularities (a disc's, a star's middle) and rows that end inside a narrowing band; sewn proof
 - [ ] **PX4 Shading** (after PX1): two-colour blends by density, colour mixing for photos and gradients
-- [ ] **PX5 Every machine**: machines and hoops of Janome, Bernina, Husqvarna/Pfaff, Tajima-format machines from
-  the makers' published specs; JEF once Janome's thread order is measured
+- [x] **PX5 Every machine**: machines and hoops of Janome, Bernina, Husqvarna/Pfaff, Tajima-format machines from
+  the makers' published specs (machines.js, cited); the machine sets the file, the checks use its field and limits.
+  Left: JEF once Janome's thread order is measured (a Janome trial in the VM), Singer and the no-jump-trim machines
+  (a loose-thread count for machines that cut nothing between parts), fields past 409.6 mm (writer-changes W1c)
 - [ ] **PX6 Art that stitches well**: an "ask your AI for…" guide and a check of the uploaded picture saying what
   will and won't sew well, and why
 
