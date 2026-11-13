@@ -316,20 +316,16 @@ function cluster(P, k, skip, lines = false) {
 // The picture's threads, learned from `img` (any size: the Picture tab sends the same copy whatever the Size).
 // Returns { C: fine clusters (Lab), map: fine cluster -> colour id, colors, bg (the background's id, or -1), frame
 // (a mask over img, or null), boxes: each colour's extent as fractions of img [x0, y0, x1, y1], merged, empty }.
-// The slider's count is every thread sewn, the background's colour closed in by the design included (owner,
-// 2026-11-13: one colour chosen, a BYU logo came out Ultramarine and White). When the closed-in colour would be a
-// thread past the count, the design gets one colour fewer; at one colour the one thread is the design's and the
-// closed-in colour stays fabric (`spare`), sewn only when the person asks ("Sew it": labelWith's inside "all").
-// A design colour is given up only for over CLOSED of the learned copy closed in; less (a speck between letters) stays
-// fabric, as at one colour: the count is never passed.
-const CLOSED = 0.002;
+// One thread colour chosen means one thread sewn (owner, 2026-11-13: a BYU logo at one colour came out Ultramarine
+// and White): the one thread is the design's and the background's colour closed in by the design stays fabric
+// (`spare`), sewn only when the person asks ("Sew it": labelWith's inside "all"). From two colours up the closed-in
+// colour is still a thread past the count: giving it a slot (the design learned one colour fewer) merged distinct
+// inks on the corpus (red text sewn purple at 3, a purple stroke green at 4), so which colour to give up is left to
+// a measure of what each costs the look (roadmap PX1).
 export function learnColours(img, opts = {}) {
   const n = opts.colors ?? DEFAULTS.colors, m = learnOnce(img, opts);
-  if (m.empty || m.inside < 0 || !m.colors[m.inside]?.inside || opts.style === "line") return m;
-  if (m.colors.filter((c) => !c.background && !c.inside).length < n) return m;
-  if (n < 2 || !(labelWith(img, m).closed > CLOSED)) return { ...m, spare: true };
-  const fewer = learnOnce(img, { ...opts, colors: n - 1 });
-  return fewer.empty ? { ...m, spare: true } : fewer;
+  if (n > 1 || m.empty || m.inside < 0 || !m.colors[m.inside]?.inside || opts.style === "line") return m;
+  return { ...m, spare: true };
 }
 function learnOnce(img, opts = {}) {
   const o = { ...DEFAULTS, ...opts };
