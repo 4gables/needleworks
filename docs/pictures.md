@@ -137,6 +137,59 @@ Reference for this part of Needleworks: the rules, the reason for each (it stops
   - Tried and dropped: sewing colours back to front by which lies on which (most of a colour's edge on another,
     twice the reverse share): samples trims 1,065 -> 1,046 and loose 44 -> 36, but held-out ends 1,380 -> 1,472;
     light-first stays.
+- Soft shading (`shade.js`, numbers in `recipes.js` `SHADE`; roadmap PX4, research I7): where a picture has a real
+  soft gradient, its flat bands are sewn as blends of the threads already chosen; nowhere else.
+  - Where: two sewn colours' regions, each 3 mm across somewhere (`wide`), meet softly when the picture, blurred
+    0.4 mm, takes 2 mm or more (`soft`) to change from one to the other (their Lab difference over the median rate of
+    change along at least 4 mm of border). A drawn edge, anti-aliased or not, measures about 1 mm (the blur's 2.5 σ);
+    the corpus's soft borders measured 1.5-40 mm, its drawn ones 0.3-1.3. Regions joined that way, 25 mm² or more, are
+    a shaded group. Flat pictures have none, so their files are unchanged (every logo, cartoon, sticker, drawing and
+    shapes case scored the same to the decimal). Not with the fabric: a soft shadow on the cloth stays build()'s.
+  - Threads: only the group's own colours (the Thread colours count is every thread sewn). Every chain of up to 6 of
+    them, in order along the group's main colour axis, is scored whole: mean ΔE00 from the group's colours to their mix
+    on the chain, plus half of Liu et al. 2023's end loss (ΔE00 at the gradient's two ends, its 3 % extremes, plus 10 x
+    the W3C contrast ratio the pair loses: palette.js `blendLoss`), less 1 for each thread past two (nearer threads
+    side by side show less texture). Blended only when that beats sewing the group flat and the chain's ends are
+    12 ΔE00 apart (`span`): a lemon's pale wash (9.5 apart) took the pale segment lines drawn on it, look 75.5 -> 71.7.
+  - Mix: in linear light, from the picture blurred 0.3 mm (`field`): threads side by side mix as light does, and so
+    does the look score's blur. Placed in Lab instead, a red-to-yellow gradient came out red-heavy in the score.
+  - Stitches: one row grid at one angle for the whole group, the rows running *along* the gradient (its direction from
+    one plane fitted to each pixel's place on the chain over the whole group). Each row is cut into stretches, one
+    thread each, by an ordered threshold (`levels` 2: rows alternate thresholds 1/4 and 3/4, so a share of b sews a,
+    a and b on alternate rows, or b). Stretches under 1 mm join their neighbour; where a row changes thread the one
+    sewn first runs 0.3 mm under the next. Each thread's stretches are an ordinary fill (sewRows, routeFill, locks);
+    the underlay is the first thread's, once under the whole group. A line screen, not two layers: the cloth is covered
+    once and each colour block is a fill at most as dense as a flat one (24 hits per mm² holds as for any fill).
+  - Tried and dropped, each measured on the corpus: rows along the level lines (a share of 1/8 sewed whole rows of the
+    second thread, thin lines right across the blend; look 79.4 -> 75.8); 8 and 4 threshold levels (sparse rows of a
+    contrasting thread 1.6-3.2 mm apart read as stripes: outline 0.72 -> 0.57, structure 0.81 -> 0.72); a later
+    thread's own underlay (it lay on top of the rows sewn before it); one grid for a shape spanning two groups (spikes
+    of a ball's rim over its backdrop); keeping only a region's body or dropping pixels the chain can't mix (a whale's
+    grain cut its blend apart, trims 17 -> 27, look -1); a palette that merges a gradient's middle bands first so
+    their threads go elsewhere (a cat's greys went: look 85.7 -> 79.3, 88.5 -> 79.1).
+  - The Picture panel's Soft shading (Filled): Auto (above), Blend (any border softer than a crisp edge, 1.3 mm, and
+    no gain or span asked), Flat colours. The note beside it says how many areas were blended, with "Sew flat colours";
+    when Auto found none but Blend would, "Some colours here meet softly. Blend them".
+  - Proof (2026-11, PX4) against PX1's own corpus run: look by kind, Filled: gradient 75.2 -> 75.3, watercolour 75.9 ->
+    76.8, pet photo 82.8 -> 83.2, photo 84.8 -> 84.8 (its two cases are flat drawings with noise: no group), every other
+    kind unchanged; every corpus file passes pe900_check. By case: gradient bar 79.4 -> 80.3, watercolour flowers 72.4
+    -> 74.8 and 73.0 -> 75.3, whale 77.0 -> 78.2, cat 85.7 -> 86.6, dog 78.6 -> 79.3; icon at 60 mm 78.2 -> 77.6. The
+    look score is the brake: at its 0.35 mm blur two threads side by side on alternate rows are one colour, but any
+    sparser mix shows as stripes, so the gain is in colour and in the bands' false edges, and is bought with more
+    trims where a blend splits a thread's shape (whale 17 -> 25, dog 8 -> 14, flowers 12 -> 16).
+- Patents near shading (checked 2026-11 on Google Patents, claims read; not legal advice: the owner should check before
+  shipping). Brother's photo-stitch family is live: US 7,693,598 (to 2028), 7,946,235 (2030), 8,200,357 (2031): a
+  stored per-pixel angle and strength, a line segment laid on each pixel at its angle, coloured from the image under
+  it; 8,271,123 (2031): segments grown from target pixels by similar angle; 8,335,584 (2031): the image split into
+  areas, each given threads, each pixel's segment one of them; 8,065,030 (2030) and 8,903,536 (2034): segments joined
+  by the angle between them, or by a preset table of distance and angle ranges. US 11,851,793 (Brother, to 2040): a
+  thread added to an area's threads when mixed with them it nears a target colour within a threshold; US 8,897,909
+  (2033): the palette chosen from threads plus mix colours counted by use. Lapsed: 8,473,090 (smooth areas one angle
+  each, parallel segments), 5,481,992 (overlying density by gradation). Our design-around, each a claim element we
+  lack: no per-pixel angle or strength (the group's one angle comes from a single plane fitted over it), no segment per
+  pixel (stretches are cut from grid rows where a share crosses a row's fixed threshold), the thread chain is scored
+  whole among the group's own colours (never grown one mix colour at a time), mix colours never enter the palette,
+  and stretches are sewn in row order with travel by distance only (no angle between segments).
 - Filled: shapes 1 mm or wider get tatami following the outline (skeleton satin broke corners); parts under 2 x
   `THIN_PART` and lines under 1 mm sew a triple run, never dropped. Specks: under 4 mm² and 2.5 mm across, groups
   under 6 mm of line, walks under 1.5 mm (`lostLines` reports dropped fine lines). Kept: text dots on the fabric (>= 0.8 mm across, 0.6
