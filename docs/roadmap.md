@@ -279,7 +279,11 @@ stitch round ends with a small sew-out pack.
 - [ ] **PX2 Stitch types like a human digitizer** (after PX1): thin strokes as satin columns, outlines as run or
   satin, areas as fill, dots as satin; back to front, hidden fill removed, pull by fabric
 - [ ] **PX3 Fill direction that follows the form**: each region's rows at its own angle, or curving with it
-- [ ] **PX4 Shading** (after PX1): two-colour blends by density, colour mixing for photos and gradients
+- [x] **PX4 Shading** (after PX1): two-colour blends by density, colour mixing for photos and gradients. Done:
+  `core/shade.js` (soft borders found, threads chained from the colours chosen, a line screen on one row grid), the
+  Soft shading choice; patents and numbers in `docs/pictures.md`
+  - left: the look gain is small (gradient +0.1, watercolour +0.9, pet photo +0.4); a gradient that fades into the
+    fabric (soft shadows) is not blended; the palette still spends threads on a gradient's middle bands; no sew-out
 - [ ] **PX5 Every machine**: machines and hoops of Janome, Bernina, Husqvarna/Pfaff, Tajima-format machines from
   the makers' published specs; JEF once Janome's thread order is measured
 - [ ] **PX6 Art that stitches well**: an "ask your AI for…" guide and a check of the uploaded picture saying what
