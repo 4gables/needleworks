@@ -11,10 +11,10 @@
 // cache.
 // (`SET`: a fingerprint of the list below, written with the hashes. It is part of the cache's name, so a release whose
 // files changed can never install into the cache the running one is serving from, version number bumped or not.)
-const SET = "53f31ce111c4";
+const SET = "f6cdeeb13393";
 const CACHE = `needleworks-v34-${SET}`, SHARED = "needleworks-shared";
 const FILES = {
-  "index.html": "5f83aee168afe9f818d465c3bf3a07342c0417ca2972fc22b34e560f05250617",
+  "index.html": "69ccd54db6f31aa2777f50dcb1c8c2f0d14343de27abe57e3efbf62664e4cbc7",
   "manifest.webmanifest": "82f627e1def5254866cf364a55a1c2a85e2c3dd61abeeb890829362969fcfb63",
   "css/app.css": "4dc644a0e4bb2ede40dc6e0efe659306b0c466d38a2f79ec71ca98518fc1d205",
   "assets/icon-192.png": "19ae131e0ea47270a4cd0eefdac045f1811f7b3b25966a08d27e3c94b3262c76",
@@ -44,29 +44,29 @@ const FILES = {
   "js/core/brandcharts.js": "85f4772a2de19ab56691d984a8aad930b2c427cd34498c70f66933c6f09199be",
   "js/core/brands.js": "cb0a36b5fe3128de55654bdd350bdc86508f11fb089eb822bd73b7a26eba1c59",
   "js/core/design.js": "524343b1e64430e00794de16ca112806f34725c49e18755d2bf02416ef276fbb",
-  "js/core/digitize.js": "39c638c4022aa5d52327e26f5fa48e40c4e7dbf2d297fa73954292c4c88a735c",
+  "js/core/digitize.js": "91b1d6ab7561f7d8f3326736e014e8282cea1c8750a2c5b1525f7df025cc1e9e",
   "js/core/fonts.js": "17f00207b7a5ae85ec8ae5059a1a7122a0ab059cd27a70f27e607db74790e5ce",
   "js/core/glyphs.js": "5923a80f5f9c7d8be7e271af557783d7b3ee46c00bf0c4185f8840f344e99433",
   "js/core/formats.js": "6c635b29d843e7eb112ad773f92f79b26ea0ad17769889104b271faa2915b76e",
   "js/core/formats-out.js": "6c340ec9036e5a7efc78ced8b6a7e3d9af9dd8e8773d230c8120302da33e333c",
   "js/core/geom.js": "63e2280fc822305b2b65dc8822f567108e9df2ebdeb18a0f40b5ea9be929ef0a",
-  "js/core/colour.js": "6d55cc04f540ea7ad064709d4c3bd5160d07a87ae4a6e60fa02d857312a7d559",
+  "js/core/colour.js": "ceb89ab0511bd2c9673945b2c90f71565ffd0a934bc5b299dab1279fc9758da2",
   "js/core/density.js": "fc507b2818e7cdb700d52d88ac328a784b89ddac6f609fcc469b95c4805a237e",
-  "js/core/fill.js": "770f038f9e0736a252f30a4a33fa88ba4fa1586d67726bbe4c6d03094b2757a7",
+  "js/core/fill.js": "fff1727d72b777eadd8df6b8d848c0d360beedc1ccee7f6df81328cdae6a664f",
   "js/core/machines.js": "afd9fe6fc812a0b03d903fc54a374b3246ac27539c9cff7d5ea546ed9e81c135",
   "js/core/artcheck.js": "d87f37fe199495fc0d2150af4afe4f67abb7af58e656adaab7c62148645d3693",
   "js/core/palette.js": "203f0a1f4ab9e67c28b34d09a2bbab022891add2e86cc8f14445b9a4d2feb928",
-  "js/core/recipes.js": "65235b4b0e57905119a85b5d5f7614b547619d0424ee7f041b2346450e6b87ce",
+  "js/core/recipes.js": "4e93e643a10ba2c4f3e493891b0799ec201ceee59eabc245741c261140247f01",
   "js/core/raster.js": "b7f39ab3343d79066522fa5a4ef65bd4719e06fdb165c67f6b9dae88042ab93d",
   "js/core/regions.js": "4e24ba2c2d89c91a51bf3952db56ff4346d73783921a877911b97e1d45ad5813",
-  "js/core/shade.js": "x",
+  "js/core/shade.js": "e084b382f33bed0469790a7b1d58cb44cac159bc889742302ff0b4a65ac106b3",
   "js/core/text.js": "a253f11cfeafe6c9dd630fb3c2f010f0a88b37771923e92ffa9db70f32ff0378",
   "js/core/typed.js": "bca3a62351d99bff324c3012869f3910ec697bdc744906cf74a18f013df99e38",
   "js/core/threads.js": "2f843722671915cef7d2aad9344f171040e59d2cf70aa43b139da9dd4229fc1f",
   "js/doctor.js": "ff80ece0fa4d29d7523fd2d5c2af3247e184fe49d2e6220dba286af39281e64c",
   "js/opened.js": "4a56f6bbcd1d67639d19ca1f052ec421d32b7cde6fedf5a016f827f11ccd4b84",
   "js/artwords.js": "ceaa16cdfcf9f20f929df194a4439ff3521f9bd407aa5271f56a0f6b7d12d038",
-  "js/picture.js": "739aec8dbead70ec923c895658c9c5bf80a4ac574d7c12120a15d860164a7581",
+  "js/picture.js": "474ace728862762f3f8d80582f989a1e8acdec471c872416d73d646dc9c8d94c",
   "js/threadui.js": "8ceabd64367deaaa390dd1b99ff44ae7f6ee9a461d188c77e9c35263747af525",
   "js/along.js": "5332fceae5092f2989d8fe09ddf64167bbd7d6e0004fb3eed174a149ecd03545",
   "js/onitem.js": "e8f881bc81209ff19ee6a80c75afa0abb9a2f120077228d9370b5c864e054f6d",
