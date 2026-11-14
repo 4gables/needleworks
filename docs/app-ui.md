@@ -36,16 +36,25 @@ Reference for this part of Needleworks: the rules, the reason for each (it stops
   JSON parses with a piece). Nothing is handed over when one file is refused; a HARD fail says "Not saved" and offers a
   fixed copy; a names ZIP lists refused names under "Couldn't make". `setView` runs quality.js 250 ms after a view
   settles; the done dialog says "Checked" only when it passes, even after "Don't show this again" (`doneSeen`).
-- File for (W5, `#file-for` under Download, store `fileFormat`, default PES): Brother (PES), Tajima & most machines
-  (DST), Melco & Bernina (EXP), Husqvarna Viking & Pfaff (VP3). Every exit that makes an embroidery file takes it:
-  Download, two hoopings' ZIP, Send, the fixed copies and One for each name (a Tajima user making names wants DST
-  files, so the ZIP follows the choice). Callers still hand the gate PES bytes named `.pes`; `handOut` renames them,
-  judges the PES exactly as before (stitches, fit, HARD rules: the machine and hoop checks stay Brother's), then
-  writes the format from the same pattern (an opened file: from the PES itself) and refuses it unless `validateOut`
-  reads back the same needle points and changes. The judged file keeps the PES as `pes` for the fixed copy. Not PES:
-  a note under the choice and in the done dialog says only PES files are checked for the machine chosen, the other
-  file is untested on its machines and (DST, EXP) holds no thread colours; the dialog says "Its stitches checked as a
-  Brother PES file". The preview, sew sheet and steps stay the PES's. JEF isn't offered (spec section 7).
+- Machine (PX5, `#machine` in the header, store `machine`/`hoop`): the makers as optgroups (machines.js `MAKERS`, the
+  model's full name as the option, so the closed select says the maker), and a last option "Find my machine…" that
+  opens `#machines`: every machine under its maker, narrowed by any part of the name or number ("500e", "viking", a
+  machine's `also`), one tap picks it, Enter the first match; "Not listed?" offers Other machine (DST). A command option
+  in a select is the brand select's "Threads I own…" pattern: the select stays the keyboard's and the tests' way in,
+  and a phone gets its own list. Hoops show their size when the name doesn't (`hoopLabel`: "RE20b hoop (140 × 200 mm)").
+- File for (W5, `#file-for` under Download, store `fileFormat`): picking a machine sets it (state.js `machineFormat`:
+  the first of the machine's `reads` this site writes: a Brother PES, a Bernina EXP, a Husqvarna or Pfaff VP3, a
+  Janome DST until JEF is made); changing it after stays until another machine is picked. Every exit that makes an
+  embroidery file takes it: Download, two hoopings' ZIP, Send, the fixed copies and One for each name. Callers still
+  hand the gate PES bytes named `.pes`; `handOut` renames them, judges the PES exactly as before (stitches, HARD rules)
+  with the chosen machine's field and its published `stitches`/`blocks` limits, then writes the format from the same
+  pattern (an opened file: from the PES itself) and refuses it unless `validateOut` reads back the same needle points
+  and changes. The judged file keeps the PES as `pes` for the fixed copy. A machine that doesn't read PES as its own
+  file, or a format its manual doesn't list, gets a note under the choice, in the done dialog and in Send's text
+  (`formatNote`): checked here, untested on that maker's machines, no thread colours in DST/EXP, and why a Janome gets
+  DST. Only a PES for a PES machine says "Checked: it opens on…"; the rest say "Checked: it fits on…". The loose-thread
+  chip's tip says what the machine's maker says it cuts (`snipsTip`, machines.js `cuts`); the count stays Brother's
+  (moves of 1-5 mm). The preview, sew sheet and steps stay the PES's.
 - Steps (sheet.js): step 1 = how to hoop, which thread, Start; steps name the thread (`threadNames`/`nextThread`); a
   same-thread pause says "Keep the same thread on"; one sentence per action, three or more numbered (`youHtml`).
   Words (`words.js`): "pause"/"thread change" (`stopWords`/`stopsAt` only), never "stop"; "satin stitch(es)"/
@@ -161,6 +170,17 @@ Reference for this part of Needleworks: the rules, the reason for each (it stops
   sews the picture once more with specks kept and rings what only that has (`v.marks`, render.js `marks`). A new
   picture starts from "Leave out specks". A busy picture (150 cuts or more) says its stitches and pieces and offers
   fewer colours.
+- The verdict under the picture (`#pic-verdict`, a `div` since it holds a list) says the texture headline, then
+  the check of the picture (PX6, docs/pictures.md "Art that stitches well"): one item a finding, its sentence, what
+  to do when no tap mends it, then its links ("Show where", a fix) on their own line (beside the advice, "Show
+  where Draw them bigger…" read as one sentence). A fix sets the slider it changes (Size, Thread colours) or the
+  skipped colours and sews again; the redraw's focus is `refocus`'s. "Show where" is `aria-pressed`, rings the
+  places as ellipses round each box (a circle round a line of lettering covered the picture) and draws the
+  picture up to 360 px tall (`.showing`) while shown. Its words are `js/artwords.js`, not words.js: words.js is in
+  the first load and these are only the Picture tab's.
+- "Make art that stitches well" (`#pic-guide`) is a `details` under the verdict, reachable by Tab like every other:
+  rules, a subject box, the prompt in a read-only textarea (16 px: iOS zooms into smaller text boxes) and "Copy
+  the prompt" with its status beside it.
 - The loose-threads chip comes second in the row, and a phone's one-line row fades at its right edge.
 - The file's name: appliqué letters count with straight words (the biggest names it); the Rename dialog says the rule.
 - Sewing words explained where first used (words.js `GLOSSARY`): basting, floating, fusible web, cutter file, tacking

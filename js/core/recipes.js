@@ -80,8 +80,36 @@ export const ROWS = { solid: 0.35, standard: 0.4 };
 //             piece of a colour that needs a start of its own is left out when it would sew under `start` mm of
 //             thread and under `share` of its colour's biggest piece; so is one that only a jump reaches and that
 //             sews under `lone` mm. "all" leaves nothing out (v26).
+// Clean shapes (core/regions.js `cleanShapes`), before a picture's stitches are planned (numbers: docs/pictures.md).
+// `band` mm: a blend band's pixels within this of two sewn colours go to the one covering more of each (pieces up to
+// twice it wide); `between`: a colour is a blend of two when its Lab distances to them add to under this times theirs;
+// `side`: the second colour has this share of the band's edge at least. `fleck` mm²: pieces under it, `enclosed` of
+// their edge on sewn colours, join the colour with body they touch most, unless of `dot` mm² or more and `contrast`
+// ΔE00 to it. `smooth` mm: the edge blur's width (0.8 cost the held-out pictures 12 wasted moves); `thin` mm: narrower
+// keeps its edges. `layer` mm: a hole or bay in a colour that only later colours fill, narrower than this, is sewn
+// under them (digitize.js build).
+export const SHAPES = { band: 0.5, between: 1.25, side: 0.2, fleck: 3, enclosed: 0.8, contrast: 25, dot: 0.3, smooth: 0.5, thin: 1, layer: 3 };
 export const PICTURES = { fleck: 3, enclosed: 0.8, eyes: 6, start: 4, edge: 0.75,
   details: { all: { start: 0, share: 0, lone: 0 }, most: { start: 7, share: 0.1, lone: 8 } } };
+
+// Art that stitches well (PX6: the Picture tab's guide for making a picture, and its check of a picture; core/artcheck.js,
+// docs/pictures.md). What a picture needs, measured at the size it is sewn, from the digitizer's own rules:
+//   line:    mm. A line or part narrower than this gets no fill: it is sewn as one running line along its centre,
+//            thinner than drawn (digitize.js: "lines under 1 mm sew a triple run"; Ink/Stitch's satin columns from 1 mm).
+//   detail, dot: a separate piece under `dot` mm² and under `detail` mm across is a speck: left out, or sewn in the
+//            colour round it (digitize.js's specks and flecks: 4 mm² and 2.5 mm).
+//   gap:     mm. Gaps between parts of one colour narrower than this close up once sewn (digitize.js `MIN_GAP`).
+//   text:    mm tall. Lettering in a picture is sewn as filled shapes; a bold letter's strokes are about a sixth of its
+//            height, so under 6 mm they fall under `line` and its holes under `gap`. (Typed lettering in Design your
+//            own is sewn as lettering, from 4 mm: docs/lettering.md.)
+//   fewest:  thread colours a picture is asked for in the guide: 4 to digitize.js `MOST` (the Thread colours slider's
+//            top). Fewer than 4 flattens most illustrations; each one more is a thread change.
+//   blend:   share of a picture's ink in smooth colour ramps (gradients) over which they are said: they sew as bands.
+//   page:    share of the picture's edge one colour must hold for the background to be plain (found and left
+//            unsewn); under it the background is busy and sewn as part of the design.
+//   ask:     the guide's prompt asks for lines and details this many times the least, as shares of the picture: it
+//            is worked out for the hoop filled, and art is often sewn at half that; an AI tool's "thick" also varies.
+export const ART = { line: 1, detail: 2.5, dot: 4, gap: 0.5, text: 6, fewest: 4, blend: 0.12, page: 0.8, ask: 2 };
 
 // --- S1: pieces sewn in one go ---
 // Two pieces of script lettering are stitched across, not trimmed apart, when their columns are at most `gap` mm
@@ -113,6 +141,29 @@ export const fillRecipe = (fabric) => FILLS[fabric] || FILLS.cotton;
 // A drawn shape's fill rows (core/fill.js `fillPolygon`): needle points `stitch` mm apart along a row; a stitch over
 // `loose` mm (a row's short remainder merged into its last stitch) is halved, since one that long lies loose on top.
 export const TATAMI = { stitch: 3.5, loose: 4 };
+
+// --- PX3: fill direction that follows the form (core/fill.js `formAngle`; docs/stitch-model.md) ---
+//   least, picture: a part under this many mm² keeps the caller's angle; a picture's part under `picture`: on the
+//           picture corpus, letters and doodles at 60 mm turned to their own angles gained trims and loose threads
+//           (13 cases: from 4 mm² +10 trims and +6 loose, from 30 the same, from 100 +2 and -2)
+//   ragged: rows meet an edge at a grazing angle between lo and hi degrees (from none at 0 and to none at hi + fade,
+//           evenly): each row end steps spacing / sin(angle) along the edge, 1 to 5 mm at 0.35 mm rows, a saw-tooth one
+//           sees; at 0 a row lies along the edge
+//   even:   the traced outline is evened over this many mm before it is measured (the drawing's steps)
+//   blur, step: the edge histogram's smoothing either side, and the sweep's step (degrees)
+//   rag, sec: the weight of a fully ragged outline and of each section more than the fewest, against row ends (1 =
+//           as many again as the fewest any angle gives)
+//   keep:   the caller's angle stays unless another scores this much better (a near tie isn't worth losing the
+//           neighbouring colours' alternation)
+//   cell, blurMax, iters: curved rows' grid (mm), the most cells the direction is smoothed over, and the solver's
+//           most steps
+//   turns:  share of neighbouring cells whose directions can't be given one sign before the field is a singularity
+//   stretch: curved rows may lie up to this many times their spacing apart where the field spreads (never closer)
+//   hug, hugW: within hug mm of the edge the field's fit counts up to hugW times (the rows lie along the edge)
+//   curvedLeast, curve: curved rows are tried on parts of this many mm² or more, and sewn where they score this much
+//           better than the best straight angle
+//   gap:    a curved row that leaves the part for up to this many mm (along an edge it grazes) is sewn as one
+export const FORM = { least: 4, picture: 100, ragged: [4, 25, 20], blur: 4, step: 5, rag: 1, sec: 1.5, keep: 0.1, cell: 0.5, blurMax: 24, blurK: 1.0, iters: 600, turns: 0.002, stretch: 1.3, gap: 1, hug: 1, hugW: 4, curvedLeast: 30, curve: 0.15, even: 1.6 };
 
 // --- Z1a: a piece's own fill settings (studio/settings.js; docs/design-tab.md "Stitch settings") ---
 // What a person (or a saved file, or an agent) may set, clamped so no setting can break a rule of AGENTS.md. Each is

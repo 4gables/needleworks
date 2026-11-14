@@ -2,7 +2,7 @@
 import { turnForMachine, turnPattern } from "./core/design.js";
 import { FONTS } from "./core/fonts.js";
 import { STITCH, designStats, machineThreads, readEmbroidery, validatePES, writePES } from "./core/formats.js";
-import { DEFAULT_MACHINE, MACHINES, MARGIN, hoop as getHoop } from "./core/machines.js";
+import { DEFAULT_MACHINE, MACHINES, MAKERS, MARGIN, hoop as getHoop, hoopLabel } from "./core/machines.js";
 import { PEC_MATCH, PEC_THREADS, hexToRgb, nearestBrotherThread, pecThread, rgbToHex } from "./core/threads.js";
 import { CLOTHS, colorBlocks, draw } from "./render.js";
 import { TURNED, TURN_PIC, cutDXF, cutName, cutSVG, firstStep, sewSheet, sewTime, stepTime, told, youHtml } from "./sheet.js";
@@ -13,7 +13,7 @@ import { BLOCK, LOOK, LOOK_HEAD, TIP, TIP_HEAD, isolate, problemsHtml, problemsI
 import { brief, monogramHelp, safeName, tidy, uniqueName, withSwash } from "./core/typed.js";
 import { BRANDS, apart, brotherNum, chartSpools, exampleSpools, lab, nearestSpool, nearestSpools, ownSpoolOf, spools } from "./core/brands.js";
 import { COLORS as LINE_THREADS, initStudio, savedDesign } from "./studio/ui.js";
-import { $, designHoop, designTurned, fileFormat, forgetPicture, hoop, keepPicture, kept, outName, shownHoop, square, state, store, toMachine, turnCut, turned, turnedFile } from "./state.js";
+import { $, designHoop, designTurned, fileFormat, forgetPicture, hoop, keepPicture, kept, machineFormat, outName, shownHoop, square, state, store, toMachine, turnCut, turned, turnedFile } from "./state.js";
 import { OUT_FORMATS } from "./core/formats-out.js";
 import { keepFocus, keyboard, live, next } from "./focus.js";
 import "./onitem.js";   // (it sets itself up: nothing here calls into it)
@@ -140,7 +140,7 @@ export function setView(v) {
     orient === "turned" ? `<span${tip(`The size across × down with the hoop turned sideways, as shown here. The machine's screen shows it on its side: ${v.fact.machineSize}.`)}>Hoop turned</span>`
       : orient ? `<span${tip("The size across × down with the hoop upright, as the machine's screen shows it. A design made with the hoop turned reads the other way round here.")}>As the machine shows it</span>` : "",
     // (what there is to do after sewing comes second: last in the row, a phone's one line of chips cut it off)
-    snips ? `<span${tip("Short threads the machine leaves between two parts instead of cutting them. They're locked at both ends, so snip them after stitching. (The machine only cuts moves longer than its “jump stitch not to trim” setting, 5 mm at the lowest.)")}>${v.fact.snips}</span>` : "",
+    snips ? `<span${tip(snipsTip())}>${v.fact.snips}</span>` : "",
     `<span>${v.fact.stitches}</span>`,
     // (thread changes and pauses in the same thread, in the same words on every tab: the Design tab said "1 pause" for
     // the stop the Open tab called "1 thread change"; two hoopings count the stops in both files)
@@ -493,8 +493,7 @@ $("share").hidden = !canShareFile();
 function shareText(v) {
   const blocks = v.cache?.blocks || [], mt = machineThreadList(v), sheet = told(v.sheet, blocks, mt, v.filename), steps = sheet.steps;
   // (copy it to a USB stick: how it's picked on the machine is step 1, as everywhere)
-  const f = fileFormat(), lines = [state.fileFormat === "pes" ? `Embroidery file for a ${hoop().machineName} (${hoop().name}). Copy it to a USB stick.`
-    : `Embroidery file (${f.short}) for ${f.machines} machines. Copy it to a USB stick. ${formatNote()}`];
+  const f = fileFormat(), note = formatNote(), lines = [`Embroidery file${state.fileFormat === "pes" ? "" : ` (${f.short})`} for a ${hoop().machineName} (${hoopLabel(hoop())}). Copy it to a USB stick.${note ? " " + note : ""}`];
   if (turnedFile()) lines.push("", $("done-turn").textContent);
   // (what's still wrong, and worth knowing, as every other surface says it: before the steps, so a long list of steps
   // can't cut it off)
@@ -650,7 +649,7 @@ function downloaded(v, zipped, files = [], saved = true) {
   document.querySelector("#done .done-steps").hidden = !saved;
   $("done-checked").textContent = hardBad ? `${saved ? "It may not open or sew right" : "It wouldn't open or sew right"} ${what}: ${bad.length > 1 ? `${bad.length} of the files break` : zipped ? "one of the files breaks" : "it breaks"} a rule the machine needs.`
     : bad.length ? `It opens ${what}, but ${bad.length > 1 ? `${bad.length} of the files` : zipped ? "one of the files" : "it"} may not sew well:`
-    : part ? `It opens ${what}, but only part of the design is in it: the file it came from ends early. Download that file again if you can.` : state.fileFormat === "pes" ? `Checked: it opens ${what}.` : `Its stitches checked as a Brother PES file: it opens ${what}.`;
+    : part ? `It opens ${what}, but only part of the design is in it: the file it came from ends early. Download that file again if you can.` : proven() ? `Checked: it opens ${what}.` : `Checked: it fits ${what}.`;
   $("done-checked").className = bad.length || part ? "warn" : "good";
   $("done-zip").hidden = !zipped;
   // (as many files as were handed out: "Copy the file to a USB stick" for a ZIP of two hoopings)
@@ -659,7 +658,7 @@ function downloaded(v, zipped, files = [], saved = true) {
   $("done-copy").textContent = many ? `Copy the ${pes} ${ext} files to a USB stick.` : "Copy the file to a USB stick.";
   $("done-zip").textContent = `It's a .zip: open it first (double-click it) and copy the ${ext} files inside, not the .zip. The machine can't read a .zip.`;
   // (another machine's file: only its PES twin was checked, and what that means at the machine)
-  $("done-format").hidden = state.fileFormat === "pes"; $("done-format").textContent = formatNote();
+  $("done-format").textContent = formatNote(); $("done-format").hidden = !$("done-format").textContent;
   if (saved) savedNames().add(v.filename);
   ownNote(saved && v.filename);
   $("done-phone").hidden = !matchMedia("(pointer: coarse)").matches;
@@ -693,13 +692,29 @@ function downloaded(v, zipped, files = [], saved = true) {
 $("done-turn").insertAdjacentHTML("afterbegin", TURN_PIC);
 
 // ---------- the file's format ----------
-// Brother's PES (the default, the only one checked against the machine chosen) or another machine's file with the
-// same stitches (formats-out.js; docs/formats-out-spec.md): DST for Tajima and most machines, EXP for Melco and
-// Bernina, VP3 for Husqvarna Viking and Pfaff. The machine and hoop checks stay Brother's: a DST is judged as the PES
-// it was written beside. Remembered (store `fileFormat`).
+// The machine chosen sets it (`machineFormat`: the first file its manual lists that this site writes); "File for"
+// under Download changes it, and that stays (store `fileFormat`) until another machine is picked. PES is the file the
+// checks were made on (pe900_check, the VM): another format is written from the same pattern and read back
+// (formats-out.js; docs/formats-out-spec.md), its stitches judged as that PES with the chosen machine's field.
+const listed = (a) => a.map((x) => x.toUpperCase()).join(a.length > 2 ? ", " : " and ").replace(/, ([^,]*)$/, " and $1");
+// (a machine sewing Brother's own file, PES: the one the machine checks were proven on)
+const proven = () => state.fileFormat === "pes" && MACHINES[state.machine].reads[0] === "pes";
 export function formatNote() {
-  const f = fileFormat(); if (state.fileFormat === "pes") return "";
-  return `Only PES files are checked for your ${hoop().machineName}. This ${f.short} file has the same stitches, untested on ${f.machines} machines${state.fileFormat === "vp3" ? "" : ", and no thread colours (follow the thread list)"}.`;
+  const m = MACHINES[state.machine], f = fileFormat(), h = hoop(), other = m.brand === "Other";
+  if (proven()) return "";
+  // (a file the machine's manual doesn't list)
+  // (only what its manual lists, as read for machines.js: a PE900's manual may list more than was cited)
+  if (!m.reads.includes(state.fileFormat)) return `${other ? "Most machines read DST" : `Only ${listed(m.reads.filter((x) => OUT_FORMATS[x]))} files are checked for the ${h.machineName} here, the ones its manual lists`}: check your machine reads ${f.short} files before you use this one. It has the same stitches, untested on it so far.`;
+  const why = m.reads[0] === "jef" && state.fileFormat !== "jef" ? `Janome's own file, JEF, isn't made here yet, so it's ${f.short}, which the machine reads too. ` : "";
+  const colours = OUT_FORMATS[state.fileFormat] && !["pes", "vp3"].includes(state.fileFormat) ? `, and ${f.short} files hold no thread colours: follow the thread list` : "";
+  return `${why}The stitches, size and thread changes are checked here; the file itself is untested on ${other ? "your machine" : `${m.brand} machines`} so far${colours}.`;
+}
+// What the machine does with a short move between two parts, as its maker says (machines.js `cuts`)
+function snipsTip() {
+  const c = hoop().cuts, head = "Short threads between two parts, locked at both ends: snip them after stitching.";
+  if (typeof c === "number" && hoop().reads[0] === "pes") return `${head} (The machine only cuts moves longer than its “jump stitch not to trim” setting, ${c} mm at the lowest.)`;
+  return typeof c === "number" ? `${head} (Counted as a Brother machine leaves them, 5 mm or less. Yours cuts moves of ${c} mm or more when its jump thread cutting is on: snip any that are left.)`
+    : `${head} (A Brother machine leaves moves of 5 mm or less uncut. ${c === "file" ? "Yours cuts where the file says" : c === "length" ? "Yours cuts moves longer than the length set on it" : "Your machine's maker doesn't say what it cuts"}: snip any that are left.)`;
 }
 function formatUI() {
   $("file-for").value = state.fileFormat;
@@ -708,10 +723,14 @@ function formatUI() {
   const b = $("download");
   if (/\.(pes|dst|exp|vp3)$/i.test(b.textContent) || /^Download [A-Z0-9]+$/.test(b.textContent)) b.textContent = b.title = b.textContent.replace(/\.(pes|dst|exp|vp3)$/i, "." + state.fileFormat).replace(/^Download [A-Z0-9]+$/, `Download ${fileFormat().short}`);
 }
+function setFormat(f) { state.fileFormat = OUT_FORMATS[f] ? f : "pes"; store.set("fileFormat", state.fileFormat); formatUI(); }
 $("file-for").innerHTML = Object.entries(OUT_FORMATS).map(([k, f]) => `<option value="${k}">${f.label}</option>`).join("");
 $("file-for").onchange = (e) => {
-  state.fileFormat = OUT_FORMATS[e.target.value] ? e.target.value : "pes"; store.set("fileFormat", state.fileFormat); formatUI();
-  toast(state.fileFormat === "pes" ? `Downloads are Brother PES files, checked for the ${hoop().machineName}.` : `Downloads are ${fileFormat().short} files now, for ${fileFormat().machines} machines.`);
+  setFormat(e.target.value);
+  const m = MACHINES[state.machine], own = machineFormat();
+  toast(state.fileFormat === own ? `Downloads are ${fileFormat().short} files, as the ${hoop().machineName} reads.`
+    : m.reads.includes(state.fileFormat) ? `Downloads are ${fileFormat().short} files now. The ${hoop().machineName} reads them too.`
+    : `Downloads are ${fileFormat().short} files now, for ${fileFormat().machines} machines. ${m.brand === "Other" ? "" : `The ${hoop().machineName}'s manual doesn't list them.`}`.trim());
 };
 formatUI();   // (the note's text stays its textContent)
 // the dialog's “How to stitch it”: closed, the steps opened and shown, focus on their heading
@@ -759,13 +778,21 @@ $("cut-file").onclick = cutFile("svg");
 $("cut-dxf").onclick = cutFile("dxf");
 
 // ---------- machine & hoop ----------
+// One choice, by maker then model (machines.js): the select groups the models under their makers (typing a model's
+// first letters finds it, on a phone it's the system's list), and its last item opens a search by any part of the
+// name ("500E", "viking") with every machine listed under its maker. Remembered (store `machine`, `hoop`).
 export function fillMachines() {
-  $("machine").innerHTML = Object.entries(MACHINES).map(([k, m]) => `<option value="${k}">${m.name}</option>`).join("");
+  const opt = ([k, m]) => `<option value="${k}">${escapeHtml(m.brand === "Other" ? m.model : m.name)}</option>`;
+  $("machine").innerHTML = MAKERS.map((b) => `<optgroup label="${b === "Other" ? "Any other" : b}">${Object.entries(MACHINES).filter(([, m]) => m.brand === b).map(opt).join("")}</optgroup>`).join("")
+    + `<option value="@find">Find my machine…</option>`;
   $("machine").value = state.machine;
   const m = MACHINES[state.machine];
   if (!m.hoops[state.hoopId]) state.hoopId = m.defaultHoop;
-  $("hoop").innerHTML = Object.entries(m.hoops).map(([k, h]) => `<option value="${k}">${h.name}</option>`).join("");
+  $("hoop").innerHTML = Object.entries(m.hoops).map(([k, h]) => `<option value="${k}">${escapeHtml(hoopLabel(h))}</option>`).join("");
   $("hoop").value = state.hoopId;
+  // (hoops named with their size, "RE20b (140 × 200 mm)": the MACHINE label makes way, as it does on narrower screens,
+  // or the thread brand went onto a second line at 1413 px)
+  $("hoop").parentElement.classList.toggle("long", Object.values(m.hoops).some((x) => hoopLabel(x).length > 14));
   const h = hoop();
   const max = Math.floor(Math.max(h.w, h.h) - 2 * MARGIN - 2);
   $("pic-size").max = max;
@@ -775,14 +802,45 @@ function hoopChanged() { if (state.mode !== "picture") state.pic.req++; for (con
 // (on the Design tab a hoop change is an Undo step, as a turn is: Undo puts a design back in the hoop it was in)
 // (a machine with the same hoop changes nothing in the design: no Undo step for it (Undo lit up and nothing else
 // showed the choice was taken), the hoop picked stays, and a quiet line says what the choice does)
-$("machine").onchange = (e) => {
-  const was = hoop(), to = MACHINES[e.target.value], keep = to?.hoops[was.id], same = !!keep && keep.w === was.w && keep.h === was.h;
+// (the file follows the machine: a Janome gets the DST it reads, a Brother its PES)
+function pickMachine(id) {
+  if (!MACHINES[id]) return;
+  const was = hoop(), to = MACHINES[id], keep = to.hoops[was.id], same = !!keep && keep.w === was.w && keep.h === was.h;
+  if (id === state.machine) return;
   if (state.mode === "design" && !same) studio.remember();
-  state.machine = e.target.value; if (!keep) state.hoopId = null; store.set("machine", state.machine); hoopChanged();
-  const now = hoop();
-  toast(same ? `Set for the ${now.machineName}: the same ${now.name}, so the design is as it was. Files are checked for this machine.`
-    : `Set for the ${now.machineName} and its ${now.name}. Files are checked for this machine.`);
+  const fmt = state.fileFormat;
+  state.machine = id; if (!keep) state.hoopId = null; store.set("machine", state.machine);
+  setFormat(machineFormat());
+  hoopChanged();
+  const now = hoop(), files = state.fileFormat !== fmt || to.reads[0] !== "pes" ? ` Downloads are ${fileFormat().short} files${to.reads[0] === "jef" ? " (it reads them; Janome's own JEF isn't made here yet)" : ""}.` : "";
+  toast(same ? `Set for the ${now.machineName}: the same ${now.name}, so the design is as it was. Files are checked for this machine.${files}`
+    : `Set for the ${now.machineName} and its ${hoopLabel(now)}. Files are checked for this machine.${files}`);
+}
+$("machine").onchange = (e) => {
+  if (e.target.value === "@find") { e.target.value = state.machine; openMachines(); return; }
+  pickMachine(e.target.value);
 };
+// "Find my machine…": every machine under its maker, narrowed as a name or number is typed; one tap picks it
+function squash(t) { return t.toLowerCase().replace(/[^a-z0-9]/g, ""); }
+function machinesList() {
+  const words = $("machines-find").value.toLowerCase().split(/[\s,]+/).map(squash).filter(Boolean);
+  const hit = (m) => { const all = squash(`${m.brand} ${m.model} ${m.also || ""}`); return words.every((w) => all.includes(w)); };
+  let found = 0;
+  $("machines-list").innerHTML = MAKERS.map((b) => {
+    const ms = Object.entries(MACHINES).filter(([, m]) => m.brand === b && (b === "Other" || hit(m)));
+    if (b !== "Other") found += ms.length;
+    return ms.length ? `<h3>${b === "Other" ? "Not listed?" : b}</h3><ul>${ms.map(([k, m]) => {
+      const big = Object.values(m.hoops).reduce((a, h) => (h.w * h.h > a.w * a.h ? h : a));
+      return `<li><button type="button" data-machine="${k}" aria-pressed="${k === state.machine}"><span>${escapeHtml(m.model)}</span><small>${listed(m.reads)} files · ${b === "Other" ? "most machines read them" : `fields up to ${big.w} × ${big.h} mm`}</small></button></li>`;
+    }).join("")}</ul>` : "";
+  }).join("");
+  $("machines-none").hidden = !!found || !words.length;
+  $("machines-none").textContent = `No machine here matches “${$("machines-find").value.trim()}”. Pick Other machine (DST): nearly every embroidery machine reads DST files.`;
+}
+function openMachines() { $("machines-find").value = ""; machinesList(); modal($("machines")); }
+$("machines-find").oninput = machinesList;
+$("machines-find").onkeydown = (e) => { if (e.key === "Enter") { e.preventDefault(); if ($("machines-find").value.trim()) $("machines-list").querySelector("button")?.click(); } };
+$("machines-list").onclick = (e) => { const b = e.target.closest("[data-machine]"); if (!b) return; $("machines").close(); pickMachine(b.dataset.machine); };
 $("hoop").onchange = (e) => { if (state.mode === "design") studio.remember(); state.hoopId = e.target.value; store.set("hoop", state.hoopId); hoopChanged(); };
 function refresh() { if (state.mode === "picture") makePicture(); else if (state.mode === "design") studio.make(); else if (state.view) setView(state.view); }
 

@@ -83,6 +83,8 @@ const RAW_SIZE = process.env.EMPTY ? [] : [
   ["js/picture.js", "pictureError", "the picture's Size vs the most the hoop takes"],
   ["js/picture.js", "fineUI", "the picture's Size (sewSized: the sewn design's longer side)"],
   ["js/picture.js", "pic-fine.onclick", "the picture's Size, for a one-tap fix"],
+  ["js/picture.js", "verdictUI", "the picture's Size (sewSized: the sewn design's longer side), for the check of the picture"],
+  ["js/picture.js", "pic-verdict.onclick", "the picture's Size, for the check's one-tap fix"],
   ["js/picture.js", "checkLost", "the picture's Size, for a one-tap fix"],
   ["js/picture.js", "sizeRange", "the picture's Size control vs the most"],
 ];

@@ -20,7 +20,7 @@ measurements behind each number are in the code's comments.
   stitch number and limit, with its reason: read here, never re-typed), `design.js` (`Design`, locks, `finish`,
   `relieve`), `density.js` (hits per mm² at every offset), `geom.js`, `colour.js`, `raster.js` (skeleton, stroke
   graph), `text.js` (`renderWord`), `fonts.js`, `glyphs.js`, `fill.js` (tatami, travel router, `fillPolygon`),
-  `palette.js` (a picture's colours and threads), `digitize.js` (pictures: the three styles, sizing, `contentBox`/`pictureImage`/`LEARN`), `brands.js`/`brandcharts.js`,
+  `palette.js` (a picture's colours and threads), `regions.js` (a picture's clean shapes: blend bands, flecks, smooth edges, before stitches), `digitize.js` (pictures: the three styles, sizing, `contentBox`/`pictureImage`/`LEARN`), `brands.js`/`brandcharts.js`,
   `machines.js`, `typed.js` (all typed text: `tidy`, `lacks`, `safeName`, `uniqueName`, `initials`).
 - `js/studio/`: `pieces.js` (each piece's stitches, fitting, the sew context `sewAs`), `lettering.js` (a word drawn to strokes, counters,
   arches, `stitchLetters`), `compose.js` (`compose`,
@@ -95,7 +95,10 @@ measurements behind each number are in the code's comments.
   24; satin same-edge gap over 0.6 mm; over 99 colour blocks (the PE900's limit); PEC thread count not one per block;
   design block disagreeing with PEC.
 - **Hoops** (`machines.js`): fit the field minus `MARGIN` 2 mm. PE900 5x7 = 130 x 180 mm, 4x4 = 100 x 100 mm. A design
-  no 5x7 field holds is written with the 160 x 260 page (writer change W1; unproven on a 6x10 machine).
+  no 5x7 field holds is written with the 160 x 260 page (writer change W1; unproven on a 6x10 machine). Other
+  makers' machines (Baby Lock, Janome, Bernina, Husqvarna Viking, Pfaff, Other machine DST) come with their fields, files, cutting
+  and limits from the maker's own manuals, each cited there; a number not published is left out. Every file is judged
+  as its PES with the chosen machine's field, so no field may pass a PES stitch block's 409.6 mm.
 - **Download names are ASCII** (`safeName`: transliterates Ł ø ß æ œ đ þ, Greek, Cyrillic, Hebrew; `CON_.pes` for
   Windows device names): the machine's USB reader may not show others.
 - **The preview is the file:** `setView` decodes `v.bytes` with `readEmbroidery` and draws, counts and fit-checks

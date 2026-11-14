@@ -265,19 +265,34 @@ joins PX1's shape path). Every round keeps the hard rules of `AGENTS.md`; nothin
 stitch round ends with a small sew-out pack.
 - [x] **PX-R State of the art**: papers, commercial auto-digitizers' published behaviour, where they fail;
   `docs/research/picture-sota.md` (ideas and numbers only, credited; no one's code)
-- [ ] **PX0 Looks like the picture**: a realistic thread render of a file and a score against the source picture,
+- [x] **PX0 Looks like the picture**: a realistic thread render of a file and a score against the source picture,
   beside the stitch scoreboard in the picture corpus; a corpus of AI-style art (flat illustration, logo, cartoon,
-  mascot, photo) drawn or made here
-- [ ] **PX1 Picture to clean shapes**: fewer, smoother regions; slivers merged; curves fitted; small details kept
-  on purpose
+  mascot, photo) drawn or made here. Done: `tests/look.js` (render + score), 26 pictures in
+  `tests/browser/art.js`, the "looks like the picture" table in `picture_corpus.sh`, baseline
+  `tests/fixtures/look.json` (the numbers PX1-PX4 must beat; reading them: `docs/testing.md`)
+- [x] **PX1 Picture to clean shapes**: fewer, smoother regions; slivers merged; curves fitted; small details kept
+  on purpose (`regions.js`: blend bands, flecks, smoothed edges; layers under later colours; the Thread colours count
+  holds with the closed-in white; numbers in `docs/pictures.md`)
+  - left: art_line_mandala's look -5; a closed-in panel inside a sewn frame left as fabric at a full count; the
+    dog's shading rim, brown ears sewn near-black and soft drop shadow are thread matching and soft-shade rules
+    (palette), not shapes
 - [ ] **PX2 Stitch types like a human digitizer** (after PX1): thin strokes as satin columns, outlines as run or
   satin, areas as fill, dots as satin; back to front, hidden fill removed, pull by fabric
-- [ ] **PX3 Fill direction that follows the form**: each region's rows at its own angle, or curving with it
+- [x] **PX3 Fill direction that follows the form**: each region's rows at its own angle, or curving with it
+  (`docs/stitch-model.md` "Direction that follows the form")
+  - [x] each part's angle scored over a sweep, the principal axis and the edges' direction (fewer row ends, no
+    ragged edge, never more sections than today's angle); Follow the shape for patches and filled motifs; pictures
+    with `direction: "auto"` (a one-line hook in digitize.js; the Picture panel doesn't offer it yet)
+  - [x] curved rows: level lines of a fitted stripe field, never closer than the spacing, where they beat straight
+  - left: the Picture panel's choice (picture.js), and whether pictures default to it; curved rows with
+    singularities (a disc's, a star's middle) and rows that end inside a narrowing band; sewn proof
 - [ ] **PX4 Shading** (after PX1): two-colour blends by density, colour mixing for photos and gradients
-- [ ] **PX5 Every machine**: machines and hoops of Janome, Bernina, Husqvarna/Pfaff, Tajima-format machines from
-  the makers' published specs; JEF once Janome's thread order is measured
-- [ ] **PX6 Art that stitches well**: an "ask your AI for…" guide and a check of the uploaded picture saying what
-  will and won't sew well, and why
+- [x] **PX5 Every machine**: machines and hoops of Janome, Bernina, Husqvarna/Pfaff, Tajima-format machines from
+  the makers' published specs (machines.js, cited); the machine sets the file, the checks use its field and limits.
+  Left: JEF once Janome's thread order is measured (a Janome trial in the VM), Singer and the no-jump-trim machines
+  (a loose-thread count for machines that cut nothing between parts), fields past 409.6 mm (writer-changes W1c)
+- [x] **PX6 Art that stitches well**: an "ask your AI for…" guide and a check of the uploaded picture saying what
+  will and won't sew well, and why (`artcheck.js`, `artwords.js`, `recipes.js` `ART`; docs/pictures.md)
 
 ## Verdict
 Strong, and kept: the machine layer (locked writer, PEC box, palette, locks, the 5 mm loose-thread rule, 24 hits

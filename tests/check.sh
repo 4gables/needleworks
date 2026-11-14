@@ -10,7 +10,7 @@ cd "${0:A:h}/.."
 REF=${1:-origin/main}; BASE=${2:-}; HP=${HP:-8796}; CDP=${CDP:-9396}; U=http://127.0.0.1:$HP
 PY=/Volumes/4TB_SSD/needleworks/.venv/bin/python; OUT=${TMPDIR:-/tmp}/nw-check; mkdir -p $OUT/batch
 to() { perl -e 'alarm shift; exec @ARGV' "$@"; }   # (no `timeout` on macOS; a hung check ended a run at 0 % CPU)
-fail=0; say() { print -- "$@"; }; run() { local name=$1 secs=$2; shift 2; say "== $name"; to $secs "$@" 2>&1 | grep -E "FAIL|PROBLEM|problem|DONE|passed|failed|bad|ok:" | tail -6; (( ${pipestatus[1]} )) && fail=1; }
+fail=0; say() { print -- "$@"; }; run() { local name=$1 secs=$2; shift 2; say "== $name"; to $secs "$@" 2>&1 | grep -E "FAIL|PROBLEM|problem|DONE|passed|failed|bad|ok:|actions, [0-9]+ over" | tail -6; (( ${pipestatus[1]} )) && fail=1; }
 changed=$(git diff --name-only $REF -- . ; git diff --name-only)
 has() { print -- "$changed" | grep -qE "$1"; }
 
@@ -40,7 +40,7 @@ if has '^js/(core/|studio/(pieces|compose|lettering|shapes|fabrics|files|starter
   [[ -n $BASE ]] && say "compare: changed files vs $BASE" && for f in $BASE/*.pes; do cmp -s $f $OUT/batch/${f:t} || say "  changed ${f:t}"; done | tail -40
   # (picture_corpus.sh starts and stops its own browser and its own server on the ports it's given: not ours. Given
   # our server's port its files landed in our batch folder and its own checker count came out blank)
-  has '^js/core/(digitize|palette|fill|colour)|^js/(picture|worker)\.js' && run picture_corpus 600 zsh tests/picture_corpus.sh $((CDP+3)) $((HP+1)) $OUT/pc
+  has '^js/core/(digitize|palette|fill|colour)|^js/(picture|worker)\.js' && run picture_corpus 1200 zsh tests/picture_corpus.sh $((CDP+3)) $((HP+1)) $OUT/pc
   has '^js/core/(text|raster|fonts)|^js/studio/(pieces|lettering)' && { node tests/cdp.mjs $CDP goto "$U/tests/browser/lettering_look.html?v=$RANDOM" >/dev/null; for i in $(seq 1 120); do t=$(node tests/cdp.mjs $CDP eval document.title); [[ $t == *DONE* ]] && break; sleep 5; done; say "== lettering_look $t"; [[ $t == *" 0\""* ]] || fail=1; }
 fi
 

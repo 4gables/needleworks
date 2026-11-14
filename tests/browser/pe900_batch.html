@@ -70,6 +70,30 @@ for (const src of pics) {
   }
   log(`${src}: done`);
 }
+// rows that follow the form (PX3, `direction: "auto"`): shapes drawn here (a long diagonal leaf, a crescent, an S curve,
+// a ring, a star) and the samples at one setting
+{
+  const c = new OffscreenCanvas(800, 600), x = c.getContext("2d");
+  x.fillStyle = "#fff"; x.fillRect(0, 0, 800, 600);
+  x.fillStyle = "#2d7a2d"; x.beginPath(); x.ellipse(170, 170, 150, 38, -0.6, 0, 2 * Math.PI); x.fill();
+  x.fillStyle = "#f2b705"; x.beginPath(); x.arc(560, 150, 120, 0, 2 * Math.PI); x.arc(615, 130, 100, 0, 2 * Math.PI, true); x.fill("evenodd");
+  x.strokeStyle = "#1f5fbf"; x.lineWidth = 46; x.lineCap = "round"; x.beginPath(); x.moveTo(60, 470); x.bezierCurveTo(170, 300, 260, 620, 380, 450); x.stroke();
+  x.fillStyle = "#c62828"; x.beginPath(); x.arc(520, 450, 110, 0, 2 * Math.PI); x.arc(520, 450, 65, 0, 2 * Math.PI, true); x.fill("evenodd");
+  x.fillStyle = "#6a1b9a"; x.beginPath(); for (let k = 0; k < 10; k++) { const a = -Math.PI / 2 + (k * Math.PI) / 5, r = k % 2 ? 34 : 85; x.lineTo(700 + r * Math.cos(a), 430 + r * Math.sin(a)); } x.closePath(); x.fill();
+  const shapes = await createImageBitmap(c);
+  for (const [src, bmp0] of [["form_shapes", shapes], ...pics.map((p) => [p, null])]) {
+    let bmp = bmp0; if (!bmp) try { bmp = await createImageBitmap(await (await fetch(src)).blob()); } catch { continue; }
+    for (const [colors, size, fill] of src === "form_shapes" ? [[5, 100, "standard"], [5, 160, "solid"]] : [[6, 120, "standard"]]) {
+      const sz = workingSize(bmp.width, bmp.height, size, hoop), cv = new OffscreenCanvas(sz.w, sz.h), ctx = cv.getContext("2d");
+      ctx.imageSmoothingQuality = "high"; ctx.drawImage(bmp, 0, 0, sz.w, sz.h);
+      const img = ctx.getImageData(0, 0, sz.w, sz.h), opts = { colors, removeBackground: true, fillAngle: 45, direction: "auto", density: DENSITY[fill], skip: [], hoop };
+      const tag = `pic_${src.split("/").pop().split(".")[0]}_c${colors}_s${size}_${fill}_form`;
+      try { await save(tag, digitize(img, analyze(img, opts), opts).design.pattern()); }
+      catch (e) { bad++; log(`ERROR ${tag}: ${e.message}`); }
+    }
+  }
+  log("form: done");
+}
 log(`DONE ${n} files, ${bad} problems`);
 document.title = `DONE ${n} ${bad}`;
 </script>

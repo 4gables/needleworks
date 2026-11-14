@@ -2,6 +2,12 @@
 
 Reference for this part of Needleworks: the rules, the reason for each (it stops someone undoing it) and the number that proved it. Hard rules are in `AGENTS.md`. Add a lesson where its topic is, never as a round log.
 
+- Looks like the picture (roadmap PX0): `picture_corpus.sh` renders every file as thread and scores it against the
+  picture (colour, shape, outline, detail, structure; 0-100), per kind (logo, cartoon, mascot, sticker, line art,
+  watercolour, pet photo, gradient, flat illustration, and the corpus's own drawings, shapes and photos) and style,
+  against `tests/fixtures/look.json`. A picture round is better when its kinds' look rises and the stitch numbers
+  beside it don't get worse; what each part means and how to read it: `docs/testing.md`. The AI-style art is drawn
+  in `tests/browser/art.js` (ours to commit); `?ext=etsy_N` pictures get a look on their line, outside the baseline.
 - One job at a time, newest kept; restarted after 60 s. Styles: Filled (`build`), Line drawing (`lineArt`),
   Cross-stitch (`crossStitch`). No fabric selector: density is the only fabric knob.
 - Colours are learned once per picture (`learnColours`, `LEARN` 800 px copy of the content box) and labelled onto any
@@ -23,13 +29,16 @@ Reference for this part of Needleworks: the rules, the reason for each (it stops
   round it is at least as thick as the piece (a white star in a red ring was left out, and bouquets still gained
   white). Known cost: the hole of a big O, the inside of an outline and gaps in a bouquet are sewn white until
   tapped off.
-- One thread colour means one thread sewn (owner, 2026-11-13: a BYU logo at one colour came out Ultramarine and
-  White). `learnColours` marks the model `spare` and the closed-in colour stays fabric; the page offers "Sew it in
-  white too (2 threads)" (`inside` "all"; "auto" is the default, "none" is "Leave it out"). On the 8 Etsy samples
-  and BYU at one colour: one thread each (two with Sew it). From two colours up the closed-in colour is still one
-  thread past the count. Worse: giving it a slot (learning the design one colour fewer whenever over 0.2 % is closed
-  in): the count held everywhere, but the corpus merged distinct inks (red text sewn purple at 3 colours, a purple
-  stroke green at 4, six cases). Which colour to give up needs a measure of what each costs the look: PX1.
+- The Thread colours count is every thread sewn, the closed-in colour included (owner, 2026-11-13: a BYU logo at one
+  colour came out Ultramarine and White, at two Prussian Blue, Cornflower Blue and White). `learnColours`: when the
+  design's own colours fill the count and 0.2 % or more of the learned copy is closed in, the design learned one
+  colour fewer is taken only if what it lost is a near-duplicate shade (`NEAR`, ΔE00 under 15 to every colour kept)
+  or a blend of two colours kept (under 30; BYU at six learns Black and Dark Gray from soft edges). Else the model is
+  `spare`: the closed-in colour stays fabric and the page offers "Sew it in white too (N + 1 threads)" (`inside`
+  "all"; "auto" is the default, "none" is "Leave it out"). One colour is always `spare`. On the 9 samples at 1, 2,
+  3, 4 and 6 colours: threads sewn never over the count (before: one over in 44 of 45 settings); the white sewn
+  where a shade gave way (e.g. etsy_8 at 6, etsy_6 at 3). Worse: one colour fewer whenever white is closed in,
+  whatever was lost (red text sewn purple at 3 colours, a purple stroke green at 4: six corpus cases).
 - A see-through picture has no background to find: every opaque pixel is sewn, as drawn (the page's lede says so).
 - Separate parts (picture.js `findParts`, `cutPart`): a picture of several things apart from each other (ink
   joined across gaps under 3 % of the picture; 2 to 8 parts of 3 % of the ink or more) offers each "on its own"
@@ -84,13 +93,59 @@ Reference for this part of Needleworks: the rules, the reason for each (it stops
   "Sew the edge band too" (`opts.edge`). Lost parts are ringed on the thumbnail (`markThumb`); `#pic-size-note`
   explains a size gap. Filled keeps "eyes" (a dot of 0.6 mm2+ inside another colour, up to 6 per colour). Line drawing:
   outline bands sewn once from `tO >= 0.5 tS`; `oneInk`: no join across bare fabric between different colours.
+- Clean shapes (`regions.js` `cleanShapes`, numbers in `recipes.js` `SHAPES`; Filled only): the labelled picture is
+  made into fewer, cleaner regions before any stitch is planned, as every digitizing guide says to (Wilcom/Hatch/
+  BERNINA "Prepare Bitmap", mySewnet Despeckle, Stitch Era; `docs/research/picture-sota.md` I2, I3). In order:
+  - Blend bands: where two *sewn* colours meet, a band under 1 mm wide (`band` 0.5 mm from each side) of a colour
+    between them (Lab distances adding to under 1.25 x theirs; the second side 20 % of its edge at least) is the soft
+    edge, read as a third colour and sewn as a line of its own. Each of its pixels within 0.5 mm of both goes to the
+    colour covering more of it: the pixel's own colour halved in *linear light* (halved in Lab, a pixel a fifth
+    covered by a dark line was the line's: a mandala's 0.6 mm lines sewed 1 mm wide, look -5), grown outward from
+    both sides a step at a time (by colour alone, pixels apart from their side made dots: etsy_1 +8 magenta starts).
+    Pieces of the band left under 3 mm² go the same way. "Embroidered Flowers" on etsy_8's panel was tan halo
+    around black; now black letters. Not between the fabric and a colour: there a band is a thin thing's edge as
+    often as a blend (a stem's pale rim given to the fabric left the stem 1-2 px and broken: etsy_1 lost branches and
+    gained 38 bare locks); build()'s own rule judges those.
+  - Flecks: a piece of a sewn colour under 3 mm², 80 % of its edge on sewn colours, joins the one with body (4 mm²,
+    1.5 mm wide somewhere) it touches most, smallest first. Kept on purpose: 0.3 mm² or more at ΔE00 25 or more from
+    that colour (an eye, a highlight, a letter's stroke; by shape and a count of 6, as `foldFlecks` keeps eyes, the
+    letters of etsy_8's title went into the tan round them). Into any neighbour, two specks came to over 1.5 mm² and
+    were sewn: etsy_1 +18 trims. `foldFlecks` still runs after it (fills with body only, eyes by count).
+  - Smooth edges: one step of threshold dynamics (Merriman, Bence & Osher 1992): each colour's area blurred (three
+    box passes, 0.5 mm across in all), each pixel to the strongest colour beside it. Pixel stairs and JPEG-ragged
+    edges go, the colours still meet with no gap. Never moved: regions under 1 mm wide, a wide region's parts no
+    1 mm disc reaches (the blur took the hairlines off a script title), pieces under 4 mm² (an apostrophe rounded at
+    both ends fell under the 2 mm a mark needs and was left out) and closed-in fabric under 4 mm² (a counter). At
+    0.8 mm the held-out pictures had 12 more wasted moves and 43 more bare locks.
+  - Layers (`build`, research I3): a hole or bay in a colour's shapes under 3 mm across (`layer`: a closing of the
+    colour) that only later colours fill is sewn under them, as a person sews the shape behind whole. Cut round,
+    the rows split round each piece of shading into parts stranded behind finished rows or trimmed to. Enclosed holes
+    alone were too few to matter (a rose's shading reaches its edge). Never fabric or an earlier colour.
+  - The form an imported drawing joins (round Z2): a partition of the working copy into one-colour regions
+    (`regionsOf`; with `measure`: area, width, box, edge to each neighbour). An SVG's filled outlines painted in
+    sewing order with the later ones' overlaps removed (`docs/zigzag-spec.md` 2.6) give the same labels.
+  - Proof (2026-11, PX1, with the Thread colours count above), before -> after. The 12 samples in the browser
+    batch: trims 1,238 -> 1,104, loose threads 62 -> 54, wasted moves 47 -> 32, thread ends 1,004 -> 994, bare locks
+    81 -> 80, files at the density limit 6 -> 5, stitches -17 % (white closed in now fabric where no shade gave way).
+    Five held-out pictures at the same three settings (Node): trims 1,593 -> 1,479, loose 75 -> 65, wasted 43 -> 32,
+    ends 1,413 -> 1,391, bare locks 101 -> 104 (one more kept dot: each dot sewn on its own is 10-11 lock hits with no
+    body). Corpus (filled): trims 1,267 -> 1,180, loose 26 -> 23, holes 23.1 -> 22.0 mm² (21 -> 20 patches), every
+    file passing pe900_check; look by kind within 0.3 of PX0's baseline except shapes -1.6 (pc_framed_..._edge: the
+    cream panel inside a sewn frame is closed-in colour and stays fabric at 3 colours, 86 -> 43), line art -1.3
+    (art_line_mandala at 100 mm, 76 -> 70: colour part 0.60 -> 0.45, cause not found), watercolour -0.9, cartoon -0.8
+    (white left as fabric). Digitizing time unchanged (etsy_8's three settings 15.2 s before, 14.3 s after).
+  - Tried and dropped: sewing colours back to front by which lies on which (most of a colour's edge on another,
+    twice the reverse share): samples trims 1,065 -> 1,046 and loose 44 -> 36, but held-out ends 1,380 -> 1,472;
+    light-first stays.
 - Filled: shapes 1 mm or wider get tatami following the outline (skeleton satin broke corners); parts under 2 x
   `THIN_PART` and lines under 1 mm sew a triple run, never dropped. Specks: under 4 mm² and 2.5 mm across, groups
   under 6 mm of line, walks under 1.5 mm (`lostLines` reports dropped fine lines). Kept: text dots on the fabric (>= 0.8 mm across, 0.6
   mm², within 5 mm of their colour or another such dot) and marks >= 2 mm long, 1.5x longer than wide, within 2 mm of a
   bigger piece of their colour (apostrophes). Thin shapes (< 2 mm) 0.05 mm
   pull, else 0.15. `OVERLAP` 0.35 mm under later colours, shape by shape (growing the raw mask merged specks);
-  neighbours alternate angle (+90°). `DENSITY` Standard 0.4 (the app's default; `DEFAULTS.density` is Dense) / Dense
+  neighbours alternate angle (+90°). With `direction: "auto"` (PX3; digitize.js's `form` on each part) each part takes
+  its own measured angle or curved rows, the alternation kept only where its shape doesn't say (`docs/stitch-model.md`
+  "Direction that follows the form"); the Picture panel doesn't offer it yet. `DENSITY` Standard 0.4 (the app's default; `DEFAULTS.density` is Dense) / Dense
   0.35; 0.3 fails the check (row links under 0.3 mm). Row steps split to 3 mm, row-end stitches over 4 mm halved.
 - What other tools do (public manuals and guides, no code read): the picture is cleaned before any stitch is planned.
   Wilcom EmbroideryStudio / Hatch / BERNINA "Prepare Bitmap": reduce to the threads wanted, merge like colours, and a
@@ -131,7 +186,7 @@ Reference for this part of Needleworks: the rules, the reason for each (it stops
   not a rule.
 - Small details (Picture panel, Filled; `opts.details`, `recipes.js` `PICTURES.details`; Wilcom, Hatch and BERNINA
   have a "Details" slider, Stitch Era deletes 30-50 % of traced shapes): "Leave out specks" is the default, "Keep
-  all" is the rules above and nothing more (v26's bytes). A *piece* is the parts of one colour the needle reaches
+  all" is the rules above and nothing more (the clean shapes' flecks too; their bands, smoothing and layers stay). A *piece* is the parts of one colour the needle reaches
   without a cut (one's end within 2 mm of the next one's start, or in its travel region within `TRAVEL`), measured
   in mm of thread it sews.
   - Left out: a piece under 7 mm and under a tenth of its colour's biggest, and one that only a jump reaches and
@@ -187,3 +242,36 @@ Reference for this part of Needleworks: the rules, the reason for each (it stops
   (`forgetPicture` in app.js). Kept like any other, a blank picture opened the tab on its own error every visit after,
   in place of the sample. It showed as ui_sweep's Picture state "never ready" in 1-2 of 330 cases, at v12 too:
   whichever tab had run the blank-picture state before the plain one. Guard: ui_sweep `picture-after-blank`.
+- Art that stitches well (PX6; `js/core/artcheck.js` measures, `js/artwords.js` says, numbers `recipes.js` `ART`).
+  Makers bring art from AI image tools that looks clean on screen and sews badly; the page said "Good for
+  stitching" of a logo whose 3 mm lettering closed up. Two parts:
+  - The guide, "Make art that stitches well" (a `<details>` under the picture, opened also from the check's "How to
+    make art that stitches well"): the rules with their numbers for this hoop filled, as mm and as px on a 1024 px
+    picture (what AI tools make; PX-R: "rules in mm become rules in pixels once the sewn size is known"), and a
+    prompt to copy, filled in from the subject typed, the hoop's shape (nearest of 1:1, 4:5, 3:4, 2:3, 9:16; turned
+    when the hoop is) and the threads owned (Threads I own: their colour words and hex). The prompt asks for
+    `ART.ask` (2) times the least line and detail: it is worked out for the hoop filled and art is often sewn at
+    half that. Styles named from Brother's Artspira AI (PX-R): flat, pop, simple, silhouette and line art go to
+    embroidery; crayon, sketch, watercolour and manga don't. Copy: `navigator.clipboard`, else the text is selected.
+  - The check, in the v29 verdict box under the picture (`verdictUI`): the texture headline stays (smoothed / shaded
+    like a photo / flat), then what won't sew well and why, each with "Show where" (its places ringed on the
+    picture, drawn bigger while shown: at 64 px a ring was a dot) and its one-tap fix where one mends it, else what to
+    do; then "Sews well at N mm: …". Measured on the picture at the sewn size, in the worker beside `keptParts`:
+    `artPicture` once per picture and colour count on the learned copy, `artShapes` on the labelled working copy
+    (`res` px per mm, the digitizer's own labels).
+  | Finding | Measure | Said when | Fix |
+  |---|---|---|---|
+  | `text` | rows of 3+ letter-like pieces of one colour (0.8-40 mm tall, at most 1.6x as wide, stroke at most 0.45 of the height, 12-75 % of the box inked; neighbours overlapping half the smaller height, under 1.8x taller, under 0.8 of the taller apart; not all one size; strokes within 30 %; 7 in 10 on one baseline), joined letters beside them absorbed | the smallest row's middle height under `ART.text` 6 mm (any style) | the smallest Size in 5 mm steps that brings it to 6 mm, if the hoop holds it; else "add the words in Design your own" |
+  | `small` | pieces of one colour 0.5 mm² (keptParts' part) to `ART.dot` 4 mm² and under `ART.detail` 2.5 mm across, not lettering | 3 or more, Filled, not a photo, no left-out note (that one rings and fixes them) | the Size that brings three in four to 2.5 mm |
+  | `thin` | ridges of each colour's own (3,4) chamfer distance under `ART.line` 1 mm wide along 3 mm or more, not lettering. A ridge: along x or y, both ways, the colour's edge within its own width and nothing deeper (a plain "local top" took stair-steps on slanted edges and every straight edge: 64 lines on a bold logo) | Filled, not a photo | the Size that brings three in four to 1 mm |
+  | `blend` | share of the ink in smooth ramps: over 17 px of the learned copy the colour moves 3-50 ΔE with no step over a third and no back and forth | flat picture, share at least `ART.blend` 0.12 (the corpus gradient 0.32; JPEG logos 0.06-0.11, clean art under 0.03) | `ART.fewest` 4 thread colours: fewer, bolder bands |
+  | `colours` | flat pixels (under 4 ΔE to their four neighbours) grouped 12 apart, groups of 1 % or more | flat picture, more than the colours sewn (not asked: the fabric's colour closed in is one more) | as many thread colours as that, up to 8 |
+  | `background` | the picture's border (1 % deep) grouped 10 apart: its main group's share | under `ART.page` 0.8, not see-through, no frame, background left unstitched | leave out the sewn colours holding 10 % of the border or more |
+  - Texture and photos are the headline's (`flatShare`): for a photo the specks and thin lines are its texture and
+    are not counted one by one; colours and blends are judged only on a flat picture.
+  - What the external pictures and the corpus get: `picture_corpus.sh ... "art"` logs it under each case (and
+    `ext=etsy_1,…&fillonly&art` for `tests/external/images`). Guard: the corpus's `check: { say, never }` per drawing
+    (a bold logo and one colour say nothing; the gradient says `blend`, the thin logo `text` and `thin`, `busy_back`
+    `background`, polka dots' 5 mm "dots" `text`).
+  - Known: a row of three florets on one baseline can read as lettering (etsy_3); script lettering joined into one
+    piece is not found as lettering; the colour count of a soft picture is high, so it is said only on flat ones.

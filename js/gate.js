@@ -8,8 +8,9 @@
 // file starts a download or a share.
 // Other machines' files (DST, EXP, VP3: `format`, docs/formats-out-spec.md section 8): the PES of the same pattern is
 // judged exactly as above (stitches, fit, the machine's rules: the only check there is), then the file is written from
-// that pattern and read back: the same needle points and colour changes, or nothing is handed over.
-import { readEmbroidery, validatePES } from "./core/formats.js";
+// that pattern and read back: the same needle points and colour changes, or nothing is handed over. The hoop given is
+// the chosen machine's (machines.js): its field, and its stitch and colour limits where the maker publishes them.
+import { COLOR_CHANGE, STITCH, readEmbroidery, validatePES } from "./core/formats.js";
 import { WRITERS, validateOut } from "./core/formats-out.js";
 import { HARD, verdictOf } from "./quality.js";
 import { zip } from "./zip.js";
@@ -77,6 +78,10 @@ export function judge(f, hoop = null, format = "pes") {
   if (!EMB.test(f.name)) return no(f, "This page only saves embroidery files.");
   const check = validatePES(f.bytes, f.against || null, hoop);
   if (!check.ok) return no(f, check.error);
+  // (the chosen machine's own published limits, machines.js `stitches` and `blocks`, past the rules every file keeps)
+  const st = check.decoded.stitches, n = st.filter((e) => e[2] === STITCH).length, b = st.filter((e) => e[2] === COLOR_CHANGE).length + 1;
+  if (hoop?.stitches && n > hoop.stitches) return no(f, `The design has ${n.toLocaleString()} stitches: the ${hoop.machineName} takes ${hoop.stitches.toLocaleString()} at most in one design.`);
+  if (hoop?.blocks && b > hoop.blocks) return no(f, `The design has ${b - 1} thread changes: the ${hoop.machineName} takes ${hoop.blocks - 1} at most in one design.`);
   const problems = verdictOf(f.bytes), hard = problems.filter((q) => HARD.has(q.key));
   const out = { ...f, ok: !hard.length, error: hard.map((q) => q.text).join(" "), problems, hard };
   if (!WRITERS[format] || !out.ok) return out;
