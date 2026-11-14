@@ -254,6 +254,7 @@ leaves a design with no setting byte-identical.
 - [ ] **Z4 Test swatches** (spec 4)
 - [x] **W5 Other formats out**: DST, EXP, VP3 released (v30), see Cycle 2's line
   - [ ] JEF: Janome's thread order measured on Janome's own software (`docs/formats-out-spec.md` §7)
+    - [x] 51 of 78 numbers measured from 127 Janome-sponsored Sew4Home designs (JEF paired with VP3, §7.1)
   - [ ] Open tab: a DST with two colour changes in a row (an empty block) fails the doctor's fixes ("fewer thread
     colours than colour changes"); site files never have one, outside files may
 

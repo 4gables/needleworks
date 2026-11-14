@@ -519,6 +519,120 @@ not needed.
 
 So no public table can be copied even if the rules allowed it: at most one of them is right.
 
+### 7.1 The order measured from Janome-sponsored designs (2026-11-13)
+
+**Source.** Sew4Home publishes free designs sponsored by Janome America, each as matched JEF, PES, VP3, EXP and ART
+files made from one design by the digitizer. The VP3 of a design holds, per colour block, the thread's screen colour
+(RGB), its catalogue number and name, and the brand ("Janome Polyester" or "Janome"); the JEF holds, per block, only
+the palette number. Pairing block k of the JEF with block k of the VP3 gives one measured pair (palette number →
+thread). No other project's table was opened or used; the JEF and VP3 headers were read by a throwaway script written
+from sections 5.1 and 6 of this document.
+
+**Method.**
+
+- JEF: colour count N at offset 24, the N palette numbers at 116, the stitch block at the offset in the first u32;
+  stitches per block counted between `80 01` changes.
+- VP3: the N colour blocks after the design block; per block the RGB, the three byte strings (catalogue number, name,
+  brand) and the stitch count.
+- A pair counts only when both files have the same number of blocks. Stitch counts agreed within 5 % on 630 of 635
+  blocks; the 5 that did not are one letter (Floral Alphabet "Q", a later edit of the JEF), with the same block order.
+- **Excluded**: Aurifil "Autumn Leaves" (main design). Its VP3 names are placeholders in table order ("1 White" on a
+  pink, "2 Black" on a pink, "201 Pink" on a grey, "203 Orange" on a grey) and its RGB values are Aurifil colours, so
+  its JEF numbers are the digitizer's nearest Janome thread, not a labelled pair. It is the only conflicting source:
+  without it every palette number has exactly one thread, every catalogue number exactly one palette number, and every
+  thread one RGB across all designs.
+
+**Designs used**: 127 designs (624 colour blocks after the exclusion) from these sets, all from sew4home.com:
+
+| code | set (page) | designs |
+|---|---|---|
+| FA | Floral Alphabet (floral-alphabet-machine-embroidery-design-set) | 26 |
+| AT | Atomic set (atomic-machine-embroidery-set): alphabet, diamonds, main designs, starbursts | 34 |
+| FF | Friendly Forest Animals (friendly-forest-animals-machine-embroidery-designs) | 4 |
+| FG | Feelin' Groovy (feelin-groovy-machine-embroidery-set) | 4 |
+| FP | Flower Power (flower-power-machine-embroidery-design-set) | 8 |
+| BF | Botanical Florals, large and small (botanical-florals-machine-embroidery-designs) | 12 |
+| FR | Fancy Fruits (fancy-fruits-machine-embroidery-designs) | 5 |
+| VO | Vintage Christmas Ornaments (downloads-for-vintage-christmas-ornaments-embroidery-files-bonus-napkin-tutorial) | 11 |
+| TG | Tulip Garden (s4h-tulip-garden-emb-download) | 5 |
+| SU | Sulky 30 wt: Handmade with Love, Life's a Stitch, two sizes each (s4h-sulky_30wt_embroidery_designs_download) | 4 |
+| AU | Aurifil 80 wt: Lion, Gingham Fruit (3), Autumn Leaf Detail (s4h-aurifil_80wt_embroidery_designs_download) | 5 |
+| GS | In-the-hoop Gift Stocking (in-the-hoop-gift-stocking-with-snowflake-embroidery) | 3 |
+| TB | Large shopping tote border, three sizes (s4h-must-have-bags-fabric_com-download) | 3 |
+| MS | Mountain Sunrise (s4h-mountain_sunrise_embroidery_design-download) | 1 |
+| CO | Coaster outline (s4h-coaster_outline_emb_design_download) | 1 |
+| LS | Let It Snow | 1 |
+
+**Measured table**: 51 of the 78 palette numbers. RGB is the VP3's screen colour for that thread (the digitizing
+software's, the same in every design that uses it; not a colour Janome publishes).
+
+| JEF number | Janome no. | name | RGB (VP3) | sets |
+|---|---|---|---|---|
+| 1 | 002 | Black | `000000` | AT, FF, FG, MS, VO |
+| 2 | 001 | White | `FFFFFF` | AT, AU, FF, FG, FR, GS, SU |
+| 3 | 204 | Yellow | `FFFF17` | TG |
+| 4 | 203 | Orange | `FF6600` | CO, FF, FG |
+| 5 | 219 | Olive Green | `2F5933` | AT, BF, FP, TG |
+| 6 | 226 | Green | `237336` | FA, FP |
+| 7 | 217 | Sky | `65C2C8` | LS, MS |
+| 8 | 208 | Purple | `AB5A96` | AU, TG |
+| 10 | 225 | Red | `FF0000` | AU, FF, VO |
+| 11 | 214 | Brown | `B1704E` | FA, VO |
+| 13 | 003 | Gold | `E4C35D` | FF, GS, SU |
+| 15 | 209 | Pale Violet | `AC9CC7` | FA |
+| 16 | 210 | Pale Yellow | `FCF294` | TG |
+| 17 | 211 | Pale Pink | `F999B7` | AT |
+| 18 | 212 | Peach | `FAB381` | FR |
+| 19 | 213 | Beige | `C9A480` | AU, FA |
+| 20 | 215 | Wine Red | `970533` | BF |
+| 23 | 220 | Silver Gray | `E5E5E5` | GS, LS |
+| 25 | 227 | Pale Aqua | `98D6BD` | AT |
+| 26 | 228 | Baby Blue | `B2E1E3` | FA |
+| 27 | 229 | Powder Blue | `368BA0` | FA, FG, GS |
+| 31 | 233 | Salmon Pink | `F999A2` | AT, BF, FA, FG, FP |
+| 32 | 234 | Coral | `F9676B` | BF, FA, FG, FP, FR, MS |
+| 33 | 235 | Burnt Orange | `E3311F` | AT, FA, FG |
+| 34 | 236 | Cinnamon | `E2A188` | MS |
+| 35 | 237 | Umber | `B59474` | AU, BF |
+| 36 | 238 | Blond | `E4CF99` | AU, FF, VO |
+| 37 | 239 | Sunflower | `FFCB00` | AU, BF, FA, FG, FP, TB |
+| 38 | 240 | Orchid Pink | `E1ADD4` | TG |
+| 39 | 241 | Peony Purple | `C3007E` | TG |
+| 40 | 242 | Burgundy | `80004B` | AU, SU |
+| 41 | 243 | Royal Purple | `540571` | FA |
+| 42 | 244 | Cardinal Red | `B10525` | AU |
+| 43 | 245 | Opal Green | `CAE0C0` | FA, FR |
+| 44 | 246 | Moss Green | `899856` | FF, FR |
+| 45 | 247 | Meadow Green | `5C941A` | BF, FA, FR, TG |
+| 47 | 249 | Aquamarine | `5DAE94` | SU, TB, VO |
+| 48 | 250 | Emerald Green | `4CBF8F` | FA |
+| 49 | 251 | Peacock Green | `007772` | FA |
+| 50 | 252 | Dark Gray | `595B61` | SU |
+| 51 | 253 | Ivory White | `FFFFF2` | FP, MS |
+| 52 | 254 | Hazel | `B15818` | AU, FF |
+| 55 | 257 | Cocoa Brown | `98692D` | FF |
+| 56 | 258 | Sienna | `4D3419` | AU, FF, FR |
+| 57 | 259 | Sepia | `4C330B` | FF |
+| 62 | 264 | Green Dust | `B2DD53` | AT, AU |
+| 63 | 265 | Crimson | `F33689` | SU, TG |
+| 67 | 269 | Meadow | `4C881F` | AU |
+| 68 | 270 | Mustard | `E4DE79` | VO |
+| 74 | 202 | Vermilion | `F0331F` | AT, AU, CO, GS, SU |
+| 77 | 223 | Beige Gray | `E3C4B4` | AU |
+
+Number 9 = Pink 201 (section B.3's "every public listing") is **not** among them: no design used Pink 201.
+
+**Still unknown: 27 numbers**: 9, 12, 14, 21, 22, 24, 28, 29, 30, 46, 53, 54, 58, 59, 60, 61, 64, 65, 66, 69, 70,
+71, 72, 73, 75, 76, 78. The 27 Janome threads never seen are exactly 27 (201, 205, 206, 207, 216, 218, 221, 222,
+224, 230, 231, 232, 248, 255, 256, 260, 261, 262, 263, 266, 267, 268, 271, 272, 273, 274, 275), which fits a table
+of 78 = 001-003 plus 201-275, one thread per number.
+
+**A pattern, not a measurement.** All 26 measured numbers from 25 to 68 are the catalogue number minus 202 (25 =
+227 … 68 = 270). If it holds, 28-30 = 230-232, 46 = 248, 53-54 = 255-256, 58-61 = 260-263, 64-66 = 266-268 and
+69-73 = 271-275, leaving 201, 205, 206, 207, 216, 218, 221, 222 and 224 for 9, 12, 14, 21, 22, 24, 75, 76 and 78.
+Below 25 and above 73 there is no such rule (74 = 202, 77 = 223, 13 = 003). The pattern names threads but gives no
+screen colour, and it is unproven: nothing here relies on it.
+
 **Proposal.**
 
 1. **Measure the order** on Janome's own software or a machine, the way the PES header was measured in PE-DESIGN:
@@ -531,6 +645,11 @@ So no public table can be copied even if the rules allowed it: at most one of th
 3. **Until both exist, JEF does not ship** with guessed colours. If it must ship earlier, the honest fallback is a
    table of only the numbers measured so far (a machine shows a right name, from a coarser choice), never a public
    list. There is no "RGB only" way out for JEF: the file has nowhere to put an RGB.
+
+Section 7.1 is that fallback's table: 51 measured numbers, each with a Janome name, catalogue number and a screen
+colour seen in Janome-sponsored files. Writing JEF from it means `JANOME` holds only those 51 entries (the rest null)
+and the matching of section 5.4 runs on them alone; a design with more than 51 distinct colours shares numbers.
+Steps 1 and 2 above would still replace it (the screen colours are a digitizer's, not Janome's chart).
 
 The tests (section 9) check the table against the oracle without holding a copy of it: pyembroidery's reader names
 each palette number with its own table, and a mismatch report between its names and ours is exactly the list of
@@ -695,10 +814,13 @@ Worth one test each on a centred, trimmed fixture; it pins the stitch bytes to a
 
 ## 11. Not determined
 
-1. **JEF palette order** and screen colours: section 7. The largest open item; it blocks JEF.
+1. **JEF palette order** and screen colours: section 7. 51 of 78 numbers measured (7.1); 27 still unknown.
 2. **JEF hoop codes** beyond 1, 2, 3; what code 0 and 4 mean (the sources disagree: 110 × 110 or 126 × 110; 200 × 200
    or 230 × 200); what a current machine (MC500E, 550E, Skyline S9) does with a design bigger than every listed hoop,
-   or with code 0. Whether the four room groups are read at all.
+   or with code 0. Whether the four room groups are read at all. The 129 Janome-sponsored JEFs of 7.1 use codes
+   37 (96 files), 15 (14), 28 (8), 2 (5), 3 (4), 6 (1) and 65535 (1), mostly with all four room groups −1, so newer
+   Janome software writes codes no public list names. The u32 at offset 4 is 0x14 in most of them and 0x0A in some
+   (section 5.1 says always 0x14); the thread type at 116 + 4N is 13 in all 638 blocks.
 3. **JEF trims on a real machine**: whether one zero jump or three is needed, and whether the "cutting command"
    setting is on by default.
 4. **JEF extents off-centre**: section 5.2 follows the field names (left, top, right, bottom from the centre). No
