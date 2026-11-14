@@ -20,7 +20,7 @@ measurements behind each number are in the code's comments.
   stitch number and limit, with its reason: read here, never re-typed), `design.js` (`Design`, locks, `finish`,
   `relieve`), `density.js` (hits per mm² at every offset), `geom.js`, `colour.js`, `raster.js` (skeleton, stroke
   graph), `text.js` (`renderWord`), `fonts.js`, `glyphs.js`, `fill.js` (tatami, travel router, `fillPolygon`),
-  `palette.js` (a picture's colours and threads), `regions.js` (a picture's clean shapes: blend bands, flecks, smooth edges, before stitches), `digitize.js` (pictures: the three styles, sizing, `contentBox`/`pictureImage`/`LEARN`), `brands.js`/`brandcharts.js`,
+  `palette.js` (a picture's colours and threads), `regions.js` (a picture's clean shapes: blend bands, flecks, smooth edges, before stitches), `shade.js` (soft gradients sewn as two-thread blends), `digitize.js` (pictures: the three styles, sizing, `contentBox`/`pictureImage`/`LEARN`), `brands.js`/`brandcharts.js`,
   `machines.js`, `typed.js` (all typed text: `tidy`, `lacks`, `safeName`, `uniqueName`, `initials`).
 - `js/studio/`: `pieces.js` (each piece's stitches, fitting, the sew context `sewAs`), `lettering.js` (a word drawn to strokes, counters,
   arches, `stitchLetters`), `compose.js` (`compose`,
