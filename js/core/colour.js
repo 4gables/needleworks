@@ -11,11 +11,16 @@ const cube = (t) => (t > 0.008856 ? Math.cbrt(t) : 7.787 * t + 16 / 116);
 
 // CIELAB of sRGB 0-255
 export function labOf(r, g, b) {
-  const R = linear(r), G = linear(g), B = linear(b);
+  return labLinear(linear(r), linear(g), linear(b));
+}
+// CIELAB of linear-light RGB 0-1 (threads mixed by how much of the cloth each covers mix in linear light)
+export function labLinear(R, G, B) {
   const X = (0.4124 * R + 0.3576 * G + 0.1805 * B) / 0.95047, Y = 0.2126 * R + 0.7152 * G + 0.0722 * B, Z = (0.0193 * R + 0.1192 * G + 0.9505 * B) / 1.08883;
   return [116 * cube(Y) - 16, 500 * (cube(X) - cube(Y)), 200 * (cube(Y) - cube(Z))];
 }
 export const lab = ([r, g, b]) => labOf(r, g, b);
 
+// sRGB 0-255 -> linear light 0-1
+export const toLinear = linear;
 // relative luminance (WCAG) of [r, g, b]
 export const luminance = ([r, g, b]) => 0.2126 * linear(r) + 0.7152 * linear(g) + 0.0722 * linear(b);

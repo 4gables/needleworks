@@ -10,6 +10,7 @@ import { MARGIN } from "./machines.js";
 import { LIMITS, PICTURES, ROWS, SHAPES } from "./recipes.js";
 import { distanceTransform as wholeDT, label, order, skeletonEdges } from "./raster.js";
 import { cleanShapes } from "./regions.js";
+import { shading } from "./shade.js";
 import { PEC_MATCH, hexToRgb, nearestBrotherThread, pecThread, pyRound, rgbToHex } from "./threads.js";
 import { DEFAULTS, across, deltaE2000, pixels, srgbToLab } from "./palette.js";
 export { DEFAULTS, analyze, labelWith, learnColours, pictureInk, toPalette } from "./palette.js";
@@ -221,6 +222,8 @@ function build(img, analysis, opts) {
   // (the picture made into clean shapes first: core/regions.js)
   const clean = o.shapes === false ? { labels: analysis.labels } : cleanShapes(analysis.labels, w, h, colors, o.res, { img, keep: o.details === "all" ? "all" : "" });
   const { labels, folded } = foldFlecks(clean.labels, w, h, colors, used0, o.res);
+  // (soft gradients sewn as blends of two threads, core/shade.js: `of` says where a colour sews, `rows` its rows there)
+  const sh = shading(img, labels, colors, used0, o.res, o);
   const res = o.res;
   const hoop = o.hoop;
   const cx = w / 2, cy = h / 2, toMm = (p) => p.map(([x, y]) => [(x - cx) / res, (y - cy) / res]);
@@ -228,7 +231,7 @@ function build(img, analysis, opts) {
   const used = colors.filter((c) => !c.background && c.area > 0 && !(o.skip || []).includes(c.id))
     .sort((a, b) => b.lightness - a.lightness);   // light first, dark details on top
   const summary = [], stitched = new Set(used.map((c) => c.id));
-  const fine = { narrowMm2: 0, hairlines: 0, inkMm2: 0, folded, left: 0 };   // details too small to stitch cleanly (shown as a hint)
+  const fine = { narrowMm2: 0, hairlines: 0, inkMm2: 0, folded, left: 0, shaded: Math.round(sh.area), shades: sh.found || 0, offer: sh.offer, ...(o.shadeDebug ? { shadeDebug: sh.debug } : {}) };   // details too small to stitch cleanly (shown as a hint)
   for (let i = 0; i < w * h; i++) if (stitched.has(labels[i])) fine.inkMm2++;
   fine.inkMm2 /= res * res;
   // ignore specks: under 1.5 mm², or under 4 mm² and under 2.5 mm across (a dot, not a stem: each speck left was a
@@ -241,7 +244,7 @@ function build(img, analysis, opts) {
   const solid = new Uint8Array(w * h), budget = routeBudget();
   for (const col of used) {
     const m = { w, h, data: new Uint8Array(w * h) };
-    for (let i = 0; i < w * h; i++) m.data[i] = labels[i] === col.id ? 1 : 0;
+    for (let i = 0; i < w * h; i++) m.data[i] = sh.of(i, col.id) ? 1 : 0;
     const dt = distanceTransform(m), { labels: cl, count } = label(m), big = new Uint8Array(count + 1);
     const size = new Int32Array(count + 1), x0 = new Int32Array(count + 1).fill(w), x1 = new Int32Array(count + 1).fill(-1), y0 = new Int32Array(count + 1).fill(h), y1 = new Int32Array(count + 1).fill(-1);
     for (let i = 0; i < w * h; i++) {
@@ -255,7 +258,7 @@ function build(img, analysis, opts) {
   }
   for (const [k, col] of used.entries()) {
     const mask = { w, h, data: new Uint8Array(w * h) };
-    for (let i = 0; i < w * h; i++) mask.data[i] = labels[i] === col.id ? 1 : 0;
+    for (let i = 0; i < w * h; i++) mask.data[i] = sh.of(i, col.id) ? 1 : 0;
     fine.narrowMm2 += narrowGaps(mask, res, (i) => !stitched.has(labels[i]));
     const own = distanceTransform(mask);   // the colour's own shapes, for their widths
     // (specks: see minPx above)
@@ -422,15 +425,16 @@ function build(img, analysis, opts) {
     let blocks = [];
     const filled = new Uint8Array(count + 1);   // shapes sewn as fills
     for (const comp of comps) {
-      const mine = comp.pixels.filter((i) => labels[i] === col.id);
+      const mine = comp.pixels.filter((i) => sh.of(i, col.id));
       if (!mine.length) continue;
       let maxDt = 0, sx = 0, sy = 0;
       for (const i of mine) { maxDt = Math.max(maxDt, own[i]); sx += i % w; sy += Math.floor(i / w); }
       const widthMm = (2 * maxDt) / res, centre = [sx / mine.length, sy / mine.length];
       // anything with width is a solid fill that matches its outline exactly
-      const under = tatami(mask, comp, res, { angle: angle + 90, spacing: 2.5, stitch: 3, inset: 0.4, pull: 0 });
       // pull compensation widens a fill past its edge; on thin letters that closes the gaps between them
-      const fill = tatami(mask, comp, res, { angle, spacing: o.density, stitch: 3.5, pull: widthMm < 2 ? 0.05 : 0.15 });
+      const shaded = sh.rows(col.id, comp, mask, { spacing: o.density, stitch: 3.5, pull: widthMm < 2 ? 0.05 : 0.15 });
+      const under = shaded ? shaded.under : tatami(mask, comp, res, { angle: angle + 90, spacing: 2.5, stitch: 3, inset: 0.4, pull: 0 });
+      const fill = shaded ? shaded.fill : tatami(mask, comp, res, { angle, spacing: o.density, stitch: 3.5, pull: widthMm < 2 ? 0.05 : 0.15 });
       blocks.push({ centre, paths: routeFill([under, fill], comp, mask, res, budget, WORN, false, 0, null, PICTURES.edge).map(toMm), kind: "fill", comp: comp.id, thread: fillThread(mine.length), meant: dot(comp.id) });
       filled[comp.id] = 1;
     }

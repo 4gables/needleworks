@@ -91,6 +91,17 @@ export const ROWS = { solid: 0.35, standard: 0.4 };
 export const SHAPES = { band: 0.5, between: 1.25, side: 0.2, fleck: 3, enclosed: 0.8, contrast: 25, dot: 0.3, smooth: 0.5, thin: 1, layer: 3 };
 export const PICTURES = { fleck: 3, enclosed: 0.8, eyes: 6, start: 4, edge: 0.75,
   details: { all: { start: 0, share: 0, lone: 0 }, most: { start: 7, share: 0.1, lone: 8 } } };
+// Shading (core/shade.js, roadmap PX4; numbers: docs/pictures.md). Two colours' regions, each `wide` mm across
+// somewhere, meet in a soft gradient when the picture (blurred `blur` mm) takes `soft` mm or more to change from one to
+// the other along their border (median over at least `border` mm of it; `blend`: the Picture panel's "Blend", which
+// takes any edge softer than a crisp one, and says when there are such); joined, `area` mm² or more, they are a shaded
+// group. Its threads: a chain of up to `stops` of its own colours scored whole (mean ΔE00 to the mix, half Liu et al.
+// 2023's end loss with `contrast`, `stop` for each thread past two); blended when that beats flat by `gain` and its ends
+// are `span` ΔE00 apart (not asked in blend mode). Each pixel's mix from the picture blurred `field` mm. Rows: one grid,
+// each row's stretches in one thread by an ordered threshold of `levels`; stretches under `run` mm join their
+// neighbour; a thread's region reaches `reach` mm round its stretches; where a row changes thread the one sewn first
+// runs `over` mm under the next, the next `under` mm back over it.
+export const SHADE = { blur: 0.4, soft: 2, blend: 1.3, border: 4, wide: 3, area: 25, stops: 6, stop: -1, contrast: 10, gain: 0, span: 12, field: 0.3, levels: 2, run: 1, reach: 1, over: 0.3, under: 0.1 };
 
 // --- S1: pieces sewn in one go ---
 // Two pieces of script lettering are stitched across, not trimmed apart, when their columns are at most `gap` mm

@@ -35,9 +35,12 @@ const picJobs = picWorker(), picChecks = picWorker();
 // Everything a picture's stitches depend on (the stitches are a function of these and the picture, nothing else)
 // Small details (core/digitize.js, recipes.js `PICTURES.details`): "most" unless the person chose
 const DETAILS = ["all", "most"], detailsOf = (p) => (DETAILS.includes(p.details) ? p.details : "most");
+// Soft shading (core/shade.js): "auto" blends only where the picture has a soft gradient; "blend" any edge softer than
+// a drawn one; "flat" none
+const SHADES = ["auto", "blend", "flat"], shadeOf = (p) => (SHADES.includes(p.shade) ? p.shade : "auto");
 function picSettings(over = {}) {
   const p = state.pic, h = hoop(), turn = !!state.turn.picture && !square();
-  return { size: p.size, style: p.style, cross: p.cross, skip: p.skip, swap: p.swap, colors: p.colors, bg: p.bg, angle: p.angle, density: p.density, details: detailsOf(p), inside: p.inside === "none" || p.inside === "all" ? p.inside : "auto", smooth: p.smooth,
+  return { size: p.size, style: p.style, cross: p.cross, skip: p.skip, swap: p.swap, colors: p.colors, bg: p.bg, angle: p.angle, density: p.density, details: detailsOf(p), shade: shadeOf(p), inside: p.inside === "none" || p.inside === "all" ? p.inside : "auto", smooth: p.smooth,
     line: p.line, edge: p.edge, turn, hoop: turn ? { ...h, w: h.h, h: h.w } : h, palette: ownedPalette(), ...over };
 }
 // the fit each exact setting was sewn at (sewing it again gives the same file, at once)
@@ -53,7 +56,7 @@ async function sewPicture(s, wk, isStale = () => false) {
   const key = `${p.key}:${s.colors}:${s.bg}:${s.edge ? 1 : 0}:${s.smooth ?? "auto"}:${box.sx},${box.sy},${box.sw},${box.sh}`, k = LEARN / Math.max(box.sw, box.sh);
   if (p.learn?.key !== key) p.learn = { key, img: pictureImage(bitmap, box, Math.max(1, Math.round(box.sw * k)), Math.max(1, Math.round(box.sh * k))) };
   const learn = p.learn.img;
-  const opts = { colors: s.colors, scale: k, removeBackground: s.bg, fillAngle: s.angle, density: DENSITY[s.density] || DENSITY.standard, details: s.details, inside: s.inside, ...(s.smooth == null ? {} : { smooth: s.smooth }), skip: s.skip, ...(s.swap && Object.keys(s.swap).length ? { swap: s.swap } : {}), hoop: s.hoop, turn: s.turn, palette: s.palette, style: s.style, cross: s.cross, line: s.line || undefined, edge: s.edge || undefined };
+  const opts = { colors: s.colors, scale: k, removeBackground: s.bg, fillAngle: s.angle, density: DENSITY[s.density] || DENSITY.standard, details: s.details, shade: s.shade, inside: s.inside, ...(s.smooth == null ? {} : { smooth: s.smooth }), skip: s.skip, ...(s.swap && Object.keys(s.swap).length ? { swap: s.swap } : {}), hoop: s.hoop, turn: s.turn, palette: s.palette, style: s.style, cross: s.cross, line: s.line || undefined, edge: s.edge || undefined };
   // (kept per colour count: the checks try other counts)
   if (!p.models.has(key)) {
     const m = await wk.run({ key, learn, opts });
@@ -119,7 +122,7 @@ export async function makePicture() {
   { let cuts = 0, was = 0; for (const [, , c] of r.pattern.stitches) { if ((c === 1 || c === 2) && was === 0) cuts++; was = c === 1 || c === 2 ? 1 : 0; }
     p.busy = s.style === "fill" && cuts >= BUSY ? { cuts, stitches: r.pattern.stitches.filter((q) => q[2] === 0).length } : null; }
   p.fine = { ...r.fine, tries: r.tries }; p.checking = false;
-  fineUI(r.fine);
+  fineUI(r.fine); shadeNote(r.fine);
   const base = safeName((state.pic.file?.name || "picture").replace(/\.[^.]+$/, "") + (p.part ? `_${p.part}` : ""), "picture");
   const v = { pattern: r.pattern, verifyAgainst: r.pattern, bytes: r.bytes, filename: `${base}${state.pic.style === "line" ? "_line" : state.pic.style === "cross" ? "_cross" : ""}.pes`, fabric: "linen",
     sheet: turned() ? { notes: [$("done-turn").textContent] } : undefined,
@@ -462,6 +465,27 @@ $("pic-details").onclick = (e) => {
   const b = e.target.closest("button"); if (!b) return;
   state.pic.details = b.dataset.v; detailsUI(); makePicture();
 };
+// What the Soft shading choice did, said beside it, with the one tap that does the other
+const shadeUI = () => document.querySelectorAll("#pic-shade button").forEach((b) => b.setAttribute("aria-pressed", b.dataset.v === shadeOf(state.pic)));
+shadeUI();
+function shadeNote(fine) {
+  const p = state.pic, el = $("pic-shade-note"), mode = shadeOf(p), n = fine?.shades || 0, offer = fine?.offer || 0;
+  const areas = n === 1 ? "one area" : `${n} areas`;
+  const html = p.style !== "fill" || !fine ? ""
+    : n ? `Soft shading in ${areas} is sewn as a blend: rows of two threads side by side, more of the second where the picture has more of it. <button type="button" class="link" data-shade="flat">Sew flat colours</button>`
+    : mode === "flat" && offer ? `Sewn in flat colours. <button type="button" class="link" data-shade="auto">Blend the soft shading</button>`
+    : mode === "auto" && offer ? `Some colours here meet softly. <button type="button" class="link" data-shade="blend">Blend them</button>`
+    : "";
+  el.hidden = !html; el.innerHTML = html;
+}
+$("pic-shade").onclick = (e) => {
+  const b = e.target.closest("button"); if (!b) return;
+  state.pic.shade = b.dataset.v; shadeUI(); makePicture();
+};
+$("pic-shade-note").onclick = (e) => {
+  const b = e.target.closest("[data-shade]"); if (!b) return;
+  state.pic.shade = b.dataset.shade; shadeUI(); makePicture(); $("pic-shade").querySelector('[aria-pressed="true"]')?.focus();
+};
 const densityUI = () => document.querySelectorAll("#pic-density button").forEach((b) => b.setAttribute("aria-pressed", b.dataset.d === state.pic.density));
 densityUI();
 $("pic-density").onclick = (e) => {
@@ -472,7 +496,7 @@ $("pic-density").onclick = (e) => {
 function styleUI() {
   const s = state.pic.style;
   document.querySelectorAll("#pic-style button").forEach((b) => b.setAttribute("aria-pressed", b.dataset.s === s));
-  $("pic-angle-row").hidden = $("pic-density-row").hidden = $("pic-details-row").hidden = s !== "fill"; $("pic-cross-row").hidden = s !== "cross";
+  $("pic-angle-row").hidden = $("pic-density-row").hidden = $("pic-details-row").hidden = $("pic-shade-row").hidden = s !== "fill"; $("pic-cross-row").hidden = s !== "cross";
   $("pic-colors-label").textContent = s === "line" ? "Colours to trace" : "Thread colours";
   $("pic-line-row").hidden = s !== "line";
   lineUI();

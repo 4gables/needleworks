@@ -394,12 +394,13 @@ async function sew(bitmap, c) {
   const box = c.edge ? { sx: 0, sy: 0, sw: bitmap.width, sh: bitmap.height } : contentBox(bitmap), key = `${c.tag}:${FORCE}`, k = LEARN / Math.max(box.sw, box.sh);
   const learn = pictureImage(bitmap, box, Math.max(1, Math.round(box.sw * k)), Math.max(1, Math.round(box.sh * k)));
   const hoop = c.turn ? { ...HOOP, w: HOOP.h, h: HOOP.w } : HOOP;
-  const opts = { colors: c.colors, scale: k, removeBackground: true, fillAngle: 45, density: DENSITY.standard, skip: [], hoop, turn: !!c.turn, palette: null, style: c.style, cross: c.cross || 2.5, line: undefined, edge: c.edge || undefined, details: Q.get("details") || undefined, ...(FORCE === undefined ? {} : { smooth: FORCE }) };   // (?details=all: the Small details choice; the page's own default without)
+  const opts = { colors: c.colors, scale: k, removeBackground: true, fillAngle: 45, density: DENSITY.standard, skip: [], hoop, turn: !!c.turn, palette: null, style: c.style, cross: c.cross || 2.5, line: undefined, edge: c.edge || undefined, details: Q.get("details") || undefined, shadeDebug: Q.has("shadedebug") || undefined, ...(FORCE === undefined ? {} : { smooth: FORCE }) };   // (?details=all: the Small details choice; the page's own default without)
   const m = await job({ key, learn, opts });
   if (!m.ok) return { error: m.error, code: m.code };
   const r = await sewSized((pl) => job({ key, ref: c.tag.split(`_${c.style}_`)[0], learn, img: pictureImage(bitmap, pl.crop, pl.w, pl.h), crop: pl.frac, opts }),
     (fit) => picturePlan(box, m.boxes.filter((_, i) => !m.colors[i].background), c.size, hoop, undefined, fit), { style: c.style, cross: opts.cross });
   if (!r.ok) return { error: r.error, code: r.code };
+  if (Q.has("shadedebug")) log(`SHADEDBG ${c.tag} ${JSON.stringify(r.fine?.shadeDebug)}`);
   return { r, plan: r.plan, hoop };
 }
 
