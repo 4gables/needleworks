@@ -603,6 +603,12 @@ export function order(edges, near = 0, loose = Infinity, nodesOnly = false, how 
   return comps;
 }
 
+// The walk of the strokes joined to node `start` (each out as a run and back as a satin, as `order`), from there: a
+// picture's satin column network is entered at the node nearest the needle (digitize.js).
+export function tour(edges, start) {
+  return walk(edges, adjacency(edges), new Array(edges.length).fill(false), start);
+}
+
 function adjacency(edges) {
   const adj = new Map();
   edges.forEach(([a, b], i) => {

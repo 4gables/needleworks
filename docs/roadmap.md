@@ -276,8 +276,13 @@ stitch round ends with a small sew-out pack.
   - left: art_line_mandala's look -5; a closed-in panel inside a sewn frame left as fabric at a full count; the
     dog's shading rim, brown ears sewn near-black and soft drop shadow are thread matching and soft-shade rules
     (palette), not shapes
-- [ ] **PX2 Stitch types like a human digitizer** (after PX1): thin strokes as satin columns, outlines as run or
+- [x] **PX2 Stitch types like a human digitizer** (after PX1): thin strokes as satin columns, outlines as run or
   satin, areas as fill, dots as satin; back to front, hidden fill removed, pull by fabric
+  - done: strokes 1-4 mm as satin columns walked like lettering, small blobs as satin dots, strokes cut off fills,
+    hairlines as runs, the picture's hits eased to 19/mm² (`docs/pictures.md` "Stitch types"); corpus look +0.8, no
+    kind down, files at the density limit 5 -> 3
+  - left: trims +1-2 % and bare locks +6-11 on the samples; satin outer corners at star points; tapered strokes and
+    leaf halves as satin; back to front beyond light-first; a sew-out of picture satin (list in `docs/pictures.md`)
 - [ ] **PX3 Fill direction that follows the form**: each region's rows at its own angle, or curving with it
 - [ ] **PX4 Shading** (after PX1): two-colour blends by density, colour mixing for photos and gradients
 - [ ] **PX5 Every machine**: machines and hoops of Janome, Bernina, Husqvarna/Pfaff, Tajima-format machines from

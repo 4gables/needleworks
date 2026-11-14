@@ -89,6 +89,19 @@ export const ROWS = { solid: 0.35, standard: 0.4 };
 // keeps its edges. `layer` mm: a hole or bay in a colour that only later colours fill, narrower than this, is sewn
 // under them (digitize.js build).
 export const SHAPES = { band: 0.5, between: 1.25, side: 0.2, fleck: 3, enclosed: 0.8, contrast: 25, dot: 0.3, smooth: 0.5, thin: 1, layer: 3 };
+// Satin columns in a Filled picture (PX2, digitize.js; numbers: docs/pictures.md "Stitch types"). A shape whose usual
+// width (twice the 90th percentile of the distance to its edge) is under `min` mm is a line (a triple run); from there
+// up to `wide` mm across, and `small` mm² or more, it is a satin column along its centre line when it is a stroke (its
+// area over its width squared at least `long`, and `plain`: under `short` of its centre lines' length in strokes
+// shorter than `stub` widths, and its width away from the ends within `even` times from narrow to wide), or a dot (a
+// compact shape whose area is `solid` of its convex hull or more). Any other shape is a fill, and a stroke growing
+// out of a wider one (a stem from a leaf) is cut off it where a disc `wide` across no longer fits, sewn as a column
+// reaching `into` mm into the fill. Each side is measured across the shape, at most `cap` times the distance to the
+// edge at the centre line (a junction's other strokes), less half of `thread` (the satin's thread lies past its
+// holes); a loose end stops where the column is under `tip` across. The columns must cover `cover` of the piece
+// (a short arm thinning prunes as a spur would be left bare), else it is a fill. `pull`: the satin's own extra width (plus the
+// fabric's, LETTERS).
+export const COLUMNS = { min: 1.0, wide: 4, long: 2, into: 0.6, cap: 1.4, tip: 0.5, solid: 0.85, stub: 3, short: 0.2, even: 2.2, pull: 0.1, thread: 0.2, small: 3, cover: 0.9 };
 export const PICTURES = { fleck: 3, enclosed: 0.8, eyes: 6, start: 4, edge: 0.75,
   details: { all: { start: 0, share: 0, lone: 0 }, most: { start: 7, share: 0.1, lone: 8 } } };
 

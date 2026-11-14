@@ -137,7 +137,7 @@ Reference for this part of Needleworks: the rules, the reason for each (it stops
   - Tried and dropped: sewing colours back to front by which lies on which (most of a colour's edge on another,
     twice the reverse share): samples trims 1,065 -> 1,046 and loose 44 -> 36, but held-out ends 1,380 -> 1,472;
     light-first stays.
-- Filled: shapes 1 mm or wider get tatami following the outline (skeleton satin broke corners); parts under 2 x
+- Filled: shapes 1 mm or wider are a fill, a satin column or a satin dot (Stitch types, below); parts under 2 x
   `THIN_PART` and lines under 1 mm sew a triple run, never dropped. Specks: under 4 mm² and 2.5 mm across, groups
   under 6 mm of line, walks under 1.5 mm (`lostLines` reports dropped fine lines). Kept: text dots on the fabric (>= 0.8 mm across, 0.6
   mm², within 5 mm of their colour or another such dot) and marks >= 2 mm long, 1.5x longer than wide, within 2 mm of a
@@ -145,6 +145,67 @@ Reference for this part of Needleworks: the rules, the reason for each (it stops
   pull, else 0.15. `OVERLAP` 0.35 mm under later colours, shape by shape (growing the raw mask merged specks);
   neighbours alternate angle (+90°). `DENSITY` Standard 0.4 (the app's default; `DEFAULTS.density` is Dense) / Dense
   0.35; 0.3 fails the check (row links under 0.3 mm). Row steps split to 3 mm, row-end stitches over 4 mm halved.
+- Stitch types (PX2, `digitize.js` `columnNets`/`netStitches`, numbers in `recipes.js` `COLUMNS`; research I4, after
+  Goldman's expired auto-digitizing patents: thick or thin from the distance to the edge along the skeleton, satin
+  anchored at ends and junctions). Each piece of a colour, after the clean shapes and the specks and lines above, is
+  sewn as a digitizer would: under `min` 1 mm wide a line (triple run, as before); 1-4 mm (`wide`) a satin column
+  along its centre lines; a compact blob that narrow a satin dot along its long axis; anything wider a fill. Width is
+  twice the 90th percentile of the distance to the edge (by the widest point, a mandala's 0.6 mm lines were over 1 mm
+  where two cross, sewn twice as bold: look 74 -> 60).
+  - A stroke (area / width² >= 2) is a column only when it is `plain`: under 20 % of its centre lines in strokes
+    shorter than 3 widths, and its width away from the ends within 2.2x narrow to wide. Bold letters and ragged
+    patches thin to stubby strokes each turned its own way, and a leaf's half (0-4 mm) sewed as a fan; those stay
+    fills. A dot needs 85 % of its convex hull (`solid`). Nothing under 3 mm² (`small`): a satin that small is all
+    tie-in and tie-off, and the cap of 19 hits per mm² left a 1 mm one only its locks, a knot. The columns must cover
+    90 % of the piece (`cover`): thinning prunes a short arm as a spur, and a slab F's middle arm was left bare. The
+    fabric's colour closed in by the design is never a column (white slivers between outlines sewed as fans).
+  - A wider shape keeps its body as a fill where a disc 4 mm across fits (a morphological opening) and a stroke
+    growing out of it (a stem from a leaf) is cut off as a column reaching 0.6 mm (`into`) into the fill, and sewn
+    before it: the needle reaches it under the fill still to come and comes back into the fill where its walk began
+    (after the fill, the way lay over finished rows: a trim each).
+  - Centre lines: `skeletonEdges` (spurs under a stroke pruned; a loop under two strokes round dropped, thinning's
+    knot at a blunt end, sewn as a star of satin), loose ends carried to the edge (`lineEnds`). Each side is measured
+    across the shape along the normal (a round end narrows as the shape does; by the distance to the edge it sewed as
+    a diamond), at most 1.4x the distance to the edge at the centre line (a junction's other strokes), evened over
+    0.2 mm, less 0.1 mm a side (`thread`: the thread lies past its holes; sewn to the drawn edge a 1 mm outline came
+    out half again as bold). Only a loose end stops short, where the column is under 0.5 mm (`tip`); a narrow
+    stretch between junctions (a leaf's vein in its outline) is sewn 0.5 mm wide, not cut out.
+  - Sewing: each net is walked as lettering is (`raster.js` `tour`, `order`'s walk): every centre line out as its
+    underlay (a centre run in 1.2 mm stitches; from 2 mm wide a zigzag 0.4 mm inside each edge, `LETTERS.zigzagFrom`)
+    and back as satin (`LETTERS` gap 0.38 mm, pull 0.1 + the fabric's; `fold` at tight inside corners). A net ends
+    where it began and is entered at its node nearest the needle. A narrow dot is one satin from the end nearest the
+    needle. Locks: the tie-in 1.1-1.9 mm into the underlay (`inside`); no stitch back over the satin before the
+    tie-off (it lay across the satin, a bar). Travel may run inside a column of the colour and from it 0.35 mm under
+    a later colour (a column doesn't grow under its neighbours as a fill does, and the way to them was cut).
+  - Density: the picture's `Design` now counts hits (`ease`, as the Design tab): satin ends at junctions and fans
+    give way at 19 hits per mm² instead of being thinned afterwards; `finish({ untiny })` drops the 0.3 mm stitches
+    that leaves at tight tips (4 in the 12 samples). Files at the limit: 12 samples (Node) 7 -> 3, held-out 7 -> 5.
+  - The Details choice counts a column along its whole walk (by its nodes alone an apostrophe beside a letter sewn
+    as a column was no longer counted with it, and went) and a mark kept by a bigger piece is `meant` as a dot is. A
+    piece only a jump reaches is left out as too small only when everything the needle sews on from it without a cut
+    is (`sews`): the order changed with columns and a 0 lost its left side.
+  - Proof (2026-11, before -> after, PX1's branch as base). Corpus (filled, 124 cases), look by kind: cartoon 84.8 ->
+    85.5, drawing 79.1 -> 80.7, flat 80.8 -> 80.9, gradient 75.2 -> 75.6, line art 77.7 -> 79.0, logo 79.1 -> 80.6,
+    mascot 75.2 -> 76.7, pet photo 82.8 -> 82.7, photo 84.8 -> 85.6, shapes 73.0 -> 73.4, sticker 81.7 -> 82.3,
+    stitched sheet 82.0 -> 82.7, watercolour 75.9 -> 76.2 (all 78.1 -> 78.9; outline 0.81 -> 0.83); no case 3 down,
+    eight 3-8 up (a line cat 82.8 -> 90.8, polka dots 84 -> 90, crayon 81 -> 87, marker 84 -> 89). Stitches +3 %,
+    trims 1,405 -> 1,430, loose 26 -> 34, holes 22.0 -> 48.8 mm² (35 patches, 0.4 mm² a case: a satin outline's
+    outer corner at a star's point stops short of the drawn point). Browser batch, 12 samples: trims 1,104 -> 1,120,
+    loose 54 -> 60, wasted 32 -> 32, ends 994 -> 1,014, bare locks 80 -> 86, at the limit 5 -> 3, stitches +1 %.
+    Held-out 15 (Node): trims 1,479 -> 1,492, loose 65 -> 71, wasted 32 -> 31, bare locks 104 -> 115, at the limit
+    7 -> 5. Every file passes pe900_check. Digitizing time +5 % (12+15 in Node 88 -> 92 s).
+  - Tried and dropped: columns up to 5 mm with every narrow shape a column (whole or not): rose petals and bold
+    letters sewed as fans, look -2.4 on logos and -7.8 on line art, stitches +30 %; satin from the widest point
+    (above); pull 0.3 on columns from 1.5 mm, as lettering (outlines too bold); dots of any size as satin (knots);
+    choosing a column's node by what lies next to it (held-out loose threads 71 -> 82); a tuck back onto the satin
+    before a trim (a bar across it).
+  - Not yet: back to front beyond light-first (PX1's measure stands); satin outer corners at sharp points (a mitre);
+    tapered strokes and leaf halves as satin (they fail `even`); the dots of a dot-only satin are all lock, so a lone
+    dot counts 10 bare lock hits (the scoreboard's lockOut).
+  - Needs a sew-out (nothing here is proven on a machine): satin outlines 1-1.5 mm wide on cotton (do they close up
+    with 0.1 pull, and is 0.1 mm inside the drawn edge right?); a satin network's junctions eased to 19 hits/mm²; a
+    hybrid stem cut off a leaf (does the 0.6 mm reach leave a gap?); 2-4 mm satin dots (eyes) with their tie-in under
+    the satin; zigzag underlay under 2-4 mm picture columns.
 - What other tools do (public manuals and guides, no code read): the picture is cleaned before any stitch is planned.
   Wilcom EmbroideryStudio / Hatch / BERNINA "Prepare Bitmap": reduce to the threads wanted, merge like colours, and a
   "Details" slider that filters out small areas of colour ("minimises the number of trims and colour changes");
