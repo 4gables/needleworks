@@ -10,7 +10,7 @@ cd "${0:A:h}/.."
 REF=${1:-origin/main}; BASE=${2:-}; HP=${HP:-8796}; CDP=${CDP:-9396}; U=http://127.0.0.1:$HP
 PY=/Volumes/4TB_SSD/needleworks/.venv/bin/python; OUT=${TMPDIR:-/tmp}/nw-check; mkdir -p $OUT/batch
 to() { perl -e 'alarm shift; exec @ARGV' "$@"; }   # (no `timeout` on macOS; a hung check ended a run at 0 % CPU)
-fail=0; say() { print -- "$@"; }; run() { local name=$1 secs=$2; shift 2; say "== $name"; to $secs "$@" 2>&1 | grep -E "FAIL|PROBLEM|problem|DONE|passed|failed|bad|ok:" | tail -6; (( ${pipestatus[1]} )) && fail=1; }
+fail=0; say() { print -- "$@"; }; run() { local name=$1 secs=$2; shift 2; say "== $name"; to $secs "$@" 2>&1 | grep -E "FAIL|PROBLEM|problem|DONE|passed|failed|bad|ok:|actions, [0-9]+ over" | tail -6; (( ${pipestatus[1]} )) && fail=1; }
 changed=$(git diff --name-only $REF -- . ; git diff --name-only)
 has() { print -- "$changed" | grep -qE "$1"; }
 
