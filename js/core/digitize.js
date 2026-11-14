@@ -251,10 +251,31 @@ function columnNets(px, more, w, h, own, res, toMm, dotted) {
   const E = [], deg = new Map(), cov = new Uint8Array(cw * ch);
   for (const [a, b] of es) for (const k of [a, b]) deg.set(k, (deg.get(k) || 0) + 1);
   for (const [a, b, p0] of es) {
-    const q = resample(p0, 0.1 * res), nm = normals(q);
+    let q = resample(p0, 0.1 * res);
     if (q.length < 2) continue;
+    // (a sharp turn of the centre line, a star's point on its outline: the outer side reaches 1 / sin(half the
+    // inside angle) times as far, the mitre, measured over a stroke width either way; capped at the distance to the
+    // edge, the column stopped short of the point and left it bare: corpus holes 22 -> 49 mm²)
+    const k = Math.max(2, Math.ceil(stroke / (0.1 * res))), ring = a === b && q.length > 2 * k + 2;
+    const turns = () => q.map((_, i) => {
+      if (dotted || (!ring && (i < k || i + k >= q.length))) return [0, 1];
+      const n = q.length - 1, P = q[ring ? (i - k + n) % n : i - k], N = q[ring ? (i + k) % n : i + k];
+      const ux = q[i][0] - P[0], uy = q[i][1] - P[1], vx = N[0] - q[i][0], vy = N[1] - q[i][1], L = Math.hypot(ux, uy) * Math.hypot(vx, vy);
+      if (!L) return [0, 1];
+      const turn = Math.acos(Math.max(-1, Math.min(1, (ux * vx + uy * vy) / L))), s = Math.sin((Math.PI - turn) / 2);
+      return [ux * vy - uy * vx > 0 ? -1 : 1, 1 / Math.max(s, COLUMNS.mitre)];
+    });
+    let mitre = turns();
+    // (a ring alone, a star's outline, starts and ends at its straightest place: a column's end is sewn square across,
+    // so a point there stayed bare whatever its reach)
+    if (ring && deg.get(a) === 2) {
+      let j = 0;
+      for (let i = 1; i < q.length - 1; i++) if (mitre[i][1] < mitre[j][1]) j = i;
+      if (j) { const base = q.slice(0, -1); q = [...base.slice(j), ...base.slice(0, j), base[j]]; mitre = turns(); }
+    }
+    const nm = normals(q);
     const reach = (i, sg) => {
-      const [x, y] = q[i], cap = dotted ? Infinity : COLUMNS.cap * ownAt(x, y) + 1, far = cw + ch;
+      const [x, y] = q[i], cap = dotted ? Infinity : COLUMNS.cap * ownAt(x, y) * (mitre[i][0] === sg ? mitre[i][1] : 1) + 1, far = cw + ch;
       let t = 0;
       while (t < cap && t < far && at(x + nm[i][0] * sg * (t + 0.25), y + nm[i][1] * sg * (t + 0.25))) t += 0.25;
       // (the last step found ink up to the pixel's middle at best: the edge lies a quarter pixel back on average)

@@ -100,8 +100,9 @@ export const SHAPES = { band: 0.5, between: 1.25, side: 0.2, fleck: 3, enclosed:
 // edge at the centre line (a junction's other strokes), less half of `thread` (the satin's thread lies past its
 // holes); a loose end stops where the column is under `tip` across. The columns must cover `cover` of the piece
 // (a short arm thinning prunes as a spur would be left bare), else it is a fill. `pull`: the satin's own extra width (plus the
-// fabric's, LETTERS).
-export const COLUMNS = { min: 1.0, wide: 4, long: 2, into: 0.6, cap: 1.4, tip: 0.5, solid: 0.85, stub: 3, short: 0.2, even: 2.2, pull: 0.1, thread: 0.2, small: 3, cover: 0.9 };
+// fabric's, LETTERS). `mitre`: at a sharp turn of the centre line the outer side's cap grows by 1 / sin(half the
+// inside angle), the mitre to the drawn point, at most 1 / `mitre` times.
+export const COLUMNS = { min: 1.0, wide: 4, long: 2, into: 0.6, cap: 1.4, tip: 0.5, solid: 0.85, stub: 3, short: 0.2, even: 2.2, pull: 0.1, thread: 0.2, small: 3, cover: 0.9, mitre: 0.25 };
 export const PICTURES = { fleck: 3, enclosed: 0.8, eyes: 6, start: 4, edge: 0.75,
   details: { all: { start: 0, share: 0, lone: 0 }, most: { start: 7, share: 0.1, lone: 8 } } };
 
