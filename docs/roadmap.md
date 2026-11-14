@@ -280,8 +280,8 @@ stitch round ends with a small sew-out pack.
   satin, areas as fill, dots as satin; back to front, hidden fill removed, pull by fabric
   - done: strokes 1-4 mm as satin columns walked like lettering, small blobs as satin dots, strokes cut off fills,
     hairlines as runs, the picture's hits eased to 19/mm² (`docs/pictures.md` "Stitch types"); corpus look +0.8, no
-    kind down, files at the density limit 5 -> 3
-  - left: trims +1-2 % and bare locks +6-11 on the samples; satin outer corners at star points; tapered strokes and
+    kind down, files at the density limit 5 -> 3; released v33
+  - left: trims +1-2 % and bare locks +6-11 on the samples; satin outer corners at star points and square column ends (holes 22 -> 49 mm²; a mitre tried: `px2-mitre`); tapered strokes and
     leaf halves as satin; back to front beyond light-first; a sew-out of picture satin (list in `docs/pictures.md`)
 - [x] **PX3 Fill direction that follows the form**: each region's rows at its own angle, or curving with it
   (`docs/stitch-model.md` "Direction that follows the form")

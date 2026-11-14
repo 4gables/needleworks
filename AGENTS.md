@@ -165,5 +165,6 @@ Read the topic's file before changing its code; each holds the rules, their reas
   install, and only reports it on a round's branch),
   merge as one commit, tag `vN`. (`--write` also writes index.html's preload list, before the hashes.) After pushing, wait until the live sw.js shows vN. A visitor already on the site
   gets the release at their next visit or by the Reload note; a first visit or Cmd+Shift+R gets it at once.
+  Each release adds its row (version, date, what changed, merge commit, revert) to `docs/releases.md`.
 - 4gables.com is the `4gables/website` repo's custom domain (a project site). Other repos appear under
   4gables.com/<repo>/ only if the org site repo is `4gables.github.io` with the custom domain.

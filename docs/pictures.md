@@ -201,7 +201,10 @@ Reference for this part of Needleworks: the rules, the reason for each (it stops
     (above); pull 0.3 on columns from 1.5 mm, as lettering (outlines too bold); dots of any size as satin (knots);
     choosing a column's node by what lies next to it (held-out loose threads 71 -> 82); a tuck back onto the satin
     before a trim (a bar across it).
-  - Not yet: back to front beyond light-first (PX1's measure stands); satin outer corners at sharp points (a mitre);
+  - Not yet: back to front beyond light-first (PX1's measure stands); satin outer corners at sharp points (a mitre:
+    tried on branch `px2-mitre`, the outer side's cap raised by 1 / sin(half the inside angle) and a lone ring started
+    at its straightest place: holes 48.8 -> 44.0 mm², the star outline 5.4 -> 2.8, but mascot look -0.2; most of the
+    rest is square column ends on bold letters, J's and I's corners, which need the end sewn out to the corners);
     tapered strokes and leaf halves as satin (they fail `even`); the dots of a dot-only satin are all lock, so a lone
     dot counts 10 bare lock hits (the scoreboard's lockOut).
   - Needs a sew-out (nothing here is proven on a machine): satin outlines 1-1.5 mm wide on cotton (do they close up
