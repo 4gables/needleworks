@@ -6,7 +6,6 @@ import { labOf } from "./colour.js";
 import { FILL } from "./fill.js";
 import { distanceTransform, label } from "./raster.js";
 import { PEC_MATCH, hexToRgb, nearestBrotherThread, pecThread, rgbToHex } from "./threads.js";
-import { SHADE } from "./recipes.js";
 
 export const DEFAULTS = {
   colors: 6,          // thread colours (not counting background)
@@ -811,17 +810,6 @@ export function analyze(img, opts = {}) {
 // the page's choice for the closed-in colour, as labelWith takes it (a line drawing leaves it as fabric)
 export function insideOf(opts) {
   return opts.style === "line" || opts.inside === "none" ? "none" : opts.inside === "all" ? "all" : "auto";
-}
-// ---------- shading (core/shade.js) ----------
-// How well two threads s, t serve as the ends of a soft gradient whose ends are a, b (each { lab, lin }): Liu,
-// Piovarči, Hafner, Charrondière & Bickel's loss ("Directionality-Aware Design of Embroidery Patterns", CGF 2023):
-// CIEDE2000 from each end to its thread, plus SHADE.contrast x the contrast the pair loses against the ends (W3C
-// relative contrast ratio), so a ramp keeps its depth rather than taking two near threads. Scored for a whole chain
-// of threads at once (core/shade.js), never a mix colour added one at a time.
-export function blendLoss(a, b, s, t) {
-  const Y = (p) => 0.2126 * p[0] + 0.7152 * p[1] + 0.0722 * p[2];
-  const ratio = (p, q) => { const y = Y(p), z = Y(q); return (Math.max(y, z) + 0.05) / (Math.min(y, z) + 0.05); };
-  return deltaE2000(a.lab, s.lab) + deltaE2000(b.lab, t.lab) + SHADE.contrast * Math.max(0, ratio(a.lin, b.lin) - ratio(s.lin, t.lin));
 }
 // ---------- build ----------
 // "Use only my threads": every colour becomes the nearest of `palette` (hex, by Lab), and colours that land on the

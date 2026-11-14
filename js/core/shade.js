@@ -1,33 +1,32 @@
 /*! Needleworks (c) 2026 4Gables. All rights reserved. Proprietary, see LICENSE. https://4gables.com/needleworks/ */
-// Shading (roadmap PX4): a picture's soft gradients sewn as blends of the threads already chosen, where flat colour
-// would cut them into bands (the posterised look every auto-digitizer is faulted for; docs/research/picture-sota.md
-// I7). The step between flat colour and photo stitch.
+// Shading (roadmap PX4): where a picture's colours meet in a real soft gradient, the border between their flat bands
+// is sewn as a blend of the two threads that meet there, rather than a hard step (the posterised look every
+// auto-digitizer is faulted for; docs/research/picture-sota.md I7). The step between flat colour and photo stitch.
+// A published, general technique: the "gradient" or "blend" fill of commercial digitizing (two fills interleaved row
+// by row across a transition, as Ink/Stitch's gradient blocks and every digitizing course teach), on one row grid at
+// one angle.
 //
-// 1. Where: two colours' regions, both SHADE.wide mm across somewhere, that meet along a soft border (the picture,
-//    blurred SHADE.blur mm, takes SHADE.soft mm or more to change from one to the other; a drawn edge, anti-aliased or
-//    not, takes about one) are one shaded group. A flat picture has no such border, so nothing changes for it.
-// 2. Threads: a chain of up to SHADE.stops of the group's own colours (the Thread colours count is every thread sewn),
-//    in their order along the group's main colour axis, every chain scored whole: the mean ΔE00 from the group's
-//    colours to their mix on it, plus half Liu et al. 2023's end loss (ΔE00 at both ends of the gradient and the
-//    contrast it loses: palette.js `blendLoss`), less 1 a thread past two (nearer threads side by side show less
-//    texture). Blended only where that beats sewing flat and the chain's ends are SHADE.span apart.
-// 3. Mix: each pixel's place along the chain, from the picture blurred SHADE.field mm, in linear light (threads side by
-//    side mix as light does, and as the look score's blur does): between threads a and b, a share f of b.
-// 4. Stitches: ordinary tatami rows on one grid at one angle across the group, running along the gradient (its
-//    direction from one plane fitted to the place on the chain over the whole group: no per-pixel direction). Each row
-//    is cut into stretches, each in one thread: b where f is over the row's threshold, from an ordered sequence of
-//    SHADE.levels thresholds (bit-reversed: Bayer's ordered dither in one dimension, as line-screen halftoning does).
-//    Two levels: a, a and b on alternate rows, b. A line screen, not a layer: every row is one thread, the cloth is
-//    covered once, and each thread's stretches are a fill of its own (24 hits per mm² per colour block holds as for any
-//    fill). Each row changes thread where f crosses its threshold, and the step to the next row of the same thread lies
-//    on that thread's own rows.
-// Liu et al. lay one thread solid and the second on top with varying spacing; here the two share one grid, so a blend
-// sews no more thread than a flat fill. Patents (docs/pictures.md): no per-pixel angle or segment (Brother US
-// 7,693,598, 7,946,235, 8,200,357, 8,271,123, 8,335,584), the chain is chosen whole (not grown a mix colour at a time:
-// US 11,851,793), and the stretches are ordered as rows, by row order and distance (US 8,065,030, 8,903,536).
+// 1. Where: two sewn colours' regions meet along a soft border (the picture, blurred SHADE.blur mm, takes SHADE.soft
+//    mm or more to change from one to the other; a drawn edge takes about 1). Blended only when the border is real
+//    shading over a meaningful area: both regions SHADE.wide mm across (a tabby's stripes, a drawn line, stay drawn),
+//    the border SHADE.border mm long, the two threads SHADE.near to SHADE.far ΔE00 apart (nearer adds nothing; further,
+//    rows of the two side by side read as stripes, not a mix), and the picture across the band agrees with a ramp
+//    from one to the other (correlation SHADE.agree). A flat picture has no such border, so nothing changes for it.
+// 2. Threads: only the two that meet at that border, each pixel its own colour's thread or the one across the border
+//    (never a third: a thread chain fitted over a whole group put a stray orange on a dog's forehead).
+// 3. Mix: in a band either side of the border, half the measured transition wide (SHADE.band mm at most), the share of
+//    the other thread is where the picture (blurred SHADE.field mm) lies between the two threads in linear light,
+//    eased into 0 or 1 at the band's edge.
+// 4. Stitches: every region a blend touches is sewn on one row grid at one angle, the rows running across the borders
+//    (their mean normal), so the two threads never cross each other (two angles in one blend read as cross-hatching).
+//    Each row is cut into stretches, each in one thread, by an ordered threshold of SHADE.levels (rows alternate the
+//    point where they change thread: a comb, not a line). A line screen, not a layer: every row is one thread, the cloth
+//    is covered once, and each thread's stretches are a fill of its own (24 hits per mm² per colour block holds as for
+//    any fill). Patents (docs/pictures.md): no per-pixel angle or segment, no thread added by its mix colour, stretches
+//    sewn in row order.
 import { labLinear, toLinear } from "./colour.js";
 import { sewRows, tatami } from "./fill.js";
-import { blendLoss, deltaE2000 } from "./palette.js";
+import { deltaE2000 } from "./palette.js";
 import { distanceTransform } from "./raster.js";
 import { regionsOf } from "./regions.js";
 import { SHADE } from "./recipes.js";
@@ -109,126 +108,106 @@ export function shading(img, labels, colors, used, res, o = {}) {
       const a = labels[i], b = labels[j];
       if (a === b || !sewn.has(a) || !sewn.has(b) || !ink[i] || !ink[j]) continue;
       const ra = Math.min(Rg.id[i], Rg.id[j]), rb = Math.max(Rg.id[i], Rg.id[j]), key = ra * Rg.count + rb;
-      let p = pairs.get(key); if (!p) pairs.set(key, (p = { ra, rb, a: Rg.lab[ra], b: Rg.lab[rb], g: [] }));
-      p.g.push((grad(i) + grad(j)) / 2);
+      let p = pairs.get(key); if (!p) pairs.set(key, (p = { ra, rb, a: Rg.lab[ra], b: Rg.lab[rb], g: [], px: [] }));
+      p.g.push((grad(i) + grad(j)) / 2); p.px.push(i, j);
     }
   }
-  const picLab = new Map(colors.map((c) => [c.id, (() => { const l = linOf(c.picture || c.hex); return labLinear(...l); })()]));
+  const labOfHex = (hex) => labLinear(...linOf(hex));
+  const picLab = new Map(colors.map((c) => [c.id, labOfHex(c.picture || c.hex)])), thrLab = new Map(colors.map((c) => [c.id, labOfHex(c.hex)]));
   const soft = mode === "blend" ? SHADE.blend : SHADE.soft, debug = [];
-  const root = Array.from({ length: Rg.count }, (_, i) => i), find = (i) => (root[i] === i ? i : (root[i] = find(root[i])));
-  // (each region's half-width: a line, under SHADE.wide mm across, is drawn, not shading, however soft its edge: a
-  // lemon's pale segment lines went into the blend round them, detail 0.66 -> 0.28)
+  // (each region's half-width: a region under SHADE.wide mm across is a drawn mark, not shading, however soft its edge:
+  // a tabby's stripes blended into the fur round them came out as scribbles)
   const edge = { w, h, data: new Uint8Array(n) }, half = new Float32Array(Rg.count);
   for (let i = 0; i < n; i++) { const x = i % w, r = Rg.id[i]; edge.data[i] = (x > 0 && Rg.id[i - 1] !== r) || (x < w - 1 && Rg.id[i + 1] !== r) || (i >= w && Rg.id[i - w] !== r) || (i + w < n && Rg.id[i + w] !== r) ? 0 : 1; }
   const deep = distanceTransform(edge);
   for (let i = 0; i < n; i++) if (deep[i] + 1 > half[Rg.id[i]]) half[Rg.id[i]] = deep[i] + 1;
-  let offer = 0;
+  // 2. each blended border's band: every pixel of its two regions within W of the border. A pixel two bands reach takes
+  // the nearer border's.
+  const A = new Int16Array(n).fill(-1), B = new Int16Array(n).fill(-1), F = new Float32Array(n), dist = new Float32Array(n).fill(Infinity);
+  const root = Array.from({ length: Rg.count }, (_, i) => i), find = (i) => (root[i] === i ? i : (root[i] = find(root[i])));
+  const normals = new Map();   // group root -> [Σ cos 2θ, Σ sin 2θ] of the borders' normals (axial mean)
+  let offer = 0, accepted = [];
   for (const p of pairs.values()) {
-    if (p.g.length < SHADE.border * res || 2 * Math.min(half[p.ra], half[p.rb]) < SHADE.wide * res) continue;
-    const g = p.g.sort((u, v) => u - v)[p.g.length >> 1], A = picLab.get(p.a), B = picLab.get(p.b);
-    const mm = Math.hypot(A[0] - B[0], A[1] - B[1], A[2] - B[2]) / Math.max(g, 1e-6) / res;
-    if (o.shadeDebug) debug.push({ a: p.a, b: p.b, len: +(p.g.length / res).toFixed(1), mm: +mm.toFixed(2) });
-    if (mm >= soft) root[find(p.ra)] = find(p.rb);
-    else if (mm >= SHADE.blend) offer++;
+    const len = p.g.length / res;
+    if (len < SHADE.border || 2 * Math.min(half[p.ra], half[p.rb]) < SHADE.wide * res) continue;
+    const thr = deltaE2000(thrLab.get(p.a), thrLab.get(p.b));
+    if (thr < SHADE.near || thr > SHADE.far) continue;
+    const g = p.g.slice().sort((u, v) => u - v)[p.g.length >> 1], PA = picLab.get(p.a), PB = picLab.get(p.b);
+    const mm = Math.hypot(PA[0] - PB[0], PA[1] - PB[1], PA[2] - PB[2]) / Math.max(g, 1e-6) / res;
+    if (o.shadeDebug) debug.push({ a: p.a, b: p.b, len: +len.toFixed(1), mm: +mm.toFixed(2), dE: +thr.toFixed(1) });
+    if (mm < soft) { if (mm >= SHADE.blend) offer++; continue; }
+    accepted.push({ ...p, mm });
   }
-  // 2. the groups: regions joined by soft borders, SHADE.area mm² or more in all
-  const members = new Map();
-  for (let r = 0; r < Rg.count; r++) { const q = find(r); let a = members.get(q); if (!a) members.set(q, (a = [])); a.push(r); }
-  const rank = new Map(used.slice().sort((a, b) => b.lightness - a.lightness).map((c, k) => [c.id, k]));
-  const gid = new Int16Array(n), segJ = new Uint8Array(n), segF = new Float32Array(n), groups = [], has = new Map();
-  const ofRegion = new Int32Array(Rg.count).fill(-1);
-  for (const [q, rs] of members) if (rs.length > 1) for (const r of rs) ofRegion[r] = q;
-  const pixOf = new Map();
-  for (let i = 0; i < n; i++) { const q = ofRegion[Rg.id[i]]; if (q >= 0 && ink[i]) { let a = pixOf.get(q); if (!a) pixOf.set(q, (a = [])); a.push(i); } }
-  for (const px of pixOf.values()) {
-    if (px.length < SHADE.area * res * res) continue;
-    const g = makeGroup(px, groups.length + 1);
-    if (g) groups.push(g);
+  if (mode === "flat") return { ...none, offer: offer + accepted.length, found: 0, debug };
+  const Sf = softened(lin, ink, w, 0, w, 0, h, SHADE.field, res);
+  const picLin = new Map(colors.map((c) => [c.id, linOf(c.picture || c.hex)]));
+  for (const p of accepted) {
+    // the band: half the transition, at most SHADE.band mm (capped by the regions' half-width, a sky's blend stayed a
+    // 3 mm fringe)
+    const W = Math.max(1, Math.min(SHADE.band * res, (p.mm * res) / 2));
+    const m = { w, h, data: new Uint8Array(n).fill(1) };
+    for (const i of p.px) m.data[i] = 0;
+    const d = distanceTransform(m), band = [];
+    for (let i = 0; i < n; i++) { const r = Rg.id[i]; if ((r === p.ra || r === p.rb) && d[i] <= W) band.push(i); }
+    if (band.length < SHADE.area * res * res) continue;
+    // the picture across the band agrees with the ramp: its place between the two colours rises with it
+    const P0 = picLin.get(p.a), P1 = picLin.get(p.b), dv = [P1[0] - P0[0], P1[1] - P0[1], P1[2] - P0[2]], L2 = dv[0] ** 2 + dv[1] ** 2 + dv[2] ** 2 || 1e-9;
+    let sf = 0, st = 0, sff = 0, stt = 0, sft = 0;
+    for (const i of band) {
+      const f = Rg.lab[Rg.id[i]] === p.b ? 0.5 + d[i] / (2 * W) : 0.5 - d[i] / (2 * W);
+      const t = ((S.R[i] - P0[0]) * dv[0] + (S.G[i] - P0[1]) * dv[1] + (S.B[i] - P0[2]) * dv[2]) / L2;
+      sf += f; st += t; sff += f * f; stt += t * t; sft += f * t;
+    }
+    const N = band.length, cov = sft - (sf * st) / N, r = cov / Math.sqrt(Math.max(1e-12, (sff - (sf * sf) / N) * (stt - (st * st) / N)));
+    if (o.shadeDebug) debug.push({ band: [p.a, p.b], mm2: +(N / res / res).toFixed(0), W: +(W / res).toFixed(1), agree: +r.toFixed(2) });
+    if (mode !== "blend" && !(r >= SHADE.agree)) continue;
+    // each pixel's share of b: where the picture (blurred SHADE.field mm) lies between the two threads in linear light
+    // (threads side by side mix as light does), eased into the ramp's 0 or 1 at the band's edge so it meets flat
+    const T0 = linOf(colors[p.a].hex), T1 = linOf(colors[p.b].hex), tv = [T1[0] - T0[0], T1[1] - T0[1], T1[2] - T0[2]], T2 = tv[0] ** 2 + tv[1] ** 2 + tv[2] ** 2 || 1e-9;
+    for (const i of band) {
+      if (d[i] >= dist[i]) continue;
+      const onB = Rg.lab[Rg.id[i]] === p.b, e = (d[i] / W) ** 2;
+      const pic = Math.min(1, Math.max(0, ((Sf.R[i] - T0[0]) * tv[0] + (Sf.G[i] - T0[1]) * tv[1] + (Sf.B[i] - T0[2]) * tv[2]) / T2));
+      dist[i] = d[i]; A[i] = p.a; B[i] = p.b; F[i] = (1 - e) * pic + e * (onB ? 1 : 0);
+    }
+    root[find(p.ra)] = find(p.rb);
+    // the border's direction (principal axis of its pixels), and the rows' across it
+    let sx = 0, sy = 0, sxx = 0, syy = 0, sxy = 0;
+    for (const i of p.px) { const x = i % w, y = (i - x) / w; sx += x; sy += y; sxx += x * x; syy += y * y; sxy += x * y; }
+    const K = p.px.length, cxx = sxx - (sx * sx) / K, cyy = syy - (sy * sy) / K, cxy = sxy - (sx * sy) / K;
+    const along = 0.5 * Math.atan2(2 * cxy, cxx - cyy), across = along + Math.PI / 2;
+    p.normal = [K * Math.cos(2 * across), K * Math.sin(2 * across)];
+    p.done = true;
   }
-  if (mode === "flat" || !groups.length) return { ...none, groups: mode === "flat" ? [] : groups, offer: mode === "flat" ? groups.length + offer : offer, found: 0, debug };
-
-  function makeGroup(px, id) {
-    let x0 = w, x1 = 0, y0 = h, y1 = 0;
-    const on = new Uint8Array(n);
-    for (const i of px) { on[i] = 1; const x = i % w, y = (i - x) / w; if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
-    x1++; y1++;
-    const F = softened(lin, on, w, x0, x1, y0, y1, SHADE.field, res), at = (i) => { const x = i % w, y = (i - x) / w, j = (y - y0) * F.bw + x - x0; return [F.R[j], F.G[j], F.B[j]]; };
-    // the candidates: the colours of the group's own regions (each 1 % of it or more), as their threads
-    const count = new Map();
-    for (const i of px) count.set(labels[i], (count.get(labels[i]) || 0) + 1);
-    const cand = [...count].filter(([, k]) => k >= 0.01 * px.length).map(([cid]) => { const l = linOf(colors[cid].hex); return { id: cid, lin: l, lab: labLinear(...l) }; });
-    if (cand.length < 2) return null;
-    // a sample of the group's pixels (every pixel up to 3,000)
-    const step = Math.max(1, Math.floor(px.length / 3000)), sample = [];
-    for (let k = 0; k < px.length; k += step) { const i = px[k], l = at(i); sample.push({ i, lin: l, lab: labLinear(...l) }); }
-    // the gradient's direction in colour: the sample's principal axis in linear light (power iteration)
-    const mean = [0, 0, 0];
-    for (const s of sample) for (let q = 0; q < 3; q++) mean[q] += s.lin[q] / sample.length;
-    const C = [[0, 0, 0], [0, 0, 0], [0, 0, 0]];
-    for (const s of sample) for (let a = 0; a < 3; a++) for (let b = 0; b < 3; b++) C[a][b] += (s.lin[a] - mean[a]) * (s.lin[b] - mean[b]);
-    let ax = [1, 1, 1];
-    for (let it = 0; it < 30; it++) { const v = [0, 1, 2].map((a) => C[a][0] * ax[0] + C[a][1] * ax[1] + C[a][2] * ax[2]), L = Math.hypot(...v) || 1; ax = v.map((t) => t / L); }
-    const proj = (l) => (l[0] - mean[0]) * ax[0] + (l[1] - mean[1]) * ax[1] + (l[2] - mean[2]) * ax[2];
-    // the gradient's two ends: the mean of the 3 % of the sample furthest each way along it
-    const sorted = sample.slice().sort((p, q) => proj(p.lin) - proj(q.lin)), e = Math.max(1, Math.round(0.03 * sorted.length));
-    const end = (list) => { const l = [0, 0, 0]; for (const s of list) for (let q = 0; q < 3; q++) l[q] += s.lin[q] / list.length; return { lin: l, lab: labLinear(...l) }; };
-    const lo = end(sorted.slice(0, e)), hi = end(sorted.slice(-e));
-    // every chain of 2 to SHADE.stops candidates in their order along the axis, scored whole: the sample's mean
-    // ΔE00 to its mix on the chain, half the end loss, and SHADE.gain for each thread past two
-    cand.sort((p, q) => proj(p.lin) - proj(q.lin));
-    const place = (l, chain) => {
-      let best = null;
-      for (let j = 0; j + 1 < chain.length; j++) {
-        const A = chain[j].lin, B = chain[j + 1].lin, d = [B[0] - A[0], B[1] - A[1], B[2] - A[2]], L2 = d[0] ** 2 + d[1] ** 2 + d[2] ** 2 || 1e-9;
-        const f = Math.min(1, Math.max(0, ((l[0] - A[0]) * d[0] + (l[1] - A[1]) * d[1] + (l[2] - A[2]) * d[2]) / L2));
-        const m = [A[0] + f * d[0], A[1] + f * d[1], A[2] + f * d[2]], e2 = (l[0] - m[0]) ** 2 + (l[1] - m[1]) ** 2 + (l[2] - m[2]) ** 2;
-        if (!best || e2 < best.e2) best = { j, f, m, e2 };
-      }
-      return best;
-    };
-    const errOf = (chain) => { let s = 0; for (const p of sample) s += deltaE2000(p.lab, labLinear(...place(p.lin, chain).m)); return s / sample.length; };
-    let best = null;
-    const K = cand.length;
-    for (let mask = 0; mask < 1 << K; mask++) {
-      const chain = cand.filter((_, k) => mask & (1 << k));
-      if (chain.length < 2 || chain.length > SHADE.stops) continue;
-      const err = errOf(chain), v = err + 0.5 * blendLoss(lo, hi, chain[0], chain[chain.length - 1]) + SHADE.stop * (chain.length - 2);
-      if (!best || v < best.v) best = { chain, err, v };
-    }
-    // ... against sewing it flat: each pixel its own colour's thread
-    let flat = 0;
-    const thr = new Map(cand.map((c) => [c.id, c.lab]));
-    for (const p of sample) { const t = thr.get(labels[p.i]) || labLinear(...linOf(colors[labels[p.i]].hex)); flat += deltaE2000(p.lab, t); }
-    flat /= sample.length;
-    if (o.shadeDebug) debug.push({ group: id, px: px.length, chain: best.chain.map((c) => c.id), span: +deltaE2000(best.chain[0].lab, best.chain.at(-1).lab).toFixed(1), err: +best.err.toFixed(2), flat: +flat.toFixed(2) });
-    // (two ends under SHADE.span ΔE00 apart make little a flat fill doesn't, and the blend took the detail drawn between
-    // them: a lemon's pale segment lines, look 75.5 -> 71.7)
-    if (best.err > flat - (mode === "blend" ? 0 : SHADE.gain) || (mode !== "blend" && deltaE2000(best.chain[0].lab, best.chain[best.chain.length - 1].lab) < SHADE.span)) return null;
-    const chain = best.chain, ids = chain.map((c) => c.id);
-    // each pixel's place on the chain; the rows run along the gradient, its direction from one plane fitted to that
-    // place over the whole group (rows along the level lines sewed a share of 1/8 as whole rows of the second thread:
-    // thin lines right across the blend, look 79 -> 76). Across them, each row changes thread once, at its own level, and
-    // the step to the next row of the same thread lies on that thread's own rows
-    let sx = 0, sy = 0, sp = 0, sxx = 0, sxy = 0, syy = 0, sxp = 0, syp = 0;
-    for (const i of px) {
-      const pl = place(at(i), chain);
-      const x = i % w, y = (i - x) / w, p = pl.j + pl.f;
-      gid[i] = id; segJ[i] = pl.j; segF[i] = pl.f;
-      sx += x; sy += y; sp += p; sxx += x * x; sxy += x * y; syy += y * y; sxp += x * p; syp += y * p;
-    }
-    const N = px.length, cxx = sxx - (sx * sx) / N, cxy = sxy - (sx * sy) / N, cyy = syy - (sy * sy) / N, cxp = sxp - (sx * sp) / N, cyp = syp - (sy * sp) / N;
-    const det = cxx * cyy - cxy * cxy, gx = det ? (cyy * cxp - cxy * cyp) / det : 0, gy = det ? (cxx * cyp - cxy * cxp) / det : 0;
-    const angle = Math.hypot(gx, gy) > 1e-9 ? ((Math.atan2(gy, gx) * 180) / Math.PI + 360) % 180 : 45;
+  // 3. the groups: regions joined by blended borders, each sewn at one angle
+  const gid = new Int16Array(n), groups = [], ofRegion = new Int32Array(Rg.count).fill(-1), gOf = new Map();
+  for (const p of accepted) if (p.done) {
+    const q = find(p.ra);
+    let G = gOf.get(q); if (!G) gOf.set(q, (G = { id: groups.length + 1, nx: 0, ny: 0, regions: new Set(), ids: new Set(), px: [] })), groups.push(G);
+    G.nx += p.normal[0]; G.ny += p.normal[1]; G.regions.add(p.ra); G.regions.add(p.rb);
+  }
+  if (!groups.length) return { ...none, offer, found: 0, debug };
+  for (const G of groups) for (const r of G.regions) ofRegion[r] = G.id;
+  for (let i = 0; i < n; i++) {
+    const g = ofRegion[Rg.id[i]]; if (g < 0 || !ink[i]) continue;
+    gid[i] = g; const G = groups[g - 1]; G.px.push(i); G.ids.add(labels[i]);
+    if (A[i] < 0) { A[i] = B[i] = labels[i]; F[i] = 0; }
+  }
+  const has = new Map();
+  for (const G of groups) {
+    G.ids = [...G.ids];
+    G.angle = ((((Math.atan2(G.ny, G.nx) / 2) * 180) / Math.PI) + 360) % 180;
+    const th = (G.angle * Math.PI) / 180, U = [Math.cos(th), Math.sin(th)], V = [-Math.sin(th), Math.cos(th)], spc = o.density * res, px = G.px, id = G.id;
     // which thread sews where: a thread may sew at a pixel when its share there takes a row (over 1 / 2L), and round
     // that by SHADE.reach mm (a stretch joined to its neighbour runs past it)
-    for (const c of ids) {
-      const m = { w, h, data: new Uint8Array(n).fill(1) }, L2 = 0.5 / SHADE.levels;
-      for (const i of px) { const j = segJ[i], f = segF[i]; if ((ids[j] === c && f < 1 - L2) || (ids[j + 1] === c && f > L2)) m.data[i] = 0; }
+    const L2 = 0.5 / SHADE.levels;
+    for (const c of G.ids) {
+      const m = { w, h, data: new Uint8Array(n).fill(1) };
+      for (const i of px) if ((A[i] === c && F[i] < 1 - L2) || (B[i] === c && F[i] > L2)) m.data[i] = 0;
       const d = distanceTransform(m);
       let a = has.get(c); if (!a) has.set(c, (a = new Uint8Array(n)));
       for (const i of px) if (d[i] <= SHADE.reach * res) a[i] = 1;
     }
-    const th = (angle * Math.PI) / 180, U = [Math.cos(th), Math.sin(th)], V = [-Math.sin(th), Math.cos(th)], spc = o.density * res;
     // the plan: each row's stretches over the group, in one thread each (stretches under SHADE.run mm join the longer
     // neighbour, shortest first, so a thread never stops and starts for a few stitches)
     let u0 = Infinity, u1 = -Infinity, v0 = Infinity, v1 = -Infinity;
@@ -241,7 +220,7 @@ export function shading(img, labels, colors, used, res, o = {}) {
         if (X < 0 || Y < 0 || X >= w || Y >= h) continue;
         const i = Y * w + X;
         if (gid[i] !== id) continue;
-        const c = segF[i] > t ? ids[segJ[i] + 1] : ids[segJ[i]], last = runs[runs.length - 1];
+        const c = F[i] > t ? B[i] : A[i], last = runs[runs.length - 1];
         if (last && last[2] === c && u - last[1] <= 1) last[1] = u; else runs.push([u, u, c]);
       }
       for (;;) {
@@ -259,8 +238,12 @@ export function shading(img, labels, colors, used, res, o = {}) {
       }
       if (runs.length) plan.set(k, runs);
     }
-    return { id, ids, angle, U, V, plan, area: px.length / (res * res), err: best.err, flat };
+    let blended = 0;
+    for (const i of px) if (F[i] > 0 && F[i] < 1 && A[i] !== B[i]) blended++;
+    Object.assign(G, { U, V, plan, area: blended / (res * res) });
+    delete G.px; delete G.regions;
   }
+  const rank = new Map(used.slice().sort((a, b) => b.lightness - a.lightness).map((c, k) => [c.id, k]));
 
   const of = (i, id) => (gid[i] ? !!has.get(id)?.[i] : labels[i] === id);
   // A colour's shape that lies (in part) in a shaded group: its rows on the group's grid, each kept where the plan
