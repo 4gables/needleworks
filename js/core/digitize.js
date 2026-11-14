@@ -1,14 +1,15 @@
 /*! Needleworks (c) 2026 4Gables. All rights reserved. Proprietary, see LICENSE. https://4gables.com/needleworks/ */
-// Picture -> embroidery. Reduce to a few thread colours, then stitch each shape by its width:
-// hairlines get a double running stitch along their centre; every shape with width gets a solid tatami fill.
+// Picture -> embroidery. Reduce to a few thread colours, then stitch each shape by its width, as a digitizer would:
+// hairlines a triple run along their centre, strokes 1-4 mm wide and small blobs satin columns, wider shapes a
+// tatami fill.
 // Other styles: line drawing (`lineArt`) and cross-stitch (`crossStitch`).
 import { labOf } from "./colour.js";
 import { Design } from "./design.js";
 import { FILL, FILL_PATTERNS, SEWN, WORN, fillPolygon, makeRouter, routeBudget, routeFill, tatami } from "./fill.js";
-import { arclen, followRun } from "./geom.js";
+import { arclen, followRun, normals, resample, run, satin } from "./geom.js";
 import { MARGIN } from "./machines.js";
-import { LIMITS, PICTURES, ROWS, SHAPES } from "./recipes.js";
-import { distanceTransform as wholeDT, label, order, skeletonEdges } from "./raster.js";
+import { COLUMNS, LIMITS, PICTURES, ROWS, SHAPES, letterRecipe } from "./recipes.js";
+import { distanceTransform as wholeDT, label, order, skeletonEdges, tour } from "./raster.js";
 import { cleanShapes } from "./regions.js";
 import { PEC_MATCH, hexToRgb, nearestBrotherThread, pecThread, pyRound, rgbToHex } from "./threads.js";
 import { DEFAULTS, across, deltaE2000, pixels, srgbToLab } from "./palette.js";
@@ -213,6 +214,152 @@ function foldFlecks(labels, w, h, colors, used, res) {
   return { labels: next, folded };
 }
 
+// A column piece (`px`: its pixels in the working copy, `w` x `h`; `more`: pixels of the fill it grows out of, which
+// its ends may reach into) as satin nets, each a connected set of centre lines: [{ edges: [{ a, b, p (mm), s (mm
+// along p), A, B (each side's reach, mm, on p's normal's side and the other) }], W (its width, mm), dotted }].
+// The centre lines are the piece's skeleton (`skeletonEdges`, spurs under a stroke pruned, loose ends carried on to the
+// edge as a line drawing's are); a dot, or a piece that thins to nothing, has one: its long axis (moments). Each side
+// is measured across the shape along the normal (a round end narrows as the shape does; the distance to the edge
+// alone would sew it as a diamond), at most COLUMNS.cap times that distance at the centre line, so a junction's
+// other strokes don't count. A column stops where it is under COLUMNS.tip across.
+function columnNets(px, more, w, h, own, res, toMm, dotted) {
+  let x0 = w, x1 = -1, y0 = h, y1 = -1;
+  for (const i of [...px, ...more]) { const x = i % w, y = (i - x) / w; if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
+  const ox = Math.max(0, x0 - 2), oy = Math.max(0, y0 - 2), cw = Math.min(w - 1, x1 + 2) - ox + 1, ch = Math.min(h - 1, y1 + 2) - oy + 1;
+  const pm = { w: cw, h: ch, data: new Uint8Array(cw * ch) };
+  for (const i of [...px, ...more]) { const x = i % w, y = (i - x) / w; pm.data[(y - oy) * cw + x - ox] = 1; }
+  const at = (x, y) => { const X = Math.round(x), Y = Math.round(y); return X >= 0 && Y >= 0 && X < cw && Y < ch && pm.data[Y * cw + X] === 1; };
+  const ownAt = (x, y) => own[(Math.min(ch - 1, Math.max(0, Math.round(y))) + oy) * w + Math.min(cw - 1, Math.max(0, Math.round(x))) + ox];
+  const hw = px.map((i) => own[i]).sort((a, b) => a - b), stroke = Math.max(2, 2 * hw[Math.floor(0.9 * (hw.length - 1))]);
+  let es = [];
+  // (a loop shorter than two strokes round is thinning's knot at a blunt end, not a ring: sewn, a little star of
+  // satin stood off a bold c's end)
+  const loopLen = (p) => p.reduce((t, q, i) => (i ? t + Math.hypot(q[0] - p[i - 1][0], q[1] - p[i - 1][1]) : 0), 0);
+  if (!dotted) { es = skeletonEdges(pm, stroke, { spur: 1 }).filter((e) => e[2].length > 1 && (e[0] !== e[1] || loopLen(e[2]) >= 2 * stroke)); lineEnds(es, pm, stroke); }
+  if (!es.length) {
+    // (the long axis: the shape's second moments)
+    let n = 0, sx = 0, sy = 0, xx = 0, yy = 0, xy = 0;
+    for (let i = 0; i < cw * ch; i++) if (pm.data[i]) { const x = i % cw, y = (i - x) / cw; n++; sx += x; sy += y; xx += x * x; yy += y * y; xy += x * y; }
+    const cx = sx / n, cy = sy / n, vx = xx / n - cx * cx, vy = yy / n - cy * cy, cv = xy / n - cx * cy, th = 0.5 * Math.atan2(2 * cv, vx - vy), u = [Math.cos(th), Math.sin(th)];
+    let t0 = Infinity, t1 = -Infinity;
+    for (let i = 0; i < cw * ch; i++) if (pm.data[i]) { const x = i % cw, y = (i - x) / cw, t = (x - cx) * u[0] + (y - cy) * u[1]; if (t < t0) t0 = t; if (t > t1) t1 = t; }
+    t0 += 0.5; t1 -= 0.5;
+    if (!(t1 > t0)) { t0 = -0.5; t1 = 0.5; }
+    es = [["a", "b", [[cx + u[0] * t0, cy + u[1] * t0], [cx + u[0] * t1, cy + u[1] * t1]]]];
+    dotted = true;
+  }
+  const E = [], deg = new Map(), cov = new Uint8Array(cw * ch);
+  for (const [a, b] of es) for (const k of [a, b]) deg.set(k, (deg.get(k) || 0) + 1);
+  for (const [a, b, p0] of es) {
+    const q = resample(p0, 0.1 * res), nm = normals(q);
+    if (q.length < 2) continue;
+    const reach = (i, sg) => {
+      const [x, y] = q[i], cap = dotted ? Infinity : COLUMNS.cap * ownAt(x, y) + 1, far = cw + ch;
+      let t = 0;
+      while (t < cap && t < far && at(x + nm[i][0] * sg * (t + 0.25), y + nm[i][1] * sg * (t + 0.25))) t += 0.25;
+      // (the last step found ink up to the pixel's middle at best: the edge lies a quarter pixel back on average)
+      return Math.max(0, t - 0.25);
+    };
+    const ra = q.map((_, i) => reach(i, 1)), rb = q.map((_, i) => reach(i, -1));
+    // (evened over 0.2 mm either way: a pixel's stair is not the shape)
+    const even = (r) => r.map((_, i) => { let s = 0, k = 0; for (let j = Math.max(0, i - 2); j <= Math.min(r.length - 1, i + 2); j++) { s += r[j]; k++; } return s / k / res; });
+    const A = even(ra), B = even(rb);
+    // (only a loose end stops short; a column narrower than `tip` between two others, a leaf's vein in its outline, is
+    // sewn `tip` wide: cut out, the vein was lost)
+    let i0 = 0, i1 = q.length - 1;
+    if (deg.get(a) === 1 || dotted) while (i0 < i1 && A[i0] + B[i0] < COLUMNS.tip) i0++;
+    if (deg.get(b) === 1 || dotted) while (i1 > i0 && A[i1] + B[i1] < COLUMNS.tip) i1--;
+    if (i1 - i0 < 3) continue;
+    // (what the column covers, each stitch's line and a pixel round it)
+    for (let i = i0; i <= i1; i++) for (let t = -B[i] * res; t <= A[i] * res; t += 0.5) {
+      const X = Math.round(q[i][0] + nm[i][0] * t), Y = Math.round(q[i][1] + nm[i][1] * t);
+      for (const [dx, dy] of [[0, 0], [1, 0], [-1, 0], [0, 1], [0, -1]]) { const x = X + dx, y = Y + dy; if (x >= 0 && y >= 0 && x < cw && y < ch) cov[y * cw + x] = 1; }
+    }
+    const p = toMm(q.slice(i0, i1 + 1).map(([x, y]) => [x + ox, y + oy])), lo = COLUMNS.tip / 2;
+    // (each side less half a thread: the satin's thread lies past its needle holes, and sewn to the drawn edge a 1 mm
+    // outline came out half again as bold)
+    const in2 = COLUMNS.thread / 2;
+    E.push({ a, b, p, s: arclen(p), A: A.slice(i0, i1 + 1).map((v) => Math.max(lo, v - in2)), B: B.slice(i0, i1 + 1).map((v) => Math.max(lo, v - in2)) });
+  }
+  // (connected sets of centre lines: each one walk)
+  const root = new Map(), find = (k) => { while (root.get(k) !== k) k = root.get(k); return k; };
+  for (const e of E) { for (const k of [e.a, e.b]) if (!root.has(k)) root.set(k, k); root.set(find(e.a), find(e.b)); }
+  const nets = new Map();
+  for (const e of E) { const k = find(e.a); if (!nets.has(k)) nets.set(k, []); nets.get(k).push(e); }
+  const out = [...nets.values()].map((edges) => ({ edges, W: stroke / res, dotted }));
+  let hit = 0;
+  for (const i of px) { const x = i % w, y = (i - x) / w; if (cov[(y - oy) * cw + x - ox]) hit++; }
+  out.cover = hit / px.length;
+  return out;
+}
+
+// A piece's area over the area of its convex hull (pixel corners): 1 for a disc or an ellipse, under 0.85 for a ragged
+// patch or a crescent.
+function solidity(px, w) {
+  const pts = [];
+  for (const i of px) { const x = i % w, y = (i - x) / w; pts.push([x - 0.5, y - 0.5], [x + 0.5, y - 0.5], [x - 0.5, y + 0.5], [x + 0.5, y + 0.5]); }
+  pts.sort((p, q) => p[0] - q[0] || p[1] - q[1]);
+  const cross = (o, a, b) => (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]), lo = [], hi = [];
+  for (const p of pts) { while (lo.length >= 2 && cross(lo[lo.length - 2], lo[lo.length - 1], p) <= 0) lo.pop(); lo.push(p); }
+  for (let i = pts.length - 1; i >= 0; i--) { const p = pts[i]; while (hi.length >= 2 && cross(hi[hi.length - 2], hi[hi.length - 1], p) <= 0) hi.pop(); hi.push(p); }
+  const hull = [...lo.slice(0, -1), ...hi.slice(0, -1)];
+  let A = 0;
+  for (let i = 0; i < hull.length; i++) { const p = hull[i], q = hull[(i + 1) % hull.length]; A += p[0] * q[1] - q[0] * p[1]; }
+  return A ? px.length / (Math.abs(A) / 2) : 1;
+}
+
+// Whether a stroke's centre lines make plain columns: few short strokes between junctions (a ragged patch thins to a
+// tangle of them, and each is a column turned its own way), and an even width along them away from their ends (a
+// leaf's half, 0 to 4 mm across, sewed as a fan; an outline is even). Else the piece stays a fill.
+function plain(nets) {
+  let all = 0, short = 0;
+  const wd = [];
+  for (const net of nets) for (const e of net.edges) {
+    const L = e.s[e.s.length - 1];
+    all += L;
+    if (e.a !== e.b && L < COLUMNS.stub * net.W) short += L;
+    for (let i = 0; i < e.s.length; i++) if (e.s[i] > net.W && L - e.s[i] > net.W) wd.push(e.A[i] + e.B[i]);
+  }
+  if (!all || short > COLUMNS.short * all) return false;
+  if (wd.length < 10) return true;
+  wd.sort((x, y) => x - y);
+  return wd[Math.floor(0.9 * (wd.length - 1))] <= COLUMNS.even * wd[Math.floor(0.1 * (wd.length - 1))];
+}
+
+// A satin net's stitches from node `start`: each centre line out as its underlay (a centre run; from `zigzagFrom` mm
+// across a zigzag 0.4 mm inside each edge, as lettering) and back as the satin, so a connected net sews in one go,
+// ending where it began (`tour`; the lettering engine's walk). A dot narrower than `zigzagFrom` is one satin from the
+// end the needle is at, with nothing under it.
+function netStitches(net, start, sat) {
+  const E = net.edges, pick = (arr, s, ss) => {
+    let lo = 0, hi = ss.length - 1;
+    if (s <= 0) return arr[0];
+    if (s >= ss[hi]) return arr[hi];
+    while (hi - lo > 1) { const m = (lo + hi) >> 1; if (ss[m] <= s) lo = m; else hi = m; }
+    const f = ss[hi] > ss[lo] ? (s - ss[lo]) / (ss[hi] - ss[lo]) : 0;
+    return arr[lo] + (arr[hi] - arr[lo]) * f;
+  };
+  const column = (e, p, fwd) => {
+    const L = e.s[e.s.length - 1], a = (s) => (fwd ? pick(e.A, s, e.s) : pick(e.B, L - s, e.s)), b = (s) => (fwd ? pick(e.B, s, e.s) : pick(e.A, L - s, e.s));
+    let top = 0, sum = 0;
+    for (let i = 0; i < e.A.length; i++) { top = Math.max(top, e.A[i], e.B[i]); sum += e.A[i] + e.B[i]; }
+    return { L, a, b, W: 2 * top + 0.01, mid: sum / e.A.length };
+  };
+  if (net.dotted && E.length === 1 && net.W < sat.zigzagFrom) {
+    const e = E[0], fwd = start === e.a, p = fwd ? e.p : e.p.slice().reverse(), c = column(e, p, fwd);
+    return satin(p, c.W, sat.gap, COLUMNS.pull + sat.pull, false, true, null, (s) => [c.a(s), c.b(s), 0]);
+  }
+  const out = [];
+  for (const [p, kind, k] of tour(E.map((e) => [e.a, e.b, e.p]), start)) {
+    const e = E[k], fwd = p[0] === e.p[0] && p[1] === e.p[1], c = column(e, p, fwd);
+    if (kind === "run") {
+      if (c.mid >= sat.zigzagFrom) out.push(p[0], ...satin(p, c.W, 2.5, 0, false, false, (t) => Math.max(0.05, c.a(t * c.L) + c.b(t * c.L) - 0.8)), p[p.length - 1]);
+      else out.push(...run(p, 1.2));
+    } else out.push(...satin(p, c.W, sat.gap, COLUMNS.pull + sat.pull, false, true, null, (s) => [c.a(s), c.b(s), 0]));
+  }
+  return out;
+}
+
 function build(img, analysis, opts) {
   const o = { ...DEFAULTS, ...opts };
   const { w, h, colors } = analysis;
@@ -224,11 +371,13 @@ function build(img, analysis, opts) {
   const res = o.res;
   const hoop = o.hoop;
   const cx = w / 2, cy = h / 2, toMm = (p) => p.map(([x, y]) => [(x - cx) / res, (y - cy) / res]);
-  const d = new Design(hoop);
+  // (hits counted as they are made, as the Design tab's: satin ends at a junction give way at 19 per mm² rather than
+  // being thinned afterwards. `ease: false` sews as before PX2, for comparing)
+  const d = new Design(hoop, { ease: o.ease !== false });
   const used = colors.filter((c) => !c.background && c.area > 0 && !(o.skip || []).includes(c.id))
     .sort((a, b) => b.lightness - a.lightness);   // light first, dark details on top
   const summary = [], stitched = new Set(used.map((c) => c.id));
-  const fine = { narrowMm2: 0, hairlines: 0, inkMm2: 0, folded, left: 0 };   // details too small to stitch cleanly (shown as a hint)
+  const fine = { narrowMm2: 0, hairlines: 0, inkMm2: 0, folded, left: 0, columns: 0 };   // details too small to stitch cleanly (shown as a hint)
   for (let i = 0; i < w * h; i++) if (stitched.has(labels[i])) fine.inkMm2++;
   fine.inkMm2 /= res * res;
   // ignore specks: under 1.5 mm², or under 4 mm² and under 2.5 mm across (a dot, not a stem: each speck left was a
@@ -369,6 +518,58 @@ function build(img, analysis, opts) {
       const toCore = distanceTo(core, r + 0.5);
       for (let i = 0; i < w * h; i++) if (cl[i] && toCore[i] > r + 0.5) { thin.data[i] = 1; anyThin = true; }
     }
+    // Satin columns (PX2; research I4, after Goldman's auto-digitizing patents, expired: thick or thin from the
+    // distance to the edge along the centre line, satin anchored at the ends and junctions). What a digitizer sews
+    // as satin is what no fill should: a stroke 1-5 mm wide (an outline, a stem, a letter's stroke) and a small dot
+    // (an eye, a highlight). Filled, each was a strip of rows a few stitches long, and a dot a knot of rows and
+    // underlay. A shape no wider than COLUMNS.wide is a column whole; a wider one keeps its body as a fill (where a
+    // disc COLUMNS.wide across fits: a morphological opening) and the strokes growing out of it are columns.
+    const cols = [], colPx = new Uint8Array(w * h);
+    // (not the fabric's colour closed in by the design: its leftover slivers between outlines sewed as white fans)
+    if (COLUMNS.wide && count && !col.inside) {
+      const r = (COLUMNS.wide / 2) * res, notCore = { w, h, data: new Uint8Array(w * h) };
+      for (let i = 0; i < w * h; i++) notCore.data[i] = cl[i] && own[i] > r ? 0 : 1;
+      const toCore = distanceTo(notCore, r + 1), part = { w, h, data: new Uint8Array(w * h) }, thick = new Uint8Array(count + 1);
+      for (let i = 0; i < w * h; i++) if (cl[i]) { if (toCore[i] > r + 0.5) part.data[i] = 1; else thick[cl[i]] = 1; }
+      const { labels: pl, count: pc } = label(part);
+      const P = Array.from({ length: pc + 1 }, () => ({ px: [], c: 0, hw: [] }));
+      for (let i = 0; i < w * h; i++) if (pl[i]) { const q = P[pl[i]]; q.px.push(i); q.c = cl[i]; q.hw.push(own[i]); }
+      for (let k = 1; k <= pc; k++) {
+        const q = P[k], c = q.c, whole = !thick[c];
+        q.hw.sort((a, b) => a - b);
+        // (its width: twice the 90th percentile of the distance to the edge, about the stroke's own width)
+        const W = (2 * q.hw[Math.floor(0.9 * (q.hw.length - 1))]) / res, A = q.px.length / (res * res);
+        // (by its usual width, not its widest: a network of 0.6 mm lines is over 1 mm where two cross, and sewn as
+        // satin the mandala's lines came out twice as bold)
+        if (W < COLUMNS.min) continue;
+        // (nor a piece under COLUMNS.small mm²: a satin that small is all tie-in and tie-off, and the cap on thread per
+        // square mm left a 1 mm dot only its locks, a knot. A mark that small stays as it was)
+        if (A < COLUMNS.small) continue;
+        const stroke = A / (W * W) >= COLUMNS.long;
+        // (a part of a wider shape is a column only when it is a stroke: the corners an opening cuts off a fill stay
+        // the fill's)
+        if (!whole && !stroke) continue;
+        // (a dot only when it is a plain blob, nearly convex: a ragged patch sewn as one satin fanned every way)
+        if (!stroke && solidity(q.px, w) < COLUMNS.solid) continue;
+        // (a stroke cut off a fill reaches COLUMNS.into mm into it, so the two meet with no gap)
+        const more = [];
+        if (!whole) {
+          const seen = new Set(q.px);
+          let front = q.px;
+          for (let s = 0; s < COLUMNS.into * res && front.length; s++) {
+            const next = [];
+            for (const i of front) { const x = i % w; for (const j of [x > 0 ? i - 1 : -1, x < w - 1 ? i + 1 : -1, i - w, i + w]) if (j >= 0 && j < w * h && !seen.has(j) && cl[j] === c) { seen.add(j); next.push(j); more.push(j); } }
+            front = next;
+          }
+        }
+        const nets = columnNets(q.px, more, w, h, own, res, toMm, !stroke);
+        // (and only when its columns cover the piece: thinning prunes a stroke shorter than it is wide as a spur, and a
+        // slab F's middle arm was left bare)
+        if (!nets.length || nets.cover < COLUMNS.cover || (stroke && !plain(nets))) continue;
+        cols.push({ px: q.px, c, whole, nets, meant: dot(c) || (mark(c) && size[c] < 2 * dotPx) });
+        for (const i of q.px) { colPx[i] = 1; cl[i] = 0; mask.data[i] = 0; thin.data[i] = 0; }
+      }
+    }
     // Layers: a hole or bay in this colour's shapes that only colours sewn later fill (a rose's dark shading, the
     // outline strokes across a petal), under SHAPES.layer mm across, is sewn under them, as a person digitizes
     // the shape behind whole and lays the front on top (research I3, "Illustrator's Depth" / amodal completion: the
@@ -383,7 +584,7 @@ function build(img, analysis, opts) {
       const to = distanceTo(off, R + 1), dil = { w, h, data: new Uint8Array(w * h) };
       for (let i = 0; i < w * h; i++) dil.data[i] = cl[i] || to[i] <= R ? 1 : 0;
       const shut = distanceTransform(dil), ok = new Uint8Array(w * h);
-      for (let i = 0; i < w * h; i++) if (!cl[i] && shut[i] > R && (later.has(labels[i]) || labels[i] === col.id)) ok[i] = 1;
+      for (let i = 0; i < w * h; i++) if (!cl[i] && !colPx[i] && shut[i] > R && (later.has(labels[i]) || labels[i] === col.id)) ok[i] = 1;
       let front = [];
       for (let i = 0; i < w * h; i++) if (cl[i]) front.push(i);
       while (front.length) {
@@ -431,7 +632,7 @@ function build(img, analysis, opts) {
       const under = tatami(mask, comp, res, { angle: angle + 90, spacing: 2.5, stitch: 3, inset: 0.4, pull: 0 });
       // pull compensation widens a fill past its edge; on thin letters that closes the gaps between them
       const fill = tatami(mask, comp, res, { angle, spacing: o.density, stitch: 3.5, pull: widthMm < 2 ? 0.05 : 0.15 });
-      blocks.push({ centre, paths: routeFill([under, fill], comp, mask, res, budget, WORN, false, 0, null, PICTURES.edge).map(toMm), kind: "fill", comp: comp.id, thread: fillThread(mine.length), meant: dot(comp.id) });
+      blocks.push({ centre, paths: routeFill([under, fill], comp, mask, res, budget, WORN, false, 0, null, PICTURES.edge).map(toMm), kind: "fill", comp: comp.id, thread: fillThread(mine.length), meant: dot(comp.id) || (mark(comp.id) && size[comp.id] < 2 * dotPx) });
       filled[comp.id] = 1;
     }
     if (anyThin) {
@@ -473,11 +674,25 @@ function build(img, analysis, opts) {
         blocks.push({ centre: paths[0][0], paths, kind: "run", thread: 3 * t.len });
       });
     }
+    // the columns, each net a block entered at whichever of its nodes is nearest the needle (`make`)
+    if (cols.length) {
+      const sat = letterRecipe(o.fabric || "cotton", "auto", false);
+      for (const cp of cols) {
+        for (const net of cp.nets) {
+          const nodes = [];
+          for (const e of net.edges) { if (!nodes.some((v) => v[0] === e.a)) nodes.push([e.a, e.p[0]]); if (!nodes.some((v) => v[0] === e.b)) nodes.push([e.b, e.p[e.p.length - 1]]); }
+          const make = (k) => netStitches(net, nodes[k][0], sat), p0 = make(0);
+          if (p0.length < 2) continue;
+          blocks.push({ centre: p0[0], paths: [p0], kind: "column", nodes, make, px: cp.px, meant: cp.meant, parent: cp.whole ? 0 : cp.c, thread: arclen(p0).at(-1) });
+          fine.columns++;
+        }
+      }
+    }
     if (!blocks.length) continue;
     // Moves between sections and shapes travel where stitches still to come will cover the run: this colour's fills
     // not sewn yet (kept 0.25 mm off their edges) or a later colour's solid fill. Each jump was a trim, two locks and,
     // up to 5 mm (the PE900 never trims those), a loose thread: etsy_8 had 293 trims and 101 loose threads.
-    const toPx = ([x, y]) => [x * res + cx, y * res + cy], ink = (i) => mask.data[i] || thin.data[i] || later.has(labels[i]);
+    const toPx = ([x, y]) => [x * res + cx, y * res + cy], ink = (i) => mask.data[i] || thin.data[i] || colPx[i] || later.has(labels[i]);
     const hop = (a, b) => {   // the step between a point and its first cell: on this colour or one still to come
       const n = Math.ceil(Math.hypot(b[0] - a[0], b[1] - a[1]) / (0.2 * res));
       for (let i = 1; i <= n; i++) if (!ink(Math.round(a[1] + ((b[1] - a[1]) * i) / n) * w + Math.round(a[0] + ((b[0] - a[0]) * i) / n))) return false;
@@ -486,9 +701,19 @@ function build(img, analysis, opts) {
     // ... or along this colour's own thin lines (within 2 px), which are sewn in this thread anyway
     const near2 = new Uint8Array(w * h);
     if (anyThin) for (let i = 0; i < w * h; i++) if (thin.data[i]) { const x = i % w, y = (i - x) / w; for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) { const X = x + dx, Y = y + dy; if (X >= 0 && Y >= 0 && X < w && Y < h) near2[Y * w + X] = 1; } }
+    // ... or within a column of this colour, and from it under a later colour as far as a fill reaches under one: a
+    // column doesn't grow under its neighbours as a fill does, and the way from it to them was cut (a stem's walk and
+    // the flower over it in two pieces: a trim)
+    const colWay = new Uint8Array(w * h);
+    if (cols.length) {
+      const off = { w, h, data: new Uint8Array(w * h) };
+      for (let i = 0; i < w * h; i++) off.data[i] = colPx[i] ? 0 : 1;
+      const to = distanceTo(off, OVERLAP * res + 1);
+      for (let i = 0; i < w * h; i++) if (colPx[i] || (to[i] <= OVERLAP * res + 0.5 && later.has(labels[i]))) colWay[i] = 1;
+    }
     const router = () => makeRouter(mask, res, (x, y) => {
       const i = y * w + x;
-      return solid[i] && later.has(labels[i]) ? 2 : filled[cl[i]] && dt[i] > 0.25 * res ? 1 : near2[i] ? 1 : 0;
+      return solid[i] && later.has(labels[i]) ? 2 : filled[cl[i]] && dt[i] > 0.25 * res ? 1 : near2[i] || colWay[i] ? 1 : 0;
     }, hop, budget);
     let R = router();
     // Shapes in nearest-first order, preferring the nearest one a hidden way reaches (keeps travel and trims down),
@@ -509,15 +734,18 @@ function build(img, analysis, opts) {
     if (level.start && blocks.length > 1) {
       const root = blocks.map((_, i) => i), find = (i) => (root[i] === i ? i : (root[i] = find(root[i])));
       // (a fill begins and ends where its rows do; a line's walk comes back to where it began, so it may begin anywhere)
-      const pt = (q) => ({ q, r: R.regionOf(toPx(q)) }), along = (b) => b.paths.flat().filter((_, i, a) => i % 6 === 0 || i === a.length - 1).map(pt);
-      const from = blocks.map((b) => (b.kind === "run" ? along(b) : [pt(b.paths[b.paths.length - 1].at(-1))]));
-      const to = blocks.map((b, i) => (b.kind === "run" ? from[i] : [pt(b.paths[0][0])]));
+      const pt = (q) => ({ q, r: R.regionOf(toPx(q)) }), along = (b) => b.paths.flat().filter((_, i, a) => i % (b.nodes ? 2 : 6) === 0 || i === a.length - 1).map(pt);
+      // (a column's walk passes along all of it and may begin at any of its nodes: counted along it, as a line's.
+      // By its nodes alone, a word's apostrophe beside a letter sewn as a column was no longer counted with it, and went)
+      const from = blocks.map((b) => (b.kind === "run" || b.nodes ? along(b) : [pt(b.paths[b.paths.length - 1].at(-1))]));
+      const to = blocks.map((b, i) => (b.kind === "run" || b.nodes ? from[i] : [pt(b.paths[0][0])]));
       const goes = (i, j) => from[i].some((a) => to[j].some((b) => { const v = Math.hypot(a.q[0] - b.q[0], a.q[1] - b.q[1]); return v <= 2 || (v <= TRAVEL && a.r && a.r === b.r); }));
       for (let i = 0; i < blocks.length; i++) for (let j = i + 1; j < blocks.length; j++) if (find(i) !== find(j) && (goes(i, j) || goes(j, i))) root[find(i)] = find(j);
       const sum = new Map();
       blocks.forEach((b, i) => sum.set(find(i), (sum.get(find(i)) || 0) + b.thread));
       const most = Math.max(...sum.values()), go = (b, i) => !b.meant && sum.get(find(i)) < level.start && sum.get(find(i)) < level.share * most;
       const out = new Set(blocks.filter(go).filter((b) => b.kind === "fill").map((b) => b.comp)), n0 = blocks.length;
+      for (const b of blocks.filter(go)) if (b.px) for (const i of b.px) colPx[i] = 0;
       blocks = blocks.filter((b, i) => !go(b, i));
       fine.left += n0 - blocks.length;
       if (out.size) {
@@ -541,8 +769,13 @@ function build(img, analysis, opts) {
     while (blocks.length) {
       const from = R.regionOf(at);
       let bi = 0, bk = 0, bd = Infinity;
+      // (a fill's strokes, cut off it as columns, are sewn before it: the needle reaches them under the fill still to
+      // come and comes back into it where each stroke's walk began. After it, the way to them lay on finished rows:
+      // a trim each)
+      const kids = new Set(blocks.map((b) => b.parent).filter((c) => c));
       blocks.forEach((b, i) => {
-        (b.tour || [b.paths[0][0]]).forEach((qm, k) => {
+        if (b.kind === "fill" && kids.has(b.comp)) return;
+        (b.tour || (b.nodes && b.nodes.map((v) => v[1])) || [b.paths[0][0]]).forEach((qm, k) => {
           const q = toPx(qm), v = Math.hypot(q[0] - at[0], q[1] - at[1]) / res;
           // (a jump of 2-5 mm is left as a loose thread by the machine: one over 5 mm, trimmed, is better)
           const score = v <= 2 || (v <= TRAVEL && from && R.regionOf(q) === from) ? v : v > 5 ? v + 1000 : v + 2000;
@@ -551,11 +784,12 @@ function build(img, analysis, opts) {
       });
       const b = blocks.splice(bi, 1)[0];
       if (b.tour) { const t = b.tour; b.paths = [bk ? [...t.slice(bk), ...t.slice(1, bk + 1)] : t]; }
+      if (b.make && bk) b.paths = [b.make(bk)];
       const last = b.paths[b.paths.length - 1];
       ordered.push(b); at = toPx(last[last.length - 1]);
     }
     // a short move to the next piece is sewn straight unless it would cross fabric this colour doesn't cover
-    const covered = ([x, y]) => mask.data[Math.round(y * res + cy) * w + Math.round(x * res + cx)] === 1;
+    const covered = ([x, y]) => { const i = Math.round(y * res + cy) * w + Math.round(x * res + cx); return mask.data[i] === 1 || colPx[i] === 1; };
     // (fill rows end a little past the shape's edge, so the last 0.3 mm at each end isn't checked)
     const crosses = (a, b) => {
       const L = Math.hypot(b[0] - a[0], b[1] - a[1]), n = Math.ceil(L / 0.2);
@@ -601,7 +835,7 @@ function build(img, analysis, opts) {
       tail = null;
     };
     const jumpTo = (b, p) => {
-      let q = clearStart(noTiny(p)), at = b.kind === "fill" ? inside(q[0], q.slice(1, 16)) : null;
+      let q = clearStart(noTiny(p)), at = b.kind === "fill" || b.kind === "column" ? inside(q[0], q.slice(1, 16)) : null;
       if (at && nearer(gapTo(d.cur, q[0]), gapTo(d.cur, at))) at = null;
       tuck(at || q[0]);
       if (at && nearer(gapTo(d.cur, q[0]), gapTo(d.cur, at))) at = null;
@@ -611,6 +845,15 @@ function build(img, analysis, opts) {
     let out = null;   // a piece left out when the needle came to it
     const gone = [];   // ... and all of them: a kept mark is kept for the piece it sits by
     const by = (p) => gone.some((g) => g.paths.some((q) => q.some((v) => Math.hypot(v[0] - p[0], v[1] - p[1]) <= 2.5)));
+    // (what the needle sews from a piece on without a cut: it and the pieces after it each within 2 mm of the last. A
+    // piece a jump reaches is left out as too small only when all of that is: the dash the needle jumped to that
+    // starts a word's letters was left out, and a 0 lost its left side, when columns changed where the needle came from)
+    const chain = ordered.map((b) => b.paths.reduce((a, v) => a + pathLen(v), 0));
+    for (let i = ordered.length - 2; i >= 0; i--) {
+      const e = ordered[i].paths.at(-1).at(-1), n = ordered[i + 1].paths[0][0];
+      if (Math.hypot(n[0] - e[0], n[1] - e[1]) <= 2) chain[i] += chain[i + 1];
+    }
+    const sews = new Map(ordered.map((b, i) => [b, chain[i]]));
     for (const b of ordered) for (const [pi, p] of b.paths.entries()) {
       let q;
       if (b === out) continue;
@@ -627,19 +870,21 @@ function build(img, analysis, opts) {
           // line's other dashes but not from where the needle is. Each was a run of nothing but its own locks: 8 of them
           // were 75 of the 90 lock hits with nothing over them in the 12 sample pictures)
           // (a dot kept for the piece beside it goes with that piece: left, it was a start of its own for a knot)
-          else if (gap > 2 && level.lone && !pi && (!b.meant || by(p[0])) && b.paths.reduce((a, v) => a + pathLen(v), 0) < level.lone) { out = b; gone.push(b); fine.left++; continue; }
+          else if (gap > 2 && level.lone && !pi && (!b.meant || by(p[0])) && sews.get(b) < level.lone) { out = b; gone.push(b); fine.left++; continue; }
           else if (gap > 2) q = jumpTo(b, p);
           else d.path((q = noTiny(p, d.cur)), true, false);
         }
       }
+      // (not after a column: the stitch back onto it lay across the satin, a bar on top)
       tail = b.kind === "fill" ? q : null;
-      if (b.kind === "fill") R.markSewn(p.map(toPx));
+      if (b.kind === "fill" || b.kind === "column") R.markSewn(p.map(toPx));
     }
     tuck();
     summary.push({ ...col, shapes: ordered.length, kinds: [...new Set(ordered.map((b) => b.kind))] });
   }
   if (!d.stitches.length) throw nothing(used, o);
-  d.finish();
+  // (eased, a satin's short stitches at a tight tip can come to 0.3 mm: dropped, as the Design tab's are)
+  d.finish({ untiny: true });
   return { design: d, summary, fine };
 }
 

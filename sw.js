@@ -11,8 +11,8 @@
 // cache.
 // (`SET`: a fingerprint of the list below, written with the hashes. It is part of the cache's name, so a release whose
 // files changed can never install into the cache the running one is serving from, version number bumped or not.)
-const SET = "c085d2d042e7";
-const CACHE = `needleworks-v32-${SET}`, SHARED = "needleworks-shared";
+const SET = "53f31ce111c4";
+const CACHE = `needleworks-v33-${SET}`, SHARED = "needleworks-shared";
 const FILES = {
   "index.html": "5f83aee168afe9f818d465c3bf3a07342c0417ca2972fc22b34e560f05250617",
   "manifest.webmanifest": "82f627e1def5254866cf364a55a1c2a85e2c3dd61abeeb890829362969fcfb63",
@@ -44,7 +44,7 @@ const FILES = {
   "js/core/brandcharts.js": "85f4772a2de19ab56691d984a8aad930b2c427cd34498c70f66933c6f09199be",
   "js/core/brands.js": "cb0a36b5fe3128de55654bdd350bdc86508f11fb089eb822bd73b7a26eba1c59",
   "js/core/design.js": "524343b1e64430e00794de16ca112806f34725c49e18755d2bf02416ef276fbb",
-  "js/core/digitize.js": "3b09c5b89083523008e1efa1b85ad68e80c8d3776a93d57bbac3b0d0ac70eefa",
+  "js/core/digitize.js": "39c638c4022aa5d52327e26f5fa48e40c4e7dbf2d297fa73954292c4c88a735c",
   "js/core/fonts.js": "17f00207b7a5ae85ec8ae5059a1a7122a0ab059cd27a70f27e607db74790e5ce",
   "js/core/glyphs.js": "5923a80f5f9c7d8be7e271af557783d7b3ee46c00bf0c4185f8840f344e99433",
   "js/core/formats.js": "6c635b29d843e7eb112ad773f92f79b26ea0ad17769889104b271faa2915b76e",
@@ -56,8 +56,8 @@ const FILES = {
   "js/core/machines.js": "afd9fe6fc812a0b03d903fc54a374b3246ac27539c9cff7d5ea546ed9e81c135",
   "js/core/artcheck.js": "d87f37fe199495fc0d2150af4afe4f67abb7af58e656adaab7c62148645d3693",
   "js/core/palette.js": "203f0a1f4ab9e67c28b34d09a2bbab022891add2e86cc8f14445b9a4d2feb928",
-  "js/core/recipes.js": "ac640d0703671e6e528b877caf1c3f6f51c327adc9de9b0f360af1ecc995ffe7",
-  "js/core/raster.js": "ae1885a4450df9ac59e1e37cb253bf729a0c2d680b0a3aa54239f0df9a355baa",
+  "js/core/recipes.js": "65235b4b0e57905119a85b5d5f7614b547619d0424ee7f041b2346450e6b87ce",
+  "js/core/raster.js": "b7f39ab3343d79066522fa5a4ef65bd4719e06fdb165c67f6b9dae88042ab93d",
   "js/core/regions.js": "4e24ba2c2d89c91a51bf3952db56ff4346d73783921a877911b97e1d45ad5813",
   "js/core/text.js": "a253f11cfeafe6c9dd630fb3c2f010f0a88b37771923e92ffa9db70f32ff0378",
   "js/core/typed.js": "bca3a62351d99bff324c3012869f3910ec697bdc744906cf74a18f013df99e38",

@@ -31,8 +31,8 @@ What was tried and rejected (don't retry without new numbers) and what is known 
   thread got super thick"). Normal for script; the densest spots stay at or under 24/mm², and capping lettering at 18
   dropped only 15 of 3,300 stitches in "Read Receipts", so density isn't the lever. Unchecked: Brother's own script
   fonts at crossings.
-- Pictures: "make it stitchable" (thicken/drop too-fine detail); 1-2 mm outlines as satin (needs variable-width satin
-  through junctions); etsy_6's green panel still sewn; etsy_7's pastel lines; etsy_4's greyish-lavender title;
+- Pictures: "make it stitchable" (thicken/drop too-fine detail); satin outlines' outer corners at sharp points
+  (PX2 columns stop short: a mitre) and tapered strokes as satin; etsy_6's green panel still sewn; etsy_7's pastel lines; etsy_4's greyish-lavender title;
   etsy_5 at 4 colours merges grass and yellow; slab-serif centre lines lose serifs; a soft shadow's core joins its
   colour at 2 threads; 0.6 mm strokes in a compressed JPEG partly sewn.
 - Open tab: trims rise after re-stitching at 70 %.
