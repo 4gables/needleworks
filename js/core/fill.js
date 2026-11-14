@@ -76,7 +76,7 @@ export function tatami(mask, comp, res, { angle, spacing, stitch, inset = 0, pul
 }
 // Rows into paths: each run of rows that can be sewn back and forth without leaving the shape, split where the step
 // to the next row would cross open fabric (`leaves`).
-function sewRows(rows, U, V, res, L, pattern, leaves) {
+export function sewRows(rows, U, V, res, L, pattern, leaves) {
   // group intervals into regions that can be sewn back-and-forth without leaving the shape
   const regions = [];
   let prev = [];
