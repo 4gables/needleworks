@@ -104,6 +104,17 @@ export const SHAPES = { band: 0.5, between: 1.25, side: 0.2, fleck: 3, enclosed:
 export const COLUMNS = { min: 1.0, wide: 4, long: 2, into: 0.6, cap: 1.4, tip: 0.5, solid: 0.85, stub: 3, short: 0.2, even: 2.2, pull: 0.1, thread: 0.2, small: 3, cover: 0.9 };
 export const PICTURES = { fleck: 3, enclosed: 0.8, eyes: 6, start: 4, edge: 0.75,
   details: { all: { start: 0, share: 0, lone: 0 }, most: { start: 7, share: 0.1, lone: 8 } } };
+// Shading (core/shade.js, roadmap PX4; numbers: docs/pictures.md). Two colours' regions, each `wide` mm across
+// somewhere, meet in a soft gradient when the picture (blurred `blur` mm) takes `soft` mm or more to change from one to
+// the other along their border (median over at least `border` mm of it; `blend`: the Picture panel's "Blend", which
+// takes any edge softer than a crisp one, and says when there are such). Blended only when their threads are `near` to
+// `far` ΔE00 apart, the band (half the transition, `band` mm at most, each side) is `area` mm² or more, and the picture
+// across it correlates `agree` or better with a ramp from one colour to the other; each pixel's share from the picture
+// blurred `field` mm. Rows: one grid and angle per group,
+// each row's stretches in one thread by an ordered threshold of `levels`; stretches under `run` mm join their
+// neighbour; a thread's region reaches `reach` mm round its stretches; where a row changes thread the one sewn first
+// runs `over` mm under the next, the next `under` mm back over it.
+export const SHADE = { blur: 0.4, soft: 2, blend: 1.3, border: 8, wide: 6, near: 10, far: 30, band: 12, area: 25, agree: 0.5, field: 1, levels: 2, run: 1, reach: 1, over: 0.3, under: 0.1 };
 
 // Art that stitches well (PX6: the Picture tab's guide for making a picture, and its check of a picture; core/artcheck.js,
 // docs/pictures.md). What a picture needs, measured at the size it is sewn, from the digitizer's own rules:

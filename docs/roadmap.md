@@ -291,7 +291,11 @@ stitch round ends with a small sew-out pack.
   - [x] curved rows: level lines of a fitted stripe field, never closer than the spacing, where they beat straight
   - left: the Picture panel's choice (picture.js), and whether pictures default to it; curved rows with
     singularities (a disc's, a star's middle) and rows that end inside a narrowing band; sewn proof
-- [ ] **PX4 Shading** (after PX1): two-colour blends by density, colour mixing for photos and gradients
+- [x] **PX4 Shading** (after PX1): two-colour blends by density, colour mixing for photos and gradients. Done:
+  `core/shade.js` (soft borders gated to real shading, the two threads that meet, a line screen on one grid and
+  angle), the Soft shading choice; patents and numbers in `docs/pictures.md`
+  - left: the gain is small (gradient +0.5, pet photo +0.2, watercolour -0.2): the palette cuts a gradient into a
+    few threads and only their borders blend; a gradient into the fabric (soft shadows) is not blended; no sew-out
 - [x] **PX5 Every machine**: machines and hoops of Janome, Bernina, Husqvarna/Pfaff, Tajima-format machines from
   the makers' published specs (machines.js, cited); the machine sets the file, the checks use its field and limits.
   Left: JEF once Janome's thread order is measured (a Janome trial in the VM), Singer and the no-jump-trim machines
