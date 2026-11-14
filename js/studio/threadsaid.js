@@ -3,12 +3,12 @@
 // under a piece's swatches, swatch tips, and the offers that save thread changes (one thread for everything, the
 // same spool). The editor hands in its state and helpers as S. (Part of ui.js until 2026-11.)
 import { compose, THREADS } from "./pieces.js";
-import { machineThreads } from "../core/formats.js";
 
 export function threadSaid(S) {
   const { api, $ } = S;
   // the name the machine will show for `hex` if the piece's colour `was` became it: the file's palette gives each colour
-  // its nearest Brother thread no earlier colour took (machineThreads), so a colour may get its second-nearest. The
+  // its nearest Brother thread no earlier colour took (machineThreads; a JEF's Janome threads alike, `api.fileThreads`),
+  // so a colour may get its second-nearest. The
   // editor said "Brother Dark Gray" (the nearest) while the chips, steps and sew sheet said Olive Green (Dark Gray taken)
   // (`p`: the piece being recoloured. Another piece keeping the colour `was` keeps its blocks: a Madeira swatch's tooltip
   // said Pink with the name sharing navy with the heading, both recoloured in the guess, while the file named Light Lilac)
@@ -17,13 +17,13 @@ export function threadSaid(S) {
     const shared = p && S.pieces.some((q) => q.id !== p.id && [q.color, q.fill, q.blend].includes(was));
     const cols = !seg.includes(was) ? [...seg, hex] : !shared ? seg.map((c) => (c === was ? hex : c))
       : seg.includes(hex) ? seg : [...seg.slice(0, seg.lastIndexOf(was) + 1), hex, ...seg.slice(seg.lastIndexOf(was) + 1)];
-    return machineThreads(cols.map((color) => ({ color })))[cols.indexOf(hex)].name;
+    return api.fileThreads(cols.map((color) => ({ color })))[cols.indexOf(hex)].name;
   }
   // a piece's thread as every surface labels it (their spool first when they own one, else the machine's name)
   function threadOf(p, k = "color") { return api.threadLine(p[k], machineName(p[k]), S.guides.has(p[k])); }
 
   // (their spool's tooltip in the words every surface uses: app.js `threadLabel`)
-  function swatchTip(hex, was, own, p) { const m = machineName(hex, was, p); return own ? api.threadLine(hex, m) : `Brother ${m}`; }
+  function swatchTip(hex, was, own, p) { const m = machineName(hex, was, p); return own ? api.threadLine(hex, m) : `${api.maker()} ${m}`; }
   // after the design is made: the editor's thread labels and swatch tooltips as the file now names them
   // One thread for the whole design, offered beside a piece's thread when others differ and it saves thread changes
   // (newcomer, round 13: a name in its own pink added two thread changes to the bookmark, and nothing said "use Pink for
@@ -44,7 +44,7 @@ export function threadSaid(S) {
       fewer = allMemo.fewer;
     }
     el.hidden = fewer < 1;
-    el.innerHTML = fewer < 1 ? "" : `<button type="button" class="link" data-all-thread-set="${p.color}">Use Brother ${api.escapeHtml(machineName(p.color))} for everything</button>: ${fewer === 1 ? "1 fewer thread change" : `${fewer} fewer thread changes`}.`;
+    el.innerHTML = fewer < 1 ? "" : `<button type="button" class="link" data-all-thread-set="${p.color}">Use ${api.maker()} ${api.escapeHtml(machineName(p.color))} for everything</button>: ${fewer === 1 ? "1 fewer thread change" : `${fewer} fewer thread changes`}.`;
   }
   let allMemo = {};
   function oneThread(c) { return S.pieces.map((q) => (q.kind !== "file" && q.color ? { ...q, color: c } : q)); }
@@ -64,12 +64,12 @@ export function threadSaid(S) {
     const name = new Map();
     let seg = [];
     S.hoopings = [];
-    const flush = () => { if (seg.length) S.hoopings.push(seg.map((st) => st.color)); machineThreads(seg.map((st) => ({ color: st.color }))).forEach((t, k) => name.set(seg[k], t.name)); seg = []; };
+    const flush = () => { if (seg.length) S.hoopings.push(seg.map((st) => st.color)); api.fileThreads(seg.map((st) => ({ color: st.color }))).forEach((t, k) => name.set(seg[k], t.name)); seg = []; };
     for (const st of steps) if (st.rehoop) flush(); else seg.push(st);
     flush();
     return steps.map((st) => {
       if (st.rehoop) return st;
-      const own = api.ownSpool(st.color), spool = own ? `your ${own}` : `Brother ${name.get(st)}`;
+      const own = api.ownSpool(st.color), spool = own ? `your ${own}` : `${api.maker()} ${name.get(st)}`;
       return { ...st, machine: name.get(st), thread: spool, you: st.you && st.you.replace(/^Change to the next thread\b/, `Change to ${spool}`) };
     });
   }

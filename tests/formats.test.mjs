@@ -3,7 +3,7 @@ import { readFileSync, readdirSync, existsSync } from "node:fs";
 import { machineThreads, normalize, readEmbroidery, validatePES, writePES, STITCH, JUMP, TRIM, COLOR_CHANGE, END } from "../js/core/formats.js";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { endsEarly } from "../js/quality.js";
-import { WRITERS, needlePoints, readBack, validateOut } from "../js/core/formats-out.js";
+import { JANOME, WRITERS, janomeThreads, jefThreads, needlePoints, readBack, validateOut, writeJEF } from "../js/core/formats-out.js";
 import { createHash } from "node:crypto";
 
 let fail = 0;
@@ -220,7 +220,7 @@ ok(!validatePES(new TextEncoder().encode("#PES0060" + "x".repeat(5000))).ok, "ju
   console.log(`thread names: ${same}/200 match what the machine reads`);
 }
 
-// 9. DST, EXP, VP3 (docs/formats-out-spec.md section 9). Locked like the PES: tests/fixtures/golden/<name>.dst|exp|vp3,
+// 9. DST, EXP, JEF, VP3 (docs/formats-out-spec.md section 9). Locked like the PES: tests/fixtures/golden/<name>.dst|exp|jef|vp3,
 //    rewritten only on purpose (`--write-out`), then read back with pyembroidery by hand (`tests/make_fixture.py
 //    oracle ...`, the JSON committed beside them) and compared here within the spec's tolerances.
 {
@@ -238,18 +238,24 @@ ok(!validatePES(new TextEncoder().encode("#PES0060" + "x".repeat(5000))).ok, "ju
       stitches: [[400, -300, J], [400, -300, S], [430, -300, S], [430, -270, S], [0, 0, P], [460, -270, S], [490, -250, S], [0, 0, T], [190, -250, J], [190, -250, S], [190, -200, S],
         [0, 0, C], [0, 0, C], [-200, 100, J], [-200, 100, S], [-150, 160, S], [-150, 160, S], [-100, 160, S], [200, 160, J], [200, 160, S], [220, 175, S], [0, 0, T], [0, 0, E], [50, 50, S], [0, 0, E]] },
   };
-  const VECTORS = { dst: "7e85b9f09624cf2d0d109d07410244105d1541722577f2e95d7c6147c0a4edd0", exp: "4aba03f836f53e827f29f6cf272de10f715e0659cec41652d1d02507fdd1a062", vp3: "6af47e19abc685d4e8366ff14b6bb0928fa3e265608b7ffcc3a936b9ac9aa5a4" };
+  const VECTORS = { dst: "7e85b9f09624cf2d0d109d07410244105d1541722577f2e95d7c6147c0a4edd0", exp: "4aba03f836f53e827f29f6cf272de10f715e0659cec41652d1d02507fdd1a062", vp3: "6af47e19abc685d4e8366ff14b6bb0928fa3e265608b7ffcc3a936b9ac9aa5a4",
+    // (B.3 takes the palette numbers as given, 9 and 1: written into the bytes before hashing)
+    jef: "4ea3d8e930a5b36ebcac1a0ed5f0d58db0864bfba8894c17e0b673328bf0becf" };
+  // a JEF holds its date: the tests fix it (spec B.3)
+  const DATED = { ...WRITERS, jef: (p) => writeJEF(p, "20261113120000") };
   const names = { [S]: "STITCH", [J]: "JUMP", [T]: "TRIM", [C]: "COLOR_CHANGE", [E]: "END" };
   let checked = 0, oracles = 0;
   for (const [name, pattern] of Object.entries(OUT)) {
     const st = normalize(pattern), cut = st.slice(0, st.findIndex((e) => e[2] === E) + 1), changes = cut.filter((e) => e[2] === C || e[2] === P).length;
     sameNeedle(pattern, `golden ${name}`);
-    for (const [fmt, write] of Object.entries(WRITERS)) {
+    for (const [fmt, write] of Object.entries(DATED)) {
       const b = write(pattern), file = `tests/fixtures/golden/${name}.${fmt}`, id = `${name}.${fmt}`;
       if (process.argv.includes("--write-out")) writeFileSync(file, b);
       const golden = existsSync(file) ? new Uint8Array(readFileSync(file)) : new Uint8Array();
       ok(golden.length === b.length && golden.every((v, i) => v === b[i]), `writer ${id}: output changed from the locked golden file`);
-      if (name === "appendix_b") ok(createHash("sha256").update(b).digest("hex") === VECTORS[fmt], `writer ${id}: not the spec's Appendix B bytes`);
+      if (name === "appendix_b") { const v = b.slice(); if (fmt === "jef") { v[0x74] = 9; v[0x78] = 1; } ok(createHash("sha256").update(v).digest("hex") === VECTORS[fmt], `writer ${id}: not the spec's Appendix B bytes`); }
+      // (a JEF's palette numbers are the Janome threads the page names, one per segment: spec 9)
+      if (fmt === "jef") { const n = b[24], nums = Array.from({ length: n }, (_, k) => b[116 + 4 * k]); ok(JSON.stringify(nums) === JSON.stringify(jefThreads(pattern).map((t) => t.index)), `${id}: palette ${nums}`); }
       if (fmt === "dst") ok(JSON.stringify(needlePoints(readEmbroidery(b, "x.dst").stitches)) === JSON.stringify(needlePoints(cut)), `${id}: readEmbroidery's needle points differ`);
       checked++;
       // the oracle: pyembroidery's reader on the golden file
@@ -265,6 +271,16 @@ ok(!validatePES(new TextEncoder().encode("#PES0060" + "x".repeat(5000))).ok, "ju
         // (our reader puts an interpolated TRIM at (0, 0); pyembroidery where the needle is)
         want = r.map((e, i) => { if (e[2] !== T) return e; const prev = r.slice(0, i).reverse().find((q) => q[2] !== T); return [prev ? prev[0] : 0, prev ? prev[1] : 0, T]; });
       }
+      else if (fmt === "jef") {
+        // (as DST, spec 9: a run of three or more jump records straight after a stitch reads with a TRIM before it)
+        const r = readBack(b, fmt).stitches;
+        want = [];
+        r.forEach((e, i) => {
+          const run = e[2] === J && r[i - 1]?.[2] !== J && r[i + 1]?.[2] === J && r[i + 2]?.[2] === J;
+          if (run && r[i - 1]?.[2] === S) want.push([r[i - 1][0], r[i - 1][1], T]);
+          want.push(e);
+        });
+      }
       else want = readBack(b, fmt).stitches;
       const have = fmt === "vp3" ? got.filter((e, i) => !(e[2] === "JUMP" && i && near(e, got[i - 1]))) : got;
       const bad = have.length !== want.length ? `${have.length} entries, want ${want.length}` : have.map((e, i) => (e[2] === names[want[i][2]] && near(e, want[i]) ? "" : `entry ${i}: ${e} vs ${want[i]}`)).find(Boolean);
@@ -275,7 +291,8 @@ ok(!validatePES(new TextEncoder().encode("#PES0060" + "x".repeat(5000))).ok, "ju
         const want = (cut.reduce((a, e) => { if (e[2] === C) a.t++; if (e[2] === C || e[2] === P) a.s.push(a.t); return a; }, { t: 0, s: [0] })).s.map((k) => pattern.threads[Math.min(k, pattern.threads.length - 1)]);
         const str = (t) => [t.color, t.description ?? t.name ?? t.color, t.catalog ?? "", t.brand ?? ""].join("|");
         ok(o.threads.map((t) => [t.color, t.description, t.catalog ?? "", t.brand ?? ""].join("|")).join() === want.map(str).join(), `oracle ${id}: threads ${JSON.stringify(o.threads)}`);
-      } else ok(o.threads.length === 0, `oracle ${id}: ${o.threads.length} threads`);
+      } else if (fmt === "jef") ok(o.threads.length === b[24], `oracle ${id}: ${o.threads.length} threads, want ${b[24]}`);
+      else ok(o.threads.length === 0, `oracle ${id}: ${o.threads.length} threads`);
       oracles++;
     }
   }
@@ -285,6 +302,9 @@ ok(!validatePES(new TextEncoder().encode("#PES0060" + "x".repeat(5000))).ok, "ju
     const c = JSON.parse(readFileSync("tests/fixtures/centred_commands.json")), p = { stitches: c.commands, threads: c.threads.map((t) => ({ color: t.color, description: t.description, brand: "" })) };
     for (const [fmt, write] of Object.entries(WRITERS)) {
       const ours = write(p), py = new Uint8Array(readFileSync(`tests/fixtures/centred_py.${fmt}`)), allowed = fmt === "vp3" ? [0x59, 0x5a, 0x5b, 0x5c] : [];
+      // (JEF: its date and palette numbers are its own, pyembroidery's from its own table; the hoop fields are the
+      // spec's reading. The counts, offset and every stitch byte must agree)
+      if (fmt === "jef") allowed.push(...Array.from({ length: ours[0] - 8 }, (_, i) => i + 8).filter((i) => i < 24 || i >= 32));
       const diff = [...ours.keys()].filter((i) => ours[i] !== py[i] && !allowed.includes(i));
       ok(ours.length === py.length && !diff.length, `${fmt}: differs from pyembroidery's writer at ${diff.slice(0, 8)} (${ours.length} vs ${py.length} bytes)`);
     }
@@ -309,6 +329,22 @@ ok(!validatePES(new TextEncoder().encode("#PES0060" + "x".repeat(5000))).ok, "ju
       ok(!validateOut(good.slice(0, good.length - 7), fmt, p).ok, `${fmt}: a cut-short file passed`);
       console.log(`${fmt}: damage caught ${caught}/50 (a flip in the header text or a thread name can't move a stitch)`);
     }
+  }
+  // Janome threads (spec 5.4, 7.1): only measured numbers, two colours never sharing one while one is free, the same
+  // colour always the same thread; 200 random thread lists
+  {
+    let r = 7;
+    const rnd = () => (r = (r * 1103515245 + 12345) % 2147483648) / 2147483648, hex = () => "#" + Array.from({ length: 3 }, () => Math.floor(rnd() * 256).toString(16).padStart(2, "0")).join("");
+    let bad = 0;
+    for (let k = 0; k < 200; k++) {
+      const cols = Array.from({ length: 1 + Math.floor(rnd() * 60) }, () => (rnd() < 0.3 ? "#000000" : hex())), t = janomeThreads(cols.map((color) => ({ color })));
+      const by = new Map();
+      cols.forEach((c, i) => { if (!JANOME[t[i].index]) bad++; if (by.has(c) && by.get(c) !== t[i].index) bad++; by.set(c, t[i].index); });
+      const distinct = new Set(cols).size, used = new Set(t.map((x) => x.index)).size;
+      if (used !== Math.min(distinct, 51)) bad++;
+    }
+    ok(!bad && JANOME.filter(Boolean).length === 51, `Janome threads: ${bad} bad of 200 lists`);
+    ok(janomeThreads([{ color: "#000000" }, { color: "#ffffff" }, { color: "#ff0000" }]).map((t) => `${t.index} ${t.number} ${t.name}`).join() === "1 002 Black,2 001 White,10 225 Red", "Janome: black, white, red");
   }
   console.log(`other formats: ${checked} golden files (Appendix B byte for byte), ${oracles} read back by pyembroidery as written; a centred one as pyembroidery's writers write it`);
 }

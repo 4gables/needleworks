@@ -6,7 +6,7 @@
 // goes back with it to be said in plain words. Until 2026-10-31 each exit made its own checks: a 121-colour PES was
 // saved byte for byte, and a names ZIP was saved before its files were judged. tests/gate.test.mjs fails if any other
 // file starts a download or a share.
-// Other machines' files (DST, EXP, VP3: `format`, docs/formats-out-spec.md section 8): the PES of the same pattern is
+// Other machines' files (DST, EXP, JEF, VP3: `format`, docs/formats-out-spec.md section 8): the PES of the same pattern is
 // judged exactly as above (stitches, fit, the machine's rules: the only check there is), then the file is written from
 // that pattern and read back: the same needle points and colour changes, or nothing is handed over. The hoop given is
 // the chosen machine's (machines.js): its field, and its stitch and colour limits where the maker publishes them.
@@ -69,8 +69,8 @@ function judgeJSON(f) {
 
 // One file: { name, bytes (an embroidery file's are always PES), against? (the pattern it was written from) } -> the
 // same with ok, error (why it's refused), problems (quality.js verdict) and hard (the problems the machine can't take).
-// `format` dst, exp or vp3: bytes become that file's (named so), the PES judged kept as `pes`.
-const EMB = /\.(pes|dst|exp|vp3)$/i;
+// `format` dst, exp, jef or vp3: bytes become that file's (named so), the PES judged kept as `pes`.
+const EMB = /\.(pes|dst|exp|jef|vp3)$/i;
 export function judge(f, hoop = null, format = "pes") {
   if (/\.svg$/i.test(f.name)) return judgeSVG(f);
   if (/\.dxf$/i.test(f.name)) return judgeDXF(f);
@@ -93,8 +93,8 @@ export function judge(f, hoop = null, format = "pes") {
   } catch (err) { return no(f, `The ${format.toUpperCase()} file couldn't be written: ${err.message}`); }
 }
 
-const TYPES = { pes: "application/octet-stream", dst: "application/octet-stream", exp: "application/octet-stream", vp3: "application/octet-stream", zip: "application/zip", svg: "image/svg+xml", dxf: "application/dxf", json: "application/json" };
-// Every file judged (`format`: embroidery files handed out as pes, dst, exp or vp3), then saved (one file, or a .zip
+const TYPES = { pes: "application/octet-stream", dst: "application/octet-stream", exp: "application/octet-stream", jef: "application/octet-stream", vp3: "application/octet-stream", zip: "application/zip", svg: "image/svg+xml", dxf: "application/dxf", json: "application/json" };
+// Every file judged (`format`: embroidery files handed out as pes, dst, exp, jef or vp3), then saved (one file, or a .zip
 // of them all when `zip` names it) or shared (`share`: { title, text }, the phone's share sheet). Nothing is handed over when any file is refused. Returns { ok, files (judged),
 // refused (the files refused), error }; a share resolves when the sheet closes.
 // File names leave as the machine's USB reader can show them (`safeName` in core/typed.js: ASCII letters, digits, _ and

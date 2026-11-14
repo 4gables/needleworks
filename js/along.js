@@ -55,7 +55,7 @@ function alongShow() {
     $("along-sews").textContent = ""; $("along-time").textContent = ""; $("along-wrong").hidden = true; $("along-hoop").hidden = true;
   } else {
     const s = steps[i], t = mt[i];
-    $("along-title").innerHTML = `<i style="background:${s.block?.color || "#999"}"></i>${s.title ? escapeHtml(s.title) + " · " : ""}${s.block ? threadHtml(s.block.color, t?.name || "") : `Brother ${escapeHtml(t?.name || "")}`}`;
+    $("along-title").innerHTML = `<i style="background:${s.block?.color || "#999"}"></i>${s.title ? escapeHtml(s.title) + " · " : ""}${s.block ? threadHtml(s.block.color, t?.name || "") : `${t?.maker || "Brother"} ${escapeHtml(t?.name || "")}`}`;
     $("along-ready").hidden = !s.ready; $("along-ready").querySelector("ul").innerHTML = (s.ready || []).map((r) => `<li>${escapeHtml(r)}</li>`).join("");
     $("along-turn").hidden = !s.turn; $("along-turn").innerHTML = s.turn ? TURN_PIC + escapeHtml(s.turn) : "";
     // (what's still wrong, and worth knowing, on the first screen, as the steps and the sew sheet say it: words.js)

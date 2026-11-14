@@ -109,9 +109,9 @@ ok(!judge({ name: "x_cut.svg", bytes: cutSVG([[loop]], "x").replace('width="30mm
 ok(judge({ name: "d.needleworks.json", bytes: JSON.stringify({ needleworks: 1, pieces: [{ kind: "text", text: "Emma" }] }) }).ok, "a saved design refused");
 ok(!judge({ name: "d.needleworks.json", bytes: "{" }).ok && !judge({ name: "d.needleworks.json", bytes: '{"needleworks":1,"pieces":[]}' }).ok, "a broken saved design passed");
 ok(!judge({ name: "x.exe", bytes: new Uint8Array(10) }).ok, "an unknown file passed");
-// other machines' files (DST, EXP, VP3): the PES judged as ever, then the file written from the same pattern and read
+// other machines' files (DST, EXP, JEF, VP3): the PES judged as ever, then the file written from the same pattern and read
 // back; the name and bytes are the format's, the PES kept for a fixed copy; anything the PES fails is refused too
-for (const fmt of ["dst", "exp", "vp3"]) {
+for (const fmt of ["dst", "exp", "jef", "vp3"]) {
   saved = [];
   const j = judge({ name: "a." + fmt, bytes: goodBytes, against: good }, hoop, fmt);
   ok(j.ok && j.name === "a." + fmt && j.pes === goodBytes && validateOut(j.bytes, fmt, good).ok && readBack(j.bytes, fmt).changes === 1, `${fmt}: a good file refused or not written`);

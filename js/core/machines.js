@@ -5,8 +5,8 @@
 //
 // Every number comes from the maker's own pages or manuals, cited by the machine. A number the maker doesn't publish
 // is left out, never guessed:
-//   - `reads`: the embroidery files its manual lists, the maker's own first. The site writes PES, DST, EXP and VP3
-//     (formats-out.js); JEF waits for Janome's thread order (docs/formats-out-spec.md section 7).
+//   - `reads`: the embroidery files its manual lists, the maker's own first. The site writes PES, DST, EXP, JEF and VP3
+//     (formats-out.js; a JEF names only the 51 Janome threads whose palette numbers are measured, spec section 7.1).
 //   - `cuts`: what it does with a move between parts. A number: it trims jump stitches itself, all but those up to
 //     that many mm (Brother's "Jump Stitch Trim" and its lowest "length of jump stitch not to trim"); the loose-thread
 //     count (doctor.js shortJumps, MOVES.trimmed) is made for 5. "file": it cuts where the file says (trim codes) and
@@ -185,7 +185,7 @@ export const MACHINES = {
     brand: "Baby Lock", model: "Solaris 2", also: "BLSA2", name: "Baby Lock Solaris 2", reads: ["pes", "pha", "phb", "phc", "dst", "phx"], cuts: 5, stitches: 750000, blocks: 128,
     hoops: { "5x7": F5x7, "4x4": F4x4 }, defaultHoop: "5x7",
   },
-  // Janome: JEF is theirs, DST is read too; the DST is what they get here until JEF is made. Jump thread cutting:
+  // Janome: JEF is theirs (what they get here), DST is read too. Jump thread cutting:
   // "trim the threads if the jump thread is 3 mm or longer" (3 to 30 mm or off), and a trim code in a file is cut
   // when "Cutting command" is on. Janome's manuals say "14 cm by 20 cm", not which way is left-right: taken as written
   // (across, then front to back), as Brother's 5" x 7" reads; the hoop can be turned either way.

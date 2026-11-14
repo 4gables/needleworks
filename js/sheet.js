@@ -58,7 +58,7 @@ export const nextThread = (blocks, i, name, file) => (!i ? firstStep(file, name 
 // a file's own steps (`blocks`, its threads' `names`, an opened design with no steps of its own) when it has none
 export function told(sheet, blocks = [], names = [], file = "") {
   sheet ||= {};
-  const steps = sheet.steps?.length ? sheet.steps : blocks.map((b, i) => ({ you: nextThread(blocks, i, names[i] && `Brother ${names[i].name}`, file), sews: "" }));
+  const steps = sheet.steps?.length ? sheet.steps : blocks.map((b, i) => ({ you: nextThread(blocks, i, names[i] && `${names[i].maker || "Brother"} ${names[i].name}`, file), sews: "" }));
   const ready = sheet.ready || [], after = sheet.after?.length ? sheet.after : [FINISH];
   const all = explained([...ready, ...steps.map((st) => st.you), ...after]), n = ready.length;
   return { ...sheet, ready: all.slice(0, n), steps: steps.map((st, i) => ({ ...st, you: all[n + i] })), after: all.slice(n + steps.length) };
@@ -166,7 +166,7 @@ export function sewSheet({ pattern, filename, hoop, facts, threads, hide, sheet 
   sheet = told(sheet, blocks, threads, filename);
   const { steps, after } = sheet;
   const rows = steps.map((s, i) => {
-    const b = blocks.find((x) => x.index === i), t = threads[i], l = b ? label(b.color, t?.name || "") : { name: `Brother ${t?.name || ""}`, note: "" };
+    const b = blocks.find((x) => x.index === i), t = threads[i], l = b ? label(b.color, t?.name || "") : { name: `${t?.maker || "Brother"} ${t?.name || ""}`, note: "" };
     return `<li><b><span class="sw" style="background:${b?.color || t?.color || "#999"}"></span>${s.title ? esc(s.title) + " · " : ""}${esc(l.name)}${l.note ? ` <small>(${esc(l.note)})</small>` : ""}</b>
       ${s.you ? youHtml(s.you, esc, "p") : ""}${s.sews ? `<p>${esc(s.sews)}</p>` : ""}</li>`;
   }).join("");

@@ -5,7 +5,8 @@
 import { turnForMachine } from "./core/design.js";
 import { DEFAULT_MACHINE, MACHINES, hoop as getHoop } from "./core/machines.js";
 import { BRANDS, spools } from "./core/brands.js";
-import { OUT_FORMATS } from "./core/formats-out.js";
+import { OUT_FORMATS, janomeThreads } from "./core/formats-out.js";
+import { machineThreads } from "./core/formats.js";
 import { toast } from "./app.js";   // (used when the browser won't keep a design: by then app.js is running)
 
 export const $ = (id) => document.getElementById(id);
@@ -62,7 +63,7 @@ export const state = {
   turn: { picture: false, design: false, open: false, ...store.get("turn", {}) },
   brand: BRANDS[store.get("brand", "")] ? store.get("brand", "") : "",   // thread brand for spool numbers ("" = Brother only)
   spools: store.get("spools", {}),   // { brand: [spool numbers owned] }
-  // the file Download makes: pes, dst, exp or vp3 (formats-out.js), set by the machine chosen (`machineFormat`) unless
+  // the file Download makes: pes, dst, exp, jef or vp3 (formats-out.js), set by the machine chosen (`machineFormat`) unless
   // "File for" is changed after; remembered
   fileFormat: OUT_FORMATS[store.get("fileFormat", "pes")] ? store.get("fileFormat", "pes") : "pes",
   // their spools from brands not charted here (Madeira), matched by colour: [{ brand, num, hex }]. Ticking the nearest
@@ -74,9 +75,14 @@ if (!MACHINES[state.machine]) state.machine = DEFAULT_MACHINE;
 export const hoop = () => getHoop(state.machine, state.hoopId);
 // the chosen file format ({ ext, short, label, machines }), and a .pes name as that format's
 export const fileFormat = () => OUT_FORMATS[state.fileFormat];
-// the file a machine gets: the first its manual lists that this site writes (a Janome reads JEF and DST: DST, until JEF
-// is made here)
+// the file a machine gets: the first its manual lists that this site writes (a Janome its JEF)
 export const machineFormat = (id = state.machine) => MACHINES[id].reads.find((f) => OUT_FORMATS[f]) || "dst";
+// Whose threads the file names, and each thread's name as that machine shows it: a JEF names Janome threads (only the 51
+// whose numbers are measured, formats-out.js JANOME), every other file Brother's (the PES palette; DST and EXP name
+// none, and the steps go by the PES). `maker` on a thread says whose it is where it isn't Brother's.
+export const maker = () => (state.fileFormat === "jef" ? "Janome" : "Brother");
+export const janomeName = (t) => ({ ...t, name: `${t.number} ${t.name}`, maker: "Janome" });
+export const fileThreads = (threads) => (state.fileFormat === "jef" ? janomeThreads(threads).map(janomeName) : machineThreads(threads));
 export const outName = (name) => name.replace(/\.pes$/i, "." + state.fileFormat);
 // (a square hoop turned is the same hoop: the turn is off there, or a 4x4 file came out sideways with a turn note)
 export const square = () => { const h = hoop(); return h.w === h.h; };

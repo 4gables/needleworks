@@ -4,7 +4,7 @@
 // the machine's colours. (Part of app.js until 2026-11.)
 import { PEC_THREADS, nearestBrotherThread, rgbToHex } from "./core/threads.js";
 import { BRANDS, apart, brotherNum, chartSpools, exampleSpools, nearestSpool, nearestSpools, ownSpoolOf, spools } from "./core/brands.js";
-import { $, kept, state, store } from "./state.js";
+import { $, kept, maker, state, store } from "./state.js";
 import { next } from "./focus.js";
 import { along } from "./along.js";
 import { escapeHtml, makePicture, modal, paletteUI, setView, studio } from "./app.js";
@@ -17,14 +17,15 @@ import { escapeHtml, makePicture, modal, paletteUI, setView, studio } from "./ap
 // the chips' note (a long "nearest of yours … is quite different" under each chip shrank the preview: it's the tooltip).
 // `machine`: the name the file gives the colour, so Brother's spool number is that thread's
 // `guide`: the colour is sewn only as guide lines under fabric (the Design tab says so from its steps; else the view's)
+// (a JEF's threads are Janome's, `maker`: "Janome 225 Red"; a Brother spool's number is then the nearest spool's, as any brand's)
 export function threadLabel(hex, machine, guide = guideColour(hex)) {
-  const lead = { name: `Brother ${machine}`, note: "", short: "" };
+  const lead = { name: `${maker()} ${machine}`, note: "", short: "" }, brother = state.brand === "brother" && maker() === "Brother";
   if (!state.brand) return lead;
   const s = owns() ? nearOwn(hex) : nearestSpool(state.brand, hex);
   if (!s) return lead;
   // (an owned spool far from the colour isn't a match: white showed as "your Isacord 5513", a green; `far` in brands.js)
   // (Brother's own spools match the machine's colours exactly: just the number of the thread the machine names)
-  if (!owns()) { const note = state.brand === "brother" ? `spool ${brotherNum(machine) || s.num}` : `≈ ${s.label}`; return { ...lead, note, short: note }; }
+  if (!owns()) { const note = brother ? `spool ${brotherNum(machine) || s.num}` : `≈ ${s.label}`; return { ...lead, note, short: note }; }
   // (one wording for no close spool on every surface: the chip said "none of yours is close" and the steps and editor
   // "nearest of yours, Sulky 1076 Royal Blue, is quite different". A placement line under the appliqué fabric is only
   // a guide: its thread hardly matters, so it isn't "quite different")
@@ -33,7 +34,7 @@ export function threadLabel(hex, machine, guide = guideColour(hex)) {
   const name = `Your ${s.label}`;
   // (their Brother spool is the machine's own thread: "Your Brother 007 Prussian Blue · the machine calls it Prussian
   // Blue" said the name twice)
-  if (!s.own && state.brand === "brother" && s.name === machine) return { name, note: "", short: "" };
+  if (!s.own && brother && s.name === machine) return { name, note: "", short: "" };
   // (the file's thread for this colour may be another colour, its nearest being taken by another colour: a navy spool
   // of theirs read "the machine calls it Olive Green" with nothing to say that's fine)
   const t = PEC_THREADS.find((x) => x && x[0] === machine), other = t && apart(s.hex, rgbToHex(t.slice(1, 4)));
@@ -67,10 +68,11 @@ export function ownSpool(hex) {
 // (one spool per entry: "Isacord 3541 (for Brother Violet, Brother Purple)", not 3541 three times; a spool that's only
 // the nearest the brand has says so, as the thread chips do; a brand without spools listed gives its numbers here too)
 export function threadList(colors, machineName = (hex) => nearestBrotherThread(hex).name) {
-  const own = owns(), name = (hex) => `Brother ${machineName(hex)}`;
+  // (a JEF's threads are Janome's: Brother's spool numbers then only as a brand's nearest, like any other brand's)
+  const own = owns(), mk = maker(), brother = state.brand === "brother" && mk === "Brother", name = (hex) => `${mk} ${machineName(hex)}`;
   const and = (a) => a.length < 3 ? a.join(" and ") : `${a.slice(0, -1).join(", ")} and ${a.at(-1)}`;
   const uniq = [...new Set(colors)];
-  if (state.brand && !own && state.brand !== "brother") {
+  if (state.brand && !own && !brother) {
     const by = new Map();
     for (const h of uniq) { const s = nearestSpool(state.brand, h); if (!by.has(s.label)) by.set(s.label, { s, names: [] }); const n = name(h); if (!by.get(s.label).names.includes(n)) by.get(s.label).names.push(n); }
     return `Thread: ${[...by.values()].map(({ s, names }) => `${and(names)} ≈ ${s.label}${s.far ? " (the nearest, quite different)" : ""}`).join(", ")}.`;
@@ -80,13 +82,13 @@ export function threadList(colors, machineName = (hex) => nearestBrotherThread(h
   const buy = new Map();
   for (const h of uniq.filter((x) => !ownSpool(x))) {
     const s = nearestSpool(state.brand, h);
-    if (state.brand === "brother") { const n = brotherNum(machineName(h)); if (n) Object.assign(s, { label: `Brother ${n} ${machineName(h)}`, far: false }); }
+    if (brother) { const n = brotherNum(machineName(h)); if (n) Object.assign(s, { label: `Brother ${n} ${machineName(h)}`, far: false }); }
     if (!buy.has(s.label)) buy.set(s.label, { names: [], far: [] });
     const e = buy.get(s.label), n = machineName(h);
     if (!e.names.includes(n)) { e.names.push(n); if (s.far) e.far.push(n); }
   }
-  const bought = [...buy].map(([label, { names, far }]) => state.brand === "brother" ? label
-    : `${label} (for ${and(names.map((n) => `Brother ${n}`))}${far.length ? `; a rough match${far.length < names.length ? ` for ${and(far)}` : ""}` : ""})`);
+  const bought = [...buy].map(([label, { names, far }]) => brother ? label
+    : `${label} (for ${and(names.map((n) => `${mk} ${n}`))}${far.length ? `; a rough match${far.length < names.length ? ` for ${and(far)}` : ""}` : ""})`);
   return [mine.length ? `Your threads: ${mine.join(", ")}.` : "", bought.length ? `To buy: ${bought.join(", ")}.` : ""].filter(Boolean).join(" ");
 }
 export function brandUI() {
@@ -104,7 +106,7 @@ export function brandUI() {
   $("pic-mine-row").hidden = !mine; $("pic-mine").checked = !!mine && state.pic.mine;
 }
 // (the Design tab's editor too: its thread hint kept the old label until a reload)
-function relabel() { if (state.view) setView(state.view); paletteUI(); if (state.mode === "design") studio.relabel(); }
+export function relabel() { if (state.view) setView(state.view); paletteUI(); if (state.mode === "design") studio.relabel(); }
 $("brand").onchange = (e) => {
   if (e.target.value === "@mine") { e.target.value = state.brand; openSpools(); return; }
   state.brand = e.target.value; store.set("brand", state.brand); brandUI(); relabel();

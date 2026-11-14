@@ -3,7 +3,7 @@
 // settings and sizes, the palette and thread swaps, what was left out and the fixes that bring it back, the sample
 // and the picture kept from the last visit. (Part of app.js until 2026-11.)
 import { turnPattern } from "./core/design.js";
-import { designStats, machineThreads, readEmbroidery } from "./core/formats.js";
+import { designStats, readEmbroidery } from "./core/formats.js";
 import { DENSITY, LEARN, MOST, contentBox, cutPart, findParts, lostMuch, picturePlan, pictureImage, sewSized } from "./core/digitize.js";
 import { PEC_MATCH, hexToRgb, nearestBrotherThread, pecThread } from "./core/threads.js";
 import { fix } from "./doctor.js";
@@ -14,7 +14,7 @@ import { colourWord, lab } from "./core/brands.js";
 import { MARGIN } from "./core/machines.js";
 import { artGuide, artSaid } from "./artwords.js";
 import { COLORS as LINE_THREADS } from "./studio/ui.js";
-import { $, forgetPicture, hoop, keepPicture, kept, square, state, store, turned } from "./state.js";
+import { $, fileThreads, forgetPicture, hoop, keepPicture, kept, square, state, store, turned } from "./state.js";
 import { next } from "./focus.js";
 import { nearOwn, ownedPalette, ownedSpools, owns, threadHtml, threadLabel } from "./threadui.js";
 import { mmText } from "./words.js";
@@ -105,7 +105,7 @@ export async function makePicture() {
   state.pic.folded = r.fine?.folded >= FLECKS ? r.fine.folded : 0;
   // (pieces the Small details choice left out: said with the way back)
   state.pic.left = (p.style === "fill" && r.fine?.left) || 0;
-  const mt = machineThreads(r.pattern.threads);
+  const mt = fileThreads(r.pattern.threads);
   state.pic.machineName = new Map(r.pattern.threads.map((t, i) => [t.color, mt[i].name]));
   paletteUI();
   // (sewn longer or shorter than the Size asked, past what the style can do: said why. etsy_7 in cross-stitch at 60 mm

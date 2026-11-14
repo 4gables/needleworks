@@ -13,12 +13,12 @@ import { BLOCK, LOOK, LOOK_HEAD, TIP, TIP_HEAD, isolate, problemsHtml, problemsI
 import { brief, monogramHelp, safeName, tidy, uniqueName, withSwash } from "./core/typed.js";
 import { BRANDS, apart, brotherNum, chartSpools, exampleSpools, lab, nearestSpool, nearestSpools, ownSpoolOf, spools } from "./core/brands.js";
 import { COLORS as LINE_THREADS, initStudio, savedDesign } from "./studio/ui.js";
-import { $, designHoop, designTurned, fileFormat, forgetPicture, hoop, keepPicture, kept, machineFormat, outName, shownHoop, square, state, store, toMachine, turnCut, turned, turnedFile } from "./state.js";
-import { OUT_FORMATS } from "./core/formats-out.js";
+import { $, designHoop, designTurned, fileFormat, fileThreads, forgetPicture, hoop, janomeName, keepPicture, kept, machineFormat, maker, outName, shownHoop, square, state, store, toMachine, turnCut, turned, turnedFile } from "./state.js";
+import { OUT_FORMATS, janomeThreads, jefThreads } from "./core/formats-out.js";
 import { keepFocus, keyboard, live, next } from "./focus.js";
 import "./onitem.js";   // (it sets itself up: nothing here calls into it)
 import { along, namesFor } from "./along.js";
-import { brandUI, nearOwn, ownSpool, ownedPalette, ownedSpools, owns, threadHtml, threadLabel, threadLine, threadList } from "./threadui.js";
+import { brandUI, nearOwn, ownSpool, ownedPalette, ownedSpools, owns, relabel, threadHtml, threadLabel, threadLine, threadList } from "./threadui.js";
 
 // The Picture and Open tabs' code (picture.js, opened.js and the picture engine behind them: a quarter of the
 // scripts) isn't part of the first load: it comes when the first design is on screen, or at once when one of those
@@ -256,9 +256,12 @@ function offCentre(v, fits) {
   for (const [x, y, c] of v.shown.stitches) if (c === STITCH && (Math.abs(x) > lx || Math.abs(y) > ly)) return true;
   return false;
 }
-// thread names exactly as the machine will show them: the file's own PEC palette
+// thread names exactly as the machine will show them: the file's own PEC palette, or for a JEF the Janome threads its
+// palette numbers name, worked out from the pattern the gate writes it from (formats-out.js jefThreads; validateOut
+// refuses a JEF whose numbers aren't these)
 export function machineThreadList(v) {
   const p = v.file;
+  if (state.fileFormat === "jef") { try { return jefThreads(v.verifyAgainst || p).map(janomeName); } catch { return janomeThreads(p.threads).map(janomeName); } }
   return p.pec ? p.pec.map(pecThread) : machineThreads(p.threads);
 }
 // A dialog opens at its top. Taller than the window (the download dialog on a phone, two bookmarks), its button's
@@ -500,7 +503,7 @@ function shareText(v) {
   const probs = shownOn(problemsOf(v), "share");
   for (const [level, head] of [[LOOK, LOOK_HEAD], [TIP, TIP_HEAD]]) { const l = probs.filter((q) => q.level === level); if (l.length) lines.push("", head + ":", ...l.map((q) => `- ${q.text}`)); }
   if (sheet.ready?.length) lines.push("", "Have ready:", ...sheet.ready.map((r) => `- ${r}`));
-  const thread = (i) => { const b = blocks.find((x) => x.index === i); return b ? threadLabel(b.color, mt[i].name).name : `Brother ${mt[i].name}`; };
+  const thread = (i) => { const b = blocks.find((x) => x.index === i); return b ? threadLabel(b.color, mt[i].name).name : `${mt[i].maker || "Brother"} ${mt[i].name}`; };
   lines.push("", "Steps:", ...steps.map((st, i) => `${i + 1}. ${mt[i] ? `${thread(i)}: ` : ""}${st.you || "Press Start."}`));
   if (sheet.after?.length) lines.push("", "When it's done: " + sheet.after.join(" "));
   const out = [];
@@ -705,9 +708,11 @@ export function formatNote() {
   // (a file the machine's manual doesn't list)
   // (only what its manual lists, as read for machines.js: a PE900's manual may list more than was cited)
   if (!m.reads.includes(state.fileFormat)) return `${other ? "Most machines read DST" : `Only ${listed(m.reads.filter((x) => OUT_FORMATS[x]))} files are checked for the ${h.machineName} here, the ones its manual lists`}: check your machine reads ${f.short} files before you use this one. It has the same stitches, untested on it so far.`;
-  const why = m.reads[0] === "jef" && state.fileFormat !== "jef" ? `Janome's own file, JEF, isn't made here yet, so it's ${f.short}, which the machine reads too. ` : "";
-  const colours = OUT_FORMATS[state.fileFormat] && !["pes", "vp3"].includes(state.fileFormat) ? `, and ${f.short} files hold no thread colours: follow the thread list` : "";
-  return `${why}The stitches, size and thread changes are checked here; the file itself is untested on ${other ? "your machine" : `${m.brand} machines`} so far${colours}.`;
+  // (a JEF holds a Janome thread number per colour, not a colour: the nearest of the Janome threads whose numbers are
+  // known here, docs/formats-out-spec.md 7.1, and the thread list names the same ones)
+  const colours = state.fileFormat === "jef" ? ", and a JEF names Janome threads, not colours: the nearest of the 51 Janome threads whose numbers are known, the same ones the thread list names"
+    : OUT_FORMATS[state.fileFormat] && !["pes", "vp3"].includes(state.fileFormat) ? `, and ${f.short} files hold no thread colours: follow the thread list` : "";
+  return `The stitches, size and thread changes are checked here; the file itself is untested on ${other ? "your machine" : `${m.brand} machines`} so far${colours}.`;
 }
 // What the machine does with a short move between two parts, as its maker says (machines.js `cuts`)
 function snipsTip() {
@@ -721,12 +726,15 @@ function formatUI() {
   const note = formatNote();
   $("file-for-note").hidden = !note; $("file-for-note").textContent = note;
   const b = $("download");
-  if (/\.(pes|dst|exp|vp3)$/i.test(b.textContent) || /^Download [A-Z0-9]+$/.test(b.textContent)) b.textContent = b.title = b.textContent.replace(/\.(pes|dst|exp|vp3)$/i, "." + state.fileFormat).replace(/^Download [A-Z0-9]+$/, `Download ${fileFormat().short}`);
+  if (/\.(pes|dst|exp|jef|vp3)$/i.test(b.textContent) || /^Download [A-Z0-9]+$/.test(b.textContent)) b.textContent = b.title = b.textContent.replace(/\.(pes|dst|exp|jef|vp3)$/i, "." + state.fileFormat).replace(/^Download [A-Z0-9]+$/, `Download ${fileFormat().short}`);
 }
 function setFormat(f) { state.fileFormat = OUT_FORMATS[f] ? f : "pes"; store.set("fileFormat", state.fileFormat); formatUI(); }
 $("file-for").innerHTML = Object.entries(OUT_FORMATS).map(([k, f]) => `<option value="${k}">${f.label}</option>`).join("");
 $("file-for").onchange = (e) => {
+  const was = maker();
   setFormat(e.target.value);
+  // (from or to a JEF the threads are another maker's: every label, step and the picture's palette say the new ones)
+  if (maker() !== was) { relabel(); if (state.mode === "picture") makePicture(); }
   const m = MACHINES[state.machine], own = machineFormat();
   toast(state.fileFormat === own ? `Downloads are ${fileFormat().short} files, as the ${hoop().machineName} reads.`
     : m.reads.includes(state.fileFormat) ? `Downloads are ${fileFormat().short} files now. The ${hoop().machineName} reads them too.`
@@ -802,7 +810,7 @@ function hoopChanged() { if (state.mode !== "picture") state.pic.req++; for (con
 // (on the Design tab a hoop change is an Undo step, as a turn is: Undo puts a design back in the hoop it was in)
 // (a machine with the same hoop changes nothing in the design: no Undo step for it (Undo lit up and nothing else
 // showed the choice was taken), the hoop picked stays, and a quiet line says what the choice does)
-// (the file follows the machine: a Janome gets the DST it reads, a Brother its PES)
+// (the file follows the machine: a Janome gets its JEF, a Brother its PES)
 function pickMachine(id) {
   if (!MACHINES[id]) return;
   const was = hoop(), to = MACHINES[id], keep = to.hoops[was.id], same = !!keep && keep.w === was.w && keep.h === was.h;
@@ -812,7 +820,7 @@ function pickMachine(id) {
   state.machine = id; if (!keep) state.hoopId = null; store.set("machine", state.machine);
   setFormat(machineFormat());
   hoopChanged();
-  const now = hoop(), files = state.fileFormat !== fmt || to.reads[0] !== "pes" ? ` Downloads are ${fileFormat().short} files${to.reads[0] === "jef" ? " (it reads them; Janome's own JEF isn't made here yet)" : ""}.` : "";
+  const now = hoop(), files = state.fileFormat !== fmt || to.reads[0] !== "pes" ? ` Downloads are ${fileFormat().short} files.` : "";
   toast(same ? `Set for the ${now.machineName}: the same ${now.name}, so the design is as it was. Files are checked for this machine.${files}`
     : `Set for the ${now.machineName} and its ${hoopLabel(now)}. Files are checked for this machine.${files}`);
 }
@@ -914,7 +922,7 @@ function showStep(i) {
   state.step = i; document.dispatchEvent(new CustomEvent("nw:step", { detail: i })); paint();
 }
 export const studio = initStudio({
-  hoop: designHoop, machineHoop: hoop, turned: designTurned, pageFaces: uiFonts, fit: () => { state.zoom = 1; state.pan = [0, 0]; }, store, showError, busy, safeName, escapeHtml, handOut, keepFocus, showStep, step: () => state.step, paint: () => state.mode === "design" && paint(), setMode, toast, hideToast, keyboard: () => keyboard, threadLine, threadHtml, ownSpool, threadList, ownedSpools,
+  hoop: designHoop, machineHoop: hoop, turned: designTurned, pageFaces: uiFonts, fit: () => { state.zoom = 1; state.pan = [0, 0]; }, store, showError, busy, safeName, escapeHtml, handOut, keepFocus, showStep, step: () => state.step, paint: () => state.mode === "design" && paint(), setMode, toast, hideToast, keyboard: () => keyboard, threadLine, threadHtml, ownSpool, threadList, ownedSpools, fileThreads, maker,
   // (undo, redo and Open saved put the hoop's turn back as it was; the caller rebuilds)
   setTurn: (on) => { state.turn.design = !!on; store.set("turn", state.turn); $("turn").setAttribute("aria-pressed", designTurned()); },
   hoopId: () => hoop().id,

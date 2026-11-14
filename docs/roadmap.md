@@ -255,6 +255,12 @@ leaves a design with no setting byte-identical.
 - [x] **W5 Other formats out**: DST, EXP, VP3 released (v30), see Cycle 2's line
   - [ ] JEF: Janome's thread order measured on Janome's own software (`docs/formats-out-spec.md` §7)
     - [x] 51 of 78 numbers measured from 127 Janome-sponsored Sew4Home designs (JEF paired with VP3, §7.1)
+  - [x] **W6 JEF out** from the measured 51 (spec §7.1's fallback): `writeJEF`, `janomeThreads` (only measured
+    numbers), the gate's read-back (palette numbers = the threads the page names); a Janome machine gets JEF, and
+    its chips, steps, sew sheet and Sew along name Janome threads ("Janome 225 Red"). Golden files, Appendix B,
+    pyembroidery's reading and writer; every batch design read back. Left: the 27 unmeasured numbers (no blue
+    among the 51: a blue sews Powder Blue or Royal Purple), hoop codes past 200 x 200 mm (code 0, spec §11), opening
+    JEF on the Open tab (formats.js's reader is locked; others' JEFs use the unmeasured numbers), unproven on a Janome
   - [ ] Open tab: a DST with two colour changes in a row (an empty block) fails the doctor's fixes ("fewer thread
     colours than colour changes"); site files never have one, outside files may
 
@@ -365,7 +371,7 @@ Reading:
 | 8 | Monogram layouts that show which initial goes where | Embrilliance, Artspira | Medium | M | asked three times by testers |
 | 9 | More Brother machines and hoops | all | Medium | S | data in `machines.js` |
 | 10 | Stitch-level editing in Open | Hatch, Embrilliance | Low-medium | M-L | experts only |
-| 11 | Other formats out (DST, JEF, EXP, VP3) | Embrilliance, Hatch | Medium (sharing) | M | DST, EXP, VP3 done (W5); JEF waits for the measured Janome order |
+| 11 | Other formats out (DST, JEF, EXP, VP3) | Embrilliance, Hatch | Medium (sharing) | M | DST, EXP, VP3 done (W5); JEF from the 51 measured Janome numbers (W6) |
 | 12 | Photo stitch | Hatch, PE-DESIGN, mySewnet | Medium | L | ask first; a look shown before any engine |
 | 13 | Free-standing lace, 3D puff | StitchArtist | Low-medium | L | later; unprovable without sew-outs |
 

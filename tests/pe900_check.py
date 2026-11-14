@@ -348,7 +348,7 @@ def needle_points(entries):
 
 
 def other_formats(path, cmds):
-    """The DST / EXP / VP3 beside a PES, read by pyembroidery, against the machine's reading of the PES (raw_pec)."""
+    """The DST / EXP / JEF / VP3 beside a PES, read by pyembroidery, against the machine's reading of the PES (raw_pec)."""
     errs, seen = [], []
     # (a stitch at a jump's end is PEC's anchor: the PES writer adds it, the other formats carry only the pattern's)
     anchor = [k == "STITCH" and i and cmds[i - 1][0] in ("JUMP", "TRIM") and cmds[i - 1][1:] == (x, y) for i, (k, x, y) in enumerate(cmds)]
@@ -358,12 +358,13 @@ def other_formats(path, cmds):
             pes_pts.append((x, y, a))
     pes_changes = sum(1 for k, _, _ in cmds if k == "COLOR")
     names = {pe.STITCH: "STITCH", pe.JUMP: "JUMP", pe.TRIM: "TRIM", pe.COLOR_CHANGE: "COLOR", pe.END: "END"}
-    for ext in ("dst", "exp", "vp3"):
+    for ext in ("dst", "exp", "jef", "vp3"):
         other = path[:-4] + "." + ext
         if not os.path.exists(other):
             continue
         seen.append(ext)
-        p = pe.read(other)
+        # (JEF read as its bytes say, spec 9: by default pyembroidery adds a trim at every jump run over 3 mm)
+        p = pe.read(other, {"trim_at": 3, "trim_distance": None} if ext == "jef" else None)
         if p is None:
             errs.append(f"{ext}: pyembroidery can't read it"); continue
         got = needle_points([(names.get(c & pe.COMMAND_MASK, "?"), x, y) for x, y, c in p.stitches])

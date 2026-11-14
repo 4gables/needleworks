@@ -1,17 +1,23 @@
 /*! Needleworks (c) 2026 4Gables. All rights reserved. Proprietary, see LICENSE. https://4gables.com/needleworks/ */
-// Files for other machines: Tajima DST, Melco EXP, Husqvarna Viking / Pfaff VP3 (docs/formats-out-spec.md, the
-// clean-room spec; writer-changes.md W5). They take the pattern writePES takes and sew the needle points of its PES
-// file: the same normalize (7 mm splits, whole units), the same locks and trims, only the encoding differs. formats.js
-// is never touched. JEF waits for a measured Janome thread order (spec section 7) and is not here.
+// Files for other machines: Tajima DST, Melco EXP, Janome JEF, Husqvarna Viking / Pfaff VP3 (docs/formats-out-spec.md,
+// the clean-room spec; writer-changes.md W5, W6). They take the pattern writePES takes and sew the needle points of its
+// PES file: the same normalize (7 mm splits, whole units), the same locks and trims, only the encoding differs.
+// formats.js is never touched.
+// JEF's threads (`JANOME`): a JEF holds only a palette number per colour, looked up in the machine's own list of 78
+// Janome threads. Janome publishes neither that order nor screen colours, and the public lists disagree, so the table
+// holds only the 51 numbers measured (spec section 7.1, 2026-11-13): JEF and VP3 files of 127 Janome-sponsored designs
+// on sew4home.com (Janome America), paired block by block; the name and Janome catalogue number are Janome's, the
+// screen colour the digitizer's VP3 colour for that thread. The other 27 numbers are never written.
 // readBack is the inverse of these writers, for the exit gate (spec section 8): not a reader for other people's files.
 import { COLOR_CHANGE, END, JUMP, STITCH, STOP, TRIM, normalize } from "./formats.js";
-import { hexToRgb, pyRound } from "./threads.js";
+import { hexToRgb, nearestIndex, pyRound, rgbToHex } from "./threads.js";
 
 // the formats offered, in the order the page lists them (`pes` is formats.js's own)
 export const OUT_FORMATS = {
   pes: { ext: "pes", short: "PES", label: "Brother (PES)", machines: "Brother" },
   dst: { ext: "dst", short: "DST", label: "Tajima & most machines (DST)", machines: "Tajima or other" },
   exp: { ext: "exp", short: "EXP", label: "Melco & Bernina (EXP)", machines: "Melco or Bernina" },
+  jef: { ext: "jef", short: "JEF", label: "Janome (JEF)", machines: "Janome" },
   vp3: { ext: "vp3", short: "VP3", label: "Husqvarna Viking & Pfaff (VP3)", machines: "Husqvarna Viking or Pfaff" },
 };
 
@@ -136,6 +142,88 @@ export function writeEXP(pattern) {
   return new Uint8Array(b);
 }
 
+// ---------- JEF (spec 5) ----------
+// JEF palette number -> [Janome's name, r, g, b, Janome catalogue number] (spec 7.1: measured, see the file header)
+const MEASURED = {
+  1: ["Black", 0, 0, 0, "002"], 2: ["White", 255, 255, 255, "001"], 3: ["Yellow", 255, 255, 23, "204"],
+  4: ["Orange", 255, 102, 0, "203"], 5: ["Olive Green", 47, 89, 51, "219"], 6: ["Green", 35, 115, 54, "226"],
+  7: ["Sky", 101, 194, 200, "217"], 8: ["Purple", 171, 90, 150, "208"], 10: ["Red", 255, 0, 0, "225"],
+  11: ["Brown", 177, 112, 78, "214"], 13: ["Gold", 228, 195, 93, "003"], 15: ["Pale Violet", 172, 156, 199, "209"],
+  16: ["Pale Yellow", 252, 242, 148, "210"], 17: ["Pale Pink", 249, 153, 183, "211"], 18: ["Peach", 250, 179, 129, "212"],
+  19: ["Beige", 201, 164, 128, "213"], 20: ["Wine Red", 151, 5, 51, "215"], 23: ["Silver Gray", 229, 229, 229, "220"],
+  25: ["Pale Aqua", 152, 214, 189, "227"], 26: ["Baby Blue", 178, 225, 227, "228"], 27: ["Powder Blue", 54, 139, 160, "229"],
+  31: ["Salmon Pink", 249, 153, 162, "233"], 32: ["Coral", 249, 103, 107, "234"], 33: ["Burnt Orange", 227, 49, 31, "235"],
+  34: ["Cinnamon", 226, 161, 136, "236"], 35: ["Umber", 181, 148, 116, "237"], 36: ["Blond", 228, 207, 153, "238"],
+  37: ["Sunflower", 255, 203, 0, "239"], 38: ["Orchid Pink", 225, 173, 212, "240"], 39: ["Peony Purple", 195, 0, 126, "241"],
+  40: ["Burgundy", 128, 0, 75, "242"], 41: ["Royal Purple", 84, 5, 113, "243"], 42: ["Cardinal Red", 177, 5, 37, "244"],
+  43: ["Opal Green", 202, 224, 192, "245"], 44: ["Moss Green", 137, 152, 86, "246"], 45: ["Meadow Green", 92, 148, 26, "247"],
+  47: ["Aquamarine", 93, 174, 148, "249"], 48: ["Emerald Green", 76, 191, 143, "250"], 49: ["Peacock Green", 0, 119, 114, "251"],
+  50: ["Dark Gray", 89, 91, 97, "252"], 51: ["Ivory White", 255, 255, 242, "253"], 52: ["Hazel", 177, 88, 24, "254"],
+  55: ["Cocoa Brown", 152, 105, 45, "257"], 56: ["Sienna", 77, 52, 25, "258"], 57: ["Sepia", 76, 51, 11, "259"],
+  62: ["Green Dust", 178, 221, 83, "264"], 63: ["Crimson", 243, 54, 137, "265"], 67: ["Meadow", 76, 136, 31, "269"],
+  68: ["Mustard", 228, 222, 121, "270"], 74: ["Vermilion", 240, 51, 31, "202"], 77: ["Beige Gray", 227, 196, 180, "223"],
+};
+// 79 entries, 0 and the 27 unmeasured numbers null (so matching never picks them)
+export const JANOME = Array.from({ length: 79 }, (_, i) => MEASURED[i] || null);
+const janomeEntry = (i) => { const t = JANOME[i]; return { index: i, name: t[0], number: t[4], hex: rgbToHex(t.slice(1, 4)) }; };
+
+// Each thread's Janome thread (spec 5.4, the PES rule of formats-spec 4.7 run on JANOME): every colour not seen before
+// claims the nearest unclaimed entry, the entry then holding that colour; each thread gets the entry holding the
+// colour nearest its own. Two colours never share a number while one is free.
+export function janomeThreads(threads) {
+  const free = JANOME.slice(), claimed = JANOME.map(() => null), seen = new Set();
+  for (const t of threads) {
+    if (seen.has(t.color)) continue;
+    seen.add(t.color);
+    const rgb = hexToRgb(t.color), i = nearestIndex(rgb, free);
+    if (i == null) break;
+    claimed[i] = [null, ...rgb]; free[i] = null;
+  }
+  return threads.map((t) => janomeEntry(nearestIndex(hexToRgb(t.color), claimed)));
+}
+// the Janome thread of each colour block a JEF of this pattern names, in order (what the machine shows)
+export const jefThreads = (pattern) => { const st = stitchList(pattern, "JEF"); return janomeThreads(segments(st, pattern.threads).S); };
+
+// Janome's hoops as the format codes them (spec 5.3): [code, half-width, half-height] in 0.1 mm, the first that holds
+// the design. The spec's choice (pyembroidery's codes, 1-3 agreed by the KDE notes): bigger than 200 x 200 mm is code 0.
+const JEF_HOOPS = [[1, 250, 250], [3, 630, 550], [2, 700, 1000], [4, 1000, 1000]];
+// the four room groups: 110 x 110, 50 x 50, 140 x 200 and "custom" as 140 x 200
+const JEF_ROOM = [[550, 550], [250, 250], [700, 1000], [700, 1000]];
+
+// offsets 32-115 from the extents with the origin (spec 5.2, 5.3): the hoop code, left, up, right, down, the four rooms
+function jefHead([x0, y0, x1, y1]) {
+  const left = -x0, up = -y0, right = x1, down = y1, fits = (hw, hh) => left <= hw && right <= hw && up <= hh && down <= hh;
+  return [(JEF_HOOPS.find(([, hw, hh]) => fits(hw, hh)) || [0])[0], left, up, right, down,
+    ...JEF_ROOM.flatMap(([hw, hh]) => (fits(hw, hh) ? [hw - left, hh - up, hw - right, hh - down] : [-1, -1, -1, -1]))];
+}
+class LE {
+  constructor() { this.b = []; }
+  u8(...v) { for (const x of v) this.b.push(x & 0xff); }
+  u32(...v) { for (const x of v) this.u8(x, x >> 8, x >> 16, x >>> 24); }
+}
+const stamp = (d = new Date()) => [d.getFullYear(), d.getMonth() + 1, d.getDate(), d.getHours(), d.getMinutes(), d.getSeconds()].map((v, i) => String(v).padStart(i ? 2 : 4, "0")).join("");
+
+export function writeJEF(pattern, date) {
+  if (date !== undefined && !/^[0-9]{14}$/.test(String(date))) throw new Error("A JEF date is 14 digits.");
+  const st = stitchList(pattern, "JEF"), { S } = segments(st, pattern.threads), N = S.length;
+  const numbers = janomeThreads(S).map((t) => t.index);
+  const run = [];
+  for (const m of moveList(st, 127)) {
+    if (m.k === "s") run.push(m.dx & 0xff, -m.dy & 0xff);
+    else if (m.k === "j") run.push(0x80, 0x02, m.dx & 0xff, -m.dy & 0xff);
+    else if (m.k === "t") run.push(0x80, 0x02, 0, 0, 0x80, 0x02, 0, 0, 0x80, 0x02, 0, 0);
+    else if (m.k === "c") run.push(0x80, 0x01, 0, 0);
+    else run.push(0x80, 0x10);
+  }
+  const o = new LE();
+  o.u32(116 + 8 * N, 0x14);
+  o.u8(...[...String(date ?? stamp())].map((c) => c.charCodeAt(0)), 0, 0);
+  o.u32(N, run.length / 2, ...jefHead(box([...st, [0, 0]])));
+  o.u32(...numbers); o.u32(...numbers.map(() => 13));
+  o.u8(...run);
+  return new Uint8Array(o.b);
+}
+
 // ---------- VP3 (spec 6) ----------
 class BE {
   constructor() { this.b = []; }
@@ -195,7 +283,8 @@ export function writeVP3(pattern) {
   return new Uint8Array(o.b);
 }
 
-export const WRITERS = { dst: writeDST, exp: writeEXP, vp3: writeVP3 };
+// (the gate passes a design name second: only DST keeps one, and a JEF's second argument is its date)
+export const WRITERS = { dst: writeDST, exp: writeEXP, jef: (p) => writeJEF(p), vp3: writeVP3 };
 
 // ---------- reading back (spec 8) ----------
 const sb = (v) => (v > 127 ? v - 256 : v);
@@ -245,6 +334,44 @@ function readEXP(b) {
   }
   stitches.push([x, y, END]);
   return { stitches, changes };
+}
+
+// JEF (spec 8): the header's counts and offsets, then the records from the offset at 0 to the end code
+function readJEF(b) {
+  const bad = (m = "The JEF file is damaged.") => ({ error: m });
+  if (b.length < 118) return bad("The JEF file is cut short.");
+  const u32 = (at) => (b[at] | (b[at + 1] << 8) | (b[at + 2] << 16) | (b[at + 3] << 24)) >>> 0;
+  const start = u32(0), N = u32(24);
+  if (!N || start !== 116 + 8 * N || start > b.length) return bad();
+  if (u32(28) * 2 !== b.length - start) return bad("The JEF file's length doesn't match its stitch count.");
+  const palette = Array.from({ length: N }, (_, k) => u32(116 + 4 * k));
+  if (palette.some((i) => !(i >= 1 && i <= 78))) return bad("The JEF file names a thread the machine doesn't have.");
+  if (b[b.length - 2] !== 0x80 || b[b.length - 1] !== 0x10) return bad("The JEF file has no end marker.");
+  const stitches = [];
+  let x = 0, y = 0, changes = 0, zero = 0;
+  for (let i = start; i < b.length; i += 2) {
+    if (b[i] !== 0x80) { x += sb(b[i]); y -= sb(b[i + 1]); stitches.push([x, y, STITCH]); zero = 0; continue; }
+    const code = b[i + 1];
+    if (code === 0x10) { if (i + 2 !== b.length) return bad("The JEF file goes on past its end marker."); stitches.push([x, y, END]); break; }
+    if (i + 4 > b.length) return bad("The JEF file is cut short.");
+    i += 2;
+    if (code === 0x02) {
+      const dx = sb(b[i]), dy = sb(b[i + 1]);
+      // (three jumps that don't move are a trim: spec 5.5)
+      if (!dx && !dy) { if (++zero === 3) { stitches.push([x, y, TRIM]); zero = 0; } continue; }
+      x += dx; y -= dy; stitches.push([x, y, JUMP]);
+    } else if (code === 0x01) { changes++; stitches.push([x, y, COLOR_CHANGE]); }
+    else return bad("The JEF file has an unknown code.");
+    zero = 0;
+  }
+  if (stitches.at(-1)?.[2] !== END) return bad("The JEF file has no end marker.");
+  if (changes !== N - 1) return bad("The JEF file's colour count is wrong.");
+  // the header as writeJEF makes it from these stitches: its date, the reach from the hoop centre, the hoop and the room
+  if (u32(4) !== 0x14 || !/^[0-9]{14}$/.test(String.fromCharCode(...b.subarray(8, 22))) || b[22] || b[23]) return bad();
+  if (palette.some((_, k) => u32(116 + 4 * (N + k)) !== 13)) return bad();
+  const head = jefHead(box([...stitches, [0, 0]]));
+  if (head.some((v, k) => (v >>> 0) !== u32(32 + 4 * k))) return bad("The JEF file's size or hoop is wrong.");
+  return { stitches, changes, palette };
 }
 
 function readVP3(b) {
@@ -301,8 +428,8 @@ function readVP3(b) {
   return { stitches, changes: N - 1, threads };
 }
 
-const READERS = { dst: readDST, exp: readEXP, vp3: readVP3 };
-// { stitches, changes } (VP3: and threads), or { error } when a structure check fails (spec 8's table)
+const READERS = { dst: readDST, exp: readEXP, jef: readJEF, vp3: readVP3 };
+// { stitches, changes } (VP3: and threads; JEF: and its palette numbers), or { error } when a structure check fails (spec 8's table)
 export function readBack(bytes, format) {
   const r = READERS[format];
   if (!r) return { error: `Can't read back .${format} files.` };
@@ -320,5 +447,7 @@ export function validateOut(bytes, format, pattern) {
   const i = want.findIndex((q, k) => q[0] !== got[k][0] || q[1] !== got[k][1]);
   if (i >= 0) return { ok: false, error: `Stitch ${i + 1} moved when written to the ${fmt} file.` };
   if (r.changes !== cut.filter((e) => isStop(e[2])).length) return { ok: false, error: `Colour changes were lost when writing the ${fmt} file.` };
+  // (a JEF's thread numbers are the Janome threads the page names: the machine shows what the steps say)
+  if (format === "jef" && jefThreads(pattern).some((t, k) => t.index !== r.palette[k])) return { ok: false, error: "The JEF file's threads aren't the ones listed." };
   return { ok: true };
 }

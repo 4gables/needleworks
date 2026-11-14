@@ -18,6 +18,7 @@
 // - (round 12) One for each name: a name saved under another file name (Zoë as Zoe.pes, a second Emma as Emma_2.pes)
 //   says so under its thumbnail.
 // - (W5) File for DST: Download, the dialog and the names ZIP follow it, the bytes read back, only PES is said checked.
+// - (W6) A Janome machine: JEF, its chips and steps name the Janome threads the file holds.
 // - Every kind of project with a modifier, out through every exit (the matrix, below; all of it with --matrix).
 // usage: node tests/cdp.mjs PORT start DIR; serve the site (tests/batch_server.py out/batch HTTP); then
 //        node tests/files_flow.mjs PORT http://127.0.0.1:HTTP [--matrix] [--only kind,kind] [--mods mod,mod]
@@ -292,6 +293,26 @@ for (const [bytes, says, pic] of [[png, /is a picture \(PNG\)/, true], ["new Uin
   await open("#design");
   const kept = await run(`const v = document.getElementById("file-for").value, l = document.getElementById("download").textContent; const s = document.getElementById("file-for"); s.value = "pes"; s.dispatchEvent(new Event("change")); return [v, l, document.getElementById("download").textContent];`);
   check("File for: the choice is remembered, and PES puts it back", kept[0] === "dst" && /\.dst$/.test(kept[1]) && /\.pes$/.test(kept[2]), kept.join(" | "));
+}
+// ---- (W6) A Janome machine gets JEF: its threads named as Janome's on every surface, the same numbers the file holds
+{
+  await open("#design");
+  const j = await run(`const blobs = []; const make = URL.createObjectURL; URL.createObjectURL = (b) => { blobs.push(b); return make.call(URL, b); };
+    const m = document.getElementById("machine"); m.value = "janome-mc500e"; m.dispatchEvent(new Event("change"));
+    document.querySelector("[data-start=oval]").click(); await __ff.wait(() => !document.getElementById("download").disabled); await new Promise((r) => setTimeout(r, 800));
+    const fmt = document.getElementById("file-for").value, label = document.getElementById("download").textContent;
+    const chips = [...document.querySelectorAll("#threads li span")].map((e) => e.firstChild.textContent);
+    const steps = document.getElementById("st-steps")?.textContent || "";
+    __ff.got.length = 0; document.getElementById("download").click(); await __ff.wait(() => __ff.got.length >= 1, 5000); __ff.close();
+    const { readBack, JANOME } = await import("./js/core/formats-out.js"), b = new Uint8Array(await blobs.at(-1).arrayBuffer()), back = readBack(b, "jef");
+    const inFile = (back.palette || []).map((i) => "Janome " + JANOME[i][4] + " " + JANOME[i][0]);
+    m.value = "brother-pe900"; m.dispatchEvent(new Event("change"));
+    return { fmt, label, chips, steps: steps.slice(0, 400), got: __ff.got, error: back.error || "", inFile, after: document.getElementById("file-for").value };`);
+  check("Janome: the file is JEF", j.fmt === "jef" && /\.jef$/.test(j.label) && /\.jef$/.test(j.got[0] || ""), JSON.stringify(j));
+  check("Janome: the JEF saved reads back", !j.error && j.inFile.length > 0, JSON.stringify(j));
+  check("Janome: the chips name the threads the file holds", j.chips.length > 0 && j.chips.every((c) => j.inFile.includes(c)) && j.inFile.every((c) => j.chips.includes(c)), JSON.stringify([j.chips, j.inFile]));
+  check("Janome: the steps name Janome threads, not Brother's", /Janome \d{3} /.test(j.steps) && !/Brother/.test(j.steps), j.steps);
+  check("Janome: back on a Brother, the file is PES", j.after === "pes", j.after);
 }
 
 // ---------- every kind with every modifier, out through every exit (was tests/matrix.mjs) ----------

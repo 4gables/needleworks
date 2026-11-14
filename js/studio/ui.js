@@ -48,7 +48,8 @@ export function savedDesign(bytes) {
 
 // api: { hoop(), setView(pattern, filename, look) (null pattern: nothing to show), showError(msg), busy(on, text),
 //        safeName(s, fb), escapeHtml(s), handOut(files, opts) (gate.js: the only way a file leaves), store, showStep(i), step(), setMode(mode),
-//        threadLine(hex, machine name), threadHtml(hex, machine name) (app.js `threadLabel`: one thread label everywhere) }
+//        threadLine(hex, machine name), threadHtml(hex, machine name) (app.js `threadLabel`: one thread label everywhere),
+//        fileThreads(threads), maker() (whose threads the file names, and their names: state.js) }
 export function initStudio(api) {
   const $ = (id) => document.getElementById(id);
   // The editor's state and helpers as they are when read, for the parts of the editor that live in their own files

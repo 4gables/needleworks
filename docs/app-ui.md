@@ -44,15 +44,19 @@ Reference for this part of Needleworks: the rules, the reason for each (it stops
   and a phone gets its own list. Hoops show their size when the name doesn't (`hoopLabel`: "RE20b hoop (140 × 200 mm)").
 - File for (W5, `#file-for` under Download, store `fileFormat`): picking a machine sets it (state.js `machineFormat`:
   the first of the machine's `reads` this site writes: a Brother PES, a Bernina EXP, a Husqvarna or Pfaff VP3, a
-  Janome DST until JEF is made); changing it after stays until another machine is picked. Every exit that makes an
+  Janome JEF); changing it after stays until another machine is picked. Every exit that makes an
   embroidery file takes it: Download, two hoopings' ZIP, Send, the fixed copies and One for each name. Callers still
   hand the gate PES bytes named `.pes`; `handOut` renames them, judges the PES exactly as before (stitches, HARD rules)
   with the chosen machine's field and its published `stitches`/`blocks` limits, then writes the format from the same
   pattern (an opened file: from the PES itself) and refuses it unless `validateOut` reads back the same needle points
   and changes. The judged file keeps the PES as `pes` for the fixed copy. A machine that doesn't read PES as its own
   file, or a format its manual doesn't list, gets a note under the choice, in the done dialog and in Send's text
-  (`formatNote`): checked here, untested on that maker's machines, no thread colours in DST/EXP, and why a Janome gets
-  DST. Only a PES for a PES machine says "Checked: it opens on…"; the rest say "Checked: it fits on…". The loose-thread
+  (`formatNote`): checked here, untested on that maker's machines, no thread colours in DST/EXP, a JEF's Janome
+  threads. A JEF names Janome threads, so with JEF chosen every thread label is Janome's (state.js `maker`,
+  `fileThreads`: "Janome 225 Red", formats-out.js `janomeThreads` on the 51 measured numbers), worked out from the
+  pattern the gate writes (`jefThreads`); `validateOut` refuses a JEF whose numbers aren't those. Changing File for to
+  or from JEF relabels everything (threadui.js `relabel`). The Picture tab's colour choices (swap, More colours, the
+  line colour) still offer Brother's threads. Only a PES for a PES machine says "Checked: it opens on…"; the rest say "Checked: it fits on…". The loose-thread
   chip's tip says what the machine's maker says it cuts (`snipsTip`, machines.js `cuts`); the count stays Brother's
   (moves of 1-5 mm). The preview, sew sheet and steps stay the PES's.
 - Steps (sheet.js): step 1 = how to hoop, which thread, Start; steps name the thread (`threadNames`/`nextThread`); a

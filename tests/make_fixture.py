@@ -4,13 +4,13 @@ Write a PES fixture from a commands JSON (the writer oracle):
   .venv/bin/python tests/make_fixture.py tests/fixtures/ashley_v3_commands.json tests/fixtures/ashley_v3.pes [version]
 Version defaults to 6 (full PES v6: CEmbOne/CSewSeg + PEC), what writePES writes.
 
-Read our DST / EXP / VP3 golden files back (docs/formats-out-spec.md section 9, layer 2; run by hand when a golden
+Read our DST / EXP / JEF / VP3 golden files back (docs/formats-out-spec.md section 9, layer 2; run by hand when a golden
 file changes, the JSON is committed beside it):
-  .venv/bin/python tests/make_fixture.py oracle tests/fixtures/golden/*.dst tests/fixtures/golden/*.exp tests/fixtures/golden/*.vp3
+  .venv/bin/python tests/make_fixture.py oracle tests/fixtures/golden/*.dst tests/fixtures/golden/*.exp tests/fixtures/golden/*.jef tests/fixtures/golden/*.vp3
 Each FILE gets FILE.json: { stitches: [[x, y, "STITCH" | "JUMP" | "TRIM" | "COLOR_CHANGE" | "STOP" | "END"]], threads }.
 
-pyembroidery's own DST / EXP / VP3 writers as a second witness (spec section 9): a commands JSON already normalised,
-its jumps split here by spec section 2.4 (so pyembroidery re-encodes nothing), written to PREFIX.dst/.exp/.vp3:
+pyembroidery's own DST / EXP / JEF / VP3 writers as a second witness (spec section 9): a commands JSON already normalised,
+its jumps split here by spec section 2.4 (so pyembroidery re-encodes nothing), written to PREFIX.dst/.exp/.jef/.vp3 (JEF with its trims on, spec section 9):
   .venv/bin/python tests/make_fixture.py pywriter tests/fixtures/centred_commands.json tests/fixtures/centred_py
 """
 import math
@@ -36,7 +36,7 @@ def oracle(path):
 def pywriter(src, prefix):
     ref = json.load(open(src))
     cmd = {0: pe.STITCH, 1: pe.JUMP, 2: pe.TRIM, 3: pe.STOP, 4: pe.END, 5: pe.COLOR_CHANGE}
-    for fmt, limit in (("dst", 121), ("exp", 127), ("vp3", 127)):
+    for fmt, limit in (("dst", 121), ("exp", 127), ("jef", 127), ("vp3", 127)):
         p = pe.EmbPattern()
         for t in ref["threads"]:
             th = pe.EmbThread()
@@ -55,7 +55,7 @@ def pywriter(src, prefix):
                 ex, ey = x, y
             else:
                 p.add_stitch_absolute(cmd[c], ex, ey)
-        pe.write(p, f"{prefix}.{fmt}")
+        pe.write(p, f"{prefix}.{fmt}", {"trims": True} if fmt == "jef" else None)
 
 
 def main(src, dst, version="6"):
