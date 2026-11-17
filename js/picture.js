@@ -94,7 +94,7 @@ export async function makePicture() {
   const byId = new Map(r.colors.map((c) => [c.id, c]));
   // (a line drawing's thread may be one picked for it, not the colour's own)
   p.colorsInfo = [...r.summary.map((c) => byId.has(c.id) && { ...byId.get(c.id), hex: c.hex, thread: c.thread }), ...p.skip.map((id) => byId.get(id))].filter(Boolean);
-  if (p.style === "line" && !p.line) { p.autoLine = r.summary[0]?.hex || ""; lineUI(); }
+  if (p.style === "line" && !p.line) { p.autoLine = r.summary.length === 1 ? r.summary[0].hex : ""; lineUI(); }
   // (asked for 4, got 3: say why, instead of a slider that looks ignored)
   state.pic.merged = r.merged || 0;
   // (a band of one colour round the edge is taken as a frame and left out (`findFrame`): said, it went with no word)
@@ -510,7 +510,7 @@ async function checkLost(s, req) {
     }
   }
   const others = [s.style === "cross" && s.cross > 1.5 && ["Use 1.5 mm crosses", { cross: 1.5 }], s.style !== "fill" && ["Sew it Filled", { style: "fill" }],
-    s.style !== "line" && ["Sew it as a line drawing (one thread)", { style: "line" }]].filter(Boolean);
+    s.style !== "line" && ["Sew it as a line drawing", { style: "line" }]].filter(Boolean);
   for (const [label, over] of others) { const q = await keeps(over); if (!q) return; if (q.kept) offer(label, over); }
   p.checking = false; fineUI(p.fine);
 }
@@ -556,7 +556,7 @@ function styleUI() {
   $("pic-line-row").hidden = s !== "line";
   lineUI();
 }
-// Line drawing sews one thread: the picture's darkest colour (Auto), or one of the Design tab's Brother threads, or any
+// Line drawing sews each line in its own colour's thread (Auto), or all in one of the Design tab's Brother threads, or any
 // colour (sewn in its nearest Brother thread)
 $("pic-line").innerHTML = `<button type="button" data-line="" class="auto">Auto</button>`
   + LINE_THREADS.map((c) => `<button type="button" data-line="${c}" style="background:${c}" title="Brother ${nearestBrotherThread(c).name}" aria-label="Brother ${nearestBrotherThread(c).name}"></button>`).join("")
@@ -566,9 +566,9 @@ function lineUI() {
   for (const b of $("pic-line").querySelectorAll("button")) b.setAttribute("aria-pressed", b.dataset.line === p.line);
   const a = $("pic-line").querySelector(".auto");
   a.style.background = auto; a.style.color = auto && lightOf(auto) < 0.55 ? "#fff" : "";
-  a.title = auto ? `Auto: Brother ${nearestBrotherThread(auto).name}, the picture's darkest colour` : "Auto: the picture's darkest colour";
+  a.title = auto ? `Auto: Brother ${nearestBrotherThread(auto).name}, the picture's colour` : "Auto: each line in its own colour";
   a.setAttribute("aria-label", a.title);
-  $("pic-line-name").textContent = p.line ? `Brother ${nearestBrotherThread(p.line).name}.` : `${auto ? `Brother ${nearestBrotherThread(auto).name}: ` : ""}the picture's darkest colour.`;
+  $("pic-line-name").textContent = p.line ? `Brother ${nearestBrotherThread(p.line).name}.` : (auto ? `Brother ${nearestBrotherThread(auto).name}: the picture's colour.` : "Each line in its own colour's thread.");
 }
 const lightOf = (hex) => { const [r, g, b] = [1, 3, 5].map((k) => parseInt(hex.slice(k, k + 2), 16) / 255); return 0.2126 * r + 0.7152 * g + 0.0722 * b; };
 $("pic-line").onclick = (e) => {
