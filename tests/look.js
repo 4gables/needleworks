@@ -114,15 +114,17 @@ export function sourceGrid(rgba, W, H, { box, ppm, map: [ox, oy, kx, ky], fabric
 // depends on the stitch's direction (Kajiya-Kay), so satin and fill rows at different angles catch the light
 // differently, as real thread does; a slight twist ridge. Later stitches lie over earlier ones. The shading is scaled
 // so a thread's mean over its width and every direction is its own colour: the score's colour term sees the thread's
-// colour, not the lighting.
+// colour, not the lighting. The highlight is the thread's own colour brightened, not white added: added white (0.06
+// of full light on average) lifted every dark thread, Black drew as grey (sRGB 66), Prussian Blue as lavender and
+// Dark Brown as a warm grey, and a picture's black palm tree "sewed" lavender in the look PNGs (2026-11, PX7).
 const LT = (() => { const v = [-0.35, -0.5, 0.8], m = Math.hypot(...v); return v.map((x) => x / m); })();
 const HV = (() => { const v = [LT[0], LT[1], LT[2] + 1], m = Math.hypot(...v); return v.map((x) => x / m); })();
 const KA = 0.3, KD = 0.7, KS = 0.09, KP = 16;
 const NORM = (() => {
   let s = 0, n = 0;
   for (let k = 0; k < 72; k++) {
-    const t = (k * Math.PI) / 72, bx = -Math.sin(t), by = Math.cos(t);
-    for (let q = 0; q < 101; q++) { const u = -1 + q / 50, nz = Math.sqrt(Math.max(0, 1 - u * u)); s += KA + KD * Math.max(0, u * bx * LT[0] + u * by * LT[1] + nz * LT[2]); n++; }
+    const t = (k * Math.PI) / 72, tx = Math.cos(t), ty = Math.sin(t), bx = -ty, by = tx, spec = KS * Math.max(0, 1 - (tx * HV[0] + ty * HV[1]) ** 2) ** (KP / 2);
+    for (let q = 0; q < 101; q++) { const u = -1 + q / 50, nz = Math.sqrt(Math.max(0, 1 - u * u)); s += KA + KD * Math.max(0, u * bx * LT[0] + u * by * LT[1] + nz * LT[2]) + spec * nz; n++; }
   }
   return s / n;
 })();
@@ -155,9 +157,9 @@ export function renderThreads(design, { box, ppm = 10, fabric = "#ffffff", width
       if (cov <= 0) continue;
       const across = qx * nx + qy * ny, u = Math.max(-1, Math.min(1, (along < 0 || along > L ? Math.sign(across || 1) * d : across) / r)), nz = Math.sqrt(1 - u * u);
       const diff = Math.max(0, u * nx * LT[0] + u * ny * LT[1] + nz * LT[2]);
-      const ridge = 1 - 0.06 * Math.cos(2 * Math.PI * ((t / ppm) / 0.5 + u * 0.6)), k = ((KA + KD * diff) / NORM) * ridge, hi = spec * nz;
+      const ridge = 1 - 0.06 * Math.cos(2 * Math.PI * ((t / ppm) / 0.5 + u * 0.6)), k = ((KA + KD * diff + spec * nz) / NORM) * ridge;
       const j = y * w + x;
-      for (let ch = 0; ch < 3; ch++) img[j * 3 + ch] = img[j * 3 + ch] * (1 - cov) + Math.min(1, col[ch] * k + hi) * cov;
+      for (let ch = 0; ch < 3; ch++) img[j * 3 + ch] = img[j * 3 + ch] * (1 - cov) + Math.min(1, col[ch] * k) * cov;
       cover[j] = 1 - (1 - cover[j]) * (1 - cov);
     }
   }

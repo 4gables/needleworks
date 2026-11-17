@@ -303,6 +303,68 @@ stitch round ends with a small sew-out pack.
 - [x] **PX6 Art that stitches well**: an "ask your AI for…" guide and a check of the uploaded picture saying what
   will and won't sew well, and why (`artcheck.js`, `artwords.js`, `recipes.js` `ART`; docs/pictures.md)
 
+
+## Cycle 5: pictures a digitizer would sign (2026-11-16)
+From v34's picture corpus (239 scored cases, 254 files passing pe900_check), the 15 lowest look scores per style
+viewed by reviewers who had not seen the work, plus cycle 4's leftovers. The look baseline was re-saved first under
+the corrected thread render (highlight is the thread's own colour brightened: added white drew Black as grey sRGB 66
+and Prussian Blue as lavender), so every number below is on that renderer. What a human digitizer would do
+differently, by style:
+- Filled: soft edges, JPEG halos and drop shadows learned as threads (a 50 px icon's blur sewn as 4 pastel satin
+  rings; a navy title's shadow sewn orange, another's as a Silver fill); closed-in white wrong both ways (the line
+  mandala's 95 mm white disc and its 24 dots lost: PX1's "cause not found"; a D's counter sewn beige; a framed
+  panel left bare with no word, 86 -> 52); muted and dark threads (navy -> Ultramarine, dusty red -> Carmine, an owl's
+  near-black outline Prussian Blue); thin rules dropped ("2 colours" sews 1); small lettering as fuzzy satin fans and
+  travel showing on top (a logo's 22 trims).
+- Line drawing: inner lines lost where colours are near (no mountain ridge, owl wings, robot grille) because edges
+  come from the quantised labels; one weight and one thread for everything (bold strokes and text as hairlines, every
+  line the darkest thread); fat shapes traced twice or skeletonised into one wobbly spine; sticker die-cut borders,
+  spurs, open junctions; 23-40 trims on text and doodles.
+- Cross-stitch: no backstitch, so every line thinner than a cell is lost; line art filled with white crosses (the
+  closed-in white rule sewing the paper inside a stroke); one 2.5 mm cell for every picture (text unreadable, dots 0,
+  1 or 4 cells); travel bars across open fabric, 21-34 trims.
+- The scorer itself: Cross-stitch colour is 0 on right threads (two 0.4 mm diagonals cover ~43 % of a cell; the blur
+  averages in fabric) and is registered half a cell off (picture centre vs grid centre); a line drawing is scored
+  against the filled picture (colour and shape, 55 %, measure the style, so a near-perfect trace scores 28 and one
+  missing its ridge 36); fabric taken from an unsewn frame; SSIM on flat areas.
+
+Rounds run in parallel, each in `.worktrees/<id>` on its own branch from `origin/main`, with its ports and the
+files (or functions) it owns. Browser batches, `picture_corpus.sh`, `check.sh` and the VM take one lock
+(`lockf .worktrees/heavy.lock ...`) so only one runs at a time (16 GB). A round is proven by look score + scoreboard +
+pe900_check against this baseline and ships as its own release (`docs/releases.md`).
+- [ ] **C5-LK The score sees each style as a person does** (tests/look.js, look() in picture_corpus.html): Cross
+  colour on covered thread only and registered by the grid's origin; line drawings scored against the picture's
+  edges and ink centre lines (recall, precision, doubling, line colour, weight), self-tested with degraded tracings;
+  fabric from inside a sewn frame; no SSIM on flat areas. Re-saves the baseline at release.
+- [ ] **C5-CO Colour (PX7, built for real)**: near-black hue fade from L 15, far threads capped with a chroma gain,
+  3x3 soft-edge sampling (the text PX7 wrote and never coded); fringes and shades judged in mm and relative to the
+  source's pixel size; a shade never given another design colour's thread; muted navy/dusty red/near-black picks.
+  Owns palette.js, regions.js.
+- [ ] **C5-SA Satin finish (PX2 leftovers)**: mitred outer corners at star points (`px2-mitre`: holes 48.8 -> 44.0
+  mm²), square column ends on bold strokes, bare locks back down (PX2 added 6-11 on the samples), tapered strokes and
+  leaf halves as satin, small lettering as columns not fans. Owns digitize.js `columnNets`/`netStitches` and the
+  stroke part of `build`, recipes.js `COLUMNS`.
+- [ ] **C5-KE Keep what matters, cut what costs**: v34's blends cost (60 mm sunset loose 1 -> 7, icon trims 6 -> 11);
+  closed-in white (the mandala's disc and dots, sewn counters, a panel left bare said in the note); thin rules and
+  dots not dropped; travel under later stitches. Owns shade.js, digitize.js `keptParts`/specks/`lostLines`.
+- [ ] **C5-LN Line drawing a person would trace**: edges from the unquantised picture; each line its own thread and
+  weight (run, triple, satin column, dot from the measured width); one centre line per band, outline only for fat
+  shapes; no die-cut borders or spurs, closed junctions; routed by word and column. Owns digitize.js `lineArt`,
+  `lineEnds`, raster.js.
+- [ ] **C5-XS Cross-stitch a stitcher would chart**: backstitch over the crosses for lines under ~0.6 of a cell;
+  closed-in white only inside a filled colour; cell size and grid offset per picture, half crosses on diagonals;
+  travel hidden under crosses to come, rows per colour. Owns digitize.js `crossStitch`.
+- [ ] **C5-DI Direction (PX3 leftover + novel)**: Follow the shape on the Picture panel and whether it is the
+  default; trial: each region's angle from the picture's own texture or brush strokes (structure tensor), kept only
+  where look and pe900_check say so. Owns picture.js direction UI, digitize.js `form` hook, fill.js angles. Wave 2.
+- [ ] **C5-AU Style chosen per picture (novel trial)**: Filled, Line drawing or Cross-stitch picked from the picture
+  (flat colour areas, line share, photo-ness), proven on the corpus as the style a person would pick. Wave 2, after
+  LN and XS (better styles change the choice). Owns artcheck.js and its picture.js hook.
+- [ ] **C5-SB Scoreboard**: refresh `tests/fixtures/quality.json` (pictures: Filled 18 files now, baseline 12) after
+  the rounds above.
+- Parked: JEF (`w6-jef`) needs Janome's order for 27 more thread numbers; no source to measure them from yet (the 127
+  Janome-sponsored designs gave 51).
+
 ## Verdict
 Strong, and kept: the machine layer (locked writer, PEC box, palette, locks, the 5 mm loose-thread rule, 24 hits
 per mm² at every offset), the 4 mm satin border and staggered seams (both from real sew-outs), the exit gate, the

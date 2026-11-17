@@ -135,7 +135,8 @@ Automated checks that each guard a bug class (add a line with every new guard):
 The scoreboard and `pe900_check` say how a file sews; this says how much the sewn result looks like the picture it
 came from. Every picture_corpus case that makes a file is scored; the run ends with a table per kind and style.
 - **Render.** The file's own bytes (`readEmbroidery`, as the preview), each stitch a 0.4 mm thread lit as a cylinder
-  from the upper left with a highlight along its direction (Kajiya-Kay), later stitches over earlier ones, on the
+  from the upper left with a highlight along its direction (Kajiya-Kay; the thread's own colour brightened, the mean
+  kept: added white drew Black as grey and Prussian Blue as lavender, PX7), later stitches over earlier ones, on the
   picture's page colour (the commonest colour of its outermost pixels; white when see-through), 10 px per mm. Pure
   JS: Node and the browser give the same numbers. `render` in the query writes `NAME_look.png`: the picture at the
   stitched size beside the render. Not `js/render.js` (canvas and DOM, screen-sized, not reproducible to the bit).
