@@ -113,8 +113,9 @@ export const PICTURES = { fleck: 3, enclosed: 0.8, eyes: 6, start: 4, edge: 0.75
 // blurred `field` mm. Rows: one grid and angle per group,
 // each row's stretches in one thread by an ordered threshold of `levels`; stretches under `run` mm join their
 // neighbour; a thread's region reaches `reach` mm round its stretches; where a row changes thread the one sewn first
-// runs `over` mm under the next, the next `under` mm back over it.
-export const SHADE = { blur: 0.4, soft: 2, blend: 1.3, border: 8, wide: 6, near: 10, far: 30, band: 12, area: 25, agree: 0.5, field: 1, levels: 2, run: 1, reach: 1, over: 0.3, under: 0.1 };
+// runs `over` mm under the next, the next `under` mm back over it. `hide`: a thread's travel may run this far (mm)
+// inside where a later thread alone sews every row (under rows still to come).
+export const SHADE = { blur: 0.4, soft: 2, blend: 1.3, border: 8, wide: 6, near: 10, far: 30, band: 12, area: 25, agree: 0.5, field: 1, levels: 2, run: 1, reach: 1, over: 0.3, under: 0.1, hide: 0.5 };
 
 // Art that stitches well (PX6: the Picture tab's guide for making a picture, and its check of a picture; core/artcheck.js,
 // docs/pictures.md). What a picture needs, measured at the size it is sewn, from the digitizer's own rules:

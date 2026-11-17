@@ -8,12 +8,12 @@ import { Design } from "./design.js";
 import { FILL, FILL_PATTERNS, SEWN, WORN, fillPolygon, makeRouter, routeBudget, routeFill, tatami } from "./fill.js";
 import { arclen, followRun, normals, resample, run, satin } from "./geom.js";
 import { MARGIN } from "./machines.js";
-import { COLUMNS, LIMITS, PICTURES, ROWS, SHAPES, letterRecipe } from "./recipes.js";
+import { COLUMNS, LIMITS, PICTURES, ROWS, SHADE, SHAPES, letterRecipe } from "./recipes.js";
 import { distanceTransform as wholeDT, label, order, skeletonEdges, tour } from "./raster.js";
 import { cleanShapes } from "./regions.js";
 import { shading } from "./shade.js";
 import { PEC_MATCH, hexToRgb, nearestBrotherThread, pecThread, pyRound, rgbToHex } from "./threads.js";
-import { DEFAULTS, across, deltaE2000, pixels, srgbToLab } from "./palette.js";
+import { DEFAULTS, across, deltaE2000, faintLines, pixels, srgbToLab } from "./palette.js";
 export { DEFAULTS, analyze, labelWith, learnColours, pictureInk, toPalette } from "./palette.js";
 
 export { FILL_PATTERNS, fillPolygon, routeBudget };   // (core/fill.js)
@@ -146,6 +146,88 @@ function clearStart(pts) {
     p = p.slice(1);
   }
   return p;
+}
+
+// Lines too faint for the labels (`lostLines` said them, nothing sewed them): a 1 px hairline rule at 60 mm read as
+// fabric, and a 0.3 mm red rule the labelling broke into dashes 3 mm apart, so "2 colours" sewed 1. Each straight line
+// of the picture labelled as the fabric (palette.js `faintLines`: unlike the fabric by ΔE 20, 2 px clear of any ink,
+// fabric either side) at least FAINT.long mm long is sewn in the sewn colour it is a blend of with the fabric: its
+// mean colour lies FAINT.toward or more of the way from the fabric to that colour, within FAINT.off of the line between
+// them. It is then a thin line like any other (a triple run along it). Returns { labels, lines }.
+const FAINT = { long: 6, toward: 0.3, off: 15 };
+function faintKept(img, labels, w, h, colors, used, res) {
+  const bg = colors.find((c) => c.background);
+  if (!bg || !used.length || img.width !== w || img.height !== h) return { labels, lines: 0 };
+  const P = pixels(img), { cl, len } = faintLines(P, labels, colors, true);
+  const keep = [];
+  for (let c = 1; c < len.length; c++) if (len[c] >= FAINT.long * res) keep.push(c);
+  if (!keep.length) return { labels, lines: 0 };
+  const sum = new Map(keep.map((c) => [c, [0, 0, 0, 0]]));
+  for (let i = 0; i < w * h; i++) { const s = cl[i] && sum.get(cl[i]); if (s) { s[0] += P.lab[3 * i]; s[1] += P.lab[3 * i + 1]; s[2] += P.lab[3 * i + 2]; s[3]++; } }
+  const lab3 = (c) => srgbToLab(...hexToRgb(c.picture || c.hex)), F = lab3(bg), to = new Map();
+  for (const [c, s] of sum) {
+    const M = [s[0] / s[3] - F[0], s[1] / s[3] - F[1], s[2] / s[3] - F[2]];
+    let best = -1, bd = FAINT.off;
+    for (const col of used) {
+      if (col.inside) continue;
+      const C = lab3(col), D = [C[0] - F[0], C[1] - F[1], C[2] - F[2]], DD = D[0] ** 2 + D[1] ** 2 + D[2] ** 2;
+      if (!DD) continue;
+      const t = (M[0] * D[0] + M[1] * D[1] + M[2] * D[2]) / DD, off = Math.hypot(M[0] - t * D[0], M[1] - t * D[1], M[2] - t * D[2]);
+      if (t >= FAINT.toward && t <= 1.3 && off < bd) { bd = off; best = col.id; }
+    }
+    if (best >= 0) to.set(c, best);
+  }
+  if (!to.size) return { labels, lines: 0 };
+  const out = labels.slice();
+  for (let i = 0; i < w * h; i++) if (cl[i] && to.has(cl[i])) out[i] = to.get(cl[i]);
+  return { labels: out, lines: to.size };
+}
+
+// The fabric's colour closed in by a line drawing (a mandala's rings, a colouring page's outlines) is the paper the
+// lines are drawn on, not a colour of the design: sewn, a line-art mandala was a 95 mm disc of white fill under its
+// lines (look 76 -> 67) and its 24 dots fell under the fleck rule inside it. A closed-in piece is left as fabric when
+// under `LINE_INK` of the ink round it is thick (inside a stroke at least COLUMNS.min wide: sewn as a fill or a satin,
+// not a line). White lettering on a badge, a jersey's diamonds, an eye's white, a white star in a red ring and the
+// counters of bold letters are closed in by thick ink and stay sewn. Not when the person asked for it sewn ("all").
+// Returns { labels (a copy when anything changed), mm2: the area left as fabric }.
+const LINE_INK = 0.4;
+function lineInside(labels, w, h, colors, res) {
+  const ins = colors.find((c) => c.inside), bg = colors.find((c) => c.background), n = w * h;
+  if (!ins || !bg) return { labels, mm2: 0 };
+  const m = { w, h, data: new Uint8Array(n) };
+  let any = false;
+  for (let i = 0; i < n; i++) if (labels[i] === ins.id) { m.data[i] = 1; any = true; }
+  if (!any) return { labels, mm2: 0 };
+  // thick ink: within reach of a disc COLUMNS.min across inside one colour (a morphological opening)
+  const thick = new Uint8Array(n), r = (COLUMNS.min / 2) * res;
+  for (const c of colors) {
+    if (c.background || c.inside) continue;
+    const s = { w, h, data: new Uint8Array(n) };
+    let has = false;
+    for (let i = 0; i < n; i++) if (labels[i] === c.id) { s.data[i] = 1; has = true; }
+    if (!has) continue;
+    const dt = distanceTransform(s), core = { w, h, data: new Uint8Array(n).fill(1) };
+    for (let i = 0; i < n; i++) if (dt[i] > r) core.data[i] = 0;
+    const to = distanceTo(core, r + 1);
+    for (let i = 0; i < n; i++) if (s.data[i] && to[i] <= r + 0.5) thick[i] = 1;
+  }
+  const { labels: cl, count } = label(m), rim = new Int32Array(count + 1), fat = new Int32Array(count + 1), size = new Int32Array(count + 1);
+  for (let i = 0; i < n; i++) {
+    const c = cl[i]; if (!c) continue;
+    size[c]++;
+    const x = i % w;
+    for (const j of [x > 0 ? i - 1 : -1, x < w - 1 ? i + 1 : -1, i - w, i + w]) {
+      if (j < 0 || j >= n || cl[j] || labels[j] < 0) continue;
+      rim[c]++; if (thick[j]) fat[c]++;
+    }
+  }
+  const go = new Uint8Array(count + 1);
+  let mm2 = 0;
+  for (let c = 1; c <= count; c++) if (rim[c] && fat[c] < LINE_INK * rim[c]) { go[c] = 1; mm2 += size[c]; }
+  if (!mm2) return { labels, mm2: 0 };
+  const out = labels.slice();
+  for (let i = 0; i < n; i++) if (cl[i] && go[cl[i]]) out[i] = bg.id;
+  return { labels: out, mm2: mm2 / (res * res) };
 }
 
 // Flecks take the colour round them before anything is sewn (Wilcom's "Details" slider and mySewnet's Despeckle
@@ -367,7 +449,11 @@ function build(img, analysis, opts) {
   const used0 = colors.filter((c) => !c.background && c.area > 0 && !(o.skip || []).includes(c.id));
   const level = PICTURES.details[o.details] || PICTURES.details.most;
   // (the picture made into clean shapes first: core/regions.js)
-  const clean = o.shapes === false ? { labels: analysis.labels } : cleanShapes(analysis.labels, w, h, colors, o.res, { img, keep: o.details === "all" ? "all" : "" });
+  // (the paper inside a line drawing stays fabric, unless the person asked for the closed-in colour sewn)
+  // (and lines too faint to label sewn in the colour they are a blend of)
+  const faint = faintKept(img, analysis.labels, w, h, colors, used0, o.res);
+  const paper = o.inside === "all" ? { labels: faint.labels, mm2: 0 } : lineInside(faint.labels, w, h, colors, o.res);
+  const clean = o.shapes === false ? { labels: paper.labels } : cleanShapes(paper.labels, w, h, colors, o.res, { img, keep: o.details === "all" ? "all" : "" });
   const { labels, folded } = foldFlecks(clean.labels, w, h, colors, used0, o.res);
   // (soft gradients sewn as blends of two threads, core/shade.js: `of` says where a colour sews, `rows` its rows there)
   const sh = shading(img, labels, colors, used0, o.res, o);
@@ -380,7 +466,7 @@ function build(img, analysis, opts) {
   const used = colors.filter((c) => !c.background && c.area > 0 && !(o.skip || []).includes(c.id))
     .sort((a, b) => b.lightness - a.lightness);   // light first, dark details on top
   const summary = [], stitched = new Set(used.map((c) => c.id));
-  const fine = { narrowMm2: 0, hairlines: 0, inkMm2: 0, folded, left: 0, columns: 0, shaded: Math.round(sh.area), shades: sh.found || 0, offer: sh.offer, ...(o.shadeDebug ? { shadeDebug: sh.debug } : {}) };   // details too small to stitch cleanly (shown as a hint)
+  const fine = { narrowMm2: 0, hairlines: 0, inkMm2: 0, folded, left: 0, columns: 0, paper: Math.round(paper.mm2), faint: faint.lines, shaded: Math.round(sh.area), shades: sh.found || 0, offer: sh.offer, ...(o.shadeDebug ? { shadeDebug: sh.debug } : {}) };   // details too small to stitch cleanly (shown as a hint)
   for (let i = 0; i < w * h; i++) if (stitched.has(labels[i])) fine.inkMm2++;
   fine.inkMm2 /= res * res;
   // ignore specks: under 1.5 mm², or under 4 mm² and under 2.5 mm across (a dot, not a stem: each speck left was a
@@ -625,6 +711,19 @@ function build(img, analysis, opts) {
     for (let i = 0; i < w * h; i++) if (cl[i]) comps[cl[i] - 1].pixels.push(i);
     let blocks = [];
     const filled = new Uint8Array(count + 1);   // shapes sewn as fills
+    // In a blend (shade.js) a thread's stretches are combs reaching into the other thread's side, and the way between
+    // them lay over its own finished rows: a trim each (an icon's sky 11 -> 17 trims). Its travel may also run where a
+    // later thread alone sews every row, SHADE.hide mm inside that (its rows cover it), as a fill's travel runs under
+    // a later colour's fill between shapes.
+    let under2 = null;
+    if (sh.found && later.size) {
+      const m = { w, h, data: new Uint8Array(w * h).fill(1) };
+      for (let i = 0; i < w * h; i++) { const s = sh.sole(i); if (s >= 0 && later.has(s) && solid[i]) m.data[i] = 0; }
+      const to = distanceTransform({ w, h, data: m.data.map((v) => 1 - v) });
+      under2 = new Uint8Array(w * h);
+      for (let i = 0; i < w * h; i++) if (!m.data[i] && to[i] > SHADE.hide * res) under2[i] = 1;
+    }
+    const cellOf = (comp) => (x, y) => { const i = y * w + x; return comp.labels[i] !== comp.id ? (under2 && under2[i] ? 2 : 0) : comp.dt[i] <= PICTURES.edge * res ? 2 : 1; };
     for (const comp of comps) {
       const mine = comp.pixels.filter((i) => sh.of(i, col.id));
       if (!mine.length) continue;
@@ -636,7 +735,7 @@ function build(img, analysis, opts) {
       const shaded = sh.rows(col.id, comp, mask, { spacing: o.density, stitch: 3.5, pull: widthMm < 2 ? 0.05 : 0.15 });
       const under = shaded ? shaded.under : tatami(mask, comp, res, { angle: angle + 90, spacing: 2.5, stitch: 3, inset: 0.4, pull: 0 });
       const fill = shaded ? shaded.fill : tatami(mask, comp, res, { angle, spacing: o.density, stitch: 3.5, pull: widthMm < 2 ? 0.05 : 0.15 });
-      blocks.push({ centre, paths: routeFill([under, fill], comp, mask, res, budget, WORN, false, 0, null, PICTURES.edge).map(toMm), kind: "fill", comp: comp.id, thread: fillThread(mine.length), meant: dot(comp.id) || (mark(comp.id) && size[comp.id] < 2 * dotPx) });
+      blocks.push({ centre, paths: routeFill([under, fill], comp, mask, res, budget, WORN, false, 0, shaded && under2 ? cellOf(comp) : null, PICTURES.edge, shaded && under2 ? 90 : 30).map(toMm), kind: "fill", comp: comp.id, thread: fillThread(mine.length), meant: dot(comp.id) || (mark(comp.id) && size[comp.id] < 2 * dotPx) });
       filled[comp.id] = 1;
     }
     if (anyThin) {
@@ -649,8 +748,9 @@ function build(img, analysis, opts) {
         const mm = seq.map(([p, kind]) => [toMm(p), kind]);
         return { mm, len: mm.reduce((a, [p, kind]) => a + (kind === "run" ? arclen(p).at(-1) : 0), 0) };
       // (a piece under 1.5 mm of line is a dot: sewn four times over with two locks and a trim, beside a bigger piece
-      // too; 17-43 per picture were kept for being within LINK of one)
-      }).filter((t) => t.len >= 1.5);
+      // too; 17-43 per picture were kept for being within LINK of one. Unless it is one dash of a line broken into
+      // dashes, none of them 1.5 mm, that is GROUP mm long in all: below)
+      }).filter((t) => t.len >= 0.4);
       // A piece counts with the pieces of this line colour within LINK of it (the letters of a word, the dashes of a
       // broken stem): a group under GROUP mm of line in all is a speck (each one a trim and two locks), dropped.
       const LINK = 2, GROUP = 6;
@@ -666,10 +766,14 @@ function build(img, analysis, opts) {
           }
         }
       });
-      const total = new Map();
-      walks.forEach((t, i) => total.set(find(i), (total.get(find(i)) || 0) + t.len));
+      // (a group of nothing but short dashes is a line the labelling broke: a 0.3 mm red rule at 60 mm came out as 32
+      // dashes under 1 mm and was dropped whole, its colour with it. Its dashes are kept and sewn one after the
+      // other; in a group with a longer piece the short ones stay dots, dropped)
+      const total = new Map(), long = new Map();
+      walks.forEach((t, i) => { total.set(find(i), (total.get(find(i)) || 0) + t.len); if (t.len >= 1.5) long.set(find(i), (long.get(find(i)) || 0) + t.len); });
+      for (let i = walks.length - 1; i >= 0; i--) if (walks[i].len < 1.5 && long.get(find(i))) walks[i].drop = true;
       walks.forEach((t, i) => {
-        if (total.get(find(i)) < GROUP) return;
+        if (t.drop || (long.get(find(i)) || total.get(find(i))) < GROUP) return;
         fine.hairlines++;
         const paths = t.mm.map(([p, kind]) => {
           const q = followRun(p, 1.5, 0.1, 0.6);
@@ -889,7 +993,8 @@ function build(img, analysis, opts) {
   if (!d.stitches.length) throw nothing(used, o);
   // (eased, a satin's short stitches at a tight tip can come to 0.3 mm: dropped, as the Design tab's are)
   d.finish({ untiny: true });
-  return { design: d, summary, fine };
+  // (the labels as sewn: the paper inside a line drawing is fabric, faint lines are their colour)
+  return { design: d, summary, fine, labels: paper.labels !== analysis.labels ? paper.labels : undefined };
 }
 
 // why a picture with colours to sew came out empty (code: what the page can offer to change)
