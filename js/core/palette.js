@@ -265,11 +265,15 @@ const nearestOf = (lab, i, C, first = C.length) => {
 // and would steal a thread), and each pixel's cluster. `lines`: then the colours of lines a pixel or two wide, which
 // have no flat pixel (a logo's teal rule, a red rule, a green stem: each sewn in the colour beside it). `real` marks
 // their pixels.
-function cluster(P, k, skip, lines = false) {
+// `px`: the picture's own pixel on this copy (copy px, whole): flat is judged that far apart. A 50 px heart blown up
+// 18 times has a blur 18 px wide whose every pixel is within ΔE 6 of the next, and its blend was learned as four
+// pastel threads sewn as rings round the heart and the dot.
+function cluster(P, k, skip, lines = false, px = 1) {
   const { w, n, lab } = P, opaque = skip ? P.opaque.filter((i) => !skip[i]) : P.opaque;
   const d2 = (i, j) => (lab[i * 3] - lab[j * 3]) ** 2 + (lab[i * 3 + 1] - lab[j * 3 + 1]) ** 2 + (lab[i * 3 + 2] - lab[j * 3 + 2]) ** 2;
-  const inner = (i) => { const x = i % w; return x > 0 && x < w - 1 && i >= w && i < n - w; };
-  const flat = opaque.filter((i) => !inner(i) || Math.max(d2(i, i - 1), d2(i, i + 1), d2(i, i - w), d2(i, i + w)) < 36);   // ΔE < 6 to every neighbour
+  const inner = (i, s = 1) => { const x = i % w; return x >= s && x < w - s && i >= s * w && i < n - s * w; };
+  const flat = opaque.filter((i) => !inner(i) || Math.max(d2(i, i - 1), d2(i, i + 1), d2(i, i - w), d2(i, i + w)) < 36)   // ΔE < 6 to every neighbour
+    .filter((i) => px < 2 || !inner(i, px) || Math.max(d2(i, i - px), d2(i, i + px), d2(i, i - px * w), d2(i, i + px * w)) < 36);
   const train = flat.length > opaque.length * 0.2 ? flat : opaque, C = [];
   if (train.length) for (const c of kmeans(lab, train, Math.min(k, train.length)))
     if (!C.some((d) => (c[0] - d[0]) ** 2 + (c[1] - d[1]) ** 2 + (c[2] - d[2]) ** 2 < 4)) C.push(c);
@@ -373,7 +377,8 @@ function learnOnce(img, opts = {}) {
   if (smooth) { img = smoothed(img, Math.max(2, step)); P = pixels(img); }
   const { w, h, n, opaque, hasAlpha } = P, { data } = img;
   const cut = o.removeBackground && !hasAlpha;
-  let { C, labels, real } = cluster(P, FINE, null, true), frame = null;
+  const px = Math.max(1, Math.floor(o.scale || 1));
+  let { C, labels, real } = cluster(P, FINE, null, true, px), frame = null;
   // a frame (a band at the picture's edge) isn't part of the design, and isn't the background: learn again without it
   // (found on a coarse clustering: fine clusters chain a backdrop's shades into the frame's colour family)
   // (`edge`: the person said the band is part of the drawing, "Sew the edge band too": it's sewn, and the fabric is
@@ -383,7 +388,7 @@ function learnOnce(img, opts = {}) {
     const q = cluster(P, 5, null);
     frame = findFrame(q.labels, w, h, q.C); inset = frame?.inset ?? null;
     if (frame && o.edge) frame = null;
-    if (frame) ({ C, labels, real } = cluster(P, FINE, frame.frame, true));
+    if (frame) ({ C, labels, real } = cluster(P, FINE, frame.frame, true, px));
   }
   const K = C.length, area = new Array(K).fill(0), rgb = C.map(() => [0, 0, 0]);
   for (let i = 0; i < n; i++) {
@@ -428,7 +433,8 @@ function learnOnce(img, opts = {}) {
   // of it (a shadow across the backdrop)
   const e76 = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
   const isBg = (j) => bg >= 0 && (j === bg || e76(C[j], C[bg]) < 8 || (e76(C[j], C[bg]) < 15 && ring(j) >= 0.1) || (e76(C[j], C[bg]) < 20 && ring(j) >= 0.03));
-  // A pale colour (ΔE00 under 15 from the fabric) all but a fifth of which lies within 3 px of a stronger colour it
+  // A pale colour (ΔE00 under 15 from the fabric) all but a fifth of which lies within 3 px (3 of the picture's own px
+  // when it was blown up) of a stronger colour it
   // isn't a shade of (over 1.5 x SAME from each) is that colour's fringe, fabric too: a JPEG's halo round blue
   // lettering took two threads, Beige and Cream Brown.
   const fringe = new Uint8Array(K);
@@ -437,7 +443,7 @@ function learnOnce(img, opts = {}) {
     const m = { w, h, data: new Uint8Array(n) };
     for (let i = 0; i < n; i++) m.data[i] = labels[i] >= 0 && strong[labels[i]] ? 0 : 1;
     const dist = distanceTransform(m), hug = new Int32Array(K);
-    for (let i = 0; i < n; i++) if (labels[i] >= 0 && dist[i] <= 3) hug[labels[i]]++;
+    for (let i = 0; i < n; i++) if (labels[i] >= 0 && dist[i] <= 3 * px) hug[labels[i]]++;
     for (let j = 0; j < K; j++) if (area[j] && pale(j) && hug[j] >= 0.8 * area[j] && C.every((c, q) => !strong[q] || deltaE2000(C[j], c) > 1.5 * SAME)) fringe[j] = 1;
   }
   // Merge the design's clusters, cheapest first: the colour difference, made cheaper for a cluster that is small or
@@ -468,16 +474,32 @@ function learnOnce(img, opts = {}) {
   // along a third of their edge to the fabric too, when threads ran short, erased etsy_1's pale flowers.) Found from the fabric inwards, a shade at a time, so a shadow's darker core goes with its fading rim. A
   // shadow had been sewn as an orange halo round navy lettering, or as three greys.
   if (bg >= 0) {
-    const { lab } = P, d2 = (i, j) => (lab[i * 3] - lab[j * 3]) ** 2 + (lab[i * 3 + 1] - lab[j * 3 + 1]) ** 2 + (lab[i * 3 + 2] - lab[j * 3 + 2]) ** 2;
-    const out = (l) => l < 0 || isBg(l) || fringe[l], lim = C.map((c) => Math.min(20, 0.6 * e76(c, C[bg])) ** 2);
+    // (each side the mean of its own side's pixels among the 3 x 3 round it: a photo's grain and JPEG noise per pixel
+    // is as big as a pale shadow's whole limit, and a pet photo's drop shadow read 0.70 and was sewn as a grey blob.
+    // Its own side's only: a 3 x 3 across a doodle sheet's pale 2 px lines took in the paper beyond them, they read soft
+    // and were lost)
+    const { lab } = P, side = (i, fab) => {
+      const m = [0, 0, 0]; let k = 0;
+      for (let dy = -w; dy <= w; dy += w) for (let dx = -1; dx <= 1; dx++) {
+        const j = i + dy + dx, l = labels[j];
+        if (l < 0 || out(l) !== fab) continue;
+        m[0] += lab[j * 3]; m[1] += lab[j * 3 + 1]; m[2] += lab[j * 3 + 2]; k++;
+      }
+      return k ? m.map((v) => v / k) : [lab[i * 3], lab[i * 3 + 1], lab[i * 3 + 2]];
+    };
+    const d2 = (i, j) => { const p = side(i, false), q = side(j, true); return (p[0] - q[0]) ** 2 + (p[1] - q[1]) ** 2 + (p[2] - q[2]) ** 2; };
+    const out = (l) => l < 0 || isBg(l) || !!fringe[l], lim = C.map((c) => Math.min(20, 0.6 * e76(c, C[bg])) ** 2);
     for (let round = 0; round < 12; round++) {
       const soft = new Int32Array(K), all = new Int32Array(K);
-      for (let y = 3; y < h - 3; y++) for (let x = 3; x < w - 3; x++) {
+      for (let y = 4; y < h - 4; y++) for (let x = 4; x < w - 4; x++) {
         const i = y * w + x;
         for (const s of [1, w]) {
           const j = i + s, a = labels[i], b = labels[j];
           if (a < 0 || b < 0 || out(a) === out(b)) continue;
           const [k, inner, outer] = out(a) ? [b, j + 2 * s, i - 2 * s] : [a, i - 2 * s, j + 2 * s];
+          // (judged only where two steps in is still the colour: a shadow's core runs thin between the lettering and
+          // its paler rim, and two steps in was the navy, a step, so a soft rim read 0.35)
+          if (labels[inner] !== k) continue;
           all[k]++; if (d2(inner, outer) < lim[k]) soft[k]++;
         }
       }
@@ -563,12 +585,22 @@ function learnOnce(img, opts = {}) {
   // another hue (over HUE degrees off, in full from 90), and half that for one of another hue family. Brother's
   // threads have no sage or dusty blue: nearest by difference alone, etsy_1's sage leaves were "Gray" and its blue
   // flowers "Silver", so the picture sewed as grey silhouettes; etsy_2's sage stems were Beige.
-  const cost = (lab, q) => {
+  // Near-black: a colour's hue counts in full from L 15, fading to none at L 0 (thread that dark reads black: a
+  // #10002b palm, L 3, was Prussian Blue at ΔE00 15 over Black at 19).
+  const cost = (lab0, q) => {
+    const f = Math.min(1, Math.max(0, lab0[0]) / 15), lab = f < 1 ? [lab0[0], lab0[1] * f, lab0[2] * f] : lab0;
     const v = deltaE2000(lab, q), c = Math.hypot(lab[1], lab[2]) * Math.min(1, lab[0] / 30);
     if (c <= HUED) return v;
     const k = 0.08 * (c - HUED), grey = Math.min(1, Math.max(0, (10 - Math.hypot(q[1], q[2])) / 6));
     const off = Math.max(Math.min(1, Math.max(0, hueOff(lab, q) - HUE) / 55), 0.5 * across(lab, q));
     return v * (1 + k * (grey + (1 - grey) * off));
+  };
+  // (judging only, not choosing: a thread far more colourful than the colour, over 1.6 x its chroma and 20 more, costs
+  // up to 0.8 x more, in full 20 past that. ΔE00 squeezes chroma differences at high chroma: a dog's mid-brown head
+  // rim #8d633b got bright Reddish Brown at ΔE00 16 beside Light Brown's 12, under the "worse" bar)
+  const gain = (lab, q) => {
+    const cp = Math.hypot(lab[1], lab[2]) * Math.min(1, Math.max(0, lab[0]) / 15), cq = Math.hypot(q[1], q[2]);
+    return 1 + 0.8 * Math.min(1, Math.max(0, cq - Math.max(1.6 * cp, cp + 20)) / 20);
   };
   // A colour made of several (merged at a low count) takes the thread that suits most of its solid parts best, each
   // part's difference capped at FAR: the thread nearest their mean suited none of them (etsy_5's grass and Woodstock
@@ -583,7 +615,11 @@ function learnOnce(img, opts = {}) {
     const parts = [...sum.values()].map((u) => ({ lab: srgbToLab(u[0] / u[3], u[1] / u[3], u[2] / u[3]), w: u[3] }));
     return parts.length ? parts : g.members.map((j) => ({ lab: C[j], w: area[j] }));
   };
-  const fit = (parts, q) => { let s = 0, t = 0; for (const p of parts) { s += p.w * Math.min(FAR, cost(p.lab, q)); t += p.w; } return s / t; };
+  // (each part capped at FAR for choosing, the uncapped sum breaking ties: all capped, every far thread tied and the
+  // first PEC entry won, a whale's pale blue #8eacd0 was Prussian Blue. `judge`: uncapped, with the chroma gain, for
+  // whether a thread is worse than the colour's own)
+  const fit = (parts, q) => { let s = 0, u = 0, t = 0; for (const p of parts) { const v = cost(p.lab, q); s += p.w * Math.min(FAR, v); u += p.w * v; t += p.w; } return s / t + 1e-6 * Math.min(1e3, u / t); };
+  const judge = (parts, q) => { let s = 0, t = 0; for (const p of parts) { s += p.w * cost(p.lab, q) * gain(p.lab, q); t += p.w; } return s / t; };
   // (nor the background's thread, unless it's that colour: etsy_7's pale grey lines on white were "White")
   const bgHex = bg >= 0 ? rgbToHex(rgb[bg].map((v) => Math.round(v / Math.max(1, area[bg])))) : null;
   const bgThread = bgHex ? nearestBrotherThread(bgHex).index : -1;
@@ -601,9 +637,9 @@ function learnOnce(img, opts = {}) {
         if (v < od) { od = v; own = i; }
         if (!taken.has(i) && i !== g.ban && v < bd) { bd = v; best = i; }
       });
-      g.own = od; g.got = bd;
       if (best < 0) continue;
-      if (best !== own && bd > Math.max(15, od + 10) && !worse) worse = [g, taken.get(own), own];
+      g.own = judge(g.parts, pec[own]); g.got = judge(g.parts, pec[best]);
+      if (best !== own && g.got > Math.max(15, g.own + 10) && !worse) worse = [g, taken.get(own), own];
       taken.set(best, g); g.thread = pecThread(best);
     }
     if (!worse) break;
@@ -611,7 +647,7 @@ function learnOnce(img, opts = {}) {
     // lilac took Lavender and its blue flowers, closer to Lavender, had none left at 6 colours)
     const [g, by, own] = worse;
     if (by.ban === undefined && by.got <= Math.max(15, by.own + 10) && g.ban === undefined) {
-      const alt = Math.min(...pec.map((q, i) => (q && i !== own && !taken.has(i) && (i !== bgThread || fit(by.parts, q) <= SAME) ? fit(by.parts, q) : Infinity)));
+      const alt = Math.min(...pec.map((q, i) => (q && i !== own && !taken.has(i) && (i !== bgThread || fit(by.parts, q) <= SAME) ? judge(by.parts, q) : Infinity)));
       if (alt <= Math.max(15, by.own + 10)) { by.ban = own; continue; }
     }
     join(by, g); groups.splice(groups.indexOf(g), 1);
@@ -662,7 +698,7 @@ function learnOnce(img, opts = {}) {
   }
   // (a shade or fringe left out on purpose is no lost line)
   const lost = groups.length ? lostLines(P, labels.map((l) => (l < 0 ? -1 : fringe[l] ? -2 : map[l])), colors) / Math.max(w, h) : 0;
-  return { w, h, C, first: C.first ?? C.length, map, colors, bg: bgId, inside, frame, boxes, hasAlpha, smooth, flat: share, scale: o.scale || 0,
+  return { w, h, C, first: C.first ?? C.length, map, colors, bg: bgId, inside, frame, boxes, hasAlpha, smooth, flat: share, scale: o.scale || 0, shade: fringe,
     merged: Math.max(0, o.colors - groups.length), empty, lost };
 }
 // Label a picture's pixels with the colours learned from it (possibly from a copy at another size). `crop`
@@ -701,7 +737,10 @@ export function labelWith(img, model, crop = [0, 0, 1, 1], { inside = "auto", re
   // (no folding of colours that are mostly edge into their neighbours, as raw k-means clusters needed: the colours
   // here are merged already, and folding sent etsy_7's thin pastel doodles into the background)
   const G = model.colors.length;
-  for (const i of opaque) if (!(frame && frame[i])) labels[i] = model.map[nearestOf(lab, i, model.C, model.first)];
+  // (`shaded`: pixels of a fringe or soft shade, fabric by the model: a closed-in piece that is much shade is no
+  // closed-in colour, see below)
+  const shaded = new Uint8Array(n);
+  for (const i of opaque) if (!(frame && frame[i])) { const j = nearestOf(lab, i, model.C, model.first); labels[i] = model.map[j]; if (model.shade?.[j]) shaded[i] = 1; }
   // majority filter cleans anti-aliased fringes and speckle
   for (let pass = 0; pass < 2; pass++) {
     const out = labels.slice(), cnt = new Int16Array(G + 1);
@@ -743,14 +782,17 @@ export function labelWith(img, model, crop = [0, 0, 1, 1], { inside = "auto", re
     for (let i = 0; i < n; i++) if (labels[i] === B && !open[i]) { m.data[i] = 1; any = true; }
     if (any) {
       const { labels: cl, count } = label(m), dt = distanceTransform(m), keep = new Uint8Array(count + 1).fill(1);
-      const size = new Int32Array(count + 1), wide = new Float64Array(count + 1), x0 = new Int32Array(count + 1).fill(w), x1 = new Int32Array(count + 1).fill(-1), y0 = new Int32Array(count + 1).fill(h), y1 = new Int32Array(count + 1).fill(-1);
+      const shade = new Int32Array(count + 1), size = new Int32Array(count + 1), wide = new Float64Array(count + 1), x0 = new Int32Array(count + 1).fill(w), x1 = new Int32Array(count + 1).fill(-1), y0 = new Int32Array(count + 1).fill(h), y1 = new Int32Array(count + 1).fill(-1);
       for (let i = 0; i < n; i++) {
         const c = cl[i]; if (!c) continue;
-        const x = i % w, y = (i - x) / w; size[c]++; if (dt[i] > wide[c]) wide[c] = dt[i];
+        const x = i % w, y = (i - x) / w; size[c]++; shade[c] += shaded[i]; if (dt[i] > wide[c]) wide[c] = dt[i];
         if (x < x0[c]) x0[c] = x; if (x > x1[c]) x1[c] = x; if (y < y0[c]) y0[c] = y; if (y > y1[c]) y1[c] = y;
       }
       if (res) for (let c = 1; c <= count; c++)
         if (size[c] < 1.5 * res * res || (size[c] < 4 * res * res && x1[c] - x0[c] < 2.5 * res && y1[c] - y0[c] < 2.5 * res) || 2 * wide[c] < 0.6 * res) keep[c] = 0;
+      // (nor a piece that is a third shade: soft_shadow's O, its counter half drop shadow, was sewn White over the
+      // shadow once the shadow was fabric. It stays fabric, as the picture shows it)
+      for (let c = 1; c <= count; c++) if (shade[c] >= 0.3 * size[c]) keep[c] = 0;
       for (let c = 1; c <= count; c++) if (keep[c]) closed += size[c];
       if (inside === "all" || (inside === "auto" && !model.spare)) for (let i = 0; i < n; i++) if (cl[i] && keep[cl[i]]) labels[i] = model.inside;
     }
