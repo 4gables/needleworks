@@ -18,7 +18,7 @@ this page; ?only=name,name runs some images, ?quick one case each). Title: DONE 
 import { DENSITY, LEARN, MOST, contentBox, cutPart, findParts, lostMuch, picturePlan, pictureImage, sewSized } from "../../js/core/digitize.js";
 import { artSaid } from "../../js/artwords.js";
 import { COLOR_CHANGE, JUMP, STITCH, TRIM, designStats, readEmbroidery, validatePES } from "../../js/core/formats.js";
-import { lookScore, pageColour, renderThreads, sourceGrid, toRGBA, variantRules, variants } from "../look.js";
+import { bandGrid, crossRules, crossVariants, frameOf, lineRules, lineVariants, linOf, lookScore, pageColour, renderThreads, sourceGrid, toRGBA, variantRules, variants } from "../look.js";
 import { ART } from "./art.js";
 import { hoop as getHoop } from "../../js/core/machines.js";
 import { distanceTransform, label } from "../../js/core/raster.js";
@@ -512,17 +512,47 @@ async function renderLabels(tag, r) {
 
 // ---------- looks like the picture (tests/look.js) ----------
 // The file as the preview reads it (its own bytes, its own thread colours), drawn as thread at 10 px per mm on the
-// picture's page colour, against the picture at the stitched size over the same box (the sized crop and 2 mm round it).
+// picture's page colour, against the picture at the stitched size over the same box (the sized crop and 2 mm round it),
+// scored as its style is seen (tests/look.js: Filled and Cross-stitch against the picture, a line drawing against
+// the picture's own lines).
 const PPM = 10, WORSE = 2;   // (WORSE: a kind's mean look this many points under the baseline fails the run)
-async function look(tag, src, r, plan, turn) {
-  const Wmm = plan.w / r.res, Hmm = plan.h / r.res, box = [-Wmm / 2 - 2, -Hmm / 2 - 2, Wmm / 2 + 2, Hmm / 2 + 2];
-  const A = sourceGrid(src.d, src.w, src.h, { box, ppm: PPM, fabric: src.fabric, map: [plan.crop.sx + plan.crop.sw / 2, plan.crop.sy + plan.crop.sh / 2, plan.crop.sw / Wmm, plan.crop.sh / Hmm] });
+async function look(tag, src, r, plan, turn, style) {
+  const res = r.res, Wmm = plan.w / res, Hmm = plan.h / res, cell = r.cell || 2.5, c = cell * res;
+  // where mm 0,0 lies in the working copy: the picture's centre, but a cross-stitch's grid centre (crossStitch centres
+  // the cells that fit, not the picture: the remainder put every cross up to half a cell right and down of where the
+  // score looked for it, as a shift). r.origin when the worker sends it, else crossStitch's own rule.
+  const org = r.origin || (style === "cross" ? [(Math.floor(plan.w / c) * c) / 2, (Math.floor(plan.h / c) * c) / 2] : [plan.w / 2, plan.h / 2]);
+  const L = org[0] / res, T = org[1] / res, box = [-L - 2, -T - 2, Wmm - L + 2, Hmm - T + 2];
+  const kx = plan.crop.sw / Wmm, ky = plan.crop.sh / Hmm, map = [plan.crop.sx + L * kx, plan.crop.sy + T * ky, kx, ky];
+  // a frame round the picture (look.js frameOf): the fabric is the colour inside it, and a frame left out is not
+  // counted as part of the picture
+  const fr = frameOf(src.d, src.w, src.h), fabric = fr ? fr.inner : src.fabric;
   // (the file's coordinates start where its writer put them: moved onto the pattern's, which the plan is centred on)
   const file = readEmbroidery(r.bytes), a = designStats(r.pattern).bounds, b = designStats(file).bounds;
-  const B = renderThreads(file, { box, ppm: PPM, fabric: src.fabric, turn, shift: [a[0] - b[0], a[1] - b[1]] });
+  const B = renderThreads(file, { box, ppm: PPM, fabric, turn, shift: [a[0] - b[0], a[1] - b[1]] });
+  const A = sourceGrid(src.d, src.w, src.h, { box, ppm: PPM, fabric, map });
+  if (fr) {
+    const band = bandGrid({ box, ppm: PPM, map }, src.w, src.h, fr.k), F = linOf(fabric);
+    let n = 0, cov = 0;
+    for (let i = 0; i < band.length; i++) if (band[i]) { n++; cov += B.cover[i]; }
+    const sewn = n ? cov / n : 0;
+    if (sewn < 0.5) for (let i = 0; i < band.length; i++) if (band[i]) A.img.set(F, i * 3);
+    log(`  (${tag}: a ${fr.k} px frame, fabric ${fr.inner}, the frame ${Math.round(100 * sewn)}% sewn${sewn < 0.5 ? ": left out of the picture" : ""})`);
+  }
   if (RENDER) await savePair(`${tag}_look`, A, B);
-  return lookScore(A.img, B.img, A.w, A.h, PPM, src.fabric);
+  const sc = lookScore(A.img, B.img, A.w, A.h, PPM, fabric, { style, cover: B.cover, cell, maps: RENDER });
+  // (?render, a line drawing: NAME_lines.png, the picture's lines green where traced and red where not, band centres
+  // grey, the stitches blue)
+  if (sc.maps) {
+    const { w, h, E, hit, ridge, S } = sc.maps, c2 = new OffscreenCanvas(w, h), g = c2.getContext("2d"), d = g.createImageData(w, h);
+    for (let i = 0; i < w * h; i++) d.data.set(E[i] ? (hit[i] ? [0, 170, 0, 255] : [230, 0, 0, 255]) : S[i] ? [90, 120, 255, 255] : ridge[i] ? [150, 150, 150, 255] : [255, 255, 255, 255], i * 4);
+    g.putImageData(d, 0, 0); await fetch(`/save/${tag}_lines.png`, { method: "POST", body: await c2.convertToBlob() });
+    delete sc.maps;
+  }
+  return sc;
 }
+// a case's look and its parts, short
+const lookParts = (l) => `${l.look} (${("recall" in l ? ["recall", "precision", "doubling", "colour", "weight"] : ["colour", "shape", "outline", "detail", "structure"]).map((p) => `${p.slice(0, 4)} ${l[p]}`).join(" ")})`;
 // ?render: the picture at the stitched size beside its thread render
 async function savePair(name, A, B) {
   const c = new OffscreenCanvas(A.w * 2 + 20, A.h), g = c.getContext("2d");
@@ -534,14 +564,28 @@ async function savePair(name, A, B) {
 // two tones) must rank as a person ranks them (tests/look.js variantRules)
 async function lookSelfTest() {
   const bad = [];
-  for (const name of ["logo_regular_2c", "art_cartoon_cat", "art_photo_dog", "art_water_flowers"]) {
+  const grid = async (name) => {
     const spec = PICS.find((p) => p.name === name), bitmap = await picture(spec), box = contentBox(bitmap), Wmm = 80, Hmm = (80 * box.sh) / box.sw;
     const c = new OffscreenCanvas(bitmap.width, bitmap.height), g = c.getContext("2d"); g.drawImage(bitmap, 0, 0);
     const d = g.getImageData(0, 0, c.width, c.height).data, fabric = pageColour(d, c.width, c.height);
-    const A = sourceGrid(d, c.width, c.height, { box: [-Wmm / 2 - 2, -Hmm / 2 - 2, Wmm / 2 + 2, Hmm / 2 + 2], ppm: PPM, fabric, map: [box.sx + box.sw / 2, box.sy + box.sh / 2, box.sw / Wmm, box.sh / Hmm] });
-    const v = variants(A.img, A.w, A.h, PPM, fabric), broken = variantRules(v);
-    log(`  look check ${name}: ${Object.entries(v).map(([k, s]) => `${k} ${s.look}`).join(", ")}${broken.map((b) => "\n       FAIL " + b).join("")}`);
+    return { fabric, A: sourceGrid(d, c.width, c.height, { box: [-Wmm / 2 - 2, -Hmm / 2 - 2, Wmm / 2 + 2, Hmm / 2 + 2], ppm: PPM, fabric, map: [box.sx + box.sw / 2, box.sy + box.sh / 2, box.sw / Wmm, box.sh / Hmm] }) };
+  };
+  const check = (what, name, v, broken) => {
+    log(`  look check ${what} ${name}: ${Object.entries(v).map(([k, s]) => `${k} ${s.look}`).join(", ")}${broken.map((b) => "\n       FAIL " + b).join("")}`);
     bad.push(...broken);
+  };
+  for (const name of ["logo_regular_2c", "art_cartoon_cat", "art_photo_dog", "art_water_flowers"]) {
+    const { A, fabric } = await grid(name), v = variants(A.img, A.w, A.h, PPM, fabric);
+    check("fill", name, v, variantRules(v));
+  }
+  // (line drawings: tracings by hand of a drawing's bands, a cartoon's outlines over colour, text, a landscape's areas)
+  for (const name of ["crayon", "art_cartoon_cat", "logo_regular_2c", "art_flat_landscape"]) {
+    const { A, fabric } = await grid(name), v = lineVariants(A.img, A.w, A.h, PPM, fabric);
+    check("line", name, v, lineRules(v));
+  }
+  for (const name of ["near_identical", "art_cartoon_cat", "crayon"]) {
+    const { A, fabric } = await grid(name), v = crossVariants(A.img, A.w, A.h, PPM, fabric, 2.5);
+    check("cross", name, v, crossRules(v));
   }
   return bad;
 }
@@ -558,14 +602,15 @@ async function lookReport() {
   }
   const mean = (xs, f) => xs.reduce((t, x) => t + f(x), 0) / Math.max(1, xs.length), f1 = (v) => v.toFixed(1), f2 = (v) => v.toFixed(2);
   log(`\nlooks like the picture, by kind and style (look 0-100; parts 0-1; [change from tests/fixtures/look.json on the same cases])`);
-  log(`  ${"kind style".padEnd(26)} cases  look   [chg]  colour shape outline detail struct  dE00  | stitches trims loose`);
+  log(`  ${"kind style".padEnd(26)} cases  look   [chg]  parts (Filled, Cross-stitch: colour shape outline detail structure; line: recall precision doubling colour weight)  dE00  | stitches trims loose`);
   for (const [k, xs] of [...rows].sort((p, q) => p[0].localeCompare(q[0]))) {
     const m = (f) => mean(xs, f), common = xs.filter((x) => base?.cases?.[x.tag]);
     const chg = common.length ? mean(common, (x) => x.look.look) - mean(common, (x) => base.cases[x.tag].look) : null;
     if (chg !== null && chg <= -WORSE) worse.push(`${k} ${f1(chg)}`);
-    out.kinds[k] = { cases: xs.length, look: +f1(m((x) => x.look.look)), colour: +f2(m((x) => x.look.colour)), shape: +f2(m((x) => x.look.shape)), outline: +f2(m((x) => x.look.outline)), detail: +f2(m((x) => x.look.detail)), structure: +f2(m((x) => x.look.structure)), dE: +f1(m((x) => x.look.dE)), stitches: Math.round(m((x) => x.stitches)), trims: +f1(m((x) => x.trims)), loose: +f1(m((x) => x.loose)) };
+    const parts = xs[0].style === "line" ? ["recall", "precision", "doubling", "colour", "weight"] : ["colour", "shape", "outline", "detail", "structure"];
+    out.kinds[k] = { cases: xs.length, look: +f1(m((x) => x.look.look)), ...Object.fromEntries(parts.map((p) => [p, +f2(m((x) => x.look[p]))])), dE: +f1(m((x) => x.look.dE)), stitches: Math.round(m((x) => x.stitches)), trims: +f1(m((x) => x.trims)), loose: +f1(m((x) => x.loose)) };
     const o = out.kinds[k];
-    log(`  ${k.padEnd(26)} ${String(xs.length).padStart(5)} ${f1(o.look).padStart(5)} ${(chg === null ? "[new]" : `[${chg >= 0 ? "+" : ""}${f1(chg)}]`).padStart(7)}  ${f2(o.colour).padStart(6)} ${f2(o.shape).padStart(5)} ${f2(o.outline).padStart(7)} ${f2(o.detail).padStart(6)} ${f2(o.structure).padStart(6)} ${f1(o.dE).padStart(5)}  | ${String(o.stitches).padStart(8)} ${f1(o.trims).padStart(5)} ${f1(o.loose).padStart(5)}`);
+    log(`  ${k.padEnd(26)} ${String(xs.length).padStart(5)} ${f1(o.look).padStart(5)} ${(chg === null ? "[new]" : `[${chg >= 0 ? "+" : ""}${f1(chg)}]`).padStart(7)}  ${parts.map((p) => `${p.slice(0, 4)} ${f2(o[p])}`).join(" ")} ${f1(o.dE).padStart(5)}  | ${String(o.stitches).padStart(8)} ${f1(o.trims).padStart(5)} ${f1(o.loose).padStart(5)}`);
   }
   const all = results.filter((x) => x.look);
   log(`  ${"all".padEnd(26)} ${String(all.length).padStart(5)} ${f1(mean(all, (x) => x.look.look)).padStart(5)}`);
@@ -747,7 +792,7 @@ async function run(spec) {
       if (trims > budget && !spec.art && !spec.busy) bad.push(`${trims} trims (budget ${budget}: ${need} pieces, ${(sewnMm2 / 100).toFixed(1)} cm²)`);
       if (RENDER) await render(tag, pat, turn, reg, toMm);
       if (style === "fill") res.holes = holes(r, at);
-      res.look = await look(tag, src, r, plan, turn);
+      res.look = await look(tag, src, r, plan, turn, style);
       res.art = artOf(r, c, plan);
       // what the check of the picture says (artwords.js): `say` at 100 mm (each is drawn to need saying there),
       // `never` from 100 mm up (smaller, anything may be too small)
@@ -760,7 +805,7 @@ async function run(spec) {
     Object.assign(res, { name: spec.name, kind: spec.kind, style });
     res.bad = bad; res.known = !!(known && bad.length); results.push(res);
     if (bad.length && !known) problems++;
-    log(`  ${bad.length ? (known ? "KNOWN" : "FAIL") : "ok  "}${known && bad.length ? " (" + known + ")" : ""} ${tag} ${res.ms} ms ${res.stitches ?? ""} st ${res.trims ?? ""} trims ${res.loose ?? ""} loose peak ${res.peak ?? ""} ${res.size ?? ""} lost ${res.kept ?? ""} (drawn ${res.gone ?? ""})${res.note ? " NOTE" : ""} tries ${res.tries?.length ?? ""} flat ${res.flat ?? ""}${res.look ? ` look ${res.look.look} (c ${res.look.colour} s ${res.look.shape} o ${res.look.outline} d ${res.look.detail} st ${res.look.structure})` : ""}${res.holes ? ` holes ${res.holes.mm2} mm² ${(100 * res.holes.share).toFixed(1)}% ${res.holes.blobs}` : ""}${bad.map((b) => "\n       " + b).join("")}${Q.has("art") && res.art ? res.art.text.map((t) => "\n       art " + t).join("") : ""}`);
+    log(`  ${bad.length ? (known ? "KNOWN" : "FAIL") : "ok  "}${known && bad.length ? " (" + known + ")" : ""} ${tag} ${res.ms} ms ${res.stitches ?? ""} st ${res.trims ?? ""} trims ${res.loose ?? ""} loose peak ${res.peak ?? ""} ${res.size ?? ""} lost ${res.kept ?? ""} (drawn ${res.gone ?? ""})${res.note ? " NOTE" : ""} tries ${res.tries?.length ?? ""} flat ${res.flat ?? ""}${res.look ? ` look ${lookParts(res.look)}` : ""}${res.holes ? ` holes ${res.holes.mm2} mm² ${(100 * res.holes.share).toFixed(1)}% ${res.holes.blobs}` : ""}${bad.map((b) => "\n       " + b).join("")}${Q.has("art") && res.art ? res.art.text.map((t) => "\n       art " + t).join("") : ""}`);
   }
 }
 // The separate parts of a picture (findParts): as many as were drawn apart, none for a picture of one thing, and each
@@ -792,10 +837,10 @@ for (const name of Q.get("ext")?.split(",") || []) {
     if (s.error) { log(`  ${tag}: ${s.code} ${s.error}`); continue; }
     const st = designStats(s.r.pattern), sx = s.plan.crop.sx, sy = s.plan.crop.sy;
     const c0 = new OffscreenCanvas(bitmap.width, bitmap.height), g0 = c0.getContext("2d"); g0.drawImage(bitmap, 0, 0);
-    const d0 = g0.getImageData(0, 0, c0.width, c0.height).data, lk = await look(tag, { d: d0, w: c0.width, h: c0.height, fabric: pageColour(d0, c0.width, c0.height) }, s.r, s.plan, false);
+    const d0 = g0.getImageData(0, 0, c0.width, c0.height).data, lk = await look(tag, { d: d0, w: c0.width, h: c0.height, fabric: pageColour(d0, c0.width, c0.height) }, s.r, s.plan, false, style);
     await fetch(`/save/${tag}.pes`, { method: "POST", body: s.r.bytes });
     if (RENDER) { await render(tag, s.r.pattern, false, { pieces: [] }, () => [0, 0]); await renderLabels(tag, s.r); }
-    log(`  ${tag} ${Math.round(performance.now() - t1)} ms ${st.stitches} st ${st.trims} trims, ${Math.round(Math.max(st.widthMm, st.heightMm))} mm, threads ${s.r.pattern.threads.map((t) => t.description).join(", ")}, left out ${s.r.fine.kept.lost}/${s.r.fine.kept.parts} ${(100 * s.r.fine.kept.share).toFixed(1)}%${lostMuch(s.r.fine.kept) ? " NOTE" : ""}${verdictOf(s.r.bytes).map((q) => " QUALITY " + q.key).join("")} flat ${s.r.flat?.toFixed(2)}${s.r.smooth ? " smoothed" : ""} look ${lk.look} (c ${lk.colour} s ${lk.shape} o ${lk.outline} d ${lk.detail} st ${lk.structure})${style === "fill" ? ((hl) => ` holes ${hl.mm2} mm² ${(100 * hl.share).toFixed(1)}% ${hl.blobs}`)(holes(s.r, threadMap(s.r.pattern, false))) : ""}${Q.has("art") ? artOf(s.r, { style, size, colors }, s.plan).text.map((t) => "\n       art " + t).join("") : ""}`);
+    log(`  ${tag} ${Math.round(performance.now() - t1)} ms ${st.stitches} st ${st.trims} trims, ${Math.round(Math.max(st.widthMm, st.heightMm))} mm, threads ${s.r.pattern.threads.map((t) => t.description).join(", ")}, left out ${s.r.fine.kept.lost}/${s.r.fine.kept.parts} ${(100 * s.r.fine.kept.share).toFixed(1)}%${lostMuch(s.r.fine.kept) ? " NOTE" : ""}${verdictOf(s.r.bytes).map((q) => " QUALITY " + q.key).join("")} flat ${s.r.flat?.toFixed(2)}${s.r.smooth ? " smoothed" : ""} look ${lookParts(lk)}${style === "fill" ? ((hl) => ` holes ${hl.mm2} mm² ${(100 * hl.share).toFixed(1)}% ${hl.blobs}`)(holes(s.r, threadMap(s.r.pattern, false))) : ""}${Q.has("art") ? artOf(s.r, { style, size, colors }, s.plan).text.map((t) => "\n       art " + t).join("") : ""}`);
   }
 }
 // (?ext pictures' parts, each on its own: how flat it reads, smoothed or not, and its threads)

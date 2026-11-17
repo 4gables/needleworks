@@ -131,38 +131,88 @@ Automated checks that each guard a bug class (add a line with every new guard):
   - One thread label per colour on every surface: surfaces.mjs "threads:" cases; damaged/short Open and empty lettering
     cases too. Monkey flags a fix that changes the pieces but not the stitches (`--start <starter id>`); ui_sweep
     `focus-back`, `menu-left-open`.
-### Looks like the picture (`tests/look.js`, roadmap PX0)
+### Looks like the picture (`tests/look.js`, roadmap PX0; per style since C5-LK)
 The scoreboard and `pe900_check` say how a file sews; this says how much the sewn result looks like the picture it
-came from. Every picture_corpus case that makes a file is scored; the run ends with a table per kind and style.
+came from, judged as a person judges its style. Every picture_corpus case that makes a file is scored; the run ends
+with a table per kind and style.
 - **Render.** The file's own bytes (`readEmbroidery`, as the preview), each stitch a 0.4 mm thread lit as a cylinder
   from the upper left with a highlight along its direction (Kajiya-Kay; the thread's own colour brightened, the mean
   kept: added white drew Black as grey and Prussian Blue as lavender, PX7), later stitches over earlier ones, on the
-  picture's page colour (the commonest colour of its outermost pixels; white when see-through), 10 px per mm. Pure
-  JS: Node and the browser give the same numbers. `render` in the query writes `NAME_look.png`: the picture at the
-  stitched size beside the render. Not `js/render.js` (canvas and DOM, screen-sized, not reproducible to the bit).
-- **Picture.** The sized crop (`plan.crop`) mapped onto the same mm box (the design plus 2 mm), area-averaged.
-- **Score** (both at 0.2 mm pixels, blurred by a 0.35 mm Gaussian first, so the 0.4 mm rows and grooves of thread
-  are not error and a 2 mm shape still is; S-CIELAB's idea). Parts, each 0-1:
+  fabric, 10 px per mm, with its thread cover per pixel. Pure JS: Node and the browser give the same numbers. `render`
+  in the query writes `NAME_look.png` (the picture at the stitched size beside the render) and, for a line drawing,
+  `NAME_lines.png` (the picture's lines green where traced, red where not, band centres grey, stitches blue). Not
+  `js/render.js` (canvas and DOM, screen-sized, not reproducible to the bit).
+- **Fabric.** The picture's page colour (the commonest colour of its outermost pixels; white when see-through), except
+  in a frame (`frameOf`: a band of one colour all round the edge that turns to another colour within 3 px): the colour
+  inside the band, and a band the file doesn't sew (cover under half) is fabric in the picture too. The outermost
+  pixels made a framed card's fabric its green frame: a cream panel left bare scored as a 90 x 65 mm hole (52).
+- **Picture.** The sized crop (`plan.crop`) mapped onto the same mm box (the design plus 2 mm), area-averaged, with
+  mm 0,0 where the stitches put it: the picture's centre, a cross-stitch's grid centre (`crossStitch` centres the
+  cells that fit, so the picture's centre put every cross up to half a cell off; `r.origin` when the worker sends it).
+- **The render as seen** (`perceived`): the thread's own colour (normalised by its cover, so the fabric between rows
+  isn't mixed in) where the cover reaches `ref`, else mixed with the fabric by the cover. Filled: ref 0.9 (the render's
+  anti-aliased gaps between 0.4 mm rows put a quarter row of fabric in every 0.4 mm: a black fill read L* 13, colour
+  0.39 and structure 0.12 on a Black thread). Cross-stitch: ref = the design's own cross cover (the 75th centile;
+  two 0.4 mm diagonals cover ~43 % of a 2.5 mm cell), so crosses read as their thread, not 40 % thread + 60 % fabric.
+- **Filled and Cross-stitch score** (0.2 mm pixels; Filled blurred 0.35 mm first, so the 0.4 mm rows and grooves of
+  thread are not error and a 2 mm shape still is; S-CIELAB's idea). Parts, each 0-1:
   - colour: mean CIEDE2000 where both are inked (ΔE00 over 8 from the fabric); 0 at ΔE 25. Wrong threads.
+    Cross-stitch: the picture's ink colour and the thread's colour, each normalised without the fabric round it.
   - shape: intersection over union of the inked areas. Parts left out, bloat, a shadow sewn.
   - outline: chamfer distance between the two edge maps (Lab gradient over 10 ΔE per mm, thinned), each edge pixel
     capped at 2 mm, both ways; 0 at 2 mm. Edges in the wrong place, jagged or extra.
   - detail: the share of the picture's edges with a stitched edge within 0.5 mm. Small things kept.
-  - structure: SSIM of L* at 0.4 mm pixels over the inked area and 1 mm round it (coarse scale only). Shading and
-    light/dark layout.
+  - structure: SSIM of L* at 0.4 mm pixels over the inked area and 1 mm round it (coarse scale only); where the
+    picture is flat (L* variance under 4) only SSIM's lightness term: its structure term there measured the thread's
+    sheen against nothing.
   - look = 100 x (0.30 colour + 0.25 shape + 0.15 outline + 0.15 detail + 0.15 structure).
-- **Trusted because** variants of four pictures rank as a person ranks them on every run (`lookSelfTest`, failing the
-  run if not): a copy given thread rows and grooves scores 99+, and blurred (1.2 mm), shifted 1 mm, recoloured,
-  thinned (parts under 1.6 mm gone) and two-tone copies all score lower, each with its own part lowest (recoloured:
-  colour; blurred: detail; shifted: outline; thinned: shape).
-- **Reading it.** Compare a row with itself over time, not rows with each other: a line drawing and cross-stitch
-  are meant to look unlike a filled picture (line drawing ~40-45, cross-stitch ~30-45, Filled ~75-90 at the
-  baseline). A change of 1 point in a row's mean is real (the score is deterministic); 2 points down fails the run;
+  - Cross-stitch at the cell's scale: both blurred by half a cell (the lattice keeps 0.7 % of its contrast), the edge
+    threshold scaled to that blur, detail within half a cell.
+- **Line drawing score**: against the picture's own lines (`lineRef`, from the picture's pixels, not its learned
+  colours), not against the filled picture, where colour and shape (55 %) only measured the style: a near-perfect
+  crayon trace scored 28 and a landscape missing its ridge 36. The lines are the edges (as above; edge pieces under
+  1 mm and holes in the ink under 1 mm² are texture, not lines: a crayon's paper speckle) and, for each band up to
+  4 mm wide (between two edges, or an edge and the fabric: a stroke, or a dark outline across a coloured shape), its
+  centre. Parts:
+  - recall: the share of the edges (weighted by contrast up to twice the threshold) with a stitch within 0.75 mm,
+    or for a band's edges anywhere across the band. Lines left out (the landscape's ridge).
+  - precision: the share of the stitch length within 0.75 mm of a line or on a band. False lines (die-cut borders,
+    spurs, a gradient's band line).
+  - doubling: 1 - the share of stitch length with a parallel line 0.5-2 mm across picture ink with no edge between
+    (one band traced as its two outlines).
+  - colour: ΔE00 of each line's thread against the picture's line beside it; 0 at 25.
+  - weight: across each band 1.5 mm or wider, the width sewn over the band's width (a 3 mm crayon line as one run: 0.13).
+  - look = 100 x (0.4 recall + 0.25 precision + 0.15 doubling + 0.1 colour + 0.1 weight) (the cycle 5 reviewer's
+    weights). Stitch length counts each thread pixel as 1 / the thread's width there, so a satin column is one line.
+- **The per-style score (C5-LK) against v34's**, same files: Filled 80.4 -> 81.8 (127 cases), line 42.2 -> 81.6 (57),
+  cross 41.5 -> 70.5 (55). Filled kinds move -4.4 to +6.0: shapes +6.0 (the black cat 60 -> 95: Black colour 0.39 ->
+  0.96 and structure 0.12 -> 0.94; the framed card 52 -> 84 and 65 -> 90, fabric from inside the frame), flat
+  pictures +1 to +3 (structure on flat areas is their lightness), line art -4.4 and the s60 lettering 6-8 down
+  (logo_regular 84 -> 75): the render's gaps between rows had mixed ~5 % fabric into every thread and flattered
+  saturated or dark threads picked for muted ink (navy sewn ultramarine, a dusty red sewn bright: C5-CO's subject);
+  the crayon fills 5 down the same way (the crayon's paper speckle lightens the picture, the thread doesn't). Line
+  drawing: the crayon trace 28 -> 80 now outranks the landscape missing its ridge 36 -> 73 (recall 0.82, the ridge
+  red in `_lines.png`). Cross-stitch: right threads score colour 0.72 (near_identical 0 -> 0.72, 36 -> 80).
+- **Trusted because** made-up copies rank as a person ranks them on every run (`lookSelfTest`, failing the run if
+  not). Filled (`variants`, four pictures): a copy given thread rows and grooves scores 99+, and blurred (1.2 mm),
+  shifted 1 mm, recoloured, thinned (parts under 1.6 mm gone) and two-tone copies all score lower, each with its own
+  part lowest (recoloured: colour; blurred: detail; shifted: outline; thinned: shape). Line drawing (`lineVariants`,
+  crayon, a cartoon, a logo, a landscape): a tracing of the picture's own lines scores 85+ (99+ today), and copies with
+  a third of the lines dropped (recall), false lines across the fabric (precision), bands sewn as two outlines
+  (doubling), the trace 1 mm off (precision), its threads recoloured (colour) and bands sewn as hairlines (weight) all
+  score lower; the hairline copy (the crayon) above the dropped one (the landscape). Cross-stitch (`crossVariants`, 2.5
+  mm cells charted from the picture): the chart in the picture's colours scores colour 0.7+ (0 on right threads before),
+  and copies shifted half a cell (outline), recoloured (colour) and with a third of the columns dropped (shape) lower.
+- **Reading it.** Compare a row with itself over time, not rows with each other: the styles are scored by different
+  parts (Filled and Cross-stitch against the picture, a line drawing against its lines). A change of 1 point in a
+  row's mean is real (the score is deterministic); 2 points down fails the run;
   cases 3+ points down or up are listed as `worse:`/`better:`. The stitch columns beside it (stitches, trims, loose)
   are the price: a better look bought with twice the trims is a choice, not a win.
 - **Re-save** after a round that is meant to move it: `LOOK_SAVE=1 zsh tests/picture_corpus.sh CDP HP OUT` copies
   the run's `look.json` to `tests/fixtures/look.json`.
-- **Weak spots**: the page colour stands in for the fabric (a photo's backdrop that is not one colour counts as ink
-  left out); no pull, push or puckering, no fabric showing through thin fill; the colour part only looks where both
-  have ink, so a part left out costs shape and detail, not colour; a line drawing is scored against the filled
-  picture; the weights are chosen, not fitted to people's ratings (no rating data yet).
+- **Weak spots**: the page colour stands in for the fabric (a photo's backdrop that is not one colour, or a pale
+  panel left bare like the `panel` picture's, counts as ink left out); no pull, push or puckering; the colour part only
+  looks where both have ink, so a part left out costs shape and detail, not colour; a sticker's die-cut border is an
+  edge of the picture, so tracing it is not counted false; the cross-stitch cell is `r.cell` or 2.5 mm, and the grid
+  origin crossStitch's own rule until the worker sends `origin`; the weights are chosen, not fitted to people's
+  ratings (no rating data yet).
