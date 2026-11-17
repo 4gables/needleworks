@@ -76,11 +76,41 @@ Reference for this part of Needleworks: the rules, the reason for each (it stops
   olive to Russet Brown); greys and other hue families (`FAMILY`, where Brother's names change) cost more for hued
   colours; the background's thread is skipped unless within SAME. Swatch = solid pixels' mean. The writer's red-mean
   then picks the same thread. Owned threads only: `toPalette()` merges colours landing on one spool.
+  - Labels still equal the file: the choice ends on a PEC entry's own RGB, and red-mean from an exact PEC colour lands
+    on that entry (distance 0), so the machine's screen, the file's palette and the page's label name one thread
+    whichever distance chose it. A choice by another distance keeps this as long as it picks *an entry*, never a
+    colour between entries.
+  - Near-black (C5-CO): a colour's hue counts in full only from L 15, fading to none at L 0 (art_gradient_sunset's
+    #10002b palm, L 3, was Prussian Blue at ΔE00 15 over Black at 19: it reads black, and sews Black now). Lighter
+    navies keep theirs (#1d3557, L 22, stays Ultramarine).
+  - Far threads: each part's difference is capped at FAR for choosing, the uncapped value breaking ties (all capped,
+    every far thread tied and the first PEC entry won: art_water_whale's pale blue #8eacd0 was Prussian Blue, now
+    Lavender; art_flat_coffee's brown #6f4518 was Prussian Blue, now Dark Brown).
+  - Whether a free thread is "worse" than the colour's own (then the colour joins the one that took it) is judged
+    uncapped and with a chroma gain: a thread over 1.6 x the colour's chroma and 20 more costs up to 0.8 x more, in
+    full 20 past that (ΔE00 squeezes chroma at high chroma: art_photo_dog's mid-brown head rim #8d633b got bright
+    Reddish Brown at ΔE00 16 beside Light Brown's 12; judged over the bar, it joins the head). The gain judges only:
+    used for the choice too (tried at 0.5 x the excess over the colour's chroma), it fixed the framed flower's dusty
+    red (Carmine -> Amber Red) and the owl's outline (Prussian Blue -> Dark Gray) but sent etsy_3's olive to Pewter
+    and Harvest Gold, etsy_1's mauve to Black, a navy logo to Dark Gray and a leaf green to Seacrest.
 - Colours from thin lines: `cluster(..., lines)` also learns from pixels flat along a line and not a blend (a 1-2 px
   line is never flat every way); those clusters take only pixels within ΔE 12 or not a blend of two others. Pale
   fringes (JPEG halos: 80 % within 3 px of a stronger colour over 1.5 SAME away) and soft shades (drop shadows: 70 % of
   the edge with the fabric soft over 5 px) are fabric unless the whole picture is soft. Colours under SAME apart
-  merge whatever their size. Worse: half-soft colours to fabric when threads run short, scattered pale specks as
+  merge whatever their size.
+  - Soft shades, judged two steps either side of the edge as before, but each side the mean of its own side's
+    pixels in the 3 x 3 round it (a photo's grain and JPEG noise per pixel is as big as a pale shadow's whole limit:
+    art_photo_dog's drop shadow was sewn as a Silver blob), and only where two steps in is still the colour (a
+    shadow's core runs thin between the lettering and its paler rim, and two steps in was the navy, a step:
+    soft_shadow's core read 0.35 soft and was sewn Silver at 4-6 threads and orange at 2, joined to the dot). Its own
+    side's pixels only: a plain 3 x 3 mean took in the paper beyond doodle_sheet's pale 2 px lines and lost them.
+    (A fringe counted as fabric is fabric on both sides now: `out` was 0/1 for a fringe and true for the fabric, so
+    a fringe beside the fabric counted as an edge.)
+  - A picture blown up (`scale` over 2: each of its own pixels several copy px) is flat only where it is flat a whole
+    picture pixel away, and a pale fringe hugs within 3 of its own px: tiny_50px (50 px, 18 copy px each) had its
+    upscale blur learned as four pastel threads, sewn as satin rings round the heart and the dot (Deep Rose, Salmon
+    Pink, Lavender, Cornflower at 6 colours); now Dark Fuchsia and Ultramarine at every count, the blur split at
+    its midpoint by the nearest colour. Worse: half-soft colours to fabric when threads run short, scattered pale specks as
   fabric (both erased etsy_1's pale flowers).
 - Size = the sewn design's longer side (`picturePlan`, capped to the field), rebuilt when over 0.4 mm off; over the
   field it shrinks, not errors. 8 px/mm (5 lost notches).

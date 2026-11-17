@@ -698,7 +698,7 @@ function learnOnce(img, opts = {}) {
   }
   // (a shade or fringe left out on purpose is no lost line)
   const lost = groups.length ? lostLines(P, labels.map((l) => (l < 0 ? -1 : fringe[l] ? -2 : map[l])), colors) / Math.max(w, h) : 0;
-  return { w, h, C, first: C.first ?? C.length, map, colors, bg: bgId, inside, frame, boxes, hasAlpha, smooth, flat: share, scale: o.scale || 0,
+  return { w, h, C, first: C.first ?? C.length, map, colors, bg: bgId, inside, frame, boxes, hasAlpha, smooth, flat: share, scale: o.scale || 0, shade: fringe,
     merged: Math.max(0, o.colors - groups.length), empty, lost };
 }
 // Label a picture's pixels with the colours learned from it (possibly from a copy at another size). `crop`
@@ -737,7 +737,10 @@ export function labelWith(img, model, crop = [0, 0, 1, 1], { inside = "auto", re
   // (no folding of colours that are mostly edge into their neighbours, as raw k-means clusters needed: the colours
   // here are merged already, and folding sent etsy_7's thin pastel doodles into the background)
   const G = model.colors.length;
-  for (const i of opaque) if (!(frame && frame[i])) labels[i] = model.map[nearestOf(lab, i, model.C, model.first)];
+  // (`shaded`: pixels of a fringe or soft shade, fabric by the model: a closed-in piece that is much shade is no
+  // closed-in colour, see below)
+  const shaded = new Uint8Array(n);
+  for (const i of opaque) if (!(frame && frame[i])) { const j = nearestOf(lab, i, model.C, model.first); labels[i] = model.map[j]; if (model.shade?.[j]) shaded[i] = 1; }
   // majority filter cleans anti-aliased fringes and speckle
   for (let pass = 0; pass < 2; pass++) {
     const out = labels.slice(), cnt = new Int16Array(G + 1);
@@ -779,14 +782,17 @@ export function labelWith(img, model, crop = [0, 0, 1, 1], { inside = "auto", re
     for (let i = 0; i < n; i++) if (labels[i] === B && !open[i]) { m.data[i] = 1; any = true; }
     if (any) {
       const { labels: cl, count } = label(m), dt = distanceTransform(m), keep = new Uint8Array(count + 1).fill(1);
-      const size = new Int32Array(count + 1), wide = new Float64Array(count + 1), x0 = new Int32Array(count + 1).fill(w), x1 = new Int32Array(count + 1).fill(-1), y0 = new Int32Array(count + 1).fill(h), y1 = new Int32Array(count + 1).fill(-1);
+      const shade = new Int32Array(count + 1), size = new Int32Array(count + 1), wide = new Float64Array(count + 1), x0 = new Int32Array(count + 1).fill(w), x1 = new Int32Array(count + 1).fill(-1), y0 = new Int32Array(count + 1).fill(h), y1 = new Int32Array(count + 1).fill(-1);
       for (let i = 0; i < n; i++) {
         const c = cl[i]; if (!c) continue;
-        const x = i % w, y = (i - x) / w; size[c]++; if (dt[i] > wide[c]) wide[c] = dt[i];
+        const x = i % w, y = (i - x) / w; size[c]++; shade[c] += shaded[i]; if (dt[i] > wide[c]) wide[c] = dt[i];
         if (x < x0[c]) x0[c] = x; if (x > x1[c]) x1[c] = x; if (y < y0[c]) y0[c] = y; if (y > y1[c]) y1[c] = y;
       }
       if (res) for (let c = 1; c <= count; c++)
         if (size[c] < 1.5 * res * res || (size[c] < 4 * res * res && x1[c] - x0[c] < 2.5 * res && y1[c] - y0[c] < 2.5 * res) || 2 * wide[c] < 0.6 * res) keep[c] = 0;
+      // (nor a piece that is a third shade: soft_shadow's O, its counter half drop shadow, was sewn White over the
+      // shadow once the shadow was fabric. It stays fabric, as the picture shows it)
+      for (let c = 1; c <= count; c++) if (shade[c] >= 0.3 * size[c]) keep[c] = 0;
       for (let c = 1; c <= count; c++) if (keep[c]) closed += size[c];
       if (inside === "all" || (inside === "auto" && !model.spare)) for (let i = 0; i < n; i++) if (cl[i] && keep[cl[i]]) labels[i] = model.inside;
     }
