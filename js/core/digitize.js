@@ -236,7 +236,19 @@ function columnNets(px, more, w, h, own, res, toMm, dotted) {
   // (a loop shorter than two strokes round is thinning's knot at a blunt end, not a ring: sewn, a little star of
   // satin stood off a bold c's end)
   const loopLen = (p) => p.reduce((t, q, i) => (i ? t + Math.hypot(q[0] - p[i - 1][0], q[1] - p[i - 1][1]) : 0), 0);
-  if (!dotted) { es = skeletonEdges(pm, stroke, { spur: 1 }).filter((e) => e[2].length > 1 && (e[0] !== e[1] || loopLen(e[2]) >= 2 * stroke)); lineEnds(es, pm, stroke); }
+  // (unless it rings fabric: a small P's or e's counter. Dropped, the bowl round it sewed as one fan from the stem)
+  const rings = (p) => {
+    let bx0 = Infinity, bx1 = -Infinity, by0 = Infinity, by1 = -Infinity;
+    for (const [x, y] of p) { bx0 = Math.min(bx0, x); bx1 = Math.max(bx1, x); by0 = Math.min(by0, y); by1 = Math.max(by1, y); }
+    for (let y = Math.ceil(by0); y <= by1; y++) for (let x = Math.ceil(bx0); x <= bx1; x++) {
+      if (at(x, y)) continue;
+      let odd = false;
+      for (let i = 0, j = p.length - 1; i < p.length; j = i++) if ((p[i][1] > y) !== (p[j][1] > y) && x < p[j][0] + ((p[i][0] - p[j][0]) * (y - p[j][1])) / (p[i][1] - p[j][1])) odd = !odd;
+      if (odd) return true;
+    }
+    return false;
+  };
+  if (!dotted) { es = skeletonEdges(pm, stroke, { spur: 1 }).filter((e) => e[2].length > 1 && (e[0] !== e[1] || loopLen(e[2]) >= 2 * stroke || rings(e[2]))); lineEnds(es, pm, stroke); }
   if (!es.length) {
     // (the long axis: the shape's second moments)
     let n = 0, sx = 0, sy = 0, xx = 0, yy = 0, xy = 0;
@@ -252,10 +264,31 @@ function columnNets(px, more, w, h, own, res, toMm, dotted) {
   const E = [], deg = new Map(), cov = new Uint8Array(cw * ch);
   for (const [a, b] of es) for (const k of [a, b]) deg.set(k, (deg.get(k) || 0) + 1);
   for (const [a, b, p0] of es) {
-    const q = resample(p0, 0.1 * res), nm = normals(q);
+    let q = resample(p0, 0.1 * res);
     if (q.length < 2) continue;
+    // (a sharp turn of the centre line, a star's point on its outline: the outer side reaches 1 / sin(half the
+    // inside angle) times as far, the mitre, measured over a stroke width either way; capped at the distance to the
+    // edge, the column stopped short of the point and left it bare: corpus holes 22 -> 49 mm²)
+    const k = Math.max(2, Math.ceil(stroke / (0.1 * res))), ring = a === b && q.length > 2 * k + 2;
+    const turns = () => q.map((_, i) => {
+      if (dotted || (!ring && (i < k || i + k >= q.length))) return [0, 1];
+      const n = q.length - 1, P = q[ring ? (i - k + n) % n : i - k], N = q[ring ? (i + k) % n : i + k];
+      const ux = q[i][0] - P[0], uy = q[i][1] - P[1], vx = N[0] - q[i][0], vy = N[1] - q[i][1], L = Math.hypot(ux, uy) * Math.hypot(vx, vy);
+      if (!L) return [0, 1];
+      const turn = Math.acos(Math.max(-1, Math.min(1, (ux * vx + uy * vy) / L))), s = Math.sin((Math.PI - turn) / 2);
+      return [ux * vy - uy * vx > 0 ? -1 : 1, 1 / Math.max(s, COLUMNS.mitre)];
+    });
+    let mitre = turns();
+    // (a ring alone, a star's outline, starts and ends at its straightest place: a column's end is sewn square across,
+    // so a point there stayed bare whatever its reach)
+    if (ring && deg.get(a) === 2) {
+      let j = 0;
+      for (let i = 1; i < q.length - 1; i++) if (mitre[i][1] < mitre[j][1]) j = i;
+      if (j) { const base = q.slice(0, -1); q = [...base.slice(j), ...base.slice(0, j), base[j]]; mitre = turns(); }
+    }
+    const nm = normals(q);
     const reach = (i, sg) => {
-      const [x, y] = q[i], cap = dotted ? Infinity : COLUMNS.cap * ownAt(x, y) + 1, far = cw + ch;
+      const [x, y] = q[i], cap = dotted ? Infinity : COLUMNS.cap * ownAt(x, y) * (mitre[i][0] === sg ? mitre[i][1] : 1) + 1, far = cw + ch;
       let t = 0;
       while (t < cap && t < far && at(x + nm[i][0] * sg * (t + 0.25), y + nm[i][1] * sg * (t + 0.25))) t += 0.25;
       // (the last step found ink up to the pixel's middle at best: the edge lies a quarter pixel back on average)
@@ -280,7 +313,11 @@ function columnNets(px, more, w, h, own, res, toMm, dotted) {
     // (each side less half a thread: the satin's thread lies past its needle holes, and sewn to the drawn edge a 1 mm
     // outline came out half again as bold)
     const in2 = COLUMNS.thread / 2;
-    E.push({ a, b, p, s: arclen(p), A: A.slice(i0, i1 + 1).map((v) => Math.max(lo, v - in2)), B: B.slice(i0, i1 + 1).map((v) => Math.max(lo, v - in2)) });
+    // (each stitch's slant off the centre line's normal: square across the line as it runs over `steady` stroke widths
+    // either way, not as it bends under a stitch. Square to every wiggle of a small letter's skeleton, the stitches of
+    // a 1.2 mm stroke turned every way at once, a fuzzy fan)
+    const s = arclen(p), K = steadySlant(p, s, COLUMNS.steady * stroke / res);
+    E.push({ a, b, p, s, K, A: A.slice(i0, i1 + 1).map((v) => Math.max(lo, v - in2)), B: B.slice(i0, i1 + 1).map((v) => Math.max(lo, v - in2)) });
   }
   // (connected sets of centre lines: each one walk)
   const root = new Map(), find = (k) => { while (root.get(k) !== k) k = root.get(k); return k; };
@@ -292,6 +329,26 @@ function columnNets(px, more, w, h, own, res, toMm, dotted) {
   for (const i of px) { const x = i % w, y = (i - x) / w; if (cov[(y - oy) * cw + x - ox]) hit++; }
   out.cover = hit / px.length;
   return out;
+}
+
+// The slant (satin's `shape` third value: tangent of the stitch's turn off the normal) that lays each stitch square
+// across the line's direction averaged over `h` mm either way along it, at most 45°. 0 everywhere when h is 0.
+function steadySlant(p, s, h) {
+  const n = p.length, K = new Array(n).fill(0);
+  if (!(h > 0) || n < 3) return K;
+  const tx = [], ty = [];
+  for (let i = 0; i < n; i++) { const a = p[Math.max(0, i - 1)], b = p[Math.min(n - 1, i + 1)], L = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1; tx.push((b[0] - a[0]) / L); ty.push((b[1] - a[1]) / L); }
+  let lo = 0, hi = 0, sx = 0, sy = 0;
+  for (let i = 0; i < n; i++) {
+    while (hi < n && s[hi] <= s[i] + h) { sx += tx[hi]; sy += ty[hi]; hi++; }
+    while (s[lo] < s[i] - h) { sx -= tx[lo]; sy -= ty[lo]; lo++; }
+    const L = Math.hypot(sx, sy);
+    if (!L) continue;
+    // (the stitch d is square to the mean tangent; as n + k t with n = (-ty, tx) and t the local tangent: k = d.t / d.n)
+    const dx = -sy / L, dy = sx / L, dn = dx * -ty[i] + dy * tx[i], dt = dx * tx[i] + dy * ty[i];
+    if (dn > 1e-6) K[i] = Math.max(-1, Math.min(1, dt / dn));
+  }
+  return K;
 }
 
 // A piece's area over the area of its convex hull (pixel corners): 1 for a disc or an ellipse, under 0.85 for a ragged
@@ -324,7 +381,18 @@ function plain(nets) {
   if (!all || short > COLUMNS.short * all) return false;
   if (wd.length < 10) return true;
   wd.sort((x, y) => x - y);
-  return wd[Math.floor(0.9 * (wd.length - 1))] <= COLUMNS.even * wd[Math.floor(0.1 * (wd.length - 1))];
+  if (wd[Math.floor(0.9 * (wd.length - 1))] <= COLUMNS.even * wd[Math.floor(0.1 * (wd.length - 1))]) return true;
+  // (or uneven only as a taper is: along each centre line the width rises and falls at most `taper` times its range,
+  // a brush stroke narrowing to its point (once) or a leaf's half swelling and narrowing again (twice); a ragged
+  // patch's width goes up and down all along it)
+  if (!COLUMNS.taper) return false;
+  for (const net of nets) for (const e of net.edges) {
+    const v = e.A.map((a, i) => a + e.B[i]), k = 4, sm = v.map((_, i) => { let s = 0, n = 0; for (let j = Math.max(0, i - k); j <= Math.min(v.length - 1, i + k); j++) { s += v[j]; n++; } return s / n; });
+    let tv = 0, lo = Infinity, hi = -Infinity;
+    for (let i = 0; i < sm.length; i++) { if (i) tv += Math.abs(sm[i] - sm[i - 1]); lo = Math.min(lo, sm[i]); hi = Math.max(hi, sm[i]); }
+    if (hi - lo > 0.3 && tv > COLUMNS.taper * (hi - lo)) return false;
+  }
+  return true;
 }
 
 // A satin net's stitches from node `start`: each centre line out as its underlay (a centre run; from `zigzagFrom` mm
@@ -342,13 +410,14 @@ function netStitches(net, start, sat) {
   };
   const column = (e, p, fwd) => {
     const L = e.s[e.s.length - 1], a = (s) => (fwd ? pick(e.A, s, e.s) : pick(e.B, L - s, e.s)), b = (s) => (fwd ? pick(e.B, s, e.s) : pick(e.A, L - s, e.s));
+    const k = (s) => pick(e.K, fwd ? s : L - s, e.s);
     let top = 0, sum = 0;
     for (let i = 0; i < e.A.length; i++) { top = Math.max(top, e.A[i], e.B[i]); sum += e.A[i] + e.B[i]; }
-    return { L, a, b, W: 2 * top + 0.01, mid: sum / e.A.length };
+    return { L, a, b, k, W: 2 * top + 0.01, mid: sum / e.A.length };
   };
   if (net.dotted && E.length === 1 && net.W < sat.zigzagFrom) {
     const e = E[0], fwd = start === e.a, p = fwd ? e.p : e.p.slice().reverse(), c = column(e, p, fwd);
-    return satin(p, c.W, sat.gap, COLUMNS.pull + sat.pull, false, true, null, (s) => [c.a(s), c.b(s), 0]);
+    return satin(p, c.W, sat.gap, COLUMNS.pull + sat.pull, false, true, null, (s) => [c.a(s), c.b(s), c.k(s)]);
   }
   const out = [];
   for (const [p, kind, k] of tour(E.map((e) => [e.a, e.b, e.p]), start)) {
@@ -356,7 +425,7 @@ function netStitches(net, start, sat) {
     if (kind === "run") {
       if (c.mid >= sat.zigzagFrom) out.push(p[0], ...satin(p, c.W, 2.5, 0, false, false, (t) => Math.max(0.05, c.a(t * c.L) + c.b(t * c.L) - 0.8)), p[p.length - 1]);
       else out.push(...run(p, 1.2));
-    } else out.push(...satin(p, c.W, sat.gap, COLUMNS.pull + sat.pull, false, true, null, (s) => [c.a(s), c.b(s), 0]));
+    } else out.push(...satin(p, c.W, sat.gap, COLUMNS.pull + sat.pull, false, true, null, (s) => [c.a(s), c.b(s), c.k(s)]));
   }
   return out;
 }
@@ -825,7 +894,7 @@ function build(img, analysis, opts) {
         }
         prev = q;
       }
-      return pts.find((q) => far(q) >= 1.1 && far(q) <= 1.9 && !crosses(from, q)) || null;
+      return pts.find((q) => far(q) >= 1.1 && far(q) <= 1.9 && !crosses(from, q)) || pts.find((q) => far(q) >= 1.1 && far(q) <= 2.5 && !crosses(from, q)) || null;
     };
     const pathLen = (q) => { let L = 0; for (let i = 1; i < q.length; i++) L += Math.hypot(q[i][0] - q[i - 1][0], q[i][1] - q[i - 1][1]); return L; };
     // (neither when it would bring a jump the machine trims, over 5 mm, down to one it leaves as a loose thread, or a
@@ -839,7 +908,7 @@ function build(img, analysis, opts) {
       tail = null;
     };
     const jumpTo = (b, p) => {
-      let q = clearStart(noTiny(p)), at = b.kind === "fill" || b.kind === "column" ? inside(q[0], q.slice(1, 16)) : null;
+      let q = clearStart(noTiny(p)), at = b.kind === "fill" || b.kind === "column" ? inside(q[0], q.slice(1, 30)) : null;
       if (at && nearer(gapTo(d.cur, q[0]), gapTo(d.cur, at))) at = null;
       tuck(at || q[0]);
       if (at && nearer(gapTo(d.cur, q[0]), gapTo(d.cur, at))) at = null;
