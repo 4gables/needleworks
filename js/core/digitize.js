@@ -1373,6 +1373,9 @@ function lineArt(img, analysis, opts) {
   // band (its centre line is the line), nor where the picture has no step; in the thread of the colour that stands out
   // more from the fabric
   const stand = new Map(used.map((c) => [c.id, deltaE2000(c.lab, fl)]));
+  // (a shape's outline on the fabric in a thread that hardly stands out from it, under FAINT, is sewn in the darkest
+  // thread: a grey cat on a grey-blue page was traced in grey, barely seen; pet photo look 46.5 -> 43.2 -> 44.6)
+  const FAINT = 30, dim = used.reduce((a, c) => (c.thread.lightness < a.thread.lightness ? c : a));
   // (two shades of one thread SHADE apart, or ALIKE where the picture steps from one to the other within a pixel: a dog's
   // fur in two browns drew 40 small rings, and a dinosaur's crisp darker spots are kept)
   const apart = (i, j, l, m) => { const v = deltaE2000(labOf.get(l), labOf.get(m)); return v >= SHADE || (v >= ALIKE && (tOf(l) !== tOf(m) || step(i, j, labOf.get(l), labOf.get(m), 0.8, 1))); };
@@ -1380,7 +1383,7 @@ function lineArt(img, analysis, opts) {
     if (!wideAt[i]) continue;
     const x = i % w, l = labels[i];
     for (const j of [x > 0 ? i - 1 : -1, x < w - 1 ? i + 1 : -1, i - w, i + w]) {
-      if (j < 0 || j >= n || !mine.has(labels[j])) { lines.data[i] = 1; thr[i] = tOf(l); break; }
+      if (j < 0 || j >= n || !mine.has(labels[j])) { lines.data[i] = 1; thr[i] = stand.get(l) < FAINT ? dim.thread.id : tOf(l); break; }
       const m = labels[j];
       if (m !== l && m > l && !bands.data[j] && !lines.data[j] && apart(i, j, l, m) && step(i, j, labOf.get(l), labOf.get(m))) { lines.data[i] = 1; thr[i] = tOf(stand.get(m) > stand.get(l) ? m : l); break; }
     }
