@@ -340,10 +340,15 @@ pe900_check against this baseline and ships as its own release (`docs/releases.m
   3x3 soft-edge sampling (the text PX7 wrote and never coded); fringes and shades judged in mm and relative to the
   source's pixel size; a shade never given another design colour's thread; muted navy/dusty red/near-black picks.
   Owns palette.js, regions.js.
-- [ ] **C5-SA Satin finish (PX2 leftovers)**: mitred outer corners at star points (`px2-mitre`: holes 48.8 -> 44.0
+- [x] **C5-SA Satin finish (PX2 leftovers)**: mitred outer corners at star points (`px2-mitre`: holes 48.8 -> 44.0
   mm²), square column ends on bold strokes, bare locks back down (PX2 added 6-11 on the samples), tapered strokes and
   leaf halves as satin, small lettering as columns not fans. Owns digitize.js `columnNets`/`netStitches` and the
   stroke part of `build`, recipes.js `COLUMNS`.
+  - done: mitre ported (holes 48.4 -> 43.2 mm², star outline 5.4 -> 2.1), tapers and leaf halves as satin
+    (`taper`), stitches square to the line's run (`steady`), a small counter keeps its ring, tie-in searched to 2.5 mm;
+    look by kind within -0.2..+0.3, batch bare locks 86 -> 83, loose 60 -> 56 (`docs/pictures.md` "Stitch types")
+  - left: square ends had no measurable holes left; E corners and D bowls still fan (needs letter strokes, not a
+    skeleton); ~60 bare lock hits are sub-1 mm fill dots (specks, C5-KE's)
 - [ ] **C5-KE Keep what matters, cut what costs**: v34's blends cost (60 mm sunset loose 1 -> 7, icon trims 6 -> 11);
   closed-in white (the mandala's disc and dots, sewn counters, a panel left bare said in the note); thin rules and
   dots not dropped; travel under later stitches. Owns shade.js, digitize.js `keptParts`/specks/`lostLines`.
