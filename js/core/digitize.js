@@ -1055,7 +1055,7 @@ function fineColours(img, analysis, used, res, skip) {
   for (let i = 0; i < n; i++) if (L[i] >= 0 && thread[L[i]] === null && (L[i] > 0 || !fab)) L[i] = fab ? 0 : -1;
   const area = new Int32Array(K);
   for (let i = 0; i < n; i++) if (L[i] >= 0) area[L[i]]++;
-  return { labels: L, lab, colors: seeds.map((s, k) => ({ id: k, lab: s, lightness: s[0], background: !!fab && k === 0, thread: thread[k], area: thread[k] === null && (k || !fab) ? 0 : area[k] })) };
+  return { textured, labels: L, lab, colors: seeds.map((s, k) => ({ id: k, lab: s, lightness: s[0], background: !!fab && k === 0, thread: thread[k], area: thread[k] === null && (k || !fab) ? 0 : area[k] })) };
 }
 
 // How each traced line is sewn, from its width in the picture (mm): a hairline a run, out and back along it; a line
@@ -1373,9 +1373,13 @@ function lineArt(img, analysis, opts) {
   // band (its centre line is the line), nor where the picture has no step; in the thread of the colour that stands out
   // more from the fabric
   const stand = new Map(used.map((c) => [c.id, deltaE2000(c.lab, fl)]));
-  // (a shape's outline on the fabric in a thread that hardly stands out from it, under FAINT, is sewn in the darkest
-  // thread: a grey cat on a grey-blue page was traced in grey, barely seen; pet photo look 46.5 -> 43.2 -> 44.6)
-  const FAINT = 30, dim = used.reduce((a, c) => (c.thread.lightness < a.thread.lightness ? c : a));
+  // (a shape's outline on the fabric in a thread that hardly stands out from it, under FAINT, is sewn in the nearest
+  // colour that does, 10 more, and is within 30 of it: a grey cat on a grey-blue page was traced in grey, barely seen;
+  // 30 for all and the most standing out sewed a watercolour's green leaves in purple)
+  const FAINT = 25, faint = new Map(used.map((c) => {
+    const to = used.filter((u) => stand.get(u.id) >= FAINT + 10 && deltaE2000(u.lab, c.lab) < 30).sort((p, q) => deltaE2000(p.lab, c.lab) - deltaE2000(q.lab, c.lab))[0];
+    return [c.id, stand.get(c.id) < FAINT && to ? tOf(to.id) : tOf(c.id)];
+  }));
   // (two shades of one thread SHADE apart, or ALIKE where the picture steps from one to the other within a pixel: a dog's
   // fur in two browns drew 40 small rings, and a dinosaur's crisp darker spots are kept)
   const apart = (i, j, l, m) => { const v = deltaE2000(labOf.get(l), labOf.get(m)); return v >= SHADE || (v >= ALIKE && (tOf(l) !== tOf(m) || step(i, j, labOf.get(l), labOf.get(m), 0.8, 1))); };
@@ -1383,7 +1387,7 @@ function lineArt(img, analysis, opts) {
     if (!wideAt[i]) continue;
     const x = i % w, l = labels[i];
     for (const j of [x > 0 ? i - 1 : -1, x < w - 1 ? i + 1 : -1, i - w, i + w]) {
-      if (j < 0 || j >= n || !mine.has(labels[j])) { lines.data[i] = 1; thr[i] = stand.get(l) < FAINT ? dim.thread.id : tOf(l); break; }
+      if (j < 0 || j >= n || !mine.has(labels[j])) { lines.data[i] = 1; thr[i] = faint.get(l); break; }
       const m = labels[j];
       if (m !== l && m > l && !bands.data[j] && !lines.data[j] && apart(i, j, l, m) && step(i, j, labOf.get(l), labOf.get(m))) { lines.data[i] = 1; thr[i] = tOf(stand.get(m) > stand.get(l) ? m : l); break; }
     }
@@ -1402,7 +1406,7 @@ function lineArt(img, analysis, opts) {
   // Every line's centre (the skeletons of the outlines and thin lines, the bands and the strokes), each sewn by its
   // width and in the thread most of it was drawn in: decided per pixel, an ear's outline came out in two threads by turns,
   // a trim at every change
-  const all = [], allHow = [], allT = [];
+  const all = [], allHow = [], allT = [], darkest = threads.reduce((a, c) => (c.lightness < a.lightness ? c : a));
   const threadOf = (p) => {
     const v = new Map();
     for (const [x, y] of p) for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) { const X = Math.round(x) + dx, Y = Math.round(y) + dy; if (X >= 0 && Y >= 0 && X < w && Y < h && thr[Y * w + X] >= 0) v.set(thr[Y * w + X], (v.get(thr[Y * w + X]) || 0) + 1); }
@@ -1420,33 +1424,39 @@ function lineArt(img, analysis, opts) {
     }
     // (the bands' own skeleton, pruned at their width; strokes' spurs pruned under 0.6 of the width: a whole width took a
     // slab E's lower arm) sewn by their width along them
-    const byWidth = (e) => {
+    const byWidth = (e, stroke = false) => {
       // (its own median width, or its band's where they're within 0.35 mm: a bear's 3 mm brows joined to 1.2 mm eye rims
       // were sewn as hairlines by the band's median)
       const W = widthsOf(e[2], (i) => (bands.data[i] ? 2 * dep[i] - 1 : 0)).map((v) => v / res), own = median(W), all = median(widthsOf(e[2], (i) => (bands.data[i] ? pw[i] : 0))) / res;
       const m = Math.abs(own - all) < 0.35 ? all : own;
-      return m >= WEIGHT.satin ? { how: "satin", W: W.map((v) => Math.min(WEIGHT.most, Math.max(m / 2, v) - COLUMNS.thread)) } : { how: m >= WEIGHT.triple ? "triple" : "run" };
+      return m >= WEIGHT.satin ? { band: !stroke, how: "satin", W: W.map((v) => Math.min(WEIGHT.most, Math.max(m / 2, v) - COLUMNS.thread)) } : { how: m >= WEIGHT.triple ? "triple" : "run" };
     };
     if (bandW) for (const [a, b, p] of skeletonEdges(part, bandW, { spur: 1 })) { const e = [`b${a}`, `b${b}`, p]; all.push(e); allHow.push(byWidth(e)); }
-    if (strokeW) for (const [a, b, p] of lineEnds(skeletonEdges(strokes, strokeW, { spur: 0.6 }), strokes, strokeW)) { const e = [`s${a}`, `s${b}`, p]; all.push(e); allHow.push(byWidth(e)); }
-    for (const e of all) allT.push(o.line ? -2 : threadOf(e[2]));
+    if (strokeW) for (const [a, b, p] of lineEnds(skeletonEdges(strokes, strokeW, { spur: 0.6 }), strokes, strokeW)) { const e = [`s${a}`, `s${b}`, p]; all.push(e); allHow.push(byWidth(e, true)); }
+    for (const e of all) allT.push(threadOf(e[2]));
   }
   // each thread's lines (all in one when a thread is picked for the line drawing), walked and sewn lightest first, so
-  // the dark lines lie on top
+  // the dark lines lie on top. A textured picture (`F.textured`: photos, painted or stitched-looking art) is traced in its
+  // darkest thread, as before, when its threads walked apart cost over half again the trims and 10 more: its many small
+  // shapes took 20 -> 68 trims (etsy_1), 25 -> 160 (etsy_8)
+  const TRIMMED = 2;   // (formats.js TRIM)
+  const sew = (one) => {
   const groups = new Map();
-  for (const c of used) { const T = o.line ? -2 : c.thread.id; if (!groups.has(T)) groups.set(T, { T, thread: c.thread, light: c.thread.lightness }); }
+  for (const c of used) { const T = one ? -2 : c.thread.id; if (!groups.has(T)) groups.set(T, { T, thread: one ? darkest : c.thread, light: c.thread.lightness }); }
   const d = new Design(o.hoop), summary = [];
   for (const g of [...groups.values()].sort((p, q) => q.light - p.light)) {
     const edges = [], how = [];
-    all.forEach((e, k) => { if (allT[k] === g.T) { edges.push(e); how.push(allHow[k]); } });
+    // (traced in one thread, a textured picture's dark patches are shading, not drawn bands: no satin but for whole
+    // strokes, a busy rose sewed as a fuzzy blob)
+    all.forEach((e, k) => { if (one || allT[k] === g.T) { edges.push(e); how.push(one && F.textured && allHow[k].band ? { how: "triple" } : allHow[k]); } });
     const firstDot = edges.length;
-    for (const q of dots) if (o.line || q.t === g.T) { edges.push(q.e); how.push({ how: "satin", W: q.W.map((v) => Math.max(0.5, v - COLUMNS.thread)), dot: true }); }
+    for (const q of dots) if (one || q.t === g.T) { edges.push(q.e); how.push({ how: "satin", W: q.W.map((v) => Math.max(0.5, v - COLUMNS.thread)), dot: true }); }
     if (!edges.length) continue;
     const left = walks(edges, how, firstDot);
     if (!left.length) continue;
     const thread = o.line ? { hex: o.line, thread: nearestBrotherThread(o.line) } : g.thread;
     d.color(thread.hex, thread.thread.name);
-    summary.push({ ...(o.line ? threads.reduce((a, c) => (c.lightness < a.lightness ? c : a)) : g.thread), hex: thread.hex, thread: thread.thread, shapes: left.length, kinds: [...new Set(how.map((q) => q.how))] });
+    summary.push({ ...(one ? darkest : g.thread), hex: thread.hex, thread: thread.thread, shapes: left.length, kinds: [...new Set(how.map((q) => q.how))] });
     // the next drawing and where it's entered, by what the moves cost in trims: onto it (free within 2 mm, a loose 2-5 mm
     // thread dearer than a trim) and, as a drawing ends where it began, on from there to the nearest drawing still to sew
     // (0.9 of it: entered where it is near the next one, a word's letters 1-2 mm apart weren't each a trim); then the
@@ -1473,6 +1483,10 @@ function lineArt(img, analysis, opts) {
       still.delete(left[bi]); left.splice(bi, 1);
     }
   }
+  return { d, summary, trims: d.stitches.filter((q) => q[2] === TRIMMED).length };
+  };
+  let { d, summary, trims } = sew(!!o.line);
+  if (!o.line && F.textured) { const q = sew(true); if (trims > Math.max(1.5 * q.trims, q.trims + 10)) ({ d, summary } = q); }
   if (!d.stitches.length) throw Object.assign(new Error("No lines in this picture are big enough to stitch."), { code: "small" });
   d.finish();
   // (darkest first: the page names the first as the line drawing's thread)
