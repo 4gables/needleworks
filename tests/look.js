@@ -284,7 +284,7 @@ export const LOOK = {
   colourScale: 25,  // ΔE00 that scores colour 0 (2-3 is just noticeable, 5 a thread one shade off, 20+ another colour)
   fillCover: 0.9,   // cover that reads as solid thread (Filled): see `perceived`
   flat: 4,          // L*² variance under which the picture is flat in an SSIM window: only its lightness is compared there
-  crossBlur: 0.4,   // cells: Cross-stitch is judged blurred by this share of a cell (the lattice's own period is 4 % left)
+  crossBlur: 0.5,   // cells: Cross-stitch is judged blurred by this share of a cell (the lattice keeps 0.7 % of its contrast; at 0.4 its 4 %, over the cover normalising, still drew edges inside every field of crosses: outline 0.31 on a right chart)
   weights: { colour: 0.3, shape: 0.25, outline: 0.15, detail: 0.15, structure: 0.15 },
 };
 // A line drawing is judged against the picture's own lines (its edges, and the centre lines of its ink bands), not
