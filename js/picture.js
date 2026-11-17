@@ -103,6 +103,8 @@ export async function makePicture() {
   // (the fabric's colour closed in by the design: sewn, or left out, and said: insideNote)
   verdictUI(r);
   state.pic.closed = r.closed || 0; state.pic.spare = !!r.spare; state.pic.fabric = r.colors.find((c) => c.background) || null;
+  // (the paper inside a line drawing, left as fabric: digitize.js `lineInside`; its share of the design, for the note)
+  state.pic.paper = (p.style === "fill" && r.fine?.paper) || 0; state.pic.ink = r.fine?.inkMm2 || 0;
   // (flecks sewn in the colour round them, `foldFlecks`: said in the panel when it's more than a handful, as what
   // happened; not a problem, so not on the sew sheet)
   state.pic.folded = r.fine?.folded >= FLECKS ? r.fine.folded : 0;
@@ -303,8 +305,13 @@ function insideNote() {
   const name = escapeHtml(nearestBrotherThread(f.hex).name.toLowerCase());
   // (the design's colours fill the Thread colours count and none is cheap to give up: the closed-in colour stays fabric
   // unless asked for, `spare`. The count is every thread sewn, this one too)
-  el.innerHTML = p.spare
-    ? `The ${name} closed in by the design is left as fabric: ${p.colors > 1 ? `the ${p.colors} thread colours are all the design's` : "with one thread colour, that thread is the design's"}. <button type="button" class="link" data-inside="all">Sew it in ${name} too (${p.colors + 1} threads)</button>`
+  // (closed in by a line drawing: the paper it is drawn on. And when the part left bare is most of the design, a
+  // framed panel at 3 colours: said first, as what to sew it on, or the panel looked like a hole on any other cloth)
+  const most = p.closed >= 0.25 ? ` That is most of the design: sew it on ${name} fabric, or` : "";
+  el.innerHTML = p.paper && p.inside !== "all"
+    ? `The ${name} inside the drawing's lines is the paper it's drawn on, so it is left as fabric. <button type="button" class="link" data-inside="all">Sew it in ${name}</button>`
+    : p.spare
+    ? `The ${name} closed in by the design is left as fabric: ${p.colors > 1 ? `the ${p.colors} thread colours are all the design's` : "with one thread colour, that thread is the design's"}.${most} <button type="button" class="link" data-inside="all">${most ? "sew" : "Sew"} it in ${name} too (${p.colors + 1} threads)</button>`
     : p.inside === "none"
     ? `The ${name} closed in by the design is left as fabric, like the ${name} round it. <button type="button" class="link" data-inside="all">Sew it in ${name}</button>`
     : `The ${name} round the design is the fabric and isn't sewn. The ${name} closed in by the design is part of it, so it is sewn. <button type="button" class="link" data-inside="none">Leave it out</button>`;

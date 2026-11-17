@@ -340,17 +340,34 @@ pe900_check against this baseline and ships as its own release (`docs/releases.m
   a cell on the grid's origin) with line and cross self-checks; Filled 80.4 -> 81.8, line 42.2 -> 81.6, cross 41.5 ->
   70.5 (testing.md). left: the releaser re-saves look.json (new one in the c5-lk scratch dir); a pale backdrop panel
   left bare still counts as ink left out; die-cut borders count as traced; the worker could send `origin` and `cell`.
-- [ ] **C5-CO Colour (PX7, built for real)**: near-black hue fade from L 15, far threads capped with a chroma gain,
+- [x] **C5-CO Colour (PX7, built for real)**: near-black hue fade from L 15, far threads capped with a chroma gain,
   3x3 soft-edge sampling (the text PX7 wrote and never coded); fringes and shades judged in mm and relative to the
   source's pixel size; a shade never given another design colour's thread; muted navy/dusty red/near-black picks.
+  Owns palette.js, regions.js. done: PX7's four parts; flat judged at the picture's own pixel (tiny_50px 6 -> 2
+  threads); shades judged where the colour is two steps deep (soft_shadow's shadow left out at every count, never
+  orange/Silver); closed-in shade stays fabric. left: muted picks (navy -> Ultramarine, dusty red -> Carmine, owl
+  outline -> Prussian Blue: a chroma penalty in the choice fixed them and broke etsy_1/3's olive and mauve), the
+  owl's wings+body merge (keeping them cost its outline), judging in mm (colours are learned before the size).
   Owns palette.js, regions.js.
-- [ ] **C5-SA Satin finish (PX2 leftovers)**: mitred outer corners at star points (`px2-mitre`: holes 48.8 -> 44.0
+- [x] **C5-SA Satin finish (PX2 leftovers)**: mitred outer corners at star points (`px2-mitre`: holes 48.8 -> 44.0
   mm²), square column ends on bold strokes, bare locks back down (PX2 added 6-11 on the samples), tapered strokes and
   leaf halves as satin, small lettering as columns not fans. Owns digitize.js `columnNets`/`netStitches` and the
   stroke part of `build`, recipes.js `COLUMNS`.
-- [ ] **C5-KE Keep what matters, cut what costs**: v34's blends cost (60 mm sunset loose 1 -> 7, icon trims 6 -> 11);
+  - done: mitre ported (holes 48.4 -> 42.9 mm², star outline 5.4 -> 2.1), tapers and leaf halves as satin
+    (`taper`), stitches square to the line's run (`steady`), a small counter keeps its ring; look by kind within
+    -0.2..+0.1, batch trims 1,120 -> 1,114 (`docs/pictures.md` "Stitch types")
+  - left: bare locks unchanged (86: ~60 are sub-1 mm fill dots, specks; the rest fill tie-ins on sharp tips, none
+    columns); square ends had no measurable holes left; E corners and D bowls round small counters still fan (needs
+    the letter's strokes, not a skeleton)
+- [x] **C5-KE Keep what matters, cut what costs**: v34's blends cost (60 mm sunset loose 1 -> 7, icon trims 6 -> 11);
   closed-in white (the mandala's disc and dots, sewn counters, a panel left bare said in the note); thin rules and
   dots not dropped; travel under later stitches. Owns shade.js, digitize.js `keptParts`/specks/`lostLines`.
+  - done: the paper inside a line drawing left as fabric and said (`lineInside`; mandala 66.6 -> 75.1 and 71.3 ->
+    81.5, its dots back); blend travel under the later thread's rows (icon trims 17 -> 10, sunset 60 mm 21 -> 13 and
+    loose 7 -> 0); faint hairlines and dashed lines sewn (pc_rules 60 mm 70.8 -> 75.4); a bare panel that is most of
+    the design said as what to sew it on. Filled: line art +4.9, drawing +1.2, trims 1,635 -> 1,554, loose 33 -> 25
+  - left: pc_rules' red rule and the owl's 60 mm chevrons are lost in the labelling (palette, C5-CO); a bold
+    letter's counter on the fabric (panel's D) is still sewn; soft_shadow's O counter
 - [ ] **C5-LN Line drawing a person would trace**: edges from the unquantised picture; each line its own thread and
   weight (run, triple, satin column, dot from the measured width); one centre line per band, outline only for fat
   shapes; no die-cut borders or spurs, closed junctions; routed by word and column. Owns digitize.js `lineArt`,

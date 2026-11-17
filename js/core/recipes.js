@@ -100,8 +100,12 @@ export const SHAPES = { band: 0.5, between: 1.25, side: 0.2, fleck: 3, enclosed:
 // edge at the centre line (a junction's other strokes), less half of `thread` (the satin's thread lies past its
 // holes); a loose end stops where the column is under `tip` across. The columns must cover `cover` of the piece
 // (a short arm thinning prunes as a spur would be left bare), else it is a fill. `pull`: the satin's own extra width (plus the
-// fabric's, LETTERS).
-export const COLUMNS = { min: 1.0, wide: 4, long: 2, into: 0.6, cap: 1.4, tip: 0.5, solid: 0.85, stub: 3, short: 0.2, even: 2.2, pull: 0.1, thread: 0.2, small: 3, cover: 0.9 };
+// fabric's, LETTERS). `mitre`: at a sharp turn of the centre line the outer side's cap grows by 1 / sin(half the
+// inside angle), the mitre to the drawn point, at most 1 / `mitre` times. `taper`: a stroke uneven past `even` is still
+// a column when along each centre line its width rises and falls at most `taper` times its range (a brush stroke's
+// point, a leaf's half). `steady`: each satin stitch lies square to the centre line's direction averaged over that
+// many stroke widths either way (square to every wiggle, small letters sewed as fans).
+export const COLUMNS = { min: 1.0, wide: 4, long: 2, into: 0.6, cap: 1.4, tip: 0.5, solid: 0.85, stub: 3, short: 0.2, even: 2.2, pull: 0.1, thread: 0.2, small: 3, cover: 0.9, mitre: 0.25, taper: 2.5, steady: 0.75 };
 export const PICTURES = { fleck: 3, enclosed: 0.8, eyes: 6, start: 4, edge: 0.75,
   details: { all: { start: 0, share: 0, lone: 0 }, most: { start: 7, share: 0.1, lone: 8 } } };
 // Shading (core/shade.js, roadmap PX4; numbers: docs/pictures.md). Two colours' regions, each `wide` mm across
@@ -113,8 +117,9 @@ export const PICTURES = { fleck: 3, enclosed: 0.8, eyes: 6, start: 4, edge: 0.75
 // blurred `field` mm. Rows: one grid and angle per group,
 // each row's stretches in one thread by an ordered threshold of `levels`; stretches under `run` mm join their
 // neighbour; a thread's region reaches `reach` mm round its stretches; where a row changes thread the one sewn first
-// runs `over` mm under the next, the next `under` mm back over it.
-export const SHADE = { blur: 0.4, soft: 2, blend: 1.3, border: 8, wide: 6, near: 10, far: 30, band: 12, area: 25, agree: 0.5, field: 1, levels: 2, run: 1, reach: 1, over: 0.3, under: 0.1 };
+// runs `over` mm under the next, the next `under` mm back over it. `hide`: a thread's travel may run this far (mm)
+// inside where a later thread alone sews every row (under rows still to come).
+export const SHADE = { blur: 0.4, soft: 2, blend: 1.3, border: 8, wide: 6, near: 10, far: 30, band: 12, area: 25, agree: 0.5, field: 1, levels: 2, run: 1, reach: 1, over: 0.3, under: 0.1, hide: 0.5 };
 
 // Art that stitches well (PX6: the Picture tab's guide for making a picture, and its check of a picture; core/artcheck.js,
 // docs/pictures.md). What a picture needs, measured at the size it is sewn, from the digitizer's own rules:

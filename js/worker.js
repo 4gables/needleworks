@@ -30,7 +30,7 @@ self.onmessage = (e) => {
     // a thread picked on a colour's chip (`swap`: id -> { hex: a Brother thread's }) sews that colour instead of the one it
     // was matched to; where it comes in the sewing order stays (its lightness is the picture's)
     const a = opts.swap ? { ...p, colors: p.colors.map((c) => (opts.swap[c.id] ? { ...c, hex: opts.swap[c.id].hex, thread: nearestBrotherThread(opts.swap[c.id].hex) } : c)) } : p;
-    const { design, summary, fine, res, origin } = digitize(img, a, opts);
+    const { design, summary, fine, res, origin, labels } = digitize(img, a, opts);
     // (what of the picture was left out, measured on the learned copy: the same parts at every Size and colour count)
     model.full ||= labelWith(learn, m);
     if (ref?.key !== e.data.ref) ref = { key: e.data.ref, ink: pictureInk(learn, labelWith(learn, learnColours(learn, { ...opts, colors: MOST }))) };
@@ -42,7 +42,7 @@ self.onmessage = (e) => {
     const pattern = opts.turn ? turnForMachine(design.pattern()) : design.pattern();
     const bytes = writePES(pattern);
     self.postMessage({ id, ok: true, pattern, bytes, summary, fine, art,
-      colors: a.colors, merged: analysis.merged, closed: analysis.closed || 0, spare: !!m.spare && inside === "auto", flat: m.flat, smooth: !!m.smooth, framed: !!analysis.frame, owned: a.owned, labels: a.labels, w: a.w, h: a.h, res }, [bytes.buffer]);
+      colors: a.colors, merged: analysis.merged, closed: analysis.closed || 0, spare: !!m.spare && inside === "auto", flat: m.flat, smooth: !!m.smooth, framed: !!analysis.frame, owned: a.owned, labels: labels || a.labels, w: a.w, h: a.h, res }, [bytes.buffer]);
   } catch (err) {
     self.postMessage({ id, ok: false, error: err.message || String(err), code: err.code });
   }

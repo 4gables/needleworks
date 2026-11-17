@@ -81,7 +81,7 @@ export function shading(img, labels, colors, used, res, o = {}) {
   const mode = o.shade === "blend" || o.shade === "flat" ? o.shade : "auto";
   const { width: w, height: h } = img, n = w * h;
   const flatOf = (i, id) => labels[i] === id;
-  const none = { mode, groups: [], area: 0, offer: 0, of: flatOf, rows: () => null };
+  const none = { mode, groups: [], area: 0, offer: 0, of: flatOf, sole: (i) => labels[i], rows: () => null };
   if (!used.length || labels.length !== n) return none;
   const sewn = new Set(used.map((c) => c.id)), data = img.data;
   const lin = new Float32Array(3 * n), ink = new Uint8Array(n);
@@ -246,6 +246,10 @@ export function shading(img, labels, colors, used, res, o = {}) {
   const rank = new Map(used.slice().sort((a, b) => b.lightness - a.lightness).map((c, k) => [c.id, k]));
 
   const of = (i, id) => (gid[i] ? !!has.get(id)?.[i] : labels[i] === id);
+  // the one thread that sews every row at a pixel (-1 where the two share it): under the lowest row threshold the
+  // first, over the highest the second. build() lets an earlier thread's travel run there, under rows still to come.
+  const lo = Math.min(...ORDER), hi = Math.max(...ORDER);
+  const sole = (i) => (!gid[i] ? labels[i] : A[i] === B[i] ? A[i] : F[i] < lo ? A[i] : F[i] > hi ? B[i] : -1);
   // A colour's shape that lies (in part) in a shaded group: its rows on the group's grid, each kept where the plan
   // gives it this thread (and where the shape lies outside the group, whole), and an underlay under the part where
   // it is the main thread. opts: { spacing, stitch, pull } as build()'s tatami.
@@ -325,5 +329,5 @@ export function shading(img, labels, colors, used, res, o = {}) {
     return { under, fill };
   }
   const area = groups.reduce((t, g) => t + g.area, 0);
-  return { mode, groups, area, offer, found: groups.length, of, rows, debug };
+  return { mode, groups, area, offer, found: groups.length, of, sole, rows, debug };
 }
