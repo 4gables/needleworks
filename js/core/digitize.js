@@ -971,7 +971,7 @@ function lineEnds(es, mask, far) {
 // majority passes (as `labelWith`). A seed's thread is its own; an added one's is the thread most of its pixels were
 // labelled with, or the nearest by colour where that was the fabric. Within `fabric` of the fabric, a colour is fabric
 // (a sticker's die-cut white on a white page was drawn round as a ring).
-const FINE = { apart: 10, near: 5, area: 0.5, most: 12, tries: 60, fabric: 8, flat: 0.5 };
+const FINE = { apart: 10, near: 5, area: 0.5, most: 12, tries: 60, fabric: 8, flat: 0.7 };
 function fineColours(img, analysis, used, res, skip) {
   const { w, h, labels, colors } = analysis, n = w * h, { lab } = pixels(img), fab = colors.find((c) => c.background);
   const px = (i) => [lab[i * 3], lab[i * 3 + 1], lab[i * 3 + 2]], labC = (c) => srgbToLab(...hexToRgb(c.picture || c.hex));
@@ -983,17 +983,19 @@ function fineColours(img, analysis, used, res, skip) {
   // (a blend: between the colours 2 px either side of it, along some axis, where those differ; the anti-aliased edge
   // between two colours. A pale line's middle is paler than both sides, not between them)
   const blend = (i) => [1, w, w + 1, w - 1].some((s) => { const a = i - 2 * s, b = i + 2 * s; return a >= 0 && b < n && dE(a, b) > 10 && dE(a, i) + dE(i, b) <= 1.15 * dE(a, b); });
-  const plain = [];
+  const plain = [], inkAt = (i) => i >= 0 && i < n && labels[i] >= 0 && !(fab && labels[i] === fab.id);
+  let inside = 0, flatIn = 0;
   for (let y = 2; y < h - 2; y += step) for (let x = 2; x < w - 2; x += step) {
     const i = y * w + x;
     if (labels[i] < 0 || skip.has(labels[i])) continue;
     const k = [i - 1, i + 1, i - w, i + w].filter((j) => dE(i, j) < 6).length;
     S.push(i); flat.push(close(i, i - 1) && close(i, i + 1) && close(i, i - w) && close(i, i + w)); plain.push(k >= 2 && !blend(i));
+    if (inkAt(i) && inkAt(i - 3) && inkAt(i + 3) && inkAt(i - 3 * w) && inkAt(i + 3 * w)) { inside++; if (flat.at(-1)) flatIn++; }
   }
-  // (a textured picture, under FINE.flat of it flat (a photo's grain, paper noise), keeps the colours it was labelled
-  // with: its grain learned finer drew 147 squiggles over a noisy page)
-  const textured = flat.filter(Boolean).length < FINE.flat * S.length;
-  if (globalThis.__ln) globalThis.__ln.flat = flat.filter(Boolean).length / Math.max(1, S.length);
+  // (a textured picture, under FINE.flat of its ink flat 3 px inside (a photo's grain, paper noise, crayon), keeps the
+  // colours it was labelled with: its grain learned finer drew 147 squiggles over a noisy page, and crayon's flecks
+  // tangled the strokes)
+  const textured = inside > 50 && flatIn < FINE.flat * inside;
   const d = S.map((i) => Math.min(...seeds.map((s) => deltaE2000(px(i), s)))), out = new Uint8Array(S.length);
   const need = (FINE.area * res * res) / (step * step);
   let tries = 0;
@@ -1078,8 +1080,9 @@ function lineArt(img, analysis, opts) {
   // Only a change of colour draws a line: two shades of one (a textured lawn in two greens) don't, and a thin piece that
   // is a shade of the colour round it, or the blend between two colours (a yellow bird's edge against its black
   // outline), takes the neighbouring colour instead of being drawn as a line beside the outline. Alike: under ALIKE
-  // ΔE00 (15 kept sky and teal mountains, 14.6 apart, from meeting at a line; an owl's outline and wing are 10.3)
-  const ALIKE = 8, fabric = colors.find((c) => c.background), labOf = new Map(colors.map((c) => [c.id, c.lab]));
+  // ΔE00, and under SHADE for a thin piece whose edge is soft (under 0.7 of the difference across 4 px; 15 for all kept
+  // sky and teal mountains, 14.6 apart, from meeting at a line, and an owl's outline from its wing, 10.3)
+  const ALIKE = 8, SHADE = 15, fabric = colors.find((c) => c.background), labOf = new Map(colors.map((c) => [c.id, c.lab]));
   const colOf = (l) => (mine.has(l) ? labOf.get(l) : fabric ? labOf.get(fabric.id) : null);
   const alike = (a, b) => !!a && !!b && deltaE2000(a, b) < ALIKE;
   const toFabric = fabric ? fabric.id : -1, moves = [];
@@ -1111,15 +1114,16 @@ function lineArt(img, analysis, opts) {
       for (let i = 0; i < n; i++) { const c = cl[i]; if (c && k[c] && sum[c] / k[c] < 0.3 * full) labels[i] = toFabric; }
     }
   }
-  // Where the picture has no step (STEP: across 5 px its colour changes by under 0.4 of the two colours' difference)
+  // Where the picture has no step (STEP: across 2 mm its colour changes by under half the two colours' difference)
   // there is no line: a gradient learned as two colours drew a straight line across a sunset's sky. And a pale piece
   // (under 35 ΔE00 from the fabric) lying against another colour whose edge on the fabric is soft nearly all round (2 px out
   // still not the fabric's colour, within 6, on four fifths of it) is a shadow or a glow, fabric: a soft shadow under "Holly" was traced in orange satin.
-  const lab = F.lab, fl = fabric ? labOf.get(fabric.id) : [100, 0, 0], STEP = 0.4;
-  const step = (i, j, p, q) => {
-    const A = i - 2 * (j - i), B = j + 2 * (j - i);
-    if (A < 0 || B < 0 || A >= n || B >= n || Math.abs((A % w) - (i % w)) > 3 || Math.abs((B % w) - (j % w)) > 3) return true;
-    return Math.hypot(lab[A * 3] - lab[B * 3], lab[A * 3 + 1] - lab[B * 3 + 1], lab[A * 3 + 2] - lab[B * 3 + 2]) >= STEP * Math.hypot(p[0] - q[0], p[1] - q[1], p[2] - q[2]);
+  const lab = F.lab, fl = fabric ? labOf.get(fabric.id) : [100, 0, 0], STEP = 0.5, reach = Math.max(2, Math.round(res));
+  // (a tabby's blurred stripes take 1-2 mm to change; a sunset's sky 30 mm)
+  const step = (i, j, p, q, f = STEP, r = reach) => {
+    const A = i - r * (j - i), B = j + r * (j - i);
+    if (A < 0 || B < 0 || A >= n || B >= n || Math.abs((A % w) - (i % w)) > r + 1 || Math.abs((B % w) - (j % w)) > r + 1) return true;
+    return Math.hypot(lab[A * 3] - lab[B * 3], lab[A * 3 + 1] - lab[B * 3 + 1], lab[A * 3 + 2] - lab[B * 3 + 2]) >= f * Math.hypot(p[0] - q[0], p[1] - q[1], p[2] - q[2]);
   };
   // (palest first: a blurred shadow learned as two greys is dropped from its outside in)
   const edgeOn = (i, j) => { const k = j + 2 * (j - i); return k < 0 || k >= n || Math.abs((k % w) - (j % w)) > 3 || Math.hypot(lab[k * 3] - fl[0], lab[k * 3 + 1] - fl[1], lab[k * 3 + 2] - fl[2]) <= 6; };
@@ -1154,7 +1158,7 @@ function lineArt(img, analysis, opts) {
     for (let i = 0; i < n; i++) mask.data[i] = before[i] === col.id ? 1 : 0;
     const dt = distanceTransform(mask), { labels: cl, count } = label(mask), wide = new Uint8Array(count + 1), size = new Int32Array(count + 1);
     for (let i = 0; i < n; i++) if (cl[i]) { size[cl[i]]++; if (dt[i] > 0.75 * res) wide[cl[i]] = 1; }
-    const nb = new Map();
+    const nb = new Map(), sharp = [], edge = [];
     for (let i = 0; i < n; i++) {
       const c = cl[i]; if (!c || wide[c]) continue;
       const x = i % w;
@@ -1162,16 +1166,30 @@ function lineArt(img, analysis, opts) {
         if (j < 0 || j >= n || cl[j] === c) continue;
         const l = mine.has(before[j]) ? before[j] : toFabric, m = nb.get(c) || new Map();
         m.set(l, (m.get(l) || 0) + 1); nb.set(c, m);
+        if (l !== toFabric) { sharp[c] = (sharp[c] || 0) + (step(i, j, labOf.get(col.id), labOf.get(l), 0.7, 1) ? 1 : 0); edge[c] = (edge[c] || 0) + 1; }
       }
     }
     const me = labOf.get(col.id), to = new Map();
     for (const [c, m] of nb) {
       const [[A] = [], [B] = []] = [...m.entries()].sort((p, q) => q[1] - p[1]), a = colOf(A), b = colOf(B);
       // (into the fabric only a speck: a pale line on white is still a line)
-      if (alike(me, a) && (A !== toFabric || size[c] < 0.5 * res * res)) to.set(c, A);
+      // (and a shade under SHADE apart whose edge on its colours is soft: a dog's fur streaks drew 50 squiggles)
+      if ((alike(me, a) || (A !== toFabric && deltaE2000(me, a) < SHADE && (sharp[c] || 0) < 0.5 * (edge[c] || 1))) && (A !== toFabric || size[c] < 0.5 * res * res)) to.set(c, A);
       // (a blend with the fabric is the edge of the colour it blends into: thin dark lettering anti-aliased to grey
       // stays lettering)
-      else if (a && b && deltaE2000(a, me) + deltaE2000(me, b) <= 1.25 * deltaE2000(a, b)) to.set(c, A === toFabric ? B : B === toFabric ? A : deltaE2000(a, me) <= deltaE2000(me, b) ? A : B);
+      else {
+        // (between any two of the colours round it that hold a sixth of its edge, the two furthest apart: a black outline
+        // anti-aliased to white through two greys of the drawing left each grey as a ring round a robot)
+        const all = [...m.entries()], tot = all.reduce((t, e) => t + e[1], 0), round = all.filter((e) => e[1] >= tot / 6).map((e) => e[0]);
+        let best = null, bd = 0;
+        for (let x = 0; x < round.length; x++) for (let y = x + 1; y < round.length; y++) {
+          const P = round[x], Q = round[y], p = colOf(P), q = colOf(Q);
+          if (!p || !q) continue;
+          const v = deltaE2000(p, q);
+          if (v > bd && deltaE2000(p, me) + deltaE2000(me, q) <= 1.25 * v) { bd = v; best = [P, Q, p, q]; }
+        }
+        if (best) { const [P, Q, p, q] = best; to.set(c, P === toFabric ? Q : Q === toFabric ? P : deltaE2000(p, me) <= deltaE2000(me, q) ? P : Q); }
+      }
     }
     if (to.size) moves.push([cl, to]);
   }
@@ -1182,13 +1200,12 @@ function lineArt(img, analysis, opts) {
   // Each pixel's thread (`thr`: the thread colour's id, the line drawn through it), its line's width when it is a thin
   // piece (`wpx`, px) and its depth in its colour when it is a band or a stroke (`dep`, px): what each traced line is
   // sewn in and how (`WEIGHT`)
-  if (globalThis.__ln) Object.assign(globalThis.__ln, { fine: F, labels: labels.slice(), colors });
   const thr = new Int16Array(n).fill(-1), wpx = new Float32Array(n), dep = new Float32Array(n), pw = new Float32Array(n), tOf = (l) => colors[l].thread.id;
   // Outlines drawn in the picture (a dark band under BAND mm wide) are lines already: sewn once along their centre.
   // Tracing both their edges drew two parallel lines round Snoopy. Parts of a dark colour's shapes no disc BAND/2 mm
   // across reaches into are such bands (a filled ear stays a shape, the outline running from it a line); a small dark
   // shape on its own (an eye, a nose) is outlined.
-  const BAND = 3, dark = (c) => c.lightness <= Math.max(35, ink.lightness + 15);
+  const BAND = 4, dark = (c) => c.lightness <= Math.max(35, ink.lightness + 15);
   // A whole piece that is one stroke of an even width (a crayon or marker line, a logo's letters) is sewn once along
   // its centre whatever its colour, up to STROKE of the drawing's longer side (3-6 mm). Deciding by parts drew the
   // corners of a 3 mm crayon line, where a BAND disc just fits, as little outlines and cut the line there (a house's
@@ -1196,6 +1213,13 @@ function lineArt(img, analysis, opts) {
   const STROKE = 0.04, wMax = Math.min(6, Math.max(BAND, (STROKE * Math.max(w, h)) / res)) * res;
   const lines = { w, h, data: new Uint8Array(n) }, bands = { w, h, data: new Uint8Array(n) }, wideAt = new Uint8Array(n);
   const strokes = { w, h, data: new Uint8Array(n) }, widths = [], sw = [], dots = [];
+  // (the fabric round the drawing, from the picture's edge: a robot's white grille lines, fabric closed in, made the dark
+  // strips between them "on the fabric", sewn as satin bars)
+  const outer = new Uint8Array(n), st = [];
+  const reach0 = (i) => { if (!outer[i] && !mine.has(labels[i])) { outer[i] = 1; st.push(i); } };
+  for (let x = 0; x < w; x++) { reach0(x); reach0((h - 1) * w + x); }
+  for (let y = 0; y < h; y++) { reach0(y * w); reach0(y * w + w - 1); }
+  while (st.length) { const i = st.pop(), x = i % w; if (x > 0) reach0(i - 1); if (x < w - 1) reach0(i + 1); if (i >= w) reach0(i - w); if (i + w < n) reach0(i + w); }
   for (const col of used) {
     const mask = { w, h, data: new Uint8Array(n) };
     for (let i = 0; i < n; i++) mask.data[i] = labels[i] === col.id ? 1 : 0;
@@ -1204,13 +1228,14 @@ function lineArt(img, analysis, opts) {
     // each wide piece's depths along its middle (the ridge of its distance to the edge), deepest point, area and what
     // its edge touches (fabric, or another colour of the drawing)
     const ridge = Array.from({ length: count + 1 }, () => []), top = new Float32Array(count + 1), area = new Int32Array(count + 1);
-    const open = new Int32Array(count + 1), shut = new Int32Array(count + 1);
+    const open = new Int32Array(count + 1), shut = new Int32Array(count + 1), crisp = new Int32Array(count + 1);
     for (let i = 0; i < n; i++) {
       const c = cl[i]; if (!c || !wide[c]) continue;
       area[c]++; if (dt[i] > top[c]) top[c] = dt[i];
       const x = i % w;
       let peak = dt[i] >= 1.5;
       for (const j of [x > 0 ? i - 1 : -1, x < w - 1 ? i + 1 : -1, i - w, i + w]) {
+        if (j >= 0 && j < n && labels[j] !== col.id && step(i, j, col.lab, colOf(labels[j]) || fl, 0.5, 2)) crisp[c]++;
         if (j < 0 || j >= n || !mine.has(labels[j])) open[c]++;
         else if (labels[j] !== col.id) shut[c]++;
         if (j >= 0 && j < n && dt[j] > dt[i]) peak = false;
@@ -1229,9 +1254,9 @@ function lineArt(img, analysis, opts) {
       // drawing was traced round both edges; and one that runs into another colour, a stem into its flower, a third of
       // its edge)
       across[c] = W; long[c] = area[c] >= 3 * W * W ? 1 : 0;
-      if ((W <= wMax || (W <= 6 * res && area[c] >= 12 * W * W)) && d[Math.floor(d.length * 0.2)] >= 0.6 * d[Math.floor(d.length * 0.8)] && top[c] <= W && open[c] >= (long[c] && area[c] >= 12 * W * W ? 2 : 4) * shut[c])
+      // (and drawn: crisp along half its edge at least; a 50 px heart's blurred rim was sewn as a satin ring round it)
+      if ((W <= wMax || (W <= 6 * res && area[c] >= 12 * W * W)) && d[Math.floor(d.length * 0.2)] >= 0.6 * d[Math.floor(d.length * 0.8)] && top[c] <= W && open[c] >= (long[c] && area[c] >= 12 * W * W ? 2 : 4) * shut[c] && 2 * crisp[c] >= open[c] + shut[c])
         stroke[c] = long[c] ? 1 : 2;
-      if (globalThis.__ln && area[c] > 200) console.log("st", col.id, c, stroke[c], (W / res).toFixed(2), [0.1, 0.2, 0.5, 0.8, 0.9].map((f) => (d[Math.floor(d.length * f)] / d[d.length >> 1]).toFixed(2)).join(","), (area[c] / W / W).toFixed(1));
     }
     // A stroke's centre line keeps its limbs: where a quarter of it is limbs shorter than the stroke is wide but over
     // half that (not a corner's spur), which the centre line's pruning takes off, the piece is outlined instead. Fat
@@ -1321,7 +1346,7 @@ function lineArt(img, analysis, opts) {
       const x = i % w;
       for (const j of [x > 0 ? i - 1 : -1, x < w - 1 ? i + 1 : -1, i - w, i + w]) {
         if (j < 0 || j >= n || cl[j] === cl[i]) continue;
-        if (mine.has(labels[j])) tS[t]++; else tO[t]++;
+        if (mine.has(labels[j])) tS[t]++; else if (outer[j]) tO[t]++;
       }
     }
     // (each band's width: twice the median depth along its middle, so a band is sewn at one weight all along: an owl's
@@ -1329,7 +1354,8 @@ function lineArt(img, analysis, opts) {
     const tR = Array.from({ length: tc + 1 }, () => []);
     for (let i = 0; i < n; i++) { const t = tl[i]; if (!t) continue; const x = i % w; if ([x > 0 ? i - 1 : -1, x < w - 1 ? i + 1 : -1, i - w, i + w].every((j) => j < 0 || j >= n || dt[j] <= dt[i])) tR[t].push(dt[i]); }
     const tM = tR.map((r) => (r.length ? r.sort((a, b) => a - b)[r.length >> 1] : 0));
-    const longPart = (t) => { const wd = 2 * tW[t]; return wd > 0 && tA[t] >= 4 * wd * wd && tA[t] / wd >= 5 * res && tO[t] >= 0.5 * tS[t]; };
+    // (a dark colour's such band wherever it lies: a palm's trunk between the sky and the sea was outlined, two lines)
+    const longPart = (t) => { const wd = 2 * tW[t]; return wd > 0 && tA[t] >= 4 * wd * wd && tA[t] / wd >= 5 * res && (dark(col) || tO[t] >= 0.5 * tS[t]); };
     const band = (i) => thin(i) && ((dark(col) && part[cl[i]] >= 0.5 * area[cl[i]] && (x1[cl[i]] - x0[cl[i]] > small || y1[cl[i]] - y0[cl[i]] > small)) || longPart(tl[i]));
     const T = tOf(col.id);
     for (let i = 0; i < n; i++) {
@@ -1345,16 +1371,18 @@ function lineArt(img, analysis, opts) {
   // band (its centre line is the line), nor where the picture has no step; in the thread of the colour that stands out
   // more from the fabric
   const stand = new Map(used.map((c) => [c.id, deltaE2000(c.lab, fl)]));
+  // (two shades of one thread SHADE apart, or ALIKE where the picture steps from one to the other within a pixel: a dog's
+  // fur in two browns drew 40 small rings, and a dinosaur's crisp darker spots are kept)
+  const apart = (i, j, l, m) => { const v = deltaE2000(labOf.get(l), labOf.get(m)); return v >= SHADE || (v >= ALIKE && (tOf(l) !== tOf(m) || step(i, j, labOf.get(l), labOf.get(m), 0.8, 1))); };
   for (let i = 0; i < n; i++) {
     if (!wideAt[i]) continue;
     const x = i % w, l = labels[i];
     for (const j of [x > 0 ? i - 1 : -1, x < w - 1 ? i + 1 : -1, i - w, i + w]) {
       if (j < 0 || j >= n || !mine.has(labels[j])) { lines.data[i] = 1; thr[i] = tOf(l); break; }
       const m = labels[j];
-      if (m !== l && m > l && !bands.data[j] && !lines.data[j] && !alike(labOf.get(l), labOf.get(m)) && step(i, j, labOf.get(l), labOf.get(m))) { lines.data[i] = 1; thr[i] = tOf(stand.get(m) > stand.get(l) ? m : l); break; }
+      if (m !== l && m > l && !bands.data[j] && !lines.data[j] && apart(i, j, l, m) && step(i, j, labOf.get(l), labOf.get(m))) { lines.data[i] = 1; thr[i] = tOf(stand.get(m) > stand.get(l) ? m : l); break; }
     }
   }
-  if (globalThis.__ln) Object.assign(globalThis.__ln, { lines: lines.data.slice(), bands: bands.data.slice(), strokes: strokes.data.slice(), thr: thr.slice() });
   // the widths that set each skeleton's pruning (as one stroke: corners of a wide stroke grow short spurs)
   widths.sort((a, b) => a - b); sw.sort((a, b) => a - b);
   const bandW = widths.length && Math.max(3, Math.min(BAND * res, 2 * widths[Math.floor(widths.length * 0.9)])), strokeW = sw.length && Math.max(3, sw[Math.floor(sw.length * 0.9)]);
@@ -1366,30 +1394,43 @@ function lineArt(img, analysis, opts) {
     return v;
   });
   const median = (a) => { const s = a.slice().sort((p, q) => p - q); return s.length ? s[s.length >> 1] : 0; };
-  // Each thread's lines (all in one when a thread is picked for the line drawing), walked and sewn lightest first, so
+  // Every line's centre (the skeletons of the outlines and thin lines, the bands and the strokes), each sewn by its
+  // width and in the thread most of it was drawn in: decided per pixel, an ear's outline came out in two threads by turns,
+  // a trim at every change
+  const all = [], allHow = [], allT = [];
+  const threadOf = (p) => {
+    const v = new Map();
+    for (const [x, y] of p) for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) { const X = Math.round(x) + dx, Y = Math.round(y) + dy; if (X >= 0 && Y >= 0 && X < w && Y < h && thr[Y * w + X] >= 0) v.set(thr[Y * w + X], (v.get(thr[Y * w + X]) || 0) + 1); }
+    return [...v].sort((p, q) => q[1] - p[1])[0]?.[0] ?? -1;
+  };
+  {
+    const thick = { w, h, data: lines.data.slice() }, part = { w, h, data: new Uint8Array(n) };
+    for (let i = 0; i < n; i++) if (bands.data[i] && !strokes.data[i]) part.data[i] = 1;
+    // thicken the 1 px outlines so the skeleton follows them smoothly
+    for (let i = 0; i < n; i++) if (lines.data[i]) { const x = i % w; if (x < w - 1) thick.data[i + 1] = 1; if (i + w < n) thick.data[i + w] = 1; }
+    // (pruning dead ends under 2 mm too took the strokes off small lettering)
+    for (const e of lineEnds(skeletonEdges(thick, 3, { spur: 1 }), thick, res)) {
+      const W = median(widthsOf(e[2], (i) => (lines.data[i] ? wpx[i] : 0))) / res;
+      all.push(e); allHow.push({ how: W >= WEIGHT.triple ? "triple" : "run" });
+    }
+    // (the bands' own skeleton, pruned at their width; strokes' spurs pruned under 0.6 of the width: a whole width took a
+    // slab E's lower arm) sewn by their width along them
+    const byWidth = (e) => {
+      const W = widthsOf(e[2], (i) => (bands.data[i] ? 2 * dep[i] - 1 : 0)).map((v) => v / res), m = median(widthsOf(e[2], (i) => (bands.data[i] ? pw[i] : 0))) / res;
+      return m >= WEIGHT.satin ? { how: "satin", W: W.map((v) => Math.min(WEIGHT.most, Math.max(m / 2, v) - COLUMNS.thread)) } : { how: m >= WEIGHT.triple ? "triple" : "run" };
+    };
+    if (bandW) for (const [a, b, p] of skeletonEdges(part, bandW, { spur: 1 })) { const e = [`b${a}`, `b${b}`, p]; all.push(e); allHow.push(byWidth(e)); }
+    if (strokeW) for (const [a, b, p] of lineEnds(skeletonEdges(strokes, strokeW, { spur: 0.6 }), strokes, strokeW)) { const e = [`s${a}`, `s${b}`, p]; all.push(e); allHow.push(byWidth(e)); }
+    for (const e of all) allT.push(o.line ? -2 : threadOf(e[2]));
+  }
+  // each thread's lines (all in one when a thread is picked for the line drawing), walked and sewn lightest first, so
   // the dark lines lie on top
   const groups = new Map();
   for (const c of used) { const T = o.line ? -2 : c.thread.id; if (!groups.has(T)) groups.set(T, { T, thread: c.thread, light: c.thread.lightness }); }
   const d = new Design(o.hoop), summary = [];
   for (const g of [...groups.values()].sort((p, q) => q.light - p.light)) {
-    const has = (i) => o.line || thr[i] === g.T, edges = [], how = [];
-    const thick = { w, h, data: new Uint8Array(n) }, part = { w, h, data: new Uint8Array(n) }, st = { w, h, data: new Uint8Array(n) };
-    for (let i = 0; i < n; i++) if (has(i)) { if (lines.data[i]) thick.data[i] = 1; if (bands.data[i] && !strokes.data[i]) part.data[i] = 1; if (strokes.data[i]) st.data[i] = 1; }
-    // thicken the 1 px outlines so the skeleton follows them smoothly
-    for (let i = 0; i < n; i++) if (lines.data[i] && has(i)) { const x = i % w; if (x < w - 1) thick.data[i + 1] = 1; if (i + w < n) thick.data[i + w] = 1; }
-    // (pruning dead ends under 2 mm too took the strokes off small lettering)
-    for (const e of lineEnds(skeletonEdges(thick, 3, { spur: 1 }), thick, res)) {
-      const W = median(widthsOf(e[2], (i) => (lines.data[i] && has(i) ? wpx[i] : 0))) / res;
-      edges.push(e); how.push({ how: W >= WEIGHT.triple ? "triple" : "run" });
-    }
-    // (the bands' own skeleton, pruned at their width; strokes' spurs pruned under 0.6 of the width: a whole width took a
-    // slab E's lower arm) sewn by their width along them
-    const byWidth = (e) => {
-      const W = widthsOf(e[2], (i) => (bands.data[i] && has(i) ? 2 * dep[i] - 1 : 0)).map((v) => v / res), m = median(widthsOf(e[2], (i) => (bands.data[i] && has(i) ? pw[i] : 0))) / res;
-      return m >= WEIGHT.satin ? { how: "satin", W: W.map((v) => Math.min(WEIGHT.most, Math.max(m / 2, v) - COLUMNS.thread)) } : { how: m >= WEIGHT.triple ? "triple" : "run" };
-    };
-    if (bandW) for (const [a, b, p] of skeletonEdges(part, bandW, { spur: 1 })) { const e = [`b${a}`, `b${b}`, p]; edges.push(e); how.push(byWidth(e)); }
-    if (strokeW) for (const [a, b, p] of lineEnds(skeletonEdges(st, strokeW, { spur: 0.6 }), st, strokeW)) { const e = [`s${a}`, `s${b}`, p]; edges.push(e); how.push(byWidth(e)); }
+    const edges = [], how = [];
+    all.forEach((e, k) => { if (allT[k] === g.T) { edges.push(e); how.push(allHow[k]); } });
     const firstDot = edges.length;
     for (const q of dots) if (o.line || q.t === g.T) { edges.push(q.e); how.push({ how: "satin", W: q.W.map((v) => Math.max(0.5, v - COLUMNS.thread)), dot: true }); }
     if (!edges.length) continue;
@@ -1444,7 +1485,7 @@ function lineArt(img, analysis, opts) {
     // A line end within 2 mm of another drawing is joined to it: the needle steps across, sews that drawing and steps
     // back over the same stitch, instead of jumping (a gap that short is a loose thread the machine never trims; 3 mm
     // drew visible bars between small letters)
-    const key = ([x, y]) => `${Math.floor(x / 3)},${Math.floor(y / 3)}`, cells = new Map();
+    const key = ([x, y]) => `${Math.floor(x / 3)},${Math.floor(y / 3)}`, cells = new Map(), gone = new Set();
     tours.forEach((t, i) => t.forEach((q, k) => { const c = key(q); if (!cells.has(c)) cells.set(c, []); cells.get(c).push([i, k]); }));
     const deg = new Map();
     for (const [a, b] of edges) { deg.set(a, (deg.get(a) || 0) + 1); deg.set(b, (deg.get(b) || 0) + 1); }
@@ -1454,21 +1495,29 @@ function lineArt(img, analysis, opts) {
       let best = null, bd = r;
       for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) for (const [i, k] of cells.get(`${gx + dx},${gy + dy}`) || []) {
         const v = Math.hypot(tours[i][k][0] - q[0], tours[i][k][1] - q[1]);
-        if (i !== skip && v <= bd) { bd = v; best = [i, k, v]; }
+        if (i !== skip && v <= bd && !gone.has(i)) { bd = v; best = [i, k, v]; }
       }
       return best;
     };
+    // (a short piece lying along a longer one, within 0.8 mm of it nearly all its length, is a fleck of an edge's blend
+    // beside the line, not a line: a robot's rounded corners each grew a tick)
+    const len = tours.map((t) => arclen(t).at(-1));
+    tours.forEach((t, i) => {
+      if (len[i] >= 6 || t.dot) return;
+      const k = t.filter((q) => { const at = near(q, i, 0.8); return at && len[at[0]] > 2 * len[i]; }).length;
+      if (k >= 0.8 * t.length) gone.add(i);
+    });
     const joins = [];
     for (const e of ends) {
       const at = near(e, -1, 0.05);
-      if (!at) continue;
+      if (!at || gone.has(at[0])) continue;
       const to = near(e, at[0], 2);
       if (to && oneInk(e, tours[to[0]][to[1]])) joins.push({ a: at[0], ka: at[1], b: to[0], kb: to[1], v: to[2] });
     }
     // (and so is a drawing too short to sew on its own, at its point nearest another: an i's dot or a full stop, which
     // as a closed outline has no loose end)
     tours.forEach((t, i) => {
-      if (arclen(t).at(-1) >= 4) return;
+      if (arclen(t).at(-1) >= 4 || gone.has(i)) return;
       let best = null;
       t.forEach((q, k) => { const to = near(q, i, 2); if (to && (!best || to[2] < best.v) && oneInk(q, tours[to[0]][to[1]])) best = { a: i, ka: k, b: to[0], kb: to[1], v: to[2] }; });
       if (best) joins.push(best);
@@ -1496,7 +1545,7 @@ function lineArt(img, analysis, opts) {
     };
     // (a dot not joined to a drawing is kept when another drawing is within 5 mm: a colon after a space)
     const by = (i) => tours.some((u, j) => j !== i && find(j) !== find(i) && tours[i].some((q) => u.some((v) => Math.hypot(v[0] - q[0], v[1] - q[1]) <= 5)));
-    return tours.map((_, i) => i).filter((i) => find(i) === i && (total.get(i) >= 4 || (tours[i].dot && by(i)))).map((i) => spaced(nest(i, 0, -1)));
+    return tours.map((_, i) => i).filter((i) => find(i) === i && !gone.has(i) && (total.get(i) >= 4 || (tours[i].dot && by(i)))).map((i) => spaced(nest(i, 0, -1)));
   }
   // a tour from its point k (it ends where it began)
   function rotate(t, k) { return [...t.slice(k), ...t.slice(1, k + 1)]; }
