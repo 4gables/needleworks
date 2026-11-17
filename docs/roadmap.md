@@ -368,11 +368,15 @@ pe900_check against this baseline and ships as its own release (`docs/releases.m
     the design said as what to sew it on. Filled: line art +4.9, drawing +1.2, trims 1,635 -> 1,554, loose 33 -> 25
   - left: pc_rules' red rule and the owl's 60 mm chevrons are lost in the labelling (palette, C5-CO); a bold
     letter's counter on the fabric (panel's D) is still sewn; soft_shadow's O counter
-- [ ] **C5-LN Line drawing a person would trace**: edges from the unquantised picture; each line its own thread and
   weight (run, triple, satin column, dot from the measured width); one centre line per band, outline only for fat
   shapes; no die-cut borders or spurs, closed junctions; routed by word and column. Owns digitize.js `lineArt`,
   `lineEnds`, raster.js.
 - [x] **C5-XS Cross-stitch a stitcher would chart**: backstitch over the crosses for lines under ~0.6 of a cell;
+- [x] **C5-LN Line drawing a person would trace**: edges from the unquantised picture; each line its own thread and
+  done: colours told apart finer than threads (`fineColours`), each line in its own thread, weight from width (run,
+  triple, satin, satin dots), soft shadows/gradients/blend rings not traced, one centre line per band to 4 mm, ticks
+  dropped, lookahead routing; line look 42.2 -> 54.2, trims 8.6 -> 8.8. left: laurel chains as one wobbly satin, a
+  50 px picture's blurred rim as a satin ring, travel along sewn lines, lock ticks on small circles.
   closed-in white only inside a filled colour; cell size and grid offset per picture, half crosses on diagonals;
   travel hidden under crosses to come, rows per colour. Owns digitize.js `crossStitch`.
 - [x] **C5-DI Direction (PX3 leftover + novel)**: Follow the shape on the Picture panel and whether it is the
