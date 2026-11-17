@@ -289,7 +289,7 @@ stitch round ends with a small sew-out pack.
     ragged edge, never more sections than today's angle); Follow the shape for patches and filled motifs; pictures
     with `direction: "auto"` (a one-line hook in digitize.js; the Picture panel doesn't offer it yet)
   - [x] curved rows: level lines of a fitted stripe field, never closer than the spacing, where they beat straight
-  - left: the Picture panel's choice (picture.js), and whether pictures default to it; curved rows with
+  - left (the Picture panel's choice and the default: C5-DI); curved rows with
     singularities (a disc's, a star's middle) and rows that end inside a narrowing band; sewn proof
 - [x] **PX4 Shading** (after PX1): two-colour blends by density, colour mixing for photos and gradients. Done:
   `core/shade.js` (soft borders gated to real shading, the two threads that meet, a line screen on one grid and
@@ -368,19 +368,37 @@ pe900_check against this baseline and ships as its own release (`docs/releases.m
     the design said as what to sew it on. Filled: line art +4.9, drawing +1.2, trims 1,635 -> 1,554, loose 33 -> 25
   - left: pc_rules' red rule and the owl's 60 mm chevrons are lost in the labelling (palette, C5-CO); a bold
     letter's counter on the fabric (panel's D) is still sewn; soft_shadow's O counter
-- [ ] **C5-LN Line drawing a person would trace**: edges from the unquantised picture; each line its own thread and
+- [x] **C5-LN Line drawing a person would trace**: edges from the unquantised picture; each line its own thread and
   weight (run, triple, satin column, dot from the measured width); one centre line per band, outline only for fat
   shapes; no die-cut borders or spurs, closed junctions; routed by word and column. Owns digitize.js `lineArt`,
   `lineEnds`, raster.js.
+  done: colours told apart finer than threads (`fineColours`), each line in its own thread, weight from width (run,
+  triple, satin, satin dots), soft shadows/gradients/blend rings not traced, one centre line per band to 4 mm, ticks
+  dropped, lookahead routing; line look 42.2 -> 54.2, trims 8.6 -> 8.8. left: laurel chains as one wobbly satin, a
+  50 px picture's blurred rim as a satin ring, travel along sewn lines, lock ticks on small circles.
 - [ ] **C5-XS Cross-stitch a stitcher would chart**: backstitch over the crosses for lines under ~0.6 of a cell;
   closed-in white only inside a filled colour; cell size and grid offset per picture, half crosses on diagonals;
   travel hidden under crosses to come, rows per colour. Owns digitize.js `crossStitch`.
-- [ ] **C5-DI Direction (PX3 leftover + novel)**: Follow the shape on the Picture panel and whether it is the
+  held (2026-11-16, branch `c5-xs` 6e4b5df, not shipped): measured with the corrected look score (C5-LK) it is a
+  net loss: 9 cross cases 3+ down (doodle sheet 77 -> 59, monogram 63 -> 51, photo cat 88 -> 77, white_inside 79 -> 71),
+  2 up (line mandala 23 -> 43, line cat 43 -> 59: the closed-in white fix), and busy pictures cost 2.5-5x the trims
+  (etsy at 100 mm: 19-58 -> 90-244). Its gains were measured on the old score. Next: keep the closed-in white rule
+  and backstitch for thin lines, re-judge the smaller cells and grid offsets on the corrected score, and a trim budget.
+- [x] **C5-DI Direction (PX3 leftover + novel)**: Follow the shape on the Picture panel and whether it is the
   default; trial: each region's angle from the picture's own texture or brush strokes (structure tensor), kept only
   where look and pe900_check say so. Owns picture.js direction UI, digitize.js `form` hook, fill.js angles. Wave 2.
-- [ ] **C5-AU Style chosen per picture (novel trial)**: Filled, Line drawing or Cross-stitch picked from the picture
+  - done: Follow the shape on the Picture panel (More settings, off by default: trims -2.7 %, look +0.1, the flat
+    landscape -3.7); curved rows no longer drop a piece of a part in pieces (a leaf unsewn, the bee's band); the grain
+    trial measured and dropped (docs/pictures.md)
+  - left: the landscape's neighbouring colours running one way under `dir=auto`; a sew-out before it's the default
+- [x] **C5-AU Style chosen per picture (novel trial)**: Filled, Line drawing or Cross-stitch picked from the picture
   (flat colour areas, line share, photo-ness), proven on the corpus as the style a person would pick. Wave 2, after
   LN and XS (better styles change the choice). Owns artcheck.js and its picture.js hook.
+  done: `chooseStyle` (thin-stroke share of the ink by local thickness, colours drawn in; `STYLE`) starts a new
+  picture as a line drawing when it is one, the reason under Style; labels written first
+  (`tests/fixtures/style_labels.json`), 69/74 agree (always-Filled 64/74), no filled picture moved; `picture_corpus.sh
+  ... styles`. left: Cross-stitch is never chosen (photos measure like soft-shaded clip art); crayon/marker strokes
+  and a sheet of doodles under a bold title start Filled.
 - [ ] **C5-SB Scoreboard**: refresh `tests/fixtures/quality.json` (pictures: Filled 18 files now, baseline 12) after
   the rounds above.
 - Parked: JEF (`w6-jef`) needs Janome's order for 27 more thread numbers; no source to measure them from yet (the 127

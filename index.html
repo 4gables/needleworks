@@ -154,6 +154,7 @@
             <button type="button" data-s="line" aria-pressed="false">Line drawing</button>
             <button type="button" data-s="cross" aria-pressed="false">Cross-stitch</button>
           </div>
+          <p id="pic-style-why" class="hint" role="status" hidden></p>
         </fieldset>
         <div class="field">
           <label for="pic-colors"><span id="pic-colors-label">Thread colours</span> <output id="pic-colors-out">6</output></label>
@@ -196,6 +197,7 @@
           <div class="field" id="pic-angle-row">
             <label for="pic-angle">Fill direction <output id="pic-angle-out">45°</output></label>
             <input id="pic-angle" autocomplete="off" type="range" min="0" max="175" step="5" value="45">
+            <label class="check small"><input id="pic-follow" autocomplete="off" type="checkbox"> Follow the shape <span class="hint inline">(each part's rows turn with it)</span></label>
           </div>
           <fieldset class="field" id="pic-density-row">
             <legend>Fill</legend>

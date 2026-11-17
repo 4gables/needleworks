@@ -250,6 +250,15 @@ Reference for this part of Needleworks: the rules, the reason for each (it stops
   (stretches are cut from grid rows where a share crosses a row's fixed threshold), a blend's threads are only the two
   already chosen that meet at the border (no thread added for its mix colour), mix colours never enter the palette,
   and stretches are sewn in row order with travel by distance only (no angle between segments).
+- Direction from the picture's own grain (C5-DI trial, not kept): each part's one angle from the structure tensor of
+  the source pixels' lightness gradients inside it (Sobel, over 0.6 mm in from the part's edge), used where its
+  coherence (l1 - l2) / (l1 + l2) is 0.3 or more, else the shape's angle. One angle per part, never one per pixel, and
+  no segment per pixel: the photo-stitch claims' elements stay out. It changed nothing where it was meant to: fur and
+  washes run many ways within one part (the dog's fur 0.0-0.2, the cat's body 0.10, washes 0.04-0.44), so one angle
+  for the part reads as none; and flat art read its colours' own edges as grain (0.7-0.93 on white_inside, the
+  cartoon cat). Full corpus against `dir=auto`: 24 files changed, all flat art; look by kind within 0.2. Following fur
+  needs a field that turns with it (the curved rows' field from the picture's gradients, whose middle is a
+  singularity on radial fur, so it would fall back to straight rows there too).
 - Filled: shapes 1 mm or wider are a fill, a satin column or a satin dot (Stitch types, below); parts under 2 x
   `THIN_PART` and lines under 1 mm sew a triple run, never dropped. Specks: under 4 mm² and 2.5 mm across, groups
   under 6 mm of line, walks under 1.5 mm (`lostLines` reports dropped fine lines). A group of nothing but walks
@@ -264,7 +273,9 @@ Reference for this part of Needleworks: the rules, the reason for each (it stops
   pull, else 0.15. `OVERLAP` 0.35 mm under later colours, shape by shape (growing the raw mask merged specks);
   neighbours alternate angle (+90°). With `direction: "auto"` (PX3; digitize.js's `form` on each part) each part takes
   its own measured angle or curved rows, the alternation kept only where its shape doesn't say (`docs/stitch-model.md`
-  "Direction that follows the form"); the Picture panel doesn't offer it yet. `DENSITY` Standard 0.4 (the app's default; `DEFAULTS.density` is Dense) / Dense
+  "Direction that follows the form"); the Picture panel offers it as Follow the shape under More settings (Filled),
+  off by default: on the corpus it saves 3 % of trims and stitches with look unchanged (79.1 -> 79.2), but one flat
+  landscape loses 3.7 and a few cases gain a loose thread (numbers in stitch-model.md). `DENSITY` Standard 0.4 (the app's default; `DEFAULTS.density` is Dense) / Dense
   0.35; 0.3 fails the check (row links under 0.3 mm). Row steps split to 3 mm, row-end stitches over 4 mm halved.
 - Stitch types (PX2, `digitize.js` `columnNets`/`netStitches`, numbers in `recipes.js` `COLUMNS`; research I4, after
   Goldman's expired auto-digitizing patents: thick or thin from the distance to the edge along the skeleton, satin
@@ -435,13 +446,55 @@ Reference for this part of Needleworks: the rules, the reason for each (it stops
   Travel may follow any thin line of its colour, also one too short to keep (`thin`, not the walks kept): it sews
   one run where the picture has a line. Worse: only along lines that are sewn (the samples' trims 1,162 -> 1,551,
   more than before any of this, and the small bouquet's stems came apart).
-- Line drawing (`opts.line`, Auto = darkest): outlines once where colours meet, none between colours within ΔE00 15;
-  dark bands (`BAND`) and whole even strokes sewn once along their centre (both edges drew double lines), decided once
-  per colour (centre lines if 80 % of its long pieces are strokes; fat letters outlined; marker lines up to 6 mm;
-  spurs pruned at 0.6 width; narrow elongated parts of any colour centre-lined); text dots a short out-and-back line;
-  `closeSlivers`; `lineEnds` reach the ink's edge; pieces under 2 mm dropped (`spur: 1`: pruning cut letters apart);
-  ends within 2 mm of another drawing joined (3 mm drew bars). JPEG ringing is fabric: thin pieces under 5 mm of a colour
-  at least 30 ΔE00 from the fabric whose own pixels are under 30 % of that (40 % with no floor cut etsy_1's lavender).
+- Line drawing (`lineArt`; `opts.line` sews everything in that one thread, Auto = each line in its own colour's
+  thread). C5-LN, from the review of the 15 worst line drawings (all one thread, one 0.4 mm run, inner lines lost):
+  - Colours told apart finer than the threads (`fineColours`, `FINE`): seeds are each thread's colour and the fabric,
+    then farthest first any colour 10 ΔE00 from every seed that holds 0.5 mm² (flat pixels first, then any pixel that
+    is not a blend between the colours 2 px either side and has 2 neighbours within 6: a pale pink doodle column was
+    labelled fabric at 4 threads). Each added colour sews in the thread most of its pixels were labelled, or the thread
+    it is a blend of with the fabric (a grey shadow had been given the orange thread). Within 8 of the fabric (white,
+    with no fabric colour) it is fabric: a see-through sticker's die-cut white was a ring. A textured picture (under
+    `FINE.flat` 0.7 of its ink flat 3 px inside: photo noise 0.02, watercolours 0.51-0.63, crayon 0.64, flat art 0.87+)
+    keeps its thread labels: its grain drew 147 squiggles, crayon flecks tangled the strokes. It is traced in its darkest
+    thread (and its bands as triple runs, not satin) when its threads walked apart cost over 1.5x the trims and 10 more:
+    the batch's etsy pictures went 20 -> 68 trims (etsy_1), 25 -> 160 (etsy_8). A shape's outline on the fabric in a
+    colour under 25 from it is sewn in the nearest colour within 30 that stands 35 out (a grey cat on a grey page).
+  - A line where colours meet: `ALIKE` 8 ΔE00 apart (15 lost the sky/teal ridge, 14.6, and an owl's outline from its
+    wing, 10.3); two shades of one thread `SHADE` 15, or 8 where the picture steps within a pixel (a dog's fur drew 40
+    rings; a dinosaur's crisp spots stay). Only where the picture has a step: across 1 mm each side it changes by half
+    the two colours' difference (`STEP`; a sunset's gradient drew a straight line across the sky; at 2 px a tabby's
+    1-2 mm soft stripes went). Thin blends move into a colour beside them: the two furthest apart of the colours holding
+    a sixth of the piece's edge (an outline anti-aliased through two greys left grey rings round a robot), three rounds
+    (dashes beside an owl's outline); and a thin shade under 15 apart whose edge is soft. A pale colour (under 35 from
+    the fabric) against another whose edge on the fabric fades (2 px out still not the fabric's colour) on 4/5 of it is a
+    shadow: fabric, the whole colour when it is so as a whole (a soft shadow under "Holly" was traced in orange satin).
+  - One centre line per band: dark bands under `BAND` 4 mm (3 left a palm trunk and a robot's neck as two lines), and
+    a dark colour's long thin part wherever it lies (not only on the fabric); a long part of any colour counts only the
+    fabric round the drawing (a robot's white grille lines, fabric closed in, made the strips between them satin bars).
+    Strokes must be crisp on half their edge. Fat letters are outlined only when too narrow for satin.
+  - Weight from the measured width (`WEIGHT`): thin lines a run (out and back), from 0.9 mm a triple run, from 1.5 mm
+    a satin column as wide as the line along it (out as its centre-run underlay, back as the satin; a band's width is
+    its median depth, so a whole outline is one weight: an owl's came out part satin, part triple), up to 6 mm; dots
+    (0.8-2.5 mm thin pieces, and solid round pieces up to 4 mm) a satin across their long axis, as wide as each chord
+    (bold i dots and eyes had been hollow rings). Thread per line: one skeleton of everything, each edge in the thread
+    most of its pixels were drawn in (per pixel, an ear's outline alternated two threads, a trim each time); an outline
+    between two colours is in the one that stands out more from the fabric. Threads sewn lightest first.
+  - Unchanged: `closeSlivers`; `lineEnds` reach the ink's edge; pieces under 2 mm dropped (`spur: 1`: pruning cut
+    letters apart); ends within 2 mm of another drawing joined (3 mm drew bars); a piece under 6 mm lying within 0.8 mm
+    of a line twice its length for 4/5 of it is dropped (a fleck of a blend: ticks on a robot's corners). JPEG ringing
+    is fabric: thin pieces under 5 mm of a colour at least 30 ΔE00 from the fabric whose own pixels are under 30 % of
+    that (40 % with no floor cut etsy_1's lavender).
+  - Routing: each drawing is entered where it is also within 2 mm of a drawing still to sew (it ends where it began, so
+    that is where the needle leaves it): trims 9.7 -> 8.8 a case.
+  - Measured (picture_corpus, 57 line cases, still scored against the filled picture until C5-LK): look 42.2 -> 54.2
+    (logo +16.8, mascot +13, drawing +24, shapes +12, cartoon +12, flat illustration +10, photo/watercolour +8.5);
+    marker 24.7 -> 84.6, text_dots 30 -> 86.8, crayon 28 -> 73, doodle sheet 34 -> 77, monogram 22 -> 64; trims
+    8.6 -> 8.8 a case, loose 0.02 -> 0; pe900_check all ok. Down: lavender_title 61.5 -> 53.7 (its pale lavender
+    title now sewn lavender, as drawn, not in the darkest thread), photo cat 46.5 -> ~42 (grey outline in its own
+    thread), soft_shadow 43 -> 40 (the shadow left out: the scorer counts it as ink).
+  - Left: laurel leaves touching in a chain still sew as one wobbly satin (their neck depth can't be told from crayon's
+    flecks); a 50 px picture's blurred rim is a satin ring; trims between separate drawings (no travel along sewn lines
+    yet; doodle sheet 45, owl 23); lock ticks on small circles.
 - Cross-stitch (`cross` mm cells): a row is two diagonal zigzags out and back plus one straight stitch (climbing every
   edge drew bowties); runs chained by Dijkstra over cell corners, else a jump over 5 mm; a lone cell dropped only if
   nothing touches it.
@@ -484,3 +537,35 @@ Reference for this part of Needleworks: the rules, the reason for each (it stops
     `background`, polka dots' 5 mm "dots" `text`).
   - Known: a row of three florets on one baseline can read as lettering (etsy_3); script lettering joined into one
     piece is not found as lettering; the colour count of a soft picture is high, so it is said only on flat ones.
+
+## Style chosen per picture
+
+A fresh picture starts in the style a person would pick (C5-AU): Line drawing when it is one, else Filled.
+`artcheck.js` `artStyle` measures (in the worker, on the first measure of a new picture: the message's `pick`),
+`chooseStyle` decides (numbers `recipes.js` `STYLE`), picture.js `startStyle` applies it.
+- Measured on the learned copy labelled with closed-in fabric left as fabric (`labelWith` inside "none": a line
+  drawing's insides and a frame are not ink). For each ink pixel its local thickness: the radius of the biggest disc
+  of ink covering it (exact distance transform; each local top paints its disc; past 24 px "wide"). The thin share =
+  ink in strokes no wider than `STYLE.wide` 1.6 % of the longer side. Line drawing when that is at least
+  `STYLE.line` 0.55 and the picture is drawn in at most `STYLE.inks` 4 colours (`artPicture`'s flat-colour count).
+- Only a new picture (chosen or dropped) is chosen for; the sample and the picture kept from the last visit keep
+  their style, a part or a turn keeps the picture's, and a style tapped stands (the choice is made once, before the
+  first stitching, so nothing is sewn twice). Under the Style chips, while the chosen style stands: "Looks like a
+  line drawing, so it's sewn as one." Nothing is said when it starts Filled (as before).
+- Ground truth: `tests/fixtures/style_labels.json`, the style a person would pick for each of the 74 pictures (the
+  corpus drawings, `art.js`, `tests/external/images`), each with its reason, written from the pictures before the
+  chooser was built (64 Filled, 8 Line drawing, 2 Cross-stitch; `also`: another a person could defend).
+  `picture_corpus.sh ... styles` measures only (about 5 min with the lock) and reports agreement.
+- Agreement: 69/74 (93.2 %), every miss a style the label allows (always-Filled: 64/74). Line drawings found 5 of 8
+  (pastel_lines, the three line-art drawings, etsy_7's doodle bundle); no filled picture moved to Line drawing
+  (logos, lettering, cartoons, flat illustrations, stickers, mascots all stay Filled). Missed: crayon and marker
+  (strokes 2-6 mm: they sew well filled as columns), doodle_sheet (its bold title is two thirds of the ink), and the
+  two pet photos (labelled Cross-stitch).
+  Stable: the same 69 for `wide` 1.4-1.6 % at `line` 0.45-0.6; from 1.8 % a Filled picture turns Line drawing.
+- Measured at the Size instead (mm): the line cat's thin share fell from 0.98 at 100 mm to 0.25 at 150 mm, while a
+  person's pick doesn't change with the Size. A regular-weight wordmark (Bob's Bakery) is 0.72 thin at 60 mm by mm
+  and under 0.4 by share of the picture: its strokes are 2-2.5 % of the picture, line art's 1-1.5 %.
+- Colour count keeps photos of embroidered wildflower sheets Filled: as thin as line art (0.58-0.73) in 8-13 colours.
+- Cross-stitch is never the start: the pet photos measured as clip art does (flat 0.84-0.90, blends 0.07-0.28, off
+  their colours by 3.4 ΔE) and the gradient icon and sunset alike or more. Left: a photo measure that tells a photo
+  from a soft-shaded illustration (fur texture at the picture's own pixel size), then a suggestion, not a default.

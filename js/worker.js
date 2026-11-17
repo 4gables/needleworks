@@ -5,21 +5,23 @@ import { insideOf } from "./core/palette.js";
 import { writePES } from "./core/formats.js";
 import { turnForMachine } from "./core/design.js";
 import { nearestBrotherThread } from "./core/threads.js";
-import { artPicture, artShapes } from "./core/artcheck.js";
+import { artPicture, artShapes, artStyle } from "./core/artcheck.js";
 
 // The colours learned from the picture's fixed-size copy, kept per picture and colour count (Size, Turn hoop and the
 // fill settings reuse them), and the last labelled working copy (moving sliders that don't change it is fast); `ref`:
 // the learned copy labelled with the most colours, kept per picture, for what's left out (keptParts)
 let model = null, labelled = null, ref = null;
 self.onmessage = (e) => {
-  const { id, key, learn, img, crop, opts } = e.data;
+  const { id, key, learn, img, crop, opts, pick } = e.data;
   try {
     if (model?.key !== key) model = { key, m: learnColours(learn, opts) };
     const m = model.m;
     if (m.empty) throw Object.assign(new Error(m.empty), { code: "empty" });
     // only the colours and where each lies: the page cuts and sizes the picture by what will be sewn
     if (!img) {
-      self.postMessage({ id, ok: true, measure: true, key, boxes: m.boxes, colors: m.colors.map(({ id: i, background, inside }) => ({ id: i, background, inside })) });
+      // (`pick`: what the page needs to start a fresh picture in the style a person would pick, core/artcheck.js)
+      if (pick) { model.full ||= labelWith(learn, m); model.art ||= artPicture(learn, model.full); model.pick ||= { ...artStyle(learn, labelWith(learn, m, undefined, { inside: "none" })), flat: +m.flat.toFixed(3), blend: model.art.blend, colours: model.art.colours }; }
+      self.postMessage({ id, ok: true, measure: true, key, boxes: m.boxes, colors: m.colors.map(({ id: i, background, inside }) => ({ id: i, background, inside })), ...(pick ? { pick: model.pick } : {}) });
       return;
     }
     // (a line drawing draws the edges of colours: the fabric's colour inside the design stays fabric)
