@@ -267,19 +267,24 @@ Reference for this part of Needleworks: the rules, the reason for each (it stops
     (above); pull 0.3 on columns from 1.5 mm, as lettering (outlines too bold); dots of any size as satin (knots);
     choosing a column's node by what lies next to it (held-out loose threads 71 -> 82); a tuck back onto the satin
     before a trim (a bar across it).
-  - Proof of C5-SA (2026-11, v34 base, browser corpus 127 filled cases): look by kind within -0.2..+0.3 (cartoon
-    +0.3, line art -0.2, mascot -0.1, gradient -0.1, the rest 0..+0.1); no case 3 down, the most -1.0 (a line cat at
-    100 mm) and +2.0 (robot at 100 mm), the star outline +0.8 and +1.3. Holes 48.4 -> 43.2 mm² (35 -> 31 patches; star
-    outline 5.4 -> 2.1). Filled corpus: stitches +0.01 %, trims 1,635 -> 1,639, loose 33 -> 32, wasted 56 -> 49,
-    ends 1,018 -> 1,023, bare locks 43 -> 43. The 12 browser-batch pictures (Node, same working copies): trims 1,120
-    -> 1,116, loose 60 -> 56, ends 1,014 -> 1,008, bare locks 86 -> 83. pe900_check 254 of 254.
+  - Proof of C5-SA (2026-11, v34 base, browser corpus 127 filled cases): look by kind within -0.2..+0.1 (line art
+    -0.2, mascot -0.1, shapes and other +0.1, the rest 0); no case 3 down, the most -1.0 (a line cat at 100 mm) and
+    +1.3 (the star outline at 60 mm; +0.8 at 120). Holes 48.4 -> 42.9 mm² (35 -> 31 patches; star outline 5.4 ->
+    2.1). Filled corpus: stitches -0.2 %, trims 1,635 -> 1,633, loose 33 -> 34, wasted 56 -> 49, bare locks 43 -> 43,
+    at the limit 1 -> 2 (very_dark at 60 mm: a small ring's stitches, square to the line's run, meet at 24 hits, not
+    over). Browser batch, 12 samples: trims 1,120 -> 1,114, loose 60 -> 60, wasted 32 -> 32, ends 1,014 -> 1,007,
+    bare locks 86 -> 86, at the limit 3 -> 3. pe900_check 254 of 254 (corpus) and 553 of 553 (batches).
+  - Tried and dropped: the tie-in searched up to 2.5 mm along a fill's first 30 points when nothing at 1.1-1.9 mm is
+    reached without crossing fabric (a fill starting at a sharp tip ties in on the tip, bare): bare locks 86 -> 83,
+    but one tie-in landed on a dense spot (etsy_8 at 170 mm 22 -> 24 hits). Mitre on any centre line and taper on any
+    net: a blob's short curl sewed as a satin starburst at the density limit (etsy_4 at 170 mm 22 -> 24).
   - Not yet: back to front beyond light-first (PX1's measure stands); square column ends on bold letters (the holes
     left are not satin: 18 of the 43 mm² are a sun's 1 mm rays the Details choice leaves out in two drawings, the rest
     under 2 mm² a case); a corner of an E or a D's bowl round a small counter is still a fan (the stitch angle turns
     with the line: a digitizer splits the letter into a stem sewn straight across and arms or a bowl, which needs
-    the letter's strokes, not its skeleton); bare locks: about 60 of the batch's 83 are dots under 1 mm sewn as a fill of
-    one row (tie-in, a stitch, tie-off: all lock, nothing over them) and the rest fill tie-ins on a sharp tip that
-    no point within 2.5 mm reaches without crossing fabric (`Design`'s tie-in goes toward the first point); a lone
+    the letter's strokes, not its skeleton); bare locks: about 60 of the batch's 86 are dots under 1 mm sewn as a fill of
+    one row (tie-in, a stitch, tie-off: all lock, nothing over them; specks, not satin) and the rest fill tie-ins on
+    a sharp tip (above; `Design`'s tie-in goes toward the first point); none are columns; a lone
     dot of a dot-only satin counts 10 bare lock hits (the scoreboard's lockOut).
   - Needs a sew-out (nothing here is proven on a machine): satin outlines 1-1.5 mm wide on cotton (do they close up
     with 0.1 pull, and is 0.1 mm inside the drawn edge right?); a satin network's junctions eased to 19 hits/mm²; a

@@ -344,11 +344,12 @@ pe900_check against this baseline and ships as its own release (`docs/releases.m
   mm²), square column ends on bold strokes, bare locks back down (PX2 added 6-11 on the samples), tapered strokes and
   leaf halves as satin, small lettering as columns not fans. Owns digitize.js `columnNets`/`netStitches` and the
   stroke part of `build`, recipes.js `COLUMNS`.
-  - done: mitre ported (holes 48.4 -> 43.2 mm², star outline 5.4 -> 2.1), tapers and leaf halves as satin
-    (`taper`), stitches square to the line's run (`steady`), a small counter keeps its ring, tie-in searched to 2.5 mm;
-    look by kind within -0.2..+0.3, batch bare locks 86 -> 83, loose 60 -> 56 (`docs/pictures.md` "Stitch types")
-  - left: square ends had no measurable holes left; E corners and D bowls still fan (needs letter strokes, not a
-    skeleton); ~60 bare lock hits are sub-1 mm fill dots (specks, C5-KE's)
+  - done: mitre ported (holes 48.4 -> 42.9 mm², star outline 5.4 -> 2.1), tapers and leaf halves as satin
+    (`taper`), stitches square to the line's run (`steady`), a small counter keeps its ring; look by kind within
+    -0.2..+0.1, batch trims 1,120 -> 1,114 (`docs/pictures.md` "Stitch types")
+  - left: bare locks unchanged (86: ~60 are sub-1 mm fill dots, specks; the rest fill tie-ins on sharp tips, none
+    columns); square ends had no measurable holes left; E corners and D bowls round small counters still fan (needs
+    the letter's strokes, not a skeleton)
 - [ ] **C5-KE Keep what matters, cut what costs**: v34's blends cost (60 mm sunset loose 1 -> 7, icon trims 6 -> 11);
   closed-in white (the mandala's disc and dots, sewn counters, a panel left bare said in the note); thin rules and
   dots not dropped; travel under later stitches. Owns shade.js, digitize.js `keptParts`/specks/`lostLines`.
