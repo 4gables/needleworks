@@ -104,6 +104,19 @@ export const SHAPES = { band: 0.5, between: 1.25, side: 0.2, fleck: 3, enclosed:
 export const COLUMNS = { min: 1.0, wide: 4, long: 2, into: 0.6, cap: 1.4, tip: 0.5, solid: 0.85, stub: 3, short: 0.2, even: 2.2, pull: 0.1, thread: 0.2, small: 3, cover: 0.9 };
 export const PICTURES = { fleck: 3, enclosed: 0.8, eyes: 6, start: 4, edge: 0.75,
   details: { all: { start: 0, share: 0, lone: 0 }, most: { start: 7, share: 0.1, lone: 8 } } };
+// Cross-stitch (digitize.js `crossStitch`, roadmap C5-XS; numbers: docs/pictures.md). Lines narrower than `thin` of a
+// cell are backstitch: a run along their centre (`stitch` mm), over the crosses, in their own thread; pieces of it
+// shorter than `line` mm are left out, and a dot (`dot`: 0.8 to 2.5 mm across) is one small cross its own size. The
+// cell is the Cross size asked, or `cells` of it (not under `min` mm) when over `trouble` of the ink is between thin
+// and a cell wide (letters' strokes); the grid's offset is the one of `phases` x `phases` tried that fits the picture
+// best. A colour's piece whose crosses cover under `covered` of it is backstitched instead (two stray crosses read as
+// nothing), and so is one `part` of which is narrower than a cell (a letter half crosses, half backstitch). Closed-in white (or a colour in the fabric's thread under `paper` ΔE00 from it) is crossed only where
+// `surround` of the cells round it are crosses of another colour.
+// A three-quarter cross fills an empty cell on a diagonal edge whose corner's two quarters are `quarter[0]` of a
+// colour crossed beside it and the other two under `quarter[1]` picture. Travel along cell edges costs `cost` (under crosses still to come, beside crosses sewn or sewn later, beside ones
+// sewn before; never across open fabric), at most `reach`, else a jump.
+export const CROSS = { thin: 0.6, stitch: 2, line: 2, dot: [0.8, 2.5], cells: [1, 0.8, 0.6], min: 1.5, trouble: 0.12, phases: 4, covered: 0.35, part: 0.5, letter: 4, bold: 1, hidden: 0.5, surround: 0.6, paper: 10, quarter: [0.6, 0.3],
+  cost: { under: 1, beside: 1.5, over: 3 }, reach: 6, travel: 10 };
 // Shading (core/shade.js, roadmap PX4; numbers: docs/pictures.md). Two colours' regions, each `wide` mm across
 // somewhere, meet in a soft gradient when the picture (blurred `blur` mm) takes `soft` mm or more to change from one to
 // the other along their border (median over at least `border` mm of it; `blend`: the Picture panel's "Blend", which
