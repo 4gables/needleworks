@@ -190,6 +190,15 @@ Reference for this part of Needleworks: the rules, the reason for each (it stops
   (stretches are cut from grid rows where a share crosses a row's fixed threshold), a blend's threads are only the two
   already chosen that meet at the border (no thread added for its mix colour), mix colours never enter the palette,
   and stretches are sewn in row order with travel by distance only (no angle between segments).
+- Direction from the picture's own grain (C5-DI trial, not kept): each part's one angle from the structure tensor of
+  the source pixels' lightness gradients inside it (Sobel, over 0.6 mm in from the part's edge), used where its
+  coherence (l1 - l2) / (l1 + l2) is 0.3 or more, else the shape's angle. One angle per part, never one per pixel, and
+  no segment per pixel: the photo-stitch claims' elements stay out. It changed nothing where it was meant to: fur and
+  washes run many ways within one part (the dog's fur 0.0-0.2, the cat's body 0.10, washes 0.04-0.44), so one angle
+  for the part reads as none; and flat art read its colours' own edges as grain (0.7-0.93 on white_inside, the
+  cartoon cat). Full corpus against `dir=auto`: 24 files changed, all flat art; look by kind within 0.2. Following fur
+  needs a field that turns with it (the curved rows' field from the picture's gradients, whose middle is a
+  singularity on radial fur, so it would fall back to straight rows there too).
 - Filled: shapes 1 mm or wider are a fill, a satin column or a satin dot (Stitch types, below); parts under 2 x
   `THIN_PART` and lines under 1 mm sew a triple run, never dropped. Specks: under 4 mm² and 2.5 mm across, groups
   under 6 mm of line, walks under 1.5 mm (`lostLines` reports dropped fine lines). Kept: text dots on the fabric (>= 0.8 mm across, 0.6
@@ -198,7 +207,9 @@ Reference for this part of Needleworks: the rules, the reason for each (it stops
   pull, else 0.15. `OVERLAP` 0.35 mm under later colours, shape by shape (growing the raw mask merged specks);
   neighbours alternate angle (+90°). With `direction: "auto"` (PX3; digitize.js's `form` on each part) each part takes
   its own measured angle or curved rows, the alternation kept only where its shape doesn't say (`docs/stitch-model.md`
-  "Direction that follows the form"); the Picture panel doesn't offer it yet. `DENSITY` Standard 0.4 (the app's default; `DEFAULTS.density` is Dense) / Dense
+  "Direction that follows the form"); the Picture panel offers it as Follow the shape under More settings (Filled),
+  off by default: on the corpus it saves 3 % of trims and stitches with look unchanged (79.1 -> 79.2), but one flat
+  landscape loses 3.7 and a few cases gain a loose thread (numbers in stitch-model.md). `DENSITY` Standard 0.4 (the app's default; `DEFAULTS.density` is Dense) / Dense
   0.35; 0.3 fails the check (row links under 0.3 mm). Row steps split to 3 mm, row-end stitches over 4 mm halved.
 - Stitch types (PX2, `digitize.js` `columnNets`/`netStitches`, numbers in `recipes.js` `COLUMNS`; research I4, after
   Goldman's expired auto-digitizing patents: thick or thin from the distance to the edge along the skeleton, satin

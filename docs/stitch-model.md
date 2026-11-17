@@ -124,7 +124,19 @@ Reference for this part of Needleworks: the rules, the reason for each (it stops
   -1.7 %. PX0's look score (`tests/look.js`) says neither better nor worse: 126 filled corpus cases 78.72 -> 78.62,
   swings both ways (two near-identical reds +11.9, rules +11.0; a framed card -5.3, a turned bold logo -4.7; 12 cases
   down 2 or more, so `dir=auto` would fail the look gate), and the render's sheen turns with the rows, which moves
-  its outline and structure parts at region borders. Not the pictures' default until sewn and judged by eye.
+  its outline and structure parts at region borders.
+  C5-DI (the Picture panel's Follow the shape, More settings, off by default): full corpus, every filled case at
+  `dir=auto` against today's (127 cases): trims 1,635 -> 1,591, loose 33 -> 32, stitches -2.6 %, look 79.1 -> 79.2 (no
+  kind down 2: other -0.8, flat illustration and watercolour -0.2; drawing, line art +0.7; stitched sheets +0.6); all
+  283 cases pass, pe900_check 254 ok. Worse by 3 or more in one case: the flat landscape -3.7 (its dark mountain's rows
+  turn to its slope, the mid mountain's angle, so two neighbouring colours run the same way and the 90 degree underlay
+  shows as stripes); loose threads +2 on the line-art flower at 60 mm, +1 on the whale and the fox. Not the default:
+  it doesn't win without costs, and no picture has been sewn this way yet.
+  - **A part in pieces keeps straight rows** (`rowField`): the field's sign is carried out from its surest cell, so
+    a part in two pieces (a stem's two leaves, once the stem is a satin column; a hexagon's outer band) got rows on
+    the seed's piece alone, the other sewing only its underlay; and, with fewer sections, it won formOf's count. Found
+    by `dir=auto` on the corpus (photo_noise and jpeg_flower: a leaf 44-54 % unsewn; the honey bee's band, -3.5). A
+    field that doesn't reach every cell of the part is no field; a fill with no rows never wins the count.
 - **Curved rows** (`rowField`, `curvedRows`): the rows are the level lines of one field phi over the part, fitted so its
   gradient follows the part's own direction field (stripe patterns, Knöppel et al. 2015, here without singularities:
   one sparse least-squares solve, conjugate gradients, on 0.5 mm cells). The direction field is the structure tensor
