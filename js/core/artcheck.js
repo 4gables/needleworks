@@ -8,9 +8,10 @@
 //   thin, lettering too small. Every finding carries `spots` (fractions of the learned copy, as keptParts' are, for
 //   the page to ring on the picture) and, where a bigger Size would mend it, `need`: how many times bigger.
 // Measures only: nothing here changes what is sewn.
-import { ART } from "./recipes.js";
-import { pixels } from "./palette.js";
-import { label } from "./raster.js";
+import { ART, STYLE } from "./recipes.js";
+import { pixels, srgbToLab as labOf } from "./palette.js";
+import { hexToRgb } from "./threads.js";
+import { distanceTransform, label } from "./raster.js";
 
 let SPOTS = 12;
 export const allSpots = (on) => { SPOTS = on ? 1e9 : 12; };   // (tests: every spot, to look at)
@@ -240,4 +241,57 @@ export function artShapes(a, res, crop = [0, 0, 1, 1], skip = []) {
     text: { n: text.length, mm: text.length ? +text[0].mm.toFixed(1) : 0, small: text.filter((t) => t.mm < ART.text).length,
       spots: text.filter((t) => t.mm < ART.text).slice(0, SPOTS).map((t) => spot(...t.box)), need: text.length && text[0].mm < ART.text ? +(ART.text / text[0].mm).toFixed(3) : 0 },
   };
+}
+
+// ---------- the style a person would pick (Filled, Line drawing, Cross-stitch) ----------
+// docs/pictures.md "Style chosen per picture". `artStyle` measures the learned copy once per fresh picture (in the
+// worker, with the colours' measure); `chooseStyle` decides at the Size asked, on the page. Measures only.
+// `L`: the copy labelled with its colours, closed-in fabric left as fabric (labelWith inside "none"), so a line
+// drawing's insides and a frame are not ink.
+//   ink:   share of the copy that is ink (a design colour).
+//   thick: for each ink pixel, the radius (copy px, to CAP) of the biggest disc of ink that covers it (local
+//          thickness: half the width of the stroke or shape it lies in); `thick[k]` the share of the ink at radius k
+//          (k = CAP + 1: wider). A line drawing's ink is all thin strokes; a filled picture's mostly wide shapes.
+//   rest:  mean ΔE76 of the ink to the colour it is labelled (flat art sits on its colours; shading and photos don't).
+//   long:  the copy's longer side (px), so the page turns radii into mm at the Size.
+const CAP = 24;
+export function artStyle(img, L) {
+  const P = pixels(img), { w, h, n, lab } = P, ink = { w, h, data: new Uint8Array(n) }, labels = L.labels;
+  const cols = new Map(L.colors.filter((c) => !c.background).map((c) => [c.id, labOf(...hexToRgb(c.picture || c.hex))]));
+  let inked = 0, rest = 0;
+  for (let i = 0; i < n; i++) { const c = cols.get(labels[i]); if (!c) continue; ink.data[i] = 1; inked++; rest += Math.hypot(lab[i * 3] - c[0], lab[i * 3 + 1] - c[1], lab[i * 3 + 2] - c[2]); }
+  const thick = new Array(CAP + 2).fill(0);
+  if (!inked) return { ink: 0, thick, rest: 0, long: Math.max(w, h) };
+  const dt = distanceTransform(ink), T = new Float32Array(n);
+  // (wider than CAP: within CAP of a pixel that deep)
+  const core = { w, h, data: new Uint8Array(n) };
+  for (let i = 0; i < n; i++) core.data[i] = ink.data[i] && dt[i] > CAP ? 0 : 1;
+  const dc = distanceTransform(core);
+  for (let i = 0; i < n; i++) if (ink.data[i] && dc[i] <= CAP) T[i] = CAP + 1;
+  // (narrower: each local top of the distance paints its disc)
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    const i = y * w + x, v = dt[i]; if (!ink.data[i] || v > CAP) continue;
+    let top = true;
+    for (let dy = -1; dy <= 1 && top; dy++) for (let dx = -1; dx <= 1; dx++) { const X = x + dx, Y = y + dy; if (X >= 0 && Y >= 0 && X < w && Y < h && dt[Y * w + X] > v) { top = false; break; } }
+    if (!top) continue;
+    const r = Math.floor(v), r2 = v * v;
+    for (let dy = -r; dy <= r; dy++) { const Y = y + dy; if (Y < 0 || Y >= h) continue;
+      for (let dx = -r; dx <= r; dx++) { const X = x + dx; if (X < 0 || X >= w || dx * dx + dy * dy > r2) continue; const j = Y * w + X; if (T[j] < v) T[j] = v; } }
+  }
+  for (let i = 0; i < n; i++) if (ink.data[i]) thick[Math.min(CAP + 1, Math.max(1, Math.round(T[i])))]++;
+  return { ink: +(inked / n).toFixed(4), thick: thick.map((c) => +(c / inked).toFixed(4)), rest: +(rest / inked).toFixed(2), long: Math.max(w, h) };
+}
+// The style a fresh picture starts in: Line drawing when at least STYLE.line of its ink lies in strokes no wider than
+// STYLE.wide of the picture's longer side, drawn in at most STYLE.inks colours (artPicture's count, the page's colour
+// with them); else Filled. Cross-stitch is never the start (a photo and a soft-shaded illustration measured alike:
+// the person picks it). Scale-free: a line drawing is one at any Size (measured at the Size, the line cat's thin share
+// fell from 0.98 at 100 mm to 0.25 at 150 mm). `size` (mm) only says in the reason how fine the lines sew.
+// Returns { style, start, why, line } (`start`: the page starts the picture in it; `line`: the thin share).
+export function chooseStyle(f, size) {
+  const { line, wide, inks } = STYLE, k = (wide * f.long) / 2;
+  const thin = f.thick.reduce((a, v, r) => a + (r > 0 && r <= k ? v : 0), 0);
+  if (f.ink > 0 && thin >= line && (f.colours || 0) <= inks) {
+    return { style: "line", start: true, line: +thin.toFixed(3), why: "Looks like a line drawing, so it's sewn as one: its lines are traced in running stitch." };
+  }
+  return { style: "fill", start: false, line: +thin.toFixed(3), why: "" };
 }

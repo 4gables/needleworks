@@ -134,6 +134,14 @@ export const SHADE = { blur: 0.4, soft: 2, blend: 1.3, border: 8, wide: 6, near:
 //   ask:     the guide's prompt asks for lines and details this many times the least, as shares of the picture: it
 //            is worked out for the hoop filled, and art is often sewn at half that; an AI tool's "thick" also varies.
 export const ART = { line: 1, detail: 2.5, dot: 4, gap: 0.5, text: 6, fewest: 4, blend: 0.12, page: 0.8, ask: 2 };
+// The style a fresh picture starts in (artcheck.js `chooseStyle`, docs/pictures.md "Style chosen per picture"):
+//   line: share of the ink in thin strokes for a line drawing. Line art 0.92-1, etsy_7's doodle sheet 0.60; filled
+//         pictures 0.44 at most (etsy_3's flower sheet), logos and lettering under 0.4.
+//   wide: a thin stroke's width, as a share of the picture's longer side (1.6 %: 13 px of 800). A regular-weight
+//         wordmark's strokes are 2-2.5 %, line art's 1-1.5 %.
+//   inks: colours (artPicture's) a line drawing is drawn in, at most. Photos of embroidered wildflower sheets are as
+//         thin (0.58-0.73) in 8-13 colours, and a person sews them Filled.
+export const STYLE = { line: 0.55, wide: 0.016, inks: 4 };
 
 // --- S1: pieces sewn in one go ---
 // Two pieces of script lettering are stitched across, not trimmed apart, when their columns are at most `gap` mm

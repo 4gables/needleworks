@@ -23,6 +23,7 @@ import { ART } from "./art.js";
 import { hoop as getHoop } from "../../js/core/machines.js";
 import { distanceTransform, label } from "../../js/core/raster.js";
 import { peak, verdictOf } from "../../js/quality.js";
+import { chooseStyle } from "../../js/core/artcheck.js";
 
 const log = (s) => (document.getElementById("log").textContent += s + "\n");
 const Q = new URLSearchParams(location.search), ONLY = Q.get("only")?.split(","), QUICK = Q.has("quick"), RENDER = Q.has("render");
@@ -827,6 +828,40 @@ async function parts(spec) {
 }
 worker = new Worker(new URL("../../js/worker.js", import.meta.url), { type: "module" });
 window.corpus = { PICS, picture, regions, sew, contentBox, pictureImage, LEARN };   // (for poking at one case from the console)
+// The style chosen per picture (core/artcheck.js `chooseStyle`) against the style a person would pick
+// (tests/fixtures/style_labels.json, written before the chooser): ?styles runs only this (every picture's measure,
+// no sewing, about a minute) and ends; the full run reports it at the end from the cases' own measures.
+const PICKS = new Map();
+async function pickOf(name, bitmap) {
+  if (PICKS.has(name)) return PICKS.get(name);
+  const box = contentBox(bitmap), k = LEARN / Math.max(box.sw, box.sh), learn = pictureImage(bitmap, box, Math.max(1, Math.round(box.sw * k)), Math.max(1, Math.round(box.sh * k)));
+  const m = await job({ key: `pick:${name}`, learn, pick: true, opts: { colors: 6, scale: k, removeBackground: true, style: "fill" } });
+  PICKS.set(name, m.ok ? m.pick : null); return PICKS.get(name);
+}
+async function styleReport() {
+  const labels = await (await fetch("../fixtures/style_labels.json")).json(), rows = [];
+  for (const [key, lab] of Object.entries(labels)) {
+    const f = PICKS.get(key); if (key === "_" || !f) continue;
+    const c = chooseStyle(f, 100);
+    rows.push({ key, want: lab.style, also: lab.also, got: c.style, sure: c.sure, why: c.why, f });
+  }
+  const agree = rows.filter((r) => r.got === r.want).length, fair = rows.filter((r) => r.got === r.want || r.got === r.also).length;
+  log(`\nstyle chosen per picture (artcheck.js chooseStyle at 100 mm) vs tests/fixtures/style_labels.json: ${agree}/${rows.length} agree (${(100 * agree / Math.max(1, rows.length)).toFixed(1)} %), ${fair}/${rows.length} a style the label allows`);
+  for (const st of ["fill", "line", "cross"]) { const of = rows.filter((r) => r.want === st); log(`  ${st}: ${of.filter((r) => r.got === st).length}/${of.length} found; chosen for ${rows.filter((r) => r.got === st && r.want !== st).length} others`); }
+  for (const r of rows) log(`  ${r.got === r.want ? "ok  " : r.got === r.also ? "also" : "MISS"} ${r.key.padEnd(24)} want ${r.want.padEnd(5)} got ${r.got.padEnd(5)} ${r.sure ? "sure" : "    "} ${JSON.stringify({ ...r.f, thick: undefined })} thin ${r.f.thick.slice(0, 13).map((v) => Math.round(100 * v)).join(",")}|${Math.round(100 * r.f.thick.slice(13).reduce((a, b) => a + b, 0))}`);
+  await fetch("/save/styles.json", { method: "POST", body: JSON.stringify(rows) });
+}
+if (Q.has("styles")) {
+  for (const spec of PICS) if (!spec.empty && (!ONLY || ONLY.includes(spec.name))) await pickOf(spec.name, await picture(spec));
+  for (const name of ["ashley_derby", ...Array.from({ length: 8 }, (_, i) => `etsy_${i + 1}`)]) {
+    let bitmap = null;
+    for (const type of ["jpg", "png"]) try { bitmap ||= await createImageBitmap(await (await fetch(`../external/images/${name}.${type}`)).blob()); } catch {}
+    if (bitmap) await pickOf(`ext:${name}`, bitmap);
+  }
+  await styleReport();
+  log("DONE 0 cases, 0 with problems"); document.title = "DONE 0 0";
+  await new Promise(() => {});
+}
 // ?ext=etsy_6,etsy_7: pictures from tests/external/images (not committed) through the same path: stats and renders only
 for (const name of Q.get("ext")?.split(",") || []) {
   let bitmap = null;
