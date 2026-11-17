@@ -344,9 +344,15 @@ pe900_check against this baseline and ships as its own release (`docs/releases.m
   mm²), square column ends on bold strokes, bare locks back down (PX2 added 6-11 on the samples), tapered strokes and
   leaf halves as satin, small lettering as columns not fans. Owns digitize.js `columnNets`/`netStitches` and the
   stroke part of `build`, recipes.js `COLUMNS`.
-- [ ] **C5-KE Keep what matters, cut what costs**: v34's blends cost (60 mm sunset loose 1 -> 7, icon trims 6 -> 11);
+- [x] **C5-KE Keep what matters, cut what costs**: v34's blends cost (60 mm sunset loose 1 -> 7, icon trims 6 -> 11);
   closed-in white (the mandala's disc and dots, sewn counters, a panel left bare said in the note); thin rules and
   dots not dropped; travel under later stitches. Owns shade.js, digitize.js `keptParts`/specks/`lostLines`.
+  - done: the paper inside a line drawing left as fabric and said (`lineInside`; mandala 66.6 -> 75.1 and 71.3 ->
+    81.5, its dots back); blend travel under the later thread's rows (icon trims 17 -> 10, sunset 60 mm 21 -> 13 and
+    loose 7 -> 0); faint hairlines and dashed lines sewn (pc_rules 60 mm 70.8 -> 75.4); a bare panel that is most of
+    the design said as what to sew it on. Filled: line art +4.9, drawing +1.2, trims 1,635 -> 1,554, loose 33 -> 25
+  - left: pc_rules' red rule and the owl's 60 mm chevrons are lost in the labelling (palette, C5-CO); a bold
+    letter's counter on the fabric (panel's D) is still sewn; soft_shadow's O counter
 - [ ] **C5-LN Line drawing a person would trace**: edges from the unquantised picture; each line its own thread and
   weight (run, triple, satin column, dot from the measured width); one centre line per band, outline only for fat
   shapes; no die-cut borders or spurs, closed junctions; routed by word and column. Owns digitize.js `lineArt`,
