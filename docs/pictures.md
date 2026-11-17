@@ -104,13 +104,21 @@ Reference for this part of Needleworks: the rules, the reason for each (it stops
     shadow's core runs thin between the lettering and its paler rim, and two steps in was the navy, a step:
     soft_shadow's core read 0.35 soft and was sewn Silver at 4-6 threads and orange at 2, joined to the dot). Its own
     side's pixels only: a plain 3 x 3 mean took in the paper beyond doodle_sheet's pale 2 px lines and lost them.
+    A closed-in piece a third of which is shade or fringe stays fabric (`labelWith`, `model.shade`): with the shadow
+    fabric, soft_shadow's O counter was sewn White over it; now the counter is bare, as a digitizer leaves it.
     (A fringe counted as fabric is fabric on both sides now: `out` was 0/1 for a fringe and true for the fabric, so
     a fringe beside the fabric counted as an edge.)
   - A picture blown up (`scale` over 2: each of its own pixels several copy px) is flat only where it is flat a whole
     picture pixel away, and a pale fringe hugs within 3 of its own px: tiny_50px (50 px, 18 copy px each) had its
     upscale blur learned as four pastel threads, sewn as satin rings round the heart and the dot (Deep Rose, Salmon
     Pink, Lavender, Cornflower at 6 colours); now Dark Fuchsia and Ultramarine at every count, the blur split at
-    its midpoint by the nearest colour. Worse: half-soft colours to fabric when threads run short, scattered pale specks as
+    its midpoint by the nearest colour.
+  - Corpus (C5-CO, against the v34 baseline): pet photo fill 83.2 -> 85.2, watercolour fill 76.7 -> 78.7, flat
+    illustration fill +0.7, no kind down 2 or more; better: tiny_50px fill s60 61.1 -> 73.8, line 25.7 -> 31.5,
+    water_whale fill s60 77.2 -> 83.4 and s100 76.6 -> 82.3, photo_dog fill s60 77.4 -> 82.2. Worse, all the scorer:
+    tiny_50px fill s120 72.1 -> 66.6 (two clean threads against a blurred picture: the pastel rings had matched the
+    blur's ramp; outline 0.49, detail 0.53), soft_shadow line 43.2 -> 36.5 and sticker_rainbow line 39.3 -> 33.4 (a
+    line drawing scored against the filled picture, its shadow and blend no longer traced). pe900_check 254 ok. Worse: half-soft colours to fabric when threads run short, scattered pale specks as
   fabric (both erased etsy_1's pale flowers).
 - Size = the sewn design's longer side (`picturePlan`, capped to the field), rebuilt when over 0.4 mm off; over the
   field it shrinks, not errors. 8 px/mm (5 lost notches).

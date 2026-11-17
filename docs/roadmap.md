@@ -336,10 +336,14 @@ pe900_check against this baseline and ships as its own release (`docs/releases.m
   colour on covered thread only and registered by the grid's origin; line drawings scored against the picture's
   edges and ink centre lines (recall, precision, doubling, line colour, weight), self-tested with degraded tracings;
   fabric from inside a sewn frame; no SSIM on flat areas. Re-saves the baseline at release.
-- [ ] **C5-CO Colour (PX7, built for real)**: near-black hue fade from L 15, far threads capped with a chroma gain,
+- [x] **C5-CO Colour (PX7, built for real)**: near-black hue fade from L 15, far threads capped with a chroma gain,
   3x3 soft-edge sampling (the text PX7 wrote and never coded); fringes and shades judged in mm and relative to the
   source's pixel size; a shade never given another design colour's thread; muted navy/dusty red/near-black picks.
-  Owns palette.js, regions.js.
+  Owns palette.js, regions.js. done: PX7's four parts; flat judged at the picture's own pixel (tiny_50px 6 -> 2
+  threads); shades judged where the colour is two steps deep (soft_shadow's shadow left out at every count, never
+  orange/Silver); closed-in shade stays fabric. left: muted picks (navy -> Ultramarine, dusty red -> Carmine, owl
+  outline -> Prussian Blue: a chroma penalty in the choice fixed them and broke etsy_1/3's olive and mauve), the
+  owl's wings+body merge (keeping them cost its outline), judging in mm (colours are learned before the size).
 - [ ] **C5-SA Satin finish (PX2 leftovers)**: mitred outer corners at star points (`px2-mitre`: holes 48.8 -> 44.0
   mm²), square column ends on bold strokes, bare locks back down (PX2 added 6-11 on the samples), tapered strokes and
   leaf halves as satin, small lettering as columns not fans. Owns digitize.js `columnNets`/`netStitches` and the
