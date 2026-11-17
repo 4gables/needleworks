@@ -806,7 +806,7 @@ export function labelWith(img, model, crop = [0, 0, 1, 1], { inside = "auto", re
 // clear of anything sewn (not the blend round a shape's edge). A logo's 1 px grey rule vanished without a word.
 // (`labels`: colour ids.) Returns their pixels' components (`cl`, 0 = none), each one's length (px; 0 when it isn't
 // thin by its box: a straight line) and its half-width (px: a curved line is thin too).
-function faintLines(P, labels, colors, across = false) {
+export function faintLines(P, labels, colors, across = false) {
   const { w, h, n, lab } = P, bg = colors.find((c) => c.background);
   if (!bg) return { cl: new Int32Array(n), len: [] };
   const B = srgbToLab(...hexToRgb(bg.picture || bg.hex)), m = { w, h, data: new Uint8Array(n) }, ink = { w, h, data: new Uint8Array(n) };

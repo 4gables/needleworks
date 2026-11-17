@@ -27,8 +27,23 @@ Reference for this part of Needleworks: the rules, the reason for each (it stops
   turned 90° and its apostrophe fell under the 8 mm lone-piece rule). The page says which white is fabric and which
   is sewn, with "Leave it out" / "Sew it" (`state.pic.inside`). Tried and dropped: sewing it only where the ink
   round it is at least as thick as the piece (a white star in a red ring was left out, and bouquets still gained
-  white). Known cost: the hole of a big O, the inside of an outline and gaps in a bouquet are sewn white until
-  tapped off.
+  white). Known cost: the hole of a big O and gaps in a bouquet are sewn white until tapped off.
+- The paper inside a line drawing (`lineInside` in `build`, C5-KE): a closed-in piece with under 40 % (`LINE_INK`) of
+  the ink round it thick (inside a stroke `COLUMNS.min` 1 mm wide or more, so sewn as a fill or satin, not a line)
+  is the paper the lines are drawn on and stays fabric; the page says so ("the paper it's drawn on", with "Sew it":
+  `inside` "all" sews it). Cause of PX1's "cause not found": the line mandala's 95 mm disc was sewn as a white fill
+  under its 0.6 mm lines and its 24 dots, inside sewn white, were flecks folded into it. Mandala 100 mm 66.6 -> 75.1
+  (stitches 16,832 -> 5,876), 60 mm 71.3 -> 81.5, every dot back. White lettering on a badge, a jersey's diamonds, an
+  eye's white and bold letters' counters are closed in by thick ink and stay sewn (a counter inside thin small print
+  is fabric now too). Corpus (all of C5-KE): Filled look line art 75.9 -> 80.8, drawing 82.2 -> 83.4, no kind down;
+  line flower 77.5 -> 81.5, line cat 76.6 -> 80.4, crayon 79.2 -> 84.2, doodle sheet 76.8 -> 82.1; pastel lines -0.6
+  (its white between pastel lines is fabric now, 4,510 -> 1,621 stitches). Filled stitches 663 k -> 630 k, trims
+  1,635 -> 1,554, loose 33 -> 25 (line flower 60 mm 0 -> 2, watercolour flowers 100 mm trims 11 -> 14); every file
+  passes pe900_check. Not done: a counter of bold lettering on the fabric (panel s120's D, sewn beige) is the same
+  shape as a white star in a red ring, which the owner wants sewn; nothing here tells them apart yet.
+- A closed-in part left bare (`spare`) that is a quarter of the picture or more (framed_s100_edge's cream panel at 3
+  colours) is said as what to sew it on: "That is most of the design: sew it on cream fabric, or sew it in cream too
+  (4 threads)" (picture.js `insideNote`). Keeping it sewn at the count would take a design colour.
 - The Thread colours count is every thread sewn, the closed-in colour included (owner, 2026-11-13: a BYU logo at one
   colour came out Ultramarine and White, at two Prussian Blue, Cornflower Blue and White). `learnColours`: when the
   design's own colours fill the count and 0.2 % or more of the learned copy is closed in, the design learned one
@@ -202,6 +217,13 @@ Reference for this part of Needleworks: the rules, the reason for each (it stops
     underlay is the first thread's, once under the group. A line screen, not two layers: the cloth is covered once and
     each colour block is a fill at most as dense as a flat one (24 hits per mm² per block holds as for any fill;
     pe900_check passes every corpus file).
+  - Travel (C5-KE): a thread's stretches are combs reaching into the other thread's side, and the way between them
+    lay over its own finished rows (v34's icon: Sky Blue 2 -> 7 trims). A blended fill's travel may also run where a
+    later thread alone sews every row (`sole`: under the lowest row threshold or over the highest), `SHADE.hide`
+    0.5 mm inside it, as hidden (cell 2), and its routes over 30 mm are taken (the edge travel's cap; under the later
+    rows they don't show). Icon 100 mm trims 17 -> 10 (flat colours sew 11), 60 mm 6 -> 4 (flat 1); sunset 60 mm 21
+    -> 13 trims, loose 7 -> 0 (flat 18 and 7); look within 0.1. The "loose 1 -> 7" of v34's note was the sea's
+    stripes round the palm, sewn the same flat.
   - Tried and dropped: a fixed geometric ramp across the band (gradient +0.3 where following the picture gives +0.8);
     4 threshold levels (every blended case 0.1-0.6 lower); a band capped by the regions' half-width (a wide sky's blend
     stayed a 3 mm fringe); round 1's whole-group thread chain, rows along the gradient's plane fit and 4 mm `wide`
@@ -230,7 +252,13 @@ Reference for this part of Needleworks: the rules, the reason for each (it stops
   and stretches are sewn in row order with travel by distance only (no angle between segments).
 - Filled: shapes 1 mm or wider are a fill, a satin column or a satin dot (Stitch types, below); parts under 2 x
   `THIN_PART` and lines under 1 mm sew a triple run, never dropped. Specks: under 4 mm² and 2.5 mm across, groups
-  under 6 mm of line, walks under 1.5 mm (`lostLines` reports dropped fine lines). Kept: text dots on the fabric (>= 0.8 mm across, 0.6
+  under 6 mm of line, walks under 1.5 mm (`lostLines` reports dropped fine lines). A group of nothing but walks
+  under 1.5 mm that comes to 6 mm is a line the labelling broke into dashes and is sewn (each dash, straight
+  stitches between). Lines too faint to label (`faintKept`, numbers `FAINT`; palette.js `faintLines`: unlike the
+  fabric by ΔE 20, 2 px clear of ink, fabric either side) 6 mm long or more are sewn in the sewn colour they are a
+  blend of with the fabric (their mean 0.3 or more of the way to it, within ΔE 15 of the line between): pc_rules at
+  60 mm sews its 1 px hairline, look 70.8 -> 75.4. Its 0.3 mm red rule is still lost: labelled as 16 dashes 3 mm
+  apart, the gaps are blends too close to them to count as faint (palette's labelling, round C5-CO). Kept: text dots on the fabric (>= 0.8 mm across, 0.6
   mm², within 5 mm of their colour or another such dot) and marks >= 2 mm long, 1.5x longer than wide, within 2 mm of a
   bigger piece of their colour (apostrophes). Thin shapes (< 2 mm) 0.05 mm
   pull, else 0.15. `OVERLAP` 0.35 mm under later colours, shape by shape (growing the raw mask merged specks);
