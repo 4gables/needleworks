@@ -11,10 +11,10 @@
 // cache.
 // (`SET`: a fingerprint of the list below, written with the hashes. It is part of the cache's name, so a release whose
 // files changed can never install into the cache the running one is serving from, version number bumped or not.)
-const SET = "16d23e85526d";
-const CACHE = `needleworks-v35-${SET}`, SHARED = "needleworks-shared";
+const SET = "72b98ecb263c";
+const CACHE = `needleworks-v36-${SET}`, SHARED = "needleworks-shared";
 const FILES = {
-  "index.html": "69ccd54db6f31aa2777f50dcb1c8c2f0d14343de27abe57e3efbf62664e4cbc7",
+  "index.html": "ce483d1692e8eb37d3323ba5a5afee9e057b9d2085627320b3e4e6eeca32a03a",
   "manifest.webmanifest": "82f627e1def5254866cf364a55a1c2a85e2c3dd61abeeb890829362969fcfb63",
   "css/app.css": "4dc644a0e4bb2ede40dc6e0efe659306b0c466d38a2f79ec71ca98518fc1d205",
   "assets/icon-192.png": "19ae131e0ea47270a4cd0eefdac045f1811f7b3b25966a08d27e3c94b3262c76",
@@ -44,7 +44,7 @@ const FILES = {
   "js/core/brandcharts.js": "85f4772a2de19ab56691d984a8aad930b2c427cd34498c70f66933c6f09199be",
   "js/core/brands.js": "cb0a36b5fe3128de55654bdd350bdc86508f11fb089eb822bd73b7a26eba1c59",
   "js/core/design.js": "524343b1e64430e00794de16ca112806f34725c49e18755d2bf02416ef276fbb",
-  "js/core/digitize.js": "644aa9e7a23681fda1cae06e917af204dec8ec02fc1636d9b4b0b37b7d5455b5",
+  "js/core/digitize.js": "a33a18d302c3676d3aadfb09169f5517df343ebfa28a5f96a66d8aa717dc095c",
   "js/core/fonts.js": "17f00207b7a5ae85ec8ae5059a1a7122a0ab059cd27a70f27e607db74790e5ce",
   "js/core/glyphs.js": "5923a80f5f9c7d8be7e271af557783d7b3ee46c00bf0c4185f8840f344e99433",
   "js/core/formats.js": "6c635b29d843e7eb112ad773f92f79b26ea0ad17769889104b271faa2915b76e",
@@ -52,11 +52,11 @@ const FILES = {
   "js/core/geom.js": "63e2280fc822305b2b65dc8822f567108e9df2ebdeb18a0f40b5ea9be929ef0a",
   "js/core/colour.js": "ceb89ab0511bd2c9673945b2c90f71565ffd0a934bc5b299dab1279fc9758da2",
   "js/core/density.js": "fc507b2818e7cdb700d52d88ac328a784b89ddac6f609fcc469b95c4805a237e",
-  "js/core/fill.js": "fff1727d72b777eadd8df6b8d848c0d360beedc1ccee7f6df81328cdae6a664f",
+  "js/core/fill.js": "6d35487bd93bfd15264960fd8d0cb660509fac03666d40a3a8a574a7253505e8",
   "js/core/machines.js": "afd9fe6fc812a0b03d903fc54a374b3246ac27539c9cff7d5ea546ed9e81c135",
-  "js/core/artcheck.js": "d87f37fe199495fc0d2150af4afe4f67abb7af58e656adaab7c62148645d3693",
+  "js/core/artcheck.js": "865411d345f32f805987419fef7147dbeefc48922c3bb23c2b8398d61678a68b",
   "js/core/palette.js": "6eb13c38bde5bff34a22854ab8e70c9d9745cd18bfc7fc38cb9e85927ba04853",
-  "js/core/recipes.js": "fc3d8c8b0c11475f9725b676a2564042543890e5355ebba7fdc0a7ba1224e883",
+  "js/core/recipes.js": "73b9b03cbd049c7554029eb3c434ce6f1cce295eee953cbc9c44e19eb1463880",
   "js/core/raster.js": "b7f39ab3343d79066522fa5a4ef65bd4719e06fdb165c67f6b9dae88042ab93d",
   "js/core/regions.js": "4e24ba2c2d89c91a51bf3952db56ff4346d73783921a877911b97e1d45ad5813",
   "js/core/shade.js": "fe44961af8f7b1b5195a420ac2509c896f7ebcc3959e3c7a5dfb09b4b943c6fc",
@@ -66,7 +66,7 @@ const FILES = {
   "js/doctor.js": "ff80ece0fa4d29d7523fd2d5c2af3247e184fe49d2e6220dba286af39281e64c",
   "js/opened.js": "4a56f6bbcd1d67639d19ca1f052ec421d32b7cde6fedf5a016f827f11ccd4b84",
   "js/artwords.js": "ceaa16cdfcf9f20f929df194a4439ff3521f9bd407aa5271f56a0f6b7d12d038",
-  "js/picture.js": "5907f03318454f0b838bd8d15ea964b611d4f7095eeede6b20cbbd34edf8d3dc",
+  "js/picture.js": "8320c36fe604e2e4ab91c582dfa1b659898d10e156a28276405d10418178b147",
   "js/threadui.js": "8ceabd64367deaaa390dd1b99ff44ae7f6ee9a461d188c77e9c35263747af525",
   "js/along.js": "5332fceae5092f2989d8fe09ddf64167bbd7d6e0004fb3eed174a149ecd03545",
   "js/onitem.js": "e8f881bc81209ff19ee6a80c75afa0abb9a2f120077228d9370b5c864e054f6d",
@@ -102,7 +102,7 @@ const FILES = {
   "js/studio/ui.js": "6176bfbaa9b4c1b3057ff615989a8eb30f863ad9ebb722edd28aa4f18e03643d",
   "js/doctor-worker.js": "3317fbb8ef871771b787b51a9778e16fe4b0d0269e3bedbcc4128c482beed8fc",
   "js/quilt-worker.js": "75ae9e71b130b2bafcb5fee6e169ffdd39e7cea9de949cbb344900bc5b6da76c",
-  "js/worker.js": "1fcf501fa4381910853ac92381f04a8ac74ecc7f2a647362e64c056d1306f9cf",
+  "js/worker.js": "19e696a2c482017d9946b7f0b924de3fe6e027d702e1128b198d9de07ecb3dd9",
   "js/zip.js": "d3d529808cf0618975057f7a71bf6044059204da36a7ffc62d4679f627c6fcb3",
   "js/gate.js": "938788b4ff6f1ef97b0ded2d32c29c9dcada1159df4d91c5e0c96eb4bb48bcef",
   "js/jobs.js": "1309a0a2ad6edd8d872c0e7af21e48da0041406b1f901d8a95c3af157a6d6617",
