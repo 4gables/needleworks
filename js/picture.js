@@ -40,9 +40,12 @@ const DETAILS = ["all", "most"], detailsOf = (p) => (DETAILS.includes(p.details)
 // Soft shading (core/shade.js): "auto" blends only where the picture has a soft gradient; "blend" any edge softer than
 // a drawn one; "flat" none
 const SHADES = ["auto", "blend", "flat"], shadeOf = (p) => (SHADES.includes(p.shade) ? p.shade : "auto");
+// Fill direction: Follow the shape (each part's rows at its own angle or curving with it, core/fill.js `formOf`), else
+// the slider's one angle (docs/pictures.md: off by default)
+const followOf = (p) => (typeof p.follow === "boolean" ? p.follow : false);
 function picSettings(over = {}) {
   const p = state.pic, h = hoop(), turn = !!state.turn.picture && !square();
-  return { size: p.size, style: p.style, cross: p.cross, skip: p.skip, swap: p.swap, colors: p.colors, bg: p.bg, angle: p.angle, density: p.density, details: detailsOf(p), shade: shadeOf(p), inside: p.inside === "none" || p.inside === "all" ? p.inside : "auto", smooth: p.smooth,
+  return { size: p.size, style: p.style, cross: p.cross, skip: p.skip, swap: p.swap, colors: p.colors, bg: p.bg, angle: p.angle, follow: followOf(p), density: p.density, details: detailsOf(p), shade: shadeOf(p), inside: p.inside === "none" || p.inside === "all" ? p.inside : "auto", smooth: p.smooth,
     line: p.line, edge: p.edge, turn, hoop: turn ? { ...h, w: h.h, h: h.w } : h, palette: ownedPalette(), ...over };
 }
 // the fit each exact setting was sewn at (sewing it again gives the same file, at once)
@@ -58,7 +61,7 @@ async function sewPicture(s, wk, isStale = () => false) {
   const key = `${p.key}:${s.colors}:${s.bg}:${s.edge ? 1 : 0}:${s.smooth ?? "auto"}:${box.sx},${box.sy},${box.sw},${box.sh}`, k = LEARN / Math.max(box.sw, box.sh);
   if (p.learn?.key !== key) p.learn = { key, img: pictureImage(bitmap, box, Math.max(1, Math.round(box.sw * k)), Math.max(1, Math.round(box.sh * k))) };
   const learn = p.learn.img;
-  const opts = { colors: s.colors, scale: k, removeBackground: s.bg, fillAngle: s.angle, density: DENSITY[s.density] || DENSITY.standard, details: s.details, shade: s.shade, inside: s.inside, ...(s.smooth == null ? {} : { smooth: s.smooth }), skip: s.skip, ...(s.swap && Object.keys(s.swap).length ? { swap: s.swap } : {}), hoop: s.hoop, turn: s.turn, palette: s.palette, style: s.style, cross: s.cross, line: s.line || undefined, edge: s.edge || undefined };
+  const opts = { colors: s.colors, scale: k, removeBackground: s.bg, fillAngle: s.angle, ...(s.follow ? { direction: "auto" } : {}), density: DENSITY[s.density] || DENSITY.standard, details: s.details, shade: s.shade, inside: s.inside, ...(s.smooth == null ? {} : { smooth: s.smooth }), skip: s.skip, ...(s.swap && Object.keys(s.swap).length ? { swap: s.swap } : {}), hoop: s.hoop, turn: s.turn, palette: s.palette, style: s.style, cross: s.cross, line: s.line || undefined, edge: s.edge || undefined };
   // (kept per colour count: the checks try other counts)
   if (!p.models.has(key)) {
     const m = await wk.run({ key, learn, opts });
@@ -78,7 +81,7 @@ async function sewPicture(s, wk, isStale = () => false) {
 }
 export async function makePicture() {
   const p = state.pic; if (!p.bitmap) return;
-  if (!p.sample) store.set("pic.last", { style: p.style, colors: p.colors, size: p.size, angle: p.angle, cross: p.cross, bg: p.bg, line: p.line, details: detailsOf(p) });
+  if (!p.sample) store.set("pic.last", { style: p.style, colors: p.colors, size: p.size, angle: p.angle, follow: followOf(p), cross: p.cross, bg: p.bg, line: p.line, details: detailsOf(p) });
   // (nothing from another tab stays on screen, with its Download, while this picture stitches)
   if (state.mode === "picture" && state.view && state.view !== state.views.picture) setView(null);
   const req = ++p.req; busy(true, "Stitching your picture…");
@@ -413,6 +416,8 @@ bindRange("pic-colors", "colors", (v) => String(v));
 bindRange("pic-size", "size", sizeLabel);
 bindRange("pic-angle", "angle", (v) => `${v}°`);
 bindRange("pic-cross", "cross", (v) => `${v} mm`);
+$("pic-follow").checked = followOf(state.pic);
+$("pic-follow").onchange = (e) => { state.pic.follow = e.target.checked; makePicture(); };
 // warn when parts of the picture are finer than thread can show (they'd close up or turn into a single line)
 // (lines under 1 mm aren't flagged: they're sewn as lines on purpose, and the warning fired on the sample flower;
 // gaps only past 1.5% of what's sewn: some always close in a detailed picture, and at 0.8 mm² it showed on every one)
@@ -604,6 +609,7 @@ export async function lastPicture() {
     for (const [k, lo, hi] of [["colors", 1, 99], ["size", 10, 400], ["angle", 0, 180], ["cross", 1, 10]]) if (Number.isFinite(o[k]) && o[k] >= lo && o[k] <= hi) { p[k] = o[k]; $("pic-" + k).value = o[k]; $(`pic-${k}-out`).textContent = { colors: String, size: sizeLabel, angle: (v) => `${v}°`, cross: (v) => `${v} mm` }[k](o[k]); }
     if (typeof o.bg === "boolean") $("pic-bg").checked = p.bg = o.bg;
     if (DETAILS.includes(o.details)) { p.details = o.details; detailsUI(); }
+    if (typeof o.follow === "boolean") $("pic-follow").checked = p.follow = o.follow;
     if (o.line === "" || /^#[0-9a-f]{6}$/i.test(o.line)) p.line = o.line;
     styleUI();
     await loadPicture(new File([got.blob], got.name, { type: got.blob.type }), false, true);

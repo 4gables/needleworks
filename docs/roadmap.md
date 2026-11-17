@@ -289,7 +289,7 @@ stitch round ends with a small sew-out pack.
     ragged edge, never more sections than today's angle); Follow the shape for patches and filled motifs; pictures
     with `direction: "auto"` (a one-line hook in digitize.js; the Picture panel doesn't offer it yet)
   - [x] curved rows: level lines of a fitted stripe field, never closer than the spacing, where they beat straight
-  - left: the Picture panel's choice (picture.js), and whether pictures default to it; curved rows with
+  - left (the Picture panel's choice and the default: C5-DI); curved rows with
     singularities (a disc's, a star's middle) and rows that end inside a narrowing band; sewn proof
 - [x] **PX4 Shading** (after PX1): two-colour blends by density, colour mixing for photos and gradients. Done:
   `core/shade.js` (soft borders gated to real shading, the two threads that meet, a line screen on one grid and
@@ -375,9 +375,13 @@ pe900_check against this baseline and ships as its own release (`docs/releases.m
 - [ ] **C5-XS Cross-stitch a stitcher would chart**: backstitch over the crosses for lines under ~0.6 of a cell;
   closed-in white only inside a filled colour; cell size and grid offset per picture, half crosses on diagonals;
   travel hidden under crosses to come, rows per colour. Owns digitize.js `crossStitch`.
-- [ ] **C5-DI Direction (PX3 leftover + novel)**: Follow the shape on the Picture panel and whether it is the
+- [x] **C5-DI Direction (PX3 leftover + novel)**: Follow the shape on the Picture panel and whether it is the
   default; trial: each region's angle from the picture's own texture or brush strokes (structure tensor), kept only
   where look and pe900_check say so. Owns picture.js direction UI, digitize.js `form` hook, fill.js angles. Wave 2.
+  - done: Follow the shape on the Picture panel (More settings, off by default: trims -2.7 %, look +0.1, the flat
+    landscape -3.7); curved rows no longer drop a piece of a part in pieces (a leaf unsewn, the bee's band); the grain
+    trial measured and dropped (docs/pictures.md)
+  - left: the landscape's neighbouring colours running one way under `dir=auto`; a sew-out before it's the default
 - [ ] **C5-AU Style chosen per picture (novel trial)**: Filled, Line drawing or Cross-stitch picked from the picture
   (flat colour areas, line share, photo-ness), proven on the corpus as the style a person would pick. Wave 2, after
   LN and XS (better styles change the choice). Owns artcheck.js and its picture.js hook.
