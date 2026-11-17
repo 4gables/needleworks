@@ -796,7 +796,7 @@ function formOf(comp, mask, res, prefer) {
     const plain = { ...comp, form: null }, sew = (a, field) => {
       const under = tatami(mask, plain, res, { angle: a + 90, spacing: 2.5, stitch: 3, inset: 0.4, pull: 0 });
       const fill = field ? curvedRows(plain, mask, res, comp.dt, { spacing: ROWS.standard, stitch: TATAMI.stitch, pull: 0.15, fd: field, inside: (x, y) => { const X = Math.round(x), Y = Math.round(y); return X >= 0 && Y >= 0 && X < mask.w && Y < mask.h && comp.labels[Y * mask.w + X] === comp.id; } })?.paths : tatami(mask, plain, res, { angle: a, spacing: ROWS.standard, stitch: TATAMI.stitch, pull: 0.15 });
-      return fill ? routeFill([under, fill], comp, mask, res, routeBudget(), WORN, false, 0, null, PICTURES.edge).length : Infinity;
+      return fill?.length ? routeFill([under, fill], comp, mask, res, routeBudget(), WORN, false, 0, null, PICTURES.edge).length : Infinity;
     };
     const was = sew(prefer, null);
     if (f.field && sew(f.angle, f.field) > was) f = { angle: f.angle };
@@ -865,6 +865,9 @@ function rowField(comp, w, h, res, dt) {
   let pairs = 0, bad = 0;
   for (let c = 0; c < n; c++) if (ins[c]) for (const m of [c + 1, c + gw]) if (m < n && ins[m]) { pairs++; if (NX[m] * NX[c] + NY[m] * NY[c] < 0) bad++; }
   if (bad > FORM.turns * pairs + 2) return null;
+  // (one field for one piece: a part in pieces, a stem's two leaves once the stem is a satin column, gave rows to
+  // the seed's piece alone, and the other leaf sewed its underlay only; with fewer sections it won the count)
+  for (let c = 0; c < n; c++) if (ins[c] && !seen[c]) return null;
   // phi: least squares over every pair of neighbouring cells, phi(b) - phi(a) = the mean normal . (b - a) (mm);
   // conjugate gradients, Jacobi preconditioned
   const cells = q, idx = new Int32Array(n).fill(-1);
