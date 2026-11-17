@@ -246,9 +246,11 @@ Reference for this part of Needleworks: the rules, the reason for each (it stops
   twice the 90th percentile of the distance to the edge (by the widest point, a mandala's 0.6 mm lines were over 1 mm
   where two cross, sewn twice as bold: look 74 -> 60).
   - A stroke (area / width² >= 2) is a column only when it is `plain`: under 20 % of its centre lines in strokes
-    shorter than 3 widths, and its width away from the ends within 2.2x narrow to wide. Bold letters and ragged
-    patches thin to stubby strokes each turned its own way, and a leaf's half (0-4 mm) sewed as a fan; those stay
-    fills. A dot needs 85 % of its convex hull (`solid`). Nothing under 3 mm² (`small`): a satin that small is all
+    shorter than 3 widths, and its width away from the ends within 2.2x narrow to wide, or uneven only as a taper is
+    (C5-SA, `taper`: along each centre line, smoothed over 0.4 mm, the width rises and falls at most 2.5x its range: a
+    brush stroke narrowing to its point, a leaf's half swelling and narrowing again; a ragged patch goes up and down
+    all along; only a single open line at least 4 widths long: a blob's short curl passed as a taper and sewed as a
+    starburst). Bold letters and ragged patches thin to stubby strokes each turned its own way; those stay fills. A dot needs 85 % of its convex hull (`solid`). Nothing under 3 mm² (`small`): a satin that small is all
     tie-in and tie-off, and the cap of 19 hits per mm² left a 1 mm one only its locks, a knot. The columns must cover
     90 % of the piece (`cover`): thinning prunes a short arm as a spur, and a slab F's middle arm was left bare. The
     fabric's colour closed in by the design is never a column (white slivers between outlines sewed as fans).
@@ -257,12 +259,23 @@ Reference for this part of Needleworks: the rules, the reason for each (it stops
     before it: the needle reaches it under the fill still to come and comes back into the fill where its walk began
     (after the fill, the way lay over finished rows: a trim each).
   - Centre lines: `skeletonEdges` (spurs under a stroke pruned; a loop under two strokes round dropped, thinning's
-    knot at a blunt end, sewn as a star of satin), loose ends carried to the edge (`lineEnds`). Each side is measured
+    knot at a blunt end, sewn as a star of satin, unless it rings fabric at least a quarter stroke square: a small
+    P's counter, whose bowl otherwise sewed as one fan from the stem; not a pinhole in a blob), loose ends carried to the edge (`lineEnds`). Each side is measured
     across the shape along the normal (a round end narrows as the shape does; by the distance to the edge it sewed as
     a diamond), at most 1.4x the distance to the edge at the centre line (a junction's other strokes), evened over
     0.2 mm, less 0.1 mm a side (`thread`: the thread lies past its holes; sewn to the drawn edge a 1 mm outline came
     out half again as bold). Only a loose end stops short, where the column is under 0.5 mm (`tip`); a narrow
     stretch between junctions (a leaf's vein in its outline) is sewn 0.5 mm wide, not cut out.
+  - Sharp turns (C5-SA, after trial branch `px2-mitre`): where the centre line turns (measured over a stroke width
+    either way) the outer side's cap is raised by 1 / sin(half the inside angle), at most 4x (`mitre` 0.25), so the
+    satin reaches the drawn point of a star or an ear; capped at the distance to the edge, it stopped short and left
+    the point bare. Not on a line under 6 widths long: a blob's short curl turns all round, and mitred every way it
+    sewed as a starburst at the density limit. A ring alone (a star's outline, a D) starts and ends at its straightest place: a column's end is
+    sewn square across, so a point there stayed bare whatever its reach.
+  - Stitch angle (`steady` 0.75): each satin stitch lies square to the centre line's direction averaged over 0.75
+    stroke widths either way (satin's slant), not to the skeleton's local wiggle: at 60 mm a 1.2 mm stroke's centre
+    line bends at every pixel stair and corner, and stitches square to it turned every way at once (DESIGN's letters
+    as fuzzy fans). Sideways reach is kept, so a straight stroke's edges are where they were.
   - Sewing: each net is walked as lettering is (`raster.js` `tour`, `order`'s walk): every centre line out as its
     underlay (a centre run in 1.2 mm stitches; from 2 mm wide a zigzag 0.4 mm inside each edge, `LETTERS.zigzagFrom`)
     and back as satin (`LETTERS` gap 0.38 mm, pull 0.1 + the fabric's; `fold` at tight inside corners). A net ends
@@ -292,12 +305,25 @@ Reference for this part of Needleworks: the rules, the reason for each (it stops
     (above); pull 0.3 on columns from 1.5 mm, as lettering (outlines too bold); dots of any size as satin (knots);
     choosing a column's node by what lies next to it (held-out loose threads 71 -> 82); a tuck back onto the satin
     before a trim (a bar across it).
-  - Not yet: back to front beyond light-first (PX1's measure stands); satin outer corners at sharp points (a mitre:
-    tried on branch `px2-mitre`, the outer side's cap raised by 1 / sin(half the inside angle) and a lone ring started
-    at its straightest place: holes 48.8 -> 44.0 mm², the star outline 5.4 -> 2.8, but mascot look -0.2; most of the
-    rest is square column ends on bold letters, J's and I's corners, which need the end sewn out to the corners);
-    tapered strokes and leaf halves as satin (they fail `even`); the dots of a dot-only satin are all lock, so a lone
-    dot counts 10 bare lock hits (the scoreboard's lockOut).
+  - Proof of C5-SA (2026-11, v34 base, browser corpus 127 filled cases): look by kind within -0.2..+0.1 (line art
+    -0.2, mascot -0.1, shapes and other +0.1, the rest 0); no case 3 down, the most -1.0 (a line cat at 100 mm) and
+    +1.3 (the star outline at 60 mm; +0.8 at 120). Holes 48.4 -> 42.9 mm² (35 -> 31 patches; star outline 5.4 ->
+    2.1). Filled corpus: stitches -0.2 %, trims 1,635 -> 1,633, loose 33 -> 34, wasted 56 -> 49, bare locks 43 -> 43,
+    at the limit 1 -> 2 (very_dark at 60 mm: a small ring's stitches, square to the line's run, meet at 24 hits, not
+    over). Browser batch, 12 samples: trims 1,120 -> 1,114, loose 60 -> 60, wasted 32 -> 32, ends 1,014 -> 1,007,
+    bare locks 86 -> 86, at the limit 3 -> 3. pe900_check 254 of 254 (corpus) and 553 of 553 (batches).
+  - Tried and dropped: the tie-in searched up to 2.5 mm along a fill's first 30 points when nothing at 1.1-1.9 mm is
+    reached without crossing fabric (a fill starting at a sharp tip ties in on the tip, bare): bare locks 86 -> 83,
+    but one tie-in landed on a dense spot (etsy_8 at 170 mm 22 -> 24 hits). Mitre on any centre line and taper on any
+    net: a blob's short curl sewed as a satin starburst at the density limit (etsy_4 at 170 mm 22 -> 24).
+  - Not yet: back to front beyond light-first (PX1's measure stands); square column ends on bold letters (the holes
+    left are not satin: 18 of the 43 mm² are a sun's 1 mm rays the Details choice leaves out in two drawings, the rest
+    under 2 mm² a case); a corner of an E or a D's bowl round a small counter is still a fan (the stitch angle turns
+    with the line: a digitizer splits the letter into a stem sewn straight across and arms or a bowl, which needs
+    the letter's strokes, not its skeleton); bare locks: about 60 of the batch's 86 are dots under 1 mm sewn as a fill of
+    one row (tie-in, a stitch, tie-off: all lock, nothing over them; specks, not satin) and the rest fill tie-ins on
+    a sharp tip (above; `Design`'s tie-in goes toward the first point); none are columns; a lone
+    dot of a dot-only satin counts 10 bare lock hits (the scoreboard's lockOut).
   - Needs a sew-out (nothing here is proven on a machine): satin outlines 1-1.5 mm wide on cotton (do they close up
     with 0.1 pull, and is 0.1 mm inside the drawn edge right?); a satin network's junctions eased to 19 hits/mm²; a
     hybrid stem cut off a leaf (does the 0.6 mm reach leave a gap?); 2-4 mm satin dots (eyes) with their tie-in under

@@ -348,10 +348,17 @@ pe900_check against this baseline and ships as its own release (`docs/releases.m
   orange/Silver); closed-in shade stays fabric. left: muted picks (navy -> Ultramarine, dusty red -> Carmine, owl
   outline -> Prussian Blue: a chroma penalty in the choice fixed them and broke etsy_1/3's olive and mauve), the
   owl's wings+body merge (keeping them cost its outline), judging in mm (colours are learned before the size).
-- [ ] **C5-SA Satin finish (PX2 leftovers)**: mitred outer corners at star points (`px2-mitre`: holes 48.8 -> 44.0
+  Owns palette.js, regions.js.
+- [x] **C5-SA Satin finish (PX2 leftovers)**: mitred outer corners at star points (`px2-mitre`: holes 48.8 -> 44.0
   mm²), square column ends on bold strokes, bare locks back down (PX2 added 6-11 on the samples), tapered strokes and
   leaf halves as satin, small lettering as columns not fans. Owns digitize.js `columnNets`/`netStitches` and the
   stroke part of `build`, recipes.js `COLUMNS`.
+  - done: mitre ported (holes 48.4 -> 42.9 mm², star outline 5.4 -> 2.1), tapers and leaf halves as satin
+    (`taper`), stitches square to the line's run (`steady`), a small counter keeps its ring; look by kind within
+    -0.2..+0.1, batch trims 1,120 -> 1,114 (`docs/pictures.md` "Stitch types")
+  - left: bare locks unchanged (86: ~60 are sub-1 mm fill dots, specks; the rest fill tie-ins on sharp tips, none
+    columns); square ends had no measurable holes left; E corners and D bowls round small counters still fan (needs
+    the letter's strokes, not a skeleton)
 - [ ] **C5-KE Keep what matters, cut what costs**: v34's blends cost (60 mm sunset loose 1 -> 7, icon trims 6 -> 11);
   closed-in white (the mandala's disc and dots, sewn counters, a panel left bare said in the note); thin rules and
   dots not dropped; travel under later stitches. Owns shade.js, digitize.js `keptParts`/specks/`lostLines`.
