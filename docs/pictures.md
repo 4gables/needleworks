@@ -495,3 +495,35 @@ Reference for this part of Needleworks: the rules, the reason for each (it stops
     `background`, polka dots' 5 mm "dots" `text`).
   - Known: a row of three florets on one baseline can read as lettering (etsy_3); script lettering joined into one
     piece is not found as lettering; the colour count of a soft picture is high, so it is said only on flat ones.
+
+## Style chosen per picture
+
+A fresh picture starts in the style a person would pick (C5-AU): Line drawing when it is one, else Filled.
+`artcheck.js` `artStyle` measures (in the worker, on the first measure of a new picture: the message's `pick`),
+`chooseStyle` decides (numbers `recipes.js` `STYLE`), picture.js `startStyle` applies it.
+- Measured on the learned copy labelled with closed-in fabric left as fabric (`labelWith` inside "none": a line
+  drawing's insides and a frame are not ink). For each ink pixel its local thickness: the radius of the biggest disc
+  of ink covering it (exact distance transform; each local top paints its disc; past 24 px "wide"). The thin share =
+  ink in strokes no wider than `STYLE.wide` 1.6 % of the longer side. Line drawing when that is at least
+  `STYLE.line` 0.55 and the picture is drawn in at most `STYLE.inks` 4 colours (`artPicture`'s flat-colour count).
+- Only a new picture (chosen or dropped) is chosen for; the sample and the picture kept from the last visit keep
+  their style, a part or a turn keeps the picture's, and a style tapped stands (the choice is made once, before the
+  first stitching, so nothing is sewn twice). Under the Style chips, while the chosen style stands: "Looks like a
+  line drawing, so it's sewn as one." Nothing is said when it starts Filled (as before).
+- Ground truth: `tests/fixtures/style_labels.json`, the style a person would pick for each of the 74 pictures (the
+  corpus drawings, `art.js`, `tests/external/images`), each with its reason, written from the pictures before the
+  chooser was built (64 Filled, 8 Line drawing, 2 Cross-stitch; `also`: another a person could defend).
+  `picture_corpus.sh ... styles` measures only (about 5 min with the lock) and reports agreement.
+- Agreement: 69/74 (93.2 %), every miss a style the label allows (always-Filled: 64/74). Line drawings found 5 of 8
+  (pastel_lines, the three line-art drawings, etsy_7's doodle bundle); no filled picture moved to Line drawing
+  (logos, lettering, cartoons, flat illustrations, stickers, mascots all stay Filled). Missed: crayon and marker
+  (strokes 2-6 mm: they sew well filled as columns), doodle_sheet (its bold title is two thirds of the ink), and the
+  two pet photos (labelled Cross-stitch).
+  Stable: the same 69 for `wide` 1.4-1.6 % at `line` 0.45-0.6; from 1.8 % a Filled picture turns Line drawing.
+- Measured at the Size instead (mm): the line cat's thin share fell from 0.98 at 100 mm to 0.25 at 150 mm, while a
+  person's pick doesn't change with the Size. A regular-weight wordmark (Bob's Bakery) is 0.72 thin at 60 mm by mm
+  and under 0.4 by share of the picture: its strokes are 2-2.5 % of the picture, line art's 1-1.5 %.
+- Colour count keeps photos of embroidered wildflower sheets Filled: as thin as line art (0.58-0.73) in 8-13 colours.
+- Cross-stitch is never the start: the pet photos measured as clip art does (flat 0.84-0.90, blends 0.07-0.28, off
+  their colours by 3.4 ΔE) and the gradient icon and sunset alike or more. Left: a photo measure that tells a photo
+  from a soft-shaded illustration (fur texture at the picture's own pixel size), then a suggestion, not a default.
