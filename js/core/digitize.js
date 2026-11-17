@@ -8,7 +8,7 @@ import { Design } from "./design.js";
 import { FILL, FILL_PATTERNS, SEWN, WORN, fillPolygon, makeRouter, routeBudget, routeFill, tatami } from "./fill.js";
 import { arclen, followRun, normals, resample, run, satin } from "./geom.js";
 import { MARGIN } from "./machines.js";
-import { COLUMNS, LIMITS, PICTURES, ROWS, SHADE, SHAPES, letterRecipe } from "./recipes.js";
+import { COLUMNS, CROSS, LIMITS, PICTURES, ROWS, SHADE, SHAPES, letterRecipe } from "./recipes.js";
 import { distanceTransform as wholeDT, label, order, skeletonEdges, tour } from "./raster.js";
 import { cleanShapes } from "./regions.js";
 import { shading } from "./shade.js";
@@ -1500,25 +1500,125 @@ function lineArt(img, analysis, opts) {
   return { design: d, summary: [{ ...ink, hex: line.hex, thread: line.thread, shapes, kinds: ["run"] }], fine: { narrowMm2: 0, hairlines: 0 } };
 }
 
-// Cross-stitch: the picture on a grid of `cross` mm cells, each the colour most of its pixels have (or left empty when
-// most are background). A run of cells in a row is two zigzags of diagonals (bottom-top-bottom… out, top-bottom-top…
-// back), so the only straight stitch is one up the run's last edge; climbing every cell edge made lone cells bowties.
+// Cross-stitch (roadmap C5-XS; numbers: recipes.js CROSS, docs/pictures.md), as a stitcher charts it: the picture on
+// a grid of cells, each the colour most of its pixels have (or left empty when most are background), and every line
+// narrower than CROSS.thin of a cell backstitched over the crosses in its own thread (crosses alone lost every rule,
+// outline and line drawing: a mandala came out as a disc of white crosses). The cell shrinks from the Cross size asked
+// when the ink's strokes are about a cell wide (letters), and the grid lies where it fits the picture best.
+// A run of cells in a row is two zigzags of diagonals (bottom-top-bottom… out, top-bottom-top… back), so the only
+// straight stitch is one up the run's last edge; climbing every cell edge made lone cells bowties.
 function crossStitch(img, analysis, opts) {
-  const o = { ...DEFAULTS, ...opts }, { w, h, labels, colors } = analysis, res = o.res;
-  const c = (o.cross || 2.5) * res, gw = Math.floor(w / c), gh = Math.floor(h / c), grid = new Int32Array(gw * gh).fill(-1);
+  const o = { ...DEFAULTS, ...opts }, { w, h, labels, colors } = analysis, res = o.res, n = w * h, K = colors.length;
   const bg = new Set(colors.filter((k) => k.background || (o.skip || []).includes(k.id)).map((k) => k.id));
-  for (let gy = 0; gy < gh; gy++) for (let gx = 0; gx < gw; gx++) {
-    const n = new Map();
-    for (let y = Math.floor(gy * c); y < Math.floor((gy + 1) * c); y++) for (let x = Math.floor(gx * c); x < Math.floor((gx + 1) * c); x++) {
-      const l = labels[y * w + x]; n.set(l, (n.get(l) || 0) + 1);
-    }
-    let best = -1, bn = 0, fg = 0, all = 0;
-    for (const [l, k] of n) { all += k; if (bg.has(l)) continue; fg += k; if (k > bn) { bn = k; best = l; } }
-    if (fg * 2 > all) grid[gy * gw + gx] = best;
+  // (the background's colour closed in by the design: crossed only inside a filled colour, below)
+  // (and a colour sewn in the fabric's own thread that is the fabric in the picture, under CROSS.paper ΔE00 from it: a
+  // line drawing's paper learned as a near-white colour of the design; a pale pink in White thread is still a colour)
+  const fabric = colors.find((k) => k.background), fl = fabric && srgbToLab(...hexToRgb(fabric.picture || fabric.hex));
+  const labAt = (l) => (l < 0 ? fl || null : srgbToLab(...hexToRgb(colors[l].picture || colors[l].hex)));
+  const paper = new Set(colors.filter((k) => !bg.has(k.id) && (k.inside || (fabric && k.thread?.hex === fabric.thread?.hex && deltaE2000(srgbToLab(...hexToRgb(k.picture || k.hex)), fl) < CROSS.paper))).map((k) => k.id));
+  const inId = analysis.inside >= 0 && colors[analysis.inside]?.inside && !bg.has(analysis.inside) ? analysis.inside : -1;
+  const inks = colors.filter((k) => !bg.has(k.id)).map((k) => k.id);
+  const masks = new Map(), dts = new Map(), area = new Map();
+  for (const id of inks) {
+    const m = { w, h, data: new Uint8Array(n) };
+    let a = 0;
+    for (let i = 0; i < n; i++) if (labels[i] === id) { m.data[i] = 1; a++; }
+    masks.set(id, m); dts.set(id, distanceTransform(m)); area.set(id, a);
   }
+  // a colour's pixels no disc d mm across reaches (what an opening of it takes off)
+  const narrowAt = new Map();
+  const narrow = (id, d) => {
+    const key = `${id} ${d.toFixed(3)}`;
+    if (narrowAt.has(key)) return narrowAt.get(key);
+    const m = masks.get(id), dt = dts.get(id), r = (d * res) / 2, off = { w, h, data: new Uint8Array(n) };
+    for (let i = 0; i < n; i++) off.data[i] = dt[i] > r ? 0 : 1;
+    const to = distanceTo(off, r), out = new Uint8Array(n);
+    let k = 0;
+    for (let i = 0; i < n; i++) if (m.data[i] && to[i] > r) { out[i] = 1; k++; }
+    out.count = k; narrowAt.set(key, out);
+    return out;
+  };
+  const lined = inks.filter((id) => !paper.has(id)), inkPx = lined.reduce((a, id) => a + area.get(id), 0);
+  // The cell: the size asked, unless over CROSS.trouble of the ink is strokes between backstitch and a cell wide (a
+  // logo's 2 mm letters at 2.5 mm cells were unreadable stairs); then the largest smaller one that keeps them
+  const cap = o.cross || 2.5, sizes = [...new Set(CROSS.cells.map((f) => (cap <= CROSS.min ? cap : Math.max(CROSS.min, +(cap * f).toFixed(2)))))];
+  let cell = sizes[0];
+  {
+    let best = Infinity;
+    for (const s of sizes) {
+      let t = 0;
+      for (const id of lined) t += narrow(id, s).count - narrow(id, CROSS.thin * s).count;
+      if (t <= CROSS.trouble * inkPx) { cell = s; break; }
+      if (t < best) { best = t; cell = s; }
+    }
+  }
+  const c = cell * res;
+  // what each pixel votes for: its colour, -1 fabric, -2 nothing (a line, backstitched)
+  const thin = new Map(), vote = new Int16Array(n);
+  for (const id of lined) thin.set(id, narrow(id, CROSS.thin * cell).slice());
+  const votes = () => {
+    for (let i = 0; i < n; i++) { const l = labels[i]; vote[i] = bg.has(l) ? -1 : thin.get(l)?.[i] ? -2 : l; }
+  };
+  votes();
+  // a grid whose corner is at (px, py) px: each cell's colour, and how many pixels disagree with it
+  const S = K + 1, cxOf = new Int32Array(w), cyOf = new Int32Array(h);
+  const lay = (px, py) => {
+    const x0 = px - c, y0 = py - c, gw = Math.ceil((w - x0) / c), gh = Math.ceil((h - y0) / c), cnt = new Float32Array(gw * gh * S);
+    for (let x = 0; x < w; x++) cxOf[x] = Math.floor((x + 0.5 - x0) / c);
+    for (let y = 0; y < h; y++) cyOf[y] = Math.floor((y + 0.5 - y0) / c);
+    for (let y = 0, i = 0; y < h; y++) { const r = cyOf[y] * gw; for (let x = 0; x < w; x++, i++) { const l = vote[i]; if (l !== -1) cnt[(r + cxOf[x]) * S + (l < 0 ? K : l)]++; } }
+    const grid = new Int32Array(gw * gh).fill(-1);
+    let miss = 0;
+    for (let g = 0; g < gw * gh; g++) {
+      let fg = 0, best = -1, bn = 0;
+      for (let l = 0; l < K; l++) { const v = cnt[g * S + l]; fg += v; if (v > bn) { bn = v; best = l; } }
+      const all = c * c - cnt[g * S + K];
+      if (fg * 2 > all) { grid[g] = best; miss += all - bn; } else miss += fg;
+    }
+    return { grid, gw, gh, x0, y0, miss };
+  };
+  // the grid's offset: of CROSS.phases² tried, the one that fits best (at one offset a 2 mm ring lost its right side
+  // and 4 mm dots came out as 0, 1 or 4 cells)
+  let G = null, ph = [0, 0];
+  for (let a = 0; a < CROSS.phases; a++) for (let b = 0; b < CROSS.phases; b++) {
+    const g = lay((a * c) / CROSS.phases, (b * c) / CROSS.phases);
+    if (!G || g.miss < G.miss) { G = g; ph = [(a * c) / CROSS.phases, (b * c) / CROSS.phases]; }
+  }
+  // A colour's piece the crosses cover under CROSS.covered of is backstitched instead: small lettering came out as two
+  // stray crosses, a 2 mm dot as none
+  {
+    let moved = false;
+    const own = (i, id) => { const x = i % w, y = (i - x) / w, gx = Math.floor((x + 0.5 - G.x0) / c), gy = Math.floor((y + 0.5 - G.y0) / c); return G.grid[gy * G.gw + gx] === id; };
+    // (a small piece, under CROSS.letter cells, that is mostly narrower than a cell is a line all through: letters
+    // about a cell wide came out half crosses, half backstitch, and read as neither. A large one, a star's 2 mm
+    // outline, keeps its weight as crosses: as a line it scored 50 -> 43)
+    for (const id of lined) {
+      const T = thin.get(id), N = narrow(id, cell), { labels: cl, count } = label(masks.get(id));
+      const tot = new Int32Array(count + 1), nar = new Int32Array(count + 1), x0 = new Int32Array(count + 1).fill(w), x1 = new Int32Array(count + 1), y0 = new Int32Array(count + 1).fill(h), y1 = new Int32Array(count + 1);
+      for (let i = 0; i < n; i++) {
+        const k = cl[i]; if (!k) continue;
+        const x = i % w, y = (i - x) / w;
+        tot[k]++; if (N[i]) nar[k]++;
+        if (x < x0[k]) x0[k] = x; if (x > x1[k]) x1[k] = x; if (y < y0[k]) y0[k] = y; if (y > y1[k]) y1[k] = y;
+      }
+      const small = (k) => Math.max(x1[k] - x0[k], y1[k] - y0[k]) + 1 < CROSS.letter * c;
+      for (let i = 0; i < n; i++) { const k = cl[i]; if (k && !T[i] && small(k) && nar[k] >= CROSS.part * tot[k]) { T[i] = 1; moved = true; } }
+    }
+    if (moved) { votes(); G = lay(...ph); }
+    for (const id of lined) {
+      const T = thin.get(id), m = { w, h, data: masks.get(id).data.map((v, i) => (v && !T[i] ? 1 : 0)) }, { labels: cl, count } = label(m);
+      if (!count) continue;
+      const tot = new Int32Array(count + 1), hit = new Int32Array(count + 1);
+      for (let i = 0; i < n; i++) if (cl[i]) { tot[cl[i]]++; if (own(i, id)) hit[cl[i]]++; }
+      for (let i = 0; i < n; i++) if (cl[i] && hit[cl[i]] < CROSS.covered * tot[cl[i]]) { T[i] = 1; moved = true; }
+    }
+    if (moved) { votes(); G = lay(...ph); }
+  }
+  const { grid, gw, gh, x0, y0 } = G;
+  const at = (gx, gy) => (gx >= 0 && gy >= 0 && gx < gw && gy < gh ? grid[gy * gw + gx] : -1);
   // a speck on open fabric (no cell of its colour within two, no other colour beside it) cost a trim and two locks:
   // dropped. (Every cell with no neighbour of its colour went too, but a small sprigged picture lost half its flowers.)
-  const at = (gx, gy) => (gx >= 0 && gy >= 0 && gx < gw && gy < gh ? grid[gy * gw + gx] : -1), lone = [];
+  const lone = [];
   for (let gy = 0; gy < gh; gy++) for (let gx = 0; gx < gw; gx++) {
     const k = at(gx, gy);
     let near = 0;
@@ -1529,19 +1629,182 @@ function crossStitch(img, analysis, opts) {
     if (k >= 0 && !near) lone.push(gy * gw + gx);
   }
   for (const i of lone) grid[i] = -1;
+  // Closed-in white is crossed only where CROSS.surround of the cells round it are crosses of another colour (a
+  // mountain's snow on a navy disc); inside lines it is the paper (a line mandala, a cat, a flower were filled with
+  // white crosses on white fabric)
+  if (paper.size) {
+    const seen = new Uint8Array(gw * gh);
+    for (let s = 0; s < gw * gh; s++) {
+      if (!paper.has(grid[s]) || seen[s]) continue;
+      const inId = grid[s];
+      const comp = [s], nb = new Set();
+      seen[s] = 1;
+      for (let k = 0; k < comp.length; k++) {
+        const g = comp[k], gx = g % gw, gy = (g - gx) / gw;
+        for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+          const X = gx + dx, Y = gy + dy, j = Y * gw + X;
+          if (X < 0 || Y < 0 || X >= gw || Y >= gh) { nb.add(-1 - k * 8 - (dx + 1) - 3 * (dy + 1)); continue; }
+          if (grid[j] === inId) { if (!seen[j]) { seen[j] = 1; comp.push(j); } } else nb.add(j);
+        }
+      }
+      let filled = 0;
+      for (const j of nb) if (j >= 0 && grid[j] >= 0) filled++;
+      if (filled < CROSS.surround * nb.size) for (const g of comp) grid[g] = -1;
+    }
+  }
+  // Three-quarter crosses on diagonal edges (a stitcher's 3/4 stitch: one whole diagonal and a leg from the filled
+  // corner to the middle): an empty cell whose two quarters at one corner are CROSS.quarter[0] or more of a colour that
+  // has a cross beside that corner, and whose other two quarters are under CROSS.quarter[1] picture (stairs on every
+  // slope of a staircase read as a jagged edge)
+  const tq = [];
+  {
+    const cand = new Int32Array(gw * gh).fill(-1);
+    let m = 0;
+    for (let g = 0; g < gw * gh; g++) {
+      if (grid[g] >= 0) continue;
+      const gx = g % gw, gy = (g - gx) / gw;
+      if (at(gx - 1, gy) >= 0 || at(gx + 1, gy) >= 0 || at(gx, gy - 1) >= 0 || at(gx, gy + 1) >= 0) cand[g] = m++;
+    }
+    const cnt = new Float32Array(m * 4 * (K + 1));
+    for (let y = 0, i = 0; y < h; y++) {
+      const fy = (y + 0.5 - y0) / c, gy = Math.floor(fy), v = fy - gy;
+      for (let x = 0; x < w; x++, i++) {
+        const l = vote[i]; if (l < 0) continue;
+        const fx = (x + 0.5 - x0) / c, gx = Math.floor(fx), u = fx - gx, k = cand[gy * gw + gx];
+        if (k < 0) continue;
+        const q = v < u ? (v < 1 - u ? 0 : 1) : (v < 1 - u ? 3 : 2);   // top, right, bottom, left
+        cnt[(k * 4 + q) * (K + 1) + l]++; cnt[(k * 4 + q) * (K + 1) + K]++;
+      }
+    }
+    const Q = (c * c) / 4, [full, bare] = CROSS.quarter;
+    for (let g = 0; g < gw * gh; g++) {
+      const k = cand[g]; if (k < 0) continue;
+      const gx = g % gw, gy = (g - gx) / gw, of = (q, l) => cnt[(k * 4 + q) * (K + 1) + l];
+      for (const [fx, fy] of [[0, 1], [1, 1], [0, 0], [1, 0]]) {
+        const qa = fx ? 1 : 3, qb = fy ? 2 : 0, rest = [0, 1, 2, 3].filter((q) => q !== qa && q !== qb);
+        if (rest.some((q) => of(q, K) > bare * Q)) continue;
+        const col = [at(gx + (fx ? 1 : -1), gy), at(gx, gy + (fy ? 1 : -1))].find((l) => l >= 0 && of(qa, l) >= full * Q && of(qb, l) >= full * Q);
+        if (col !== undefined) { tq.push({ tq: true, col, gx, gy, fx, fy }); break; }
+      }
+    }
+  }
+  const ox = x0 + (gw * c) / 2, oy = y0 + (gh * c) / 2, mm = ([gx, gy]) => [(x0 + gx * c - ox) / res, (y0 + gy * c - oy) / res];
+  const pxMm = ([x, y]) => [(x + 0.5 - ox) / res, (y + 0.5 - oy) / res];
+  // Backstitch: each colour's lines along their centre (the line drawing's skeleton), walked out and back so a joined
+  // drawing sews without a trim; a dot one small cross its own size
+  const back = new Map();
+  for (const id of lined) {
+    const T = thin.get(id), { labels: cl, count } = label({ w, h, data: T });
+    if (!count) continue;
+    const bx = Array.from({ length: count + 1 }, () => [w, h, -1, -1, 0, 0, 0]);
+    for (let i = 0; i < n; i++) {
+      const k = cl[i]; if (!k) continue;
+      const x = i % w, y = (i - x) / w, b = bx[k];
+      if (x < b[0]) b[0] = x; if (y < b[1]) b[1] = y; if (x > b[2]) b[2] = x; if (y > b[3]) b[3] = y; b[4]++; b[5] += x; b[6] += y;
+    }
+    // (a piece whose colour lies between the two colours beside it is the blend along their edge, not a line: an
+    // owl's outline anti-aliased to the paper came out as 33 short lavender lines and 33 trims)
+    const nb = Array.from({ length: count + 1 }, () => new Map()), me = labAt(id), gone = new Uint8Array(count + 1);
+    for (let i = 0; i < n; i++) {
+      const k = cl[i]; if (!k) continue;
+      const x = i % w;
+      for (const j of [x > 0 ? i - 1 : -1, x < w - 1 ? i + 1 : -1, i - w, i + w]) {
+        if (j < 0 || j >= n || cl[j] === k || labels[j] === id) continue;
+        const l = bg.has(labels[j]) ? -1 : labels[j];
+        nb[k].set(l, (nb[k].get(l) || 0) + 1);
+      }
+    }
+    for (let k = 1; k <= count; k++) {
+      const [[A] = [], [B] = []] = [...nb[k].entries()].sort((p, q) => q[1] - p[1]), a = A === undefined ? null : labAt(A), b = B === undefined ? null : labAt(B);
+      if (a && b && deltaE2000(a, me) + deltaE2000(me, b) <= CROSS.blend * deltaE2000(a, b)) gone[k] = 1;
+    }
+    const dots = [], sk = { w, h, data: new Uint8Array(n) }, wd = [];
+    const dot = (b) => { const L = Math.max(b[2] - b[0], b[3] - b[1]) + 1, s = Math.min(b[2] - b[0], b[3] - b[1]) + 1; return L < CROSS.dot[1] * res && s >= CROSS.dot[0] * res && b[4] >= 0.6 * res * res; };
+    for (let k = 1; k <= count; k++) if (!gone[k] && dot(bx[k])) {
+      const b = bx[k], r = Math.max(0.5, Math.min(1, (Math.max(b[2] - b[0], b[3] - b[1]) + 1) / res / 2 - 0.1)), [X, Y] = pxMm([b[5] / b[4], b[6] / b[4]]);
+      dots.push([[X - r, Y - r], [X + r, Y + r], [X, Y], [X + r, Y - r], [X - r, Y + r]]);
+    }
+    const dt = dts.get(id);
+    for (let i = 0; i < n; i++) if (cl[i] && !gone[cl[i]] && !dot(bx[cl[i]])) { sk.data[i] = 1; wd.push(dt[i]); }
+    const tours = [];
+    if (wd.length) {
+      wd.sort((a, b) => a - b);
+      const W = Math.max(3, 2 * wd[Math.floor(wd.length * 0.9)]);
+      const edges = lineEnds(skeletonEdges(sk, W, { spur: 1 }), sk, W);
+      for (const comp of order(edges)) {
+        const t = [];
+        // (a bold line, CROSS.bold mm or wider, is a triple run: its way out sewn out, back and out again)
+        const bold = (p) => { const [x, y] = p[p.length >> 1].map(Math.round); return 2 * (dt[y * w + x] || 0) >= CROSS.bold * res; };
+        const leg = ([p, kind]) => (kind === "run" && bold(p) ? [...p, ...p.slice(0, -1).reverse(), ...p.slice(1)] : p);
+        for (const q of comp.flatMap((e, k) => followRun(leg(e).map(pxMm), CROSS.stitch, 0.1).slice(k ? 1 : 0)))
+          if (!t.length || Math.hypot(q[0] - t.at(-1)[0], q[1] - t.at(-1)[1]) >= 0.4) t.push(q);
+        const s = comp[0][0][0], e = comp.at(-1)[0].at(-1);
+        if (Math.hypot(s[0] - e[0], s[1] - e[1]) < 0.01 && t.length > 1) { t[t.length - 1] = t[0]; t.closed = true; }
+        // (a line mostly over this colour's own crosses is the ragged edge of its shape, already sewn: the slivers of
+        // a red banner between white letters were a dozen short lines and a dozen trims)
+        const own = t.filter(([X, Y]) => at(Math.floor((X * res + ox - x0) / c), Math.floor((Y * res + oy - y0) / c)) === id).length;
+        // (and one that hardly shows on what it lies over, under CROSS.contrast ΔE00 from it at its middle: a photo's
+        // shading came out as a hundred faint lines, each a trim)
+        const under = t.map(([X, Y]) => { const q = at(Math.floor((X * res + ox - x0) / c), Math.floor((Y * res + oy - y0) / c)); return q >= 0 ? deltaE2000(me, labAt(q)) : fl ? deltaE2000(me, fl) : 100; }).sort((a, b) => a - b);
+        if (t.length > 1 && arclen(t).at(-1) >= 2 * CROSS.line && own < CROSS.hidden * t.length && under[under.length >> 1] >= CROSS.contrast) tours.push(t);
+      }
+    }
+    if (tours.length || dots.length) back.set(id, [...tours, ...dots]);
+  }
   const used = colors.filter((k) => grid.includes(k.id)).sort((a, b) => b.lightness - a.lightness);
-  if (!used.length) throw Object.assign(new Error("No square of the grid is mostly picture, so there's nothing to cross-stitch."), { code: "cross" });
-  const ox = (gw * c) / 2, oy = (gh * c) / 2, mm = ([gx, gy]) => [(gx * c - ox) / res, (gy * c - oy) / res];
+  const lines = colors.filter((k) => back.has(k.id)).sort((a, b) => b.lightness - a.lightness);
+  if (!used.length && !lines.length) throw Object.assign(new Error("No square of the grid is mostly picture, so there's nothing to cross-stitch."), { code: "cross" });
+  const rank = new Map(used.map((k, i) => [k.id, i]));
   // cell corners are the vertices, v = gy * W + gx
   const W = gw + 1, V = W * (gh + 1), X = (v) => v % W, Y = (v) => Math.floor(v / W);
   const d = new Design(o.hoop), summary = [];
+  // Backstitch: each line entered at its point nearest the needle. Under 2 mm the needle stitches across, as between
+  // a word's letters in a line drawing; up to CROSS.travel mm it runs there over this colour's own crosses or picture
+  // (a sun's rays, each trimmed apart, hang off its crossed disc); else rather a jump over 5 mm (the machine trims it)
+  // than a loose 2-5 mm thread
+  const sewLines = (col, list) => {
+    const mine = ([X, Y]) => {
+      const x = X * res + ox, y = Y * res + oy, xi = Math.floor(x), yi = Math.floor(y);
+      return at(Math.floor((x - x0) / c), Math.floor((y - y0) / c)) === col.id || (xi >= 0 && yi >= 0 && xi < w && yi < h && labels[yi * w + xi] === col.id);
+    };
+    const over = (p, q, L) => { for (let k = 1, m = Math.ceil(L * 4); k < m; k++) if (!mine([p[0] + ((q[0] - p[0]) * k) / m, p[1] + ((q[1] - p[1]) * k) / m])) return false; return true; };
+    const left = list.slice();
+    while (left.length) {
+      let bi = 0, bk = 0, bd = Infinity, run = false;
+      left.forEach((t, i) => (t.closed ? t : [t[0], t.at(-1)]).forEach((q, k) => {
+        const v = d.cur ? Math.hypot(q[0] - d.cur[0], q[1] - d.cur[1]) : q[1] * 1e3 + q[0];
+        let s = v, r = false;
+        if (d.cur && v > 2) {
+          if (v <= CROSS.travel && v < bd && over(d.cur, q, v)) r = true;
+          else s = v > 5 ? v + CROSS.travel : v + 1e3;
+        }
+        if (s < bd) { bd = s; bi = i; bk = k; run = r; }
+      }));
+      const t = left[bi], p = t.closed ? [...t.slice(bk), ...t.slice(1, bk + 1)] : bk ? t.slice().reverse() : t;
+      if (run) {   // (the run there in stitches of at most CROSS.stitch)
+        const a = d.cur, L = Math.hypot(p[0][0] - a[0], p[0][1] - a[1]), m = Math.ceil(L / CROSS.stitch);
+        d.path([...Array.from({ length: m - 1 }, (_, k) => [a[0] + ((p[0][0] - a[0]) * (k + 1)) / m, a[1] + ((p[0][1] - a[1]) * (k + 1)) / m]), ...p]);
+      } else d.path(p);
+      left.splice(bi, 1);
+    }
+    const s = summary.find((q) => q.id === col.id);
+    if (s) { if (!s.kinds.includes("run")) s.kinds.push("run"); } else summary.push({ ...col, shapes: list.length, kinds: ["run"] });
+  };
   for (const col of used) {
     d.color(col.hex, col.thread.name);
     const done = new Uint8Array(gw * gh);   // cells whose cross is sewn
     // Runs are chained by travel instead of a jump (etsy_8 at 2 mm had 722 trims, most runs under 20 stitches plus
-    // two locks): a step along a cell edge costs 1 beside a cell of this colour, 2 beside another colour's, 3 across
-    // open fabric, and back over a sewn diagonal 1; at most 6 (so open fabric two cells across at most)
-    const edge = (c1, c2) => { const a = at(...c1), b = at(...c2); return a === col.id || b === col.id ? 1 : a >= 0 || b >= 0 ? 2 : 4; };
+    // two locks): a step along a cell edge costs CROSS.cost.under beside a cross of this colour still to come (it hides
+    // under it), .beside beside one sewn or a colour sewn later, .over beside a colour sewn before (it lies on top), and
+    // never across open fabric (a bar of thread across the fabric showed on letters and line drawings); back over a sewn
+    // diagonal .under; at most CROSS.reach
+    const side = (gx, gy) => {
+      const q = at(gx, gy);
+      if (q < 0) return Infinity;
+      if (q === col.id) return done[gy * gw + gx] ? CROSS.cost.beside : CROSS.cost.under;
+      return rank.get(q) > rank.get(col.id) ? CROSS.cost.beside : CROSS.cost.over;
+    };
+    const edge = (c1, c2) => Math.min(side(...c1), side(...c2));
     const moves = (v) => {
       const x = X(v), y = Y(v), out = [];
       if (x < gw) out.push([v + 1, edge([x, y - 1], [x, y])]);
@@ -1550,7 +1813,7 @@ function crossStitch(img, analysis, opts) {
       if (y > 0) out.push([v - W, edge([x - 1, y - 1], [x, y - 1])]);
       for (const [dx, dy] of [[1, 1], [1, -1], [-1, 1], [-1, -1]]) {
         const cx = dx > 0 ? x : x - 1, cy = dy > 0 ? y : y - 1;
-        if (cx >= 0 && cy >= 0 && cx < gw && cy < gh && done[cy * gw + cx]) out.push([v + dy * W + dx, 1]);
+        if (cx >= 0 && cy >= 0 && cx < gw && cy < gh && done[cy * gw + cx]) out.push([v + dy * W + dx, CROSS.cost.under]);
       }
       return out;
     };
@@ -1560,15 +1823,23 @@ function crossStitch(img, analysis, opts) {
       const r = runs[runs.length - 1];
       if (r && r.y === gy && r.b === gx - 1) r.b = gx; else runs.push({ y: gy, a: gx, b: gx });
     }
-    const corners = (r) => [r.y * W + r.a, (r.y + 1) * W + r.a, r.y * W + r.b + 1, (r.y + 1) * W + r.b + 1];
+    runs.push(...tq.filter((t) => t.col === col.id));
+    // (a three-quarter: the ends of its diagonal, then the filled corner)
+    const ends = (t) => [[t.gx + 1 - t.fx, t.gy + t.fy], [t.gx + t.fx, t.gy + 1 - t.fy], [t.gx + t.fx, t.gy + t.fy]];
+    const corners = (r) => (r.tq ? ends(r).map(([x, y]) => y * W + x) : [r.y * W + r.a, (r.y + 1) * W + r.a, r.y * W + r.b + 1, (r.y + 1) * W + r.b + 1]);
     const starts = new Map();
     for (const r of runs) for (const s of corners(r)) { if (!starts.has(s)) starts.set(s, []); starts.get(s).push(r); }
     // the run's corners from corner s: zigzag out along one side's diagonals, up (or down) the far edge, zigzag back
     const sew = (r, s) => {
-      const n = r.b - r.a + 1, fromLeft = X(s) === r.a, s0 = Y(s) - r.y, pts = [];
+      if (r.tq) {
+        const [p, q, f] = ends(r), mid = [r.gx + 0.5, r.gy + 0.5], v = (a) => a[1] * W + a[0];
+        r.done = true;
+        return s === v(p) ? [p, q, mid, f] : s === v(q) ? [q, p, mid, f] : [f, mid, q, p];
+      }
+      const k1 = r.b - r.a + 1, fromLeft = X(s) === r.a, s0 = Y(s) - r.y, pts = [];
       const p = (k, off) => [fromLeft ? r.a + k : r.b + 1 - k, r.y + off];
-      for (let k = 0; k <= n; k++) pts.push(p(k, k % 2 ? 1 - s0 : s0));
-      for (let k = n; k >= 0; k--) pts.push(p(k, k % 2 ? s0 : 1 - s0));
+      for (let k = 0; k <= k1; k++) pts.push(p(k, k % 2 ? 1 - s0 : s0));
+      for (let k = k1; k >= 0; k--) pts.push(p(k, k % 2 ? s0 : 1 - s0));
       for (let x = r.a; x <= r.b; x++) done[r.y * gw + x] = 1;
       r.done = true;
       return pts;
@@ -1579,15 +1850,15 @@ function crossStitch(img, analysis, opts) {
     while (left--) {
       let pick = null;
       if (cur >= 0) {   // the nearest run start within reach (Dijkstra)
-        const seen = [cur], open = [[0, cur]];
+        const seen = [cur], heap = [[0, cur]];
         dist[cur] = 0;
-        while (open.length) {
-          open.sort((a, b) => b[0] - a[0]);
-          const [g, v] = open.pop();
+        while (heap.length) {
+          heap.sort((a, b) => b[0] - a[0]);
+          const [g, v] = heap.pop();
           if (g > dist[v]) continue;
           const r = (starts.get(v) || []).find((q) => !q.done);
           if (r) { pick = [r, v]; break; }
-          for (const [m, k] of moves(v)) if (g + k <= 6 && g + k < dist[m]) { if (dist[m] === Infinity) seen.push(m); dist[m] = g + k; from[m] = v; open.push([g + k, m]); }
+          for (const [m, k] of moves(v)) if (g + k <= CROSS.reach && g + k < dist[m]) { if (dist[m] === Infinity) seen.push(m); dist[m] = g + k; from[m] = v; heap.push([g + k, m]); }
         }
         if (pick) {
           const way = [];
@@ -1609,14 +1880,29 @@ function crossStitch(img, analysis, opts) {
       }
       const pts = sew(...pick), [ex, ey] = pts[pts.length - 1];
       path.push(...pts.slice(1));
-      cur = ey * W + ex; crosses += pick[0].b - pick[0].a + 1;
+      cur = ey * W + ex; crosses += pick[0].tq ? 1 : pick[0].b - pick[0].a + 1;
     }
     flush();
     summary.push({ ...col, shapes: crosses, kinds: ["cross"] });
+    // (a line no cross of a later colour lies under is sewn now, in the same thread: kept to the end, each colour of
+    // lines was a second block of its thread)
+    // (all of them or none: split in two, a colour's lines cost more trims than the block they saved)
+    const mine = back.get(col.id) || [];
+    if (mine.length && mine.every((t) => t.filter(([X, Y]) => { const q = at(Math.floor((X * res + ox - x0) / c), Math.floor((Y * res + oy - y0) / c)); return q >= 0 && rank.get(q) > rank.get(col.id); }).length <= CROSS.under * t.length)) {
+      for (const t of mine) t.early = true;
+      sewLines(col, mine);
+    }
+  }
+  // the rest last, light to dark, over all the crosses
+  for (const col of lines) {
+    const rest = back.get(col.id).filter((t) => !t.early);
+    if (!rest.length) continue;
+    if (d.threads.at(-1)?.color !== col.hex || !d.threads.length) d.color(col.hex, col.thread.name);
+    sewLines(col, rest);
   }
   d.finish();
-  // (the grid is centred, not the picture: where mm 0,0 lies in working px, for keptParts)
-  return { design: d, summary, fine: { narrowMm2: 0, hairlines: 0 }, origin: [ox, oy] };
+  // (where mm 0,0 lies in working px, for keptParts: the grid's centre, not the picture's)
+  return { design: d, summary, fine: { narrowMm2: 0, hairlines: 0 }, origin: [ox - 0.5, oy - 0.5], cell };
 }
 
 // What of the picture made it into stitches, whatever the style: every part of the picture (a connected piece of what

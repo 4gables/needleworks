@@ -372,10 +372,16 @@ pe900_check against this baseline and ships as its own release (`docs/releases.m
   weight (run, triple, satin column, dot from the measured width); one centre line per band, outline only for fat
   shapes; no die-cut borders or spurs, closed junctions; routed by word and column. Owns digitize.js `lineArt`,
   `lineEnds`, raster.js.
-- [ ] **C5-XS Cross-stitch a stitcher would chart**: backstitch over the crosses for lines under ~0.6 of a cell;
+- [x] **C5-XS Cross-stitch a stitcher would chart**: backstitch over the crosses for lines under ~0.6 of a cell;
   closed-in white only inside a filled colour; cell size and grid offset per picture, half crosses on diagonals;
   travel hidden under crosses to come, rows per colour. Owns digitize.js `crossStitch`.
 - [x] **C5-DI Direction (PX3 leftover + novel)**: Follow the shape on the Picture panel and whether it is the
+  done: backstitch (lines under 0.6 of a cell, over the crosses, bold as triple runs, dots as small crosses), closed-in
+  white only inside a filled colour, cell 1-0.6x the size asked and best of 16 grid offsets, three-quarter crosses,
+  no travel across open fabric; cross look +8 a case (line art 32 -> 65), trims 8.6 -> 15.7 a file (the lines').
+  left: busy pictures (etsy) 2.5-5x the trims and stitches (cells shrink, many lines: a stitch budget per picture);
+  trims of backstitched text and dots; pale doodles still read as
+  fabric (palette); the mountain logo's score (C5-LK's registration and colour fix).
   default; trial: each region's angle from the picture's own texture or brush strokes (structure tensor), kept only
   where look and pe900_check say so. Owns picture.js direction UI, digitize.js `form` hook, fill.js angles. Wave 2.
   - done: Follow the shape on the Picture panel (More settings, off by default: trims -2.7 %, look +0.1, the flat

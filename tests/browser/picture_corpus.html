@@ -201,9 +201,9 @@ const PICS = [
     return out;
   })() },
   // etsy_7 itself (round 10): a bold title over a sheet of doodles in hairlines, most of them too fine to sew at 60 mm
-  // or as crosses: said (`lost`: the cases that must carry the lost note; the rest are checked against this page's own
-  // measure of what's left out)
-  { name: "doodle_sheet", n: 4, lost: ["fill_s60", "cross_s100"], cases: [["fill", 60, 4], ["fill", 160, 4], ["line", 100, 4], ["cross", 100, 4]], layers: (() => {
+  // said (`lost`: the cases that must carry the lost note; the rest are checked against this page's own measure of
+  // what's left out). Cross-stitch backstitches them (round C5-XS).
+  { name: "doodle_sheet", n: 4, lost: ["fill_s60"], cases: [["fill", 60, 4], ["fill", 160, 4], ["line", 100, 4], ["cross", 100, 4]], layers: (() => {
     const r = rng(17), cols = ["#e9a3c9", "#9fc5e8", "#b4a7d6", "#b6d7a8"], out = [];
     out.push({ role: "text", col: "#e0218a", draw: (c) => text(c, "DOODLES", 400, 110, font("bold", 100), "#e0218a") });
     cols.forEach((col, k) => {
@@ -217,8 +217,9 @@ const PICS = [
     return out;
   })() },
   // the round 10 child's drawing: a sun with thin rays, a ground line and a dinosaur with a 1.5 mm eye (at 100 mm).
-  // Cross-stitch drops the rays and the line: said. (Filled dropped the eye until round 13: an eye is sewn now.)
-  { name: "child_drawing", n: 4, lost: ["cross_s100"], cases: [["fill", 100, 4], ["line", 100, 4], ["cross", 100, 4]], layers: (() => {
+  // Cross-stitch backstitches the rays and the line (it dropped them until round C5-XS). (Filled dropped the eye until
+  // round 13: an eye is sewn now.)
+  { name: "child_drawing", n: 4, cases: [["fill", 100, 4], ["line", 100, 4], ["cross", 100, 4]], layers: (() => {
     const r = rng(23), rays = Array.from({ length: 8 }, (_, k) => { const a = (k * Math.PI) / 4; return wobbly(r, [[650 + 60 * Math.cos(a), 110 + 60 * Math.sin(a)], [650 + 95 * Math.cos(a), 110 + 95 * Math.sin(a)]], 2); });
     return [
       { role: "ink", col: "#f5c400", draw: (c) => { circle(c, 650, 110, 45); c.fillStyle = "#f5c400"; c.fill(); } },
@@ -627,6 +628,7 @@ const KNOWN = {
   pc_jpeg_logo_fill_s60_c2: "0.6 mm strokes of 3 mm letters in a heavily compressed JPEG: parts of one stem are sewn",
   pc_doodle_sheet_fill_s160_c4: "the pale pink 1.5 px doodles read as fabric when the colours are learned (AGENTS.md Open: etsy_7's pastel lines); the lost note says so",
   pc_doodle_sheet_line_s100_c4: "the pale pink 1.5 px doodles read as fabric when the colours are learned (AGENTS.md Open: etsy_7's pastel lines); the lost note says so",
+  pc_doodle_sheet_cross_s100_c4: "the pale pink 1.5 px doodles read as fabric when the colours are learned (as in the line drawing); every other doodle is backstitched now, so too little is left out for the note",
 };
 
 // ---------- checks ----------
