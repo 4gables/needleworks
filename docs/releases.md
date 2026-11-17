@@ -6,6 +6,7 @@ its row here. To undo one: `git revert -m 1 <merge>`, then bump `CACHE` in `sw.j
 
 | Version | Date | What changed | Merge commit | Revert |
 |---|---|---|---|---|
+| v35 | 2026-11-16 | Pictures: colours as drawn (near-black reads black, far threads no longer picked by default, drop shadows and halos left out, tiny pictures' blur not learned as threads); satin mitred at star points, tapers and leaf halves as satin; blends cost fewer trims and loose threads; a line drawing's paper left as fabric and said; faint lines kept. Line drawings of stickers look -2.1 on the score: the die-cut border is no longer traced (the score still counts it) | tag v35 | `git revert -m 1 v35`, then bump CACHE + `sw.test.mjs --write` |
 | v34 | 2026-11-13 | Pictures: soft gradients sewn as two-thread blends where two colours really meet in a gradient; Soft shading choice on the Picture tab | tag v34 | `git revert -m 1 v34`, then bump CACHE + `sw.test.mjs --write` |
 | v33 | 2026-11-13 | Pictures: thin strokes (1-4 mm) sewn as satin columns, small blobs as satin dots, stems cut off the fills they grow from | tag v33 | `git revert -m 1 v33`, then bump CACHE + `sw.test.mjs --write` |
 | v32 | 2026-11-13 | Pictures that look like the picture (look score), cleaned shapes and merged near-colours, rows that follow the shape, machine-aware picture files, a guide to art that stitches well | c6e2434 | `git revert -m 1 c6e2434`, then bump CACHE + `sw.test.mjs --write` |
