@@ -376,8 +376,12 @@ Reference for this part of Needleworks: the rules, the reason for each (it stops
     open fabric (bars along letters' feet); at most 6, else a jump, over 5 mm rather than a loose 2-5 mm thread.
     Backstitch steps up to 2 mm stitched across (as a word's letters), up to 10 mm run over its own colour's crosses or
     picture (a sun's rays off its disc), else a jump.
-  - Cost: the lines are trims a stitcher would also make (each text letter, each separate line): over the corpus's
-    cross cases trims rose (numbers in the round's line below); rows of polka dots stay one trim a dot.
+  - Measured (picture_corpus, 55 cross cases, v34 -> C5-XS): look by kind +1.4 (watercolour) to +32 (line art: 32 ->
+    65), drawings +13, logos +9, cartoons +8; mandala 27 -> 79, flower 36 -> 63, logo_regular 31 -> 56, child's
+    drawing 32 -> 52, rules 23 -> 42. Price: trims 471 -> 910 (8.6 -> 16.3 a file: each backstitched letter or
+    separate line is one, as in a line drawing; polka dots stay one trim a dot), stitches 89 k -> 111 k (smaller cells),
+    loose 0 -> 2. Worse: the mountain logo 36.7 -> 33.1 (its PEAK and outer ring look better; the look score registers
+    cross-stitch half a cell off and scores its colour 0, round C5-LK).
 - `fine` (`narrowGaps`: gaps under 0.5 mm, at least 2 mm² and 1.5 % of the area) warns; notches under ~0.5 mm can't
   be kept by thread. Errors carry `code` (small, cross, skipped, empty); only followable advice is offered.
 - A picture with nothing in it to stitch (`code: "empty"`: all one colour) is not kept for the next visit
