@@ -184,6 +184,15 @@ with a table per kind and style.
   - weight: across each band 1.5 mm or wider, the width sewn over the band's width (a 3 mm crayon line as one run: 0.13).
   - look = 100 x (0.4 recall + 0.25 precision + 0.15 doubling + 0.1 colour + 0.1 weight) (the cycle 5 reviewer's
     weights). Stitch length counts each thread pixel as 1 / the thread's width there, so a satin column is one line.
+- **The per-style score (C5-LK) against v34's**, same files: Filled 80.4 -> 81.8 (127 cases), line 42.2 -> 81.6 (57),
+  cross 41.5 -> 70.5 (55). Filled kinds move -4.4 to +6.0: shapes +6.0 (the black cat 60 -> 95: Black colour 0.39 ->
+  0.96 and structure 0.12 -> 0.94; the framed card 52 -> 84 and 65 -> 90, fabric from inside the frame), flat
+  pictures +1 to +3 (structure on flat areas is their lightness), line art -4.4 and the s60 lettering 6-8 down
+  (logo_regular 84 -> 75): the render's gaps between rows had mixed ~5 % fabric into every thread and flattered
+  saturated or dark threads picked for muted ink (navy sewn ultramarine, a dusty red sewn bright: C5-CO's subject);
+  the crayon fills 5 down the same way (the crayon's paper speckle lightens the picture, the thread doesn't). Line
+  drawing: the crayon trace 28 -> 80 now outranks the landscape missing its ridge 36 -> 73 (recall 0.82, the ridge
+  red in `_lines.png`). Cross-stitch: right threads score colour 0.72 (near_identical 0 -> 0.72, 36 -> 80).
 - **Trusted because** made-up copies rank as a person ranks them on every run (`lookSelfTest`, failing the run if
   not). Filled (`variants`, four pictures): a copy given thread rows and grooves scores 99+, and blurred (1.2 mm),
   shifted 1 mm, recoloured, thinned (parts under 1.6 mm gone) and two-tone copies all score lower, each with its own

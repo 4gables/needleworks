@@ -332,10 +332,14 @@ Rounds run in parallel, each in `.worktrees/<id>` on its own branch from `origin
 files (or functions) it owns. Browser batches, `picture_corpus.sh`, `check.sh` and the VM take one lock
 (`lockf .worktrees/heavy.lock ...`) so only one runs at a time (16 GB). A round is proven by look score + scoreboard +
 pe900_check against this baseline and ships as its own release (`docs/releases.md`).
-- [ ] **C5-LK The score sees each style as a person does** (tests/look.js, look() in picture_corpus.html): Cross
+- [x] **C5-LK The score sees each style as a person does** (tests/look.js, look() in picture_corpus.html): Cross
   colour on covered thread only and registered by the grid's origin; line drawings scored against the picture's
   edges and ink centre lines (recall, precision, doubling, line colour, weight), self-tested with degraded tracings;
   fabric from inside a sewn frame; no SSIM on flat areas. Re-saves the baseline at release.
+  done: look.js per style (`perceived` thread cover, `lineScore`/`lineRef`, `frameOf`, flat-area SSIM, cross at half
+  a cell on the grid's origin) with line and cross self-checks; Filled 80.4 -> 81.8, line 42.2 -> 81.6, cross 41.5 ->
+  70.5 (testing.md). left: the releaser re-saves look.json (new one in the c5-lk scratch dir); a pale backdrop panel
+  left bare still counts as ink left out; die-cut borders count as traced; the worker could send `origin` and `cell`.
 - [ ] **C5-CO Colour (PX7, built for real)**: near-black hue fade from L 15, far threads capped with a chroma gain,
   3x3 soft-edge sampling (the text PX7 wrote and never coded); fringes and shades judged in mm and relative to the
   source's pixel size; a shade never given another design colour's thread; muted navy/dusty red/near-black picks.
