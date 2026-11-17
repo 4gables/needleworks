@@ -1444,17 +1444,30 @@ function lineArt(img, analysis, opts) {
     const thread = o.line ? { hex: o.line, thread: nearestBrotherThread(o.line) } : g.thread;
     d.color(thread.hex, thread.thread.name);
     summary.push({ ...(o.line ? threads.reduce((a, c) => (c.lightness < a.lightness ? c : a)) : g.thread), hex: thread.hex, thread: thread.thread, shapes: left.length, kinds: [...new Set(how.map((q) => q.how))] });
-    // nearest drawing next, entered at its nearest point; rather one over 5 mm away (the machine trims the jump) than
-    // a loose 2-5 mm thread
+    // the next drawing and where it's entered, by what the moves cost in trims: onto it (free within 2 mm, a loose 2-5 mm
+    // thread dearer than a trim) and, as a drawing ends where it began, on from there to the nearest drawing still to sew
+    // (0.9 of it: entered where it is near the next one, a word's letters 1-2 mm apart weren't each a trim); then the
+    // nearest
+    const cell = new Map(), ck = (x, y) => `${Math.floor(x / 2)},${Math.floor(y / 2)}`;
+    left.forEach((t) => t.forEach((q) => { const c = ck(...q); if (!cell.has(c)) cell.set(c, []); cell.get(c).push([t, q]); }));
+    const by = new Map(left.map((t) => [t, t.map((q) => {
+      const gx = Math.floor(q[0] / 2), gy = Math.floor(q[1] / 2), out = [];
+      for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) for (const [u, r] of cell.get(`${gx + dx},${gy + dy}`) || []) if (u !== t && !out.includes(u) && Math.hypot(r[0] - q[0], r[1] - q[1]) <= 2) out.push(u);
+      return out;
+    })])), still = new Set(left);
+    const nextFree = (k, t) => (by.get(t)[k].some((u) => still.has(u)) ? 0 : 1);
     while (left.length) {
       let bi = 0, bk = 0, bd = Infinity;
       left.forEach((t, i) => t.forEach((q, k) => {
-        const v = d.cur ? Math.hypot(q[0] - d.cur[0], q[1] - d.cur[1]) : q[0], s = !d.cur || v <= 2 || v > 5 ? v : v + 1e3;
+        if (!d.cur) { if (q[0] < bd) { bd = q[0]; bi = i; bk = k; } return; }
+        const v = Math.hypot(q[0] - d.cur[0], q[1] - d.cur[1]), on = v <= 2 ? 0 : v > 5 ? 1 : 1.5;
+        if (on + 1e-3 * v >= bd) return;
+        const s = on + (left.length > 1 ? 0.9 * nextFree(k, t) : 0) + 1e-3 * v;
         if (s < bd) { bd = s; bi = i; bk = k; }
       }));
       // (a step under 2 mm onto a drawing of another colour is a move, not a stitch across the gap: see oneInk)
       d.path(rotate(left[bi], bk), true, !!d.cur && !oneInk(d.cur, left[bi][bk]));
-      left.splice(bi, 1);
+      still.delete(left[bi]); left.splice(bi, 1);
     }
   }
   if (!d.stitches.length) throw Object.assign(new Error("No lines in this picture are big enough to stitch."), { code: "small" });
