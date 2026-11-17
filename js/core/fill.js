@@ -789,51 +789,19 @@ function fieldRagged(rings, fd, res) {
 // rows alone, parts under 100 mm² and a few bigger ones (a one-colour cat, 0 trims -> 3) gained trims on the
 // picture corpus through the travel between sections.
 const forms = new WeakMap();
-// The picture's own grain inside a part (fur, brush strokes, a wash's streaks): the structure tensor of the source
-// pixels' lightness gradients (Sobel), summed over the part's inside (over GRAIN.inset mm from its edge, so the part's
-// own outline isn't read as texture), each pixel weighted alike. Its coherence (l1 - l2) / (l1 + l2) says how much one
-// direction rules; the grain runs square to the main gradient. One angle per part: never a per-pixel angle
-// (docs/pictures.md "Patents near shading"). null where the part has no grain worth following.
-export const GRAIN = { inset: 0.6, least: 0.3, energy: 4 };
-export function grainOf(comp, mask, res) {
-  const { img } = comp, { w, h } = mask;
-  if (!img || img.width !== w || img.height !== h) return null;
-  const d = img.data, L = (i) => 0.299 * d[4 * i] + 0.587 * d[4 * i + 1] + 0.114 * d[4 * i + 2];
-  let xx = 0, yy = 0, xy = 0, n = 0;
-  const lim = GRAIN.inset * res;
-  for (const i of comp.pixels) {
-    const x = i % w, y = (i - x) / w;
-    if (x < 1 || y < 1 || x >= w - 1 || y >= h - 1 || comp.dt[i] <= lim) continue;
-    const a = L(i - w - 1), b = L(i - w), c = L(i - w + 1), e = L(i - 1), f = L(i + 1), g = L(i + w - 1), k = L(i + w), m = L(i + w + 1);
-    const gx = (c + 2 * f + m - a - 2 * e - g) / 8, gy = (g + 2 * k + m - a - 2 * b - c) / 8;
-    xx += gx * gx; yy += gy * gy; xy += gx * gy; n++;
-  }
-  if (n < 0.25 * comp.pixels.length || n < 50) return null;
-  const tr = xx + yy, root = Math.hypot(xx - yy, 2 * xy), coherence = tr ? root / tr : 0, energy = Math.sqrt(tr / n);
-  if (coherence < GRAIN.least || energy < GRAIN.energy) return null;
-  // (the main gradient's angle, turned 90: the rows run along the strokes; kept in (-90, 90])
-  let angle = Math.round(((0.5 * Math.atan2(2 * xy, xx - yy) * 180) / Math.PI + 90) / 5) * 5;
-  while (angle > 90) angle -= 180;
-  while (angle <= -90) angle += 180;
-  return { angle, coherence, energy };
-}
 function formOf(comp, mask, res, prefer) {
   if (forms.has(comp)) return forms.get(comp);
-  const big = comp.pixels.length >= FORM.picture * res * res, g = big && comp.img ? grainOf(comp, mask, res) : null;
-  let f = !big ? { angle: prefer } : g ? { angle: g.angle, grain: g } : formPick(comp, mask, res, prefer, comp.dt);
+  let f = comp.pixels.length < FORM.picture * res * res ? { angle: prefer } : formPick(comp, mask, res, prefer, comp.dt);
   if (f.angle !== prefer || f.field) {
     const plain = { ...comp, form: null }, sew = (a, field) => {
       const under = tatami(mask, plain, res, { angle: a + 90, spacing: 2.5, stitch: 3, inset: 0.4, pull: 0 });
       const fill = field ? curvedRows(plain, mask, res, comp.dt, { spacing: ROWS.standard, stitch: TATAMI.stitch, pull: 0.15, fd: field, inside: (x, y) => { const X = Math.round(x), Y = Math.round(y); return X >= 0 && Y >= 0 && X < mask.w && Y < mask.h && comp.labels[Y * mask.w + X] === comp.id; } })?.paths : tatami(mask, plain, res, { angle: a, spacing: ROWS.standard, stitch: TATAMI.stitch, pull: 0.15 });
-      return fill ? routeFill([under, fill], comp, mask, res, routeBudget(), WORN, false, 0, null, PICTURES.edge).length : Infinity;
+      return fill?.length ? routeFill([under, fill], comp, mask, res, routeBudget(), WORN, false, 0, null, PICTURES.edge).length : Infinity;
     };
     const was = sew(prefer, null);
-    // (the picture's grain, where it costs parts: the shape's own angle, then the caller's)
-    if (f.grain && f.angle !== prefer && sew(f.angle, null) > was) f = formPick(comp, mask, res, prefer, comp.dt);
     if (f.field && sew(f.angle, f.field) > was) f = { angle: f.angle };
     if (!f.field && f.angle !== prefer && sew(f.angle, null) > was) f = { angle: prefer };
   }
-  if (typeof globalThis !== "undefined" && globalThis.GRAIN_LOG) globalThis.GRAIN_LOG.push({ px: comp.pixels.length, grain: g, angle: f.angle, field: !!f.field, prefer });
   forms.set(comp, f);
   return f;
 }
@@ -897,6 +865,9 @@ function rowField(comp, w, h, res, dt) {
   let pairs = 0, bad = 0;
   for (let c = 0; c < n; c++) if (ins[c]) for (const m of [c + 1, c + gw]) if (m < n && ins[m]) { pairs++; if (NX[m] * NX[c] + NY[m] * NY[c] < 0) bad++; }
   if (bad > FORM.turns * pairs + 2) return null;
+  // (one field for one piece: a part in pieces, a stem's two leaves once the stem is a satin column, gave rows to
+  // the seed's piece alone, and the other leaf sewed its underlay only; with fewer sections it won the count)
+  for (let c = 0; c < n; c++) if (ins[c] && !seen[c]) return null;
   // phi: least squares over every pair of neighbouring cells, phi(b) - phi(a) = the mean normal . (b - a) (mm);
   // conjugate gradients, Jacobi preconditioned
   const cells = q, idx = new Int32Array(n).fill(-1);
