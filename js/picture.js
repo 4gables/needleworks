@@ -13,6 +13,7 @@ import { safeName } from "./core/typed.js";
 import { colourWord, lab } from "./core/brands.js";
 import { MARGIN } from "./core/machines.js";
 import { artGuide, artSaid } from "./artwords.js";
+import { chooseStyle } from "./core/artcheck.js";
 import { COLORS as LINE_THREADS } from "./studio/ui.js";
 import { $, forgetPicture, hoop, keepPicture, kept, square, state, store, turned } from "./state.js";
 import { next } from "./focus.js";
@@ -64,8 +65,9 @@ async function sewPicture(s, wk, isStale = () => false) {
   const opts = { colors: s.colors, scale: k, removeBackground: s.bg, fillAngle: s.angle, ...(s.follow ? { direction: "auto" } : {}), density: DENSITY[s.density] || DENSITY.standard, details: s.details, shade: s.shade, inside: s.inside, ...(s.smooth == null ? {} : { smooth: s.smooth }), skip: s.skip, ...(s.swap && Object.keys(s.swap).length ? { swap: s.swap } : {}), hoop: s.hoop, turn: s.turn, palette: s.palette, style: s.style, cross: s.cross, line: s.line || undefined, edge: s.edge || undefined };
   // (kept per colour count: the checks try other counts)
   if (!p.models.has(key)) {
-    const m = await wk.run({ key, learn, opts });
+    const pick = wk === picJobs && p.choose, m = await wk.run({ key, learn, opts, pick });
     if (!m.ok || isStale()) return isStale() ? { stale: true } : m;
+    if (pick && m.pick) { const st = startStyle(m.pick, s.size); if (st) { s.style = opts.style = st; if (!p.sample) store.set("pic.last", { ...store.get("pic.last", {}), style: st }); } }
     p.models.set(key, { boxes: m.boxes, colors: m.colors });
   }
   const { boxes, colors } = p.models.get(key), sewn = boxes.filter((_, i) => !colors[i].background && !s.skip.includes(i));
@@ -566,6 +568,8 @@ function styleUI() {
   $("pic-angle-row").hidden = $("pic-density-row").hidden = $("pic-details-row").hidden = $("pic-shade-row").hidden = s !== "fill"; $("pic-cross-row").hidden = s !== "cross";
   $("pic-colors-label").textContent = s === "line" ? "Colours to trace" : "Thread colours";
   $("pic-line-row").hidden = s !== "line";
+  const why = state.pic.picked?.style === s ? state.pic.picked.why : "";
+  $("pic-style-why").hidden = !why; $("pic-style-why").textContent = why;
   lineUI();
 }
 // Line drawing sews one thread: the picture's darkest colour (Auto), or one of the Design tab's Brother threads, or any
@@ -588,7 +592,16 @@ $("pic-line").onclick = (e) => {
   state.pic.line = b.dataset.line; lineUI(); makePicture();
 };
 $("pic-line-any").onchange = (e) => { state.pic.line = nearestBrotherThread(e.target.value).hex; lineUI(); makePicture(); };
-$("pic-style").onclick = (e) => { const b = e.target.closest("button"); if (!b || b.dataset.s === state.pic.style) return; state.pic.style = b.dataset.s; styleUI(); makePicture(); };
+$("pic-style").onclick = (e) => { const b = e.target.closest("button"); if (!b || b.dataset.s === state.pic.style) return; state.pic.style = b.dataset.s; state.pic.choose = false; state.pic.picked = null; styleUI(); makePicture(); };
+// The style a fresh picture starts in (core/artcheck.js `chooseStyle`, docs/pictures.md "Style chosen per picture"):
+// once, on the first stitching of a new picture, never over a style the maker tapped for it; the reason under the
+// chips while that style stands. Returns the style to sew, or "" to keep the one asked.
+function startStyle(f, size) {
+  const p = state.pic, c = chooseStyle(f, size); p.choose = false;
+  p.picked = c.start ? c : null;
+  if (c.start) { p.style = c.style; styleUI(); }
+  return c.start ? c.style : "";
+}
 styleUI();
 $("pic-bg").onchange = (e) => { state.pic.bg = e.target.checked; state.pic.skip = []; state.pic.swap = {}; state.pic.inside = "auto"; makePicture(); };
 // first visit: show a sample so the page opens on real stitches, not an empty box
@@ -628,7 +641,7 @@ export async function loadPicture(file, sample = false, again = false) {
     // (the Small details choice is about one picture: a new one starts with specks left out, as the panel shows.
     // "Keep" taken for the last picture stayed on for the next with nothing said.)
     if (!again && state.pic.details === "all") { state.pic.details = "most"; detailsUI(); }
-    Object.assign(state.pic, { file, bitmap, sample, box: null, key: state.pic.key + 1, skip: [], swap: {}, inside: "auto", smooth: null, edge: false, edgeSeen: false, models: new Map(), autoLine: "" });
+    Object.assign(state.pic, { file, bitmap, sample, box: null, key: state.pic.key + 1, skip: [], swap: {}, inside: "auto", smooth: null, edge: false, edgeSeen: false, models: new Map(), autoLine: "", choose: !sample && !again, picked: null });
     Object.assign(state.pic, { whole: bitmap, part: 0, partThumbs: null, found: sample ? null : findParts(bitmap) }); partsUI();
     setThumb(file); $("pic-rotate").hidden = false;
     $("pic-drop").querySelector(".drop-text").innerHTML = sample ? "<b>Choose your own picture</b> or drop it here." : `${again ? "Your last picture, " : ""}<b>${escapeHtml(file.name)}</b> · choose another`;
