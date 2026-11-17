@@ -211,7 +211,8 @@ Reference for this part of Needleworks: the rules, the reason for each (it stops
     shorter than 3 widths, and its width away from the ends within 2.2x narrow to wide, or uneven only as a taper is
     (C5-SA, `taper`: along each centre line, smoothed over 0.4 mm, the width rises and falls at most 2.5x its range: a
     brush stroke narrowing to its point, a leaf's half swelling and narrowing again; a ragged patch goes up and down
-    all along). Bold letters and ragged patches thin to stubby strokes each turned its own way; those stay fills. A dot needs 85 % of its convex hull (`solid`). Nothing under 3 mm² (`small`): a satin that small is all
+    all along; only a single open line at least 4 widths long: a blob's short curl passed as a taper and sewed as a
+    starburst). Bold letters and ragged patches thin to stubby strokes each turned its own way; those stay fills. A dot needs 85 % of its convex hull (`solid`). Nothing under 3 mm² (`small`): a satin that small is all
     tie-in and tie-off, and the cap of 19 hits per mm² left a 1 mm one only its locks, a knot. The columns must cover
     90 % of the piece (`cover`): thinning prunes a short arm as a spur, and a slab F's middle arm was left bare. The
     fabric's colour closed in by the design is never a column (white slivers between outlines sewed as fans).
@@ -220,8 +221,8 @@ Reference for this part of Needleworks: the rules, the reason for each (it stops
     before it: the needle reaches it under the fill still to come and comes back into the fill where its walk began
     (after the fill, the way lay over finished rows: a trim each).
   - Centre lines: `skeletonEdges` (spurs under a stroke pruned; a loop under two strokes round dropped, thinning's
-    knot at a blunt end, sewn as a star of satin, unless it rings fabric: a small P's counter, whose bowl otherwise
-    sewed as one fan from the stem), loose ends carried to the edge (`lineEnds`). Each side is measured
+    knot at a blunt end, sewn as a star of satin, unless it rings fabric at least a quarter stroke square: a small
+    P's counter, whose bowl otherwise sewed as one fan from the stem; not a pinhole in a blob), loose ends carried to the edge (`lineEnds`). Each side is measured
     across the shape along the normal (a round end narrows as the shape does; by the distance to the edge it sewed as
     a diamond), at most 1.4x the distance to the edge at the centre line (a junction's other strokes), evened over
     0.2 mm, less 0.1 mm a side (`thread`: the thread lies past its holes; sewn to the drawn edge a 1 mm outline came
@@ -230,7 +231,8 @@ Reference for this part of Needleworks: the rules, the reason for each (it stops
   - Sharp turns (C5-SA, after trial branch `px2-mitre`): where the centre line turns (measured over a stroke width
     either way) the outer side's cap is raised by 1 / sin(half the inside angle), at most 4x (`mitre` 0.25), so the
     satin reaches the drawn point of a star or an ear; capped at the distance to the edge, it stopped short and left
-    the point bare. A ring alone (a star's outline, a D) starts and ends at its straightest place: a column's end is
+    the point bare. Not on a line under 6 widths long: a blob's short curl turns all round, and mitred every way it
+    sewed as a starburst at the density limit. A ring alone (a star's outline, a D) starts and ends at its straightest place: a column's end is
     sewn square across, so a point there stayed bare whatever its reach.
   - Stitch angle (`steady` 0.75): each satin stitch lies square to the centre line's direction averaged over 0.75
     stroke widths either way (satin's slant), not to the skeleton's local wiggle: at 60 mm a 1.2 mm stroke's centre
@@ -240,9 +242,7 @@ Reference for this part of Needleworks: the rules, the reason for each (it stops
     underlay (a centre run in 1.2 mm stitches; from 2 mm wide a zigzag 0.4 mm inside each edge, `LETTERS.zigzagFrom`)
     and back as satin (`LETTERS` gap 0.38 mm, pull 0.1 + the fabric's; `fold` at tight inside corners). A net ends
     where it began and is entered at its node nearest the needle. A narrow dot is one satin from the end nearest the
-    needle. Locks: the tie-in 1.1-1.9 mm into the underlay (`inside`; when no point there is reached without crossing
-    fabric, a point up to 2.5 mm along the first 30: a fill starting at a sharp tip found none and tied in on the
-    tip, bare); no stitch back over the satin before the
+    needle. Locks: the tie-in 1.1-1.9 mm into the underlay (`inside`); no stitch back over the satin before the
     tie-off (it lay across the satin, a bar). Travel may run inside a column of the colour and from it 0.35 mm under
     a later colour (a column doesn't grow under its neighbours as a fill does, and the way to them was cut).
   - Density: the picture's `Design` now counts hits (`ease`, as the Design tab): satin ends at junctions and fans

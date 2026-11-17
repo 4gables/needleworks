@@ -237,14 +237,15 @@ function columnNets(px, more, w, h, own, res, toMm, dotted) {
   // satin stood off a bold c's end)
   const loopLen = (p) => p.reduce((t, q, i) => (i ? t + Math.hypot(q[0] - p[i - 1][0], q[1] - p[i - 1][1]) : 0), 0);
   // (unless it rings fabric: a small P's or e's counter. Dropped, the bowl round it sewed as one fan from the stem)
-  const rings = (p) => {
-    let bx0 = Infinity, bx1 = -Infinity, by0 = Infinity, by1 = -Infinity;
+  // (a counter at least a quarter stroke square: a pinhole in a blob, ringed, sewed as a starburst)
+  const hole = 0.25 * stroke * stroke, rings = (p) => {
+    let n = 0, bx0 = Infinity, bx1 = -Infinity, by0 = Infinity, by1 = -Infinity;
     for (const [x, y] of p) { bx0 = Math.min(bx0, x); bx1 = Math.max(bx1, x); by0 = Math.min(by0, y); by1 = Math.max(by1, y); }
     for (let y = Math.ceil(by0); y <= by1; y++) for (let x = Math.ceil(bx0); x <= bx1; x++) {
       if (at(x, y)) continue;
       let odd = false;
       for (let i = 0, j = p.length - 1; i < p.length; j = i++) if ((p[i][1] > y) !== (p[j][1] > y) && x < p[j][0] + ((p[i][0] - p[j][0]) * (y - p[j][1])) / (p[i][1] - p[j][1])) odd = !odd;
-      if (odd) return true;
+      if (odd && ++n >= hole) return true;
     }
     return false;
   };
@@ -271,7 +272,9 @@ function columnNets(px, more, w, h, own, res, toMm, dotted) {
     // edge, the column stopped short of the point and left it bare: corpus holes 22 -> 49 mm²)
     const k = Math.max(2, Math.ceil(stroke / (0.1 * res))), ring = a === b && q.length > 2 * k + 2;
     const turns = () => q.map((_, i) => {
-      if (dotted || (!ring && (i < k || i + k >= q.length))) return [0, 1];
+      // (not on a line under 6 widths long: a blob's short curl of a centre line turns all round, and mitred every
+      // way it sewed as a starburst at the density limit)
+      if (dotted || q.length < 6 * k || (!ring && (i < k || i + k >= q.length))) return [0, 1];
       const n = q.length - 1, P = q[ring ? (i - k + n) % n : i - k], N = q[ring ? (i + k) % n : i + k];
       const ux = q[i][0] - P[0], uy = q[i][1] - P[1], vx = N[0] - q[i][0], vy = N[1] - q[i][1], L = Math.hypot(ux, uy) * Math.hypot(vx, vy);
       if (!L) return [0, 1];
@@ -385,8 +388,11 @@ function plain(nets) {
   // (or uneven only as a taper is: along each centre line the width rises and falls at most `taper` times its range,
   // a brush stroke narrowing to its point (once) or a leaf's half swelling and narrowing again (twice); a ragged
   // patch's width goes up and down all along it)
-  if (!COLUMNS.taper) return false;
+  // (only one open line at least 4 widths long: a blob whose centre line is a short curl or a loop passed as a taper
+  // and sewed as a starburst of satin)
+  if (!COLUMNS.taper || nets.length !== 1 || nets[0].edges.length !== 1) return false;
   for (const net of nets) for (const e of net.edges) {
+    if (e.a === e.b || e.s[e.s.length - 1] < 4 * net.W) return false;
     const v = e.A.map((a, i) => a + e.B[i]), k = 4, sm = v.map((_, i) => { let s = 0, n = 0; for (let j = Math.max(0, i - k); j <= Math.min(v.length - 1, i + k); j++) { s += v[j]; n++; } return s / n; });
     let tv = 0, lo = Infinity, hi = -Infinity;
     for (let i = 0; i < sm.length; i++) { if (i) tv += Math.abs(sm[i] - sm[i - 1]); lo = Math.min(lo, sm[i]); hi = Math.max(hi, sm[i]); }
@@ -894,7 +900,7 @@ function build(img, analysis, opts) {
         }
         prev = q;
       }
-      return pts.find((q) => far(q) >= 1.1 && far(q) <= 1.9 && !crosses(from, q)) || pts.find((q) => far(q) >= 1.1 && far(q) <= 2.5 && !crosses(from, q)) || null;
+      return pts.find((q) => far(q) >= 1.1 && far(q) <= 1.9 && !crosses(from, q)) || null;
     };
     const pathLen = (q) => { let L = 0; for (let i = 1; i < q.length; i++) L += Math.hypot(q[i][0] - q[i - 1][0], q[i][1] - q[i - 1][1]); return L; };
     // (neither when it would bring a jump the machine trims, over 5 mm, down to one it leaves as a loose thread, or a
@@ -908,7 +914,7 @@ function build(img, analysis, opts) {
       tail = null;
     };
     const jumpTo = (b, p) => {
-      let q = clearStart(noTiny(p)), at = b.kind === "fill" || b.kind === "column" ? inside(q[0], q.slice(1, 30)) : null;
+      let q = clearStart(noTiny(p)), at = b.kind === "fill" || b.kind === "column" ? inside(q[0], q.slice(1, 16)) : null;
       if (at && nearer(gapTo(d.cur, q[0]), gapTo(d.cur, at))) at = null;
       tuck(at || q[0]);
       if (at && nearer(gapTo(d.cur, q[0]), gapTo(d.cur, at))) at = null;
