@@ -771,9 +771,15 @@ function build(img, analysis, opts) {
       // other; in a group with a longer piece the short ones stay dots, dropped)
       const total = new Map(), long = new Map();
       walks.forEach((t, i) => { total.set(find(i), (total.get(find(i)) || 0) + t.len); if (t.len >= 1.5) long.set(find(i), (long.get(find(i)) || 0) + t.len); });
-      for (let i = walks.length - 1; i >= 0; i--) if (walks[i].len < 1.5 && long.get(find(i))) walks[i].drop = true;
+      // (and only when the dashes run on as a line: the group's extent half its length or more. A photo's thread texture
+      // is short dashes in clumps: etsy_8 sewed them, +40 trims on the batch's four settings)
+      const ext = new Map();
+      walks.forEach((t, i) => { const r = find(i), e = ext.get(r) || [Infinity, Infinity, -Infinity, -Infinity]; for (const [p] of t.mm) for (const [x, y] of p) { e[0] = Math.min(e[0], x); e[1] = Math.min(e[1], y); e[2] = Math.max(e[2], x); e[3] = Math.max(e[3], y); } ext.set(r, e); });
+      const lineLike = (r) => { const e = ext.get(r); return Math.hypot(e[2] - e[0], e[3] - e[1]) >= 0.5 * total.get(r); };
+      const sewn = (r) => long.get(r) || (lineLike(r) ? total.get(r) : 0);
+      for (let i = walks.length - 1; i >= 0; i--) if (walks[i].len < 1.5 && (long.get(find(i)) || !lineLike(find(i)))) walks[i].drop = true;
       walks.forEach((t, i) => {
-        if (t.drop || (long.get(find(i)) || total.get(find(i))) < GROUP) return;
+        if (t.drop || sewn(find(i)) < GROUP) return;
         fine.hairlines++;
         const paths = t.mm.map(([p, kind]) => {
           const q = followRun(p, 1.5, 0.1, 0.6);
