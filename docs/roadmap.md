@@ -356,8 +356,9 @@ pe900_check against this baseline and ships as its own release (`docs/releases.m
   travel hidden under crosses to come, rows per colour. Owns digitize.js `crossStitch`.
   done: backstitch (lines under 0.6 of a cell, over the crosses, bold as triple runs, dots as small crosses), closed-in
   white only inside a filled colour, cell 1-0.6x the size asked and best of 16 grid offsets, three-quarter crosses,
-  no travel across open fabric; cross look +8 a case (line art 32 -> 65), trims 8.6 -> 16.3 a file (the lines').
-  left: trims of backstitched text and dots (no travel under later stitches for lines); pale doodles still read as
+  no travel across open fabric; cross look +8 a case (line art 32 -> 65), trims 8.6 -> 15.7 a file (the lines').
+  left: busy pictures (etsy) 2.5-5x the trims and stitches (cells shrink, many lines: a stitch budget per picture);
+  trims of backstitched text and dots; pale doodles still read as
   fabric (palette); the mountain logo's score (C5-LK's registration and colour fix).
 - [ ] **C5-DI Direction (PX3 leftover + novel)**: Follow the shape on the Picture panel and whether it is the
   default; trial: each region's angle from the picture's own texture or brush strokes (structure tensor), kept only

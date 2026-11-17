@@ -356,9 +356,11 @@ Reference for this part of Needleworks: the rules, the reason for each (it stops
   - Backstitch: every colour's parts narrower than `thin` 0.6 of a cell (an opening of the colour) are sewn last, over
     the crosses, light to dark, along their centre (the line drawing's skeleton, `lineEnds`, walked out and back),
     stitches of 2 mm; bold ones (1 mm or wider) a triple run; a dot 0.8-2.5 mm across one small cross its own size;
-    pieces under 2 mm, pieces mostly over their own colour's crosses (a shape's ragged edge) and pieces whose colour
-    lies between the two beside them (an anti-aliased edge: an owl's outline came out as 33 short lavender lines) are
-    left out. Thin pixels don't vote for a cell. Before, every rule, outline and line drawing was lost (rules lost
+    pieces under 3 mm, pieces mostly over their own colour's crosses (a shape's ragged edge), pieces whose colour
+    lies between the two beside them (an anti-aliased edge: an owl's outline came out as 33 short lavender lines) and
+    pieces under 15 ΔE00 from what they lie on are left out. A colour's lines go right after its crosses, in the same
+    block, when no cross of a later colour lies under any of them (else all at the end: split, they cost more trims
+    than the block saved). Thin pixels don't vote for a cell. Before, every rule, outline and line drawing was lost (rules lost
     4/5, a child's drawing its rays, ground and eye). Also a line: a piece whose crosses cover under `covered` 35 % of
     it (two stray crosses for "est. 2026"), and a piece under `letter` 4 cells that is half narrower than a cell (a
     letter half crosses, half backstitch read as neither; a star's 2 mm outline stays crosses: as a line 50 -> 43).
@@ -376,12 +378,14 @@ Reference for this part of Needleworks: the rules, the reason for each (it stops
     open fabric (bars along letters' feet); at most 6, else a jump, over 5 mm rather than a loose 2-5 mm thread.
     Backstitch steps up to 2 mm stitched across (as a word's letters), up to 10 mm run over its own colour's crosses or
     picture (a sun's rays off its disc), else a jump.
-  - Measured (picture_corpus, 55 cross cases, v34 -> C5-XS): look by kind +1.4 (watercolour) to +32 (line art: 32 ->
-    65), drawings +13, logos +9, cartoons +8; mandala 27 -> 79, flower 36 -> 63, logo_regular 31 -> 56, child's
-    drawing 32 -> 52, rules 23 -> 42. Price: trims 471 -> 910 (8.6 -> 16.3 a file: each backstitched letter or
-    separate line is one, as in a line drawing; polka dots stay one trim a dot), stitches 89 k -> 111 k (smaller cells),
-    loose 0 -> 2. Worse: the mountain logo 36.7 -> 33.1 (its PEAK and outer ring look better; the look score registers
-    cross-stitch half a cell off and scores its colour 0, round C5-LK).
+  - Measured (picture_corpus, 55 cross cases, v34 -> C5-XS): look by kind +1.2 (watercolour) to +32 (line art: 32 ->
+    65), drawings +13, logos +9, cartoons +8, mascots +7; mandala 27 -> 79, flower 36 -> 63, logo_regular 31 -> 56,
+    cartoon cat 45 -> 64, child's drawing 32 -> 52, rules 23 -> 42. Price: trims 471 -> 879 (8.6 -> 15.7 a file: each
+    backstitched letter or separate line is one, as in a line drawing; polka dots stay one trim a dot), stitches 89 k ->
+    109 k (smaller cells), loose 0 -> 5. Worse: the mountain logo 36.7 -> 33.2 (its PEAK and outer ring look better; the
+    look score registers cross-stitch half a cell off and scores its colour 0, round C5-LK). Busy pictures pay most:
+    etsy 1/4/6/8 at 100 mm, 4 colours: stitches 1.4-3.2 k -> 3.9-8.2 k, trims 19-58 -> 90-244, look 49/63/60/74 ->
+    55/66/60/65 (etsy_6 worse). Tried: cells only down to 0.8 (fox 53 -> 44, cartoon cat 64 -> 50, logo 56 -> 50).
 - `fine` (`narrowGaps`: gaps under 0.5 mm, at least 2 mm² and 1.5 % of the area) warns; notches under ~0.5 mm can't
   be kept by thread. Errors carry `code` (small, cross, skipped, empty); only followable advice is offered.
 - A picture with nothing in it to stitch (`code: "empty"`: all one colour) is not kept for the next visit

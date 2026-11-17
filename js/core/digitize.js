@@ -1557,7 +1557,10 @@ function crossStitch(img, analysis, opts) {
         // (a line mostly over this colour's own crosses is the ragged edge of its shape, already sewn: the slivers of
         // a red banner between white letters were a dozen short lines and a dozen trims)
         const own = t.filter(([X, Y]) => at(Math.floor((X * res + ox - x0) / c), Math.floor((Y * res + oy - y0) / c)) === id).length;
-        if (t.length > 1 && arclen(t).at(-1) >= 2 * CROSS.line && own < CROSS.hidden * t.length) tours.push(t);
+        // (and one that hardly shows on what it lies over, under CROSS.contrast ΔE00 from it at its middle: a photo's
+        // shading came out as a hundred faint lines, each a trim)
+        const under = t.map(([X, Y]) => { const q = at(Math.floor((X * res + ox - x0) / c), Math.floor((Y * res + oy - y0) / c)); return q >= 0 ? deltaE2000(me, labAt(q)) : fl ? deltaE2000(me, fl) : 100; }).sort((a, b) => a - b);
+        if (t.length > 1 && arclen(t).at(-1) >= 2 * CROSS.line && own < CROSS.hidden * t.length && under[under.length >> 1] >= CROSS.contrast) tours.push(t);
       }
     }
     if (tours.length || dots.length) back.set(id, [...tours, ...dots]);
@@ -1569,6 +1572,38 @@ function crossStitch(img, analysis, opts) {
   // cell corners are the vertices, v = gy * W + gx
   const W = gw + 1, V = W * (gh + 1), X = (v) => v % W, Y = (v) => Math.floor(v / W);
   const d = new Design(o.hoop), summary = [];
+  // Backstitch: each line entered at its point nearest the needle. Under 2 mm the needle stitches across, as between
+  // a word's letters in a line drawing; up to CROSS.travel mm it runs there over this colour's own crosses or picture
+  // (a sun's rays, each trimmed apart, hang off its crossed disc); else rather a jump over 5 mm (the machine trims it)
+  // than a loose 2-5 mm thread
+  const sewLines = (col, list) => {
+    const mine = ([X, Y]) => {
+      const x = X * res + ox, y = Y * res + oy, xi = Math.floor(x), yi = Math.floor(y);
+      return at(Math.floor((x - x0) / c), Math.floor((y - y0) / c)) === col.id || (xi >= 0 && yi >= 0 && xi < w && yi < h && labels[yi * w + xi] === col.id);
+    };
+    const over = (p, q, L) => { for (let k = 1, m = Math.ceil(L * 4); k < m; k++) if (!mine([p[0] + ((q[0] - p[0]) * k) / m, p[1] + ((q[1] - p[1]) * k) / m])) return false; return true; };
+    const left = list.slice();
+    while (left.length) {
+      let bi = 0, bk = 0, bd = Infinity, run = false;
+      left.forEach((t, i) => (t.closed ? t : [t[0], t.at(-1)]).forEach((q, k) => {
+        const v = d.cur ? Math.hypot(q[0] - d.cur[0], q[1] - d.cur[1]) : q[1] * 1e3 + q[0];
+        let s = v, r = false;
+        if (d.cur && v > 2) {
+          if (v <= CROSS.travel && v < bd && over(d.cur, q, v)) r = true;
+          else s = v > 5 ? v + CROSS.travel : v + 1e3;
+        }
+        if (s < bd) { bd = s; bi = i; bk = k; run = r; }
+      }));
+      const t = left[bi], p = t.closed ? [...t.slice(bk), ...t.slice(1, bk + 1)] : bk ? t.slice().reverse() : t;
+      if (run) {   // (the run there in stitches of at most CROSS.stitch)
+        const a = d.cur, L = Math.hypot(p[0][0] - a[0], p[0][1] - a[1]), m = Math.ceil(L / CROSS.stitch);
+        d.path([...Array.from({ length: m - 1 }, (_, k) => [a[0] + ((p[0][0] - a[0]) * (k + 1)) / m, a[1] + ((p[0][1] - a[1]) * (k + 1)) / m]), ...p]);
+      } else d.path(p);
+      left.splice(bi, 1);
+    }
+    const s = summary.find((q) => q.id === col.id);
+    if (s) { if (!s.kinds.includes("run")) s.kinds.push("run"); } else summary.push({ ...col, shapes: list.length, kinds: ["run"] });
+  };
   for (const col of used) {
     d.color(col.hex, col.thread.name);
     const done = new Uint8Array(gw * gh);   // cells whose cross is sewn
@@ -1663,39 +1698,21 @@ function crossStitch(img, analysis, opts) {
     }
     flush();
     summary.push({ ...col, shapes: crosses, kinds: ["cross"] });
-  }
-  // the backstitch last, light to dark, each line entered at its point nearest the needle. Under 2 mm the needle
-  // stitches across, as between a word's letters in a line drawing; up to CROSS.travel mm it runs there over this
-  // colour's own crosses or picture (a sun's rays, each trimmed apart, hang off its crossed disc); else rather a jump
-  // over 5 mm (the machine trims it) than a loose 2-5 mm thread
-  for (const col of lines) {
-    if (d.threads.at(-1)?.color !== col.hex || !d.threads.length) d.color(col.hex, col.thread.name);
-    const mine = ([X, Y]) => {
-      const x = X * res + ox, y = Y * res + oy, xi = Math.floor(x), yi = Math.floor(y);
-      return at(Math.floor((x - x0) / c), Math.floor((y - y0) / c)) === col.id || (xi >= 0 && yi >= 0 && xi < w && yi < h && labels[yi * w + xi] === col.id);
-    };
-    const over = (p, q, L) => { for (let k = 1, m = Math.ceil(L * 4); k < m; k++) if (!mine([p[0] + ((q[0] - p[0]) * k) / m, p[1] + ((q[1] - p[1]) * k) / m])) return false; return true; };
-    const left = back.get(col.id).slice();
-    while (left.length) {
-      let bi = 0, bk = 0, bd = Infinity, run = false;
-      left.forEach((t, i) => (t.closed ? t : [t[0], t.at(-1)]).forEach((q, k) => {
-        const v = d.cur ? Math.hypot(q[0] - d.cur[0], q[1] - d.cur[1]) : q[1] * 1e3 + q[0];
-        let s = v, r = false;
-        if (d.cur && v > 2) {
-          if (v <= CROSS.travel && v < bd && over(d.cur, q, v)) r = true;
-          else s = v > 5 ? v + CROSS.travel : v + 1e3;
-        }
-        if (s < bd) { bd = s; bi = i; bk = k; run = r; }
-      }));
-      const t = left[bi], p = t.closed ? [...t.slice(bk), ...t.slice(1, bk + 1)] : bk ? t.slice().reverse() : t;
-      if (run) {   // (the run there in stitches of at most CROSS.stitch)
-        const a = d.cur, L = Math.hypot(p[0][0] - a[0], p[0][1] - a[1]), m = Math.ceil(L / CROSS.stitch);
-        d.path([...Array.from({ length: m - 1 }, (_, k) => [a[0] + ((p[0][0] - a[0]) * (k + 1)) / m, a[1] + ((p[0][1] - a[1]) * (k + 1)) / m]), ...p]);
-      } else d.path(p);
-      left.splice(bi, 1);
+    // (a line no cross of a later colour lies under is sewn now, in the same thread: kept to the end, each colour of
+    // lines was a second block of its thread)
+    // (all of them or none: split in two, a colour's lines cost more trims than the block they saved)
+    const mine = back.get(col.id) || [];
+    if (mine.length && mine.every((t) => t.filter(([X, Y]) => { const q = at(Math.floor((X * res + ox - x0) / c), Math.floor((Y * res + oy - y0) / c)); return q >= 0 && rank.get(q) > rank.get(col.id); }).length <= CROSS.under * t.length)) {
+      for (const t of mine) t.early = true;
+      sewLines(col, mine);
     }
-    const s = summary.find((q) => q.id === col.id);
-    if (s) s.kinds.push("run"); else summary.push({ ...col, shapes: back.get(col.id).length, kinds: ["run"] });
+  }
+  // the rest last, light to dark, over all the crosses
+  for (const col of lines) {
+    const rest = back.get(col.id).filter((t) => !t.early);
+    if (!rest.length) continue;
+    if (d.threads.at(-1)?.color !== col.hex || !d.threads.length) d.color(col.hex, col.thread.name);
+    sewLines(col, rest);
   }
   d.finish();
   // (where mm 0,0 lies in working px, for keptParts: the grid's centre, not the picture's)
