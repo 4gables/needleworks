@@ -1062,7 +1062,7 @@ function fineColours(img, analysis, used, res, skip) {
 // about 1 mm a triple run (out, back and out again, then back); 1.5 mm and wider a satin column as wide as the line
 // (out as a centre run under it, back as the satin), up to 6 mm; a dot a satin across it. One run for every line
 // sewed bold marker strokes, crayon lines and bold lettering as hairlines (C5 review: "a different font").
-const WEIGHT = { triple: 0.9, satin: 1.5, most: 6, dot: 4 };
+const WEIGHT = { triple: 0.9, satin: 1.5, most: 6, dot: 5 };
 
 // Line drawing (redwork): every shape's outline and every line's or even stroke's centre, each in its own colour's
 // thread and at its own weight (`WEIGHT`; `opts.line`: all in that one thread). The lines are walked like lettering
@@ -1083,7 +1083,9 @@ function lineArt(img, analysis, opts) {
   // ΔE00, and under SHADE for a thin piece whose edge is soft (under 0.7 of the difference across 4 px; 15 for all kept
   // sky and teal mountains, 14.6 apart, from meeting at a line, and an owl's outline from its wing, 10.3)
   const ALIKE = 8, SHADE = 15, fabric = colors.find((c) => c.background), labOf = new Map(colors.map((c) => [c.id, c.lab]));
-  const colOf = (l) => (mine.has(l) ? labOf.get(l) : fabric ? labOf.get(fabric.id) : null);
+  // (the fabric's colour, white when the picture is seen through: a see-through sticker's outline blends were left as
+  // dashes round it)
+  const colOf = (l) => (mine.has(l) ? labOf.get(l) : fabric ? labOf.get(fabric.id) : [100, 0, 0]);
   const alike = (a, b) => !!a && !!b && deltaE2000(a, b) < ALIKE;
   const toFabric = fabric ? fabric.id : -1, moves = [];
   // JPEG noise: a thin piece (nowhere 1.5 mm across) under 5 mm long of a strong colour (30 or more from the fabric,
@@ -1416,7 +1418,10 @@ function lineArt(img, analysis, opts) {
     // (the bands' own skeleton, pruned at their width; strokes' spurs pruned under 0.6 of the width: a whole width took a
     // slab E's lower arm) sewn by their width along them
     const byWidth = (e) => {
-      const W = widthsOf(e[2], (i) => (bands.data[i] ? 2 * dep[i] - 1 : 0)).map((v) => v / res), m = median(widthsOf(e[2], (i) => (bands.data[i] ? pw[i] : 0))) / res;
+      // (its own median width, or its band's where they're within 0.35 mm: a bear's 3 mm brows joined to 1.2 mm eye rims
+      // were sewn as hairlines by the band's median)
+      const W = widthsOf(e[2], (i) => (bands.data[i] ? 2 * dep[i] - 1 : 0)).map((v) => v / res), own = median(W), all = median(widthsOf(e[2], (i) => (bands.data[i] ? pw[i] : 0))) / res;
+      const m = Math.abs(own - all) < 0.35 ? all : own;
       return m >= WEIGHT.satin ? { how: "satin", W: W.map((v) => Math.min(WEIGHT.most, Math.max(m / 2, v) - COLUMNS.thread)) } : { how: m >= WEIGHT.triple ? "triple" : "run" };
     };
     if (bandW) for (const [a, b, p] of skeletonEdges(part, bandW, { spur: 1 })) { const e = [`b${a}`, `b${b}`, p]; all.push(e); allHow.push(byWidth(e)); }
