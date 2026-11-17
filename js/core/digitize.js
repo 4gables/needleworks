@@ -1328,6 +1328,7 @@ function crossStitch(img, analysis, opts) {
   // (and a colour sewn in the fabric's own thread that is the fabric in the picture, under CROSS.paper ΔE00 from it: a
   // line drawing's paper learned as a near-white colour of the design; a pale pink in White thread is still a colour)
   const fabric = colors.find((k) => k.background), fl = fabric && srgbToLab(...hexToRgb(fabric.picture || fabric.hex));
+  const labAt = (l) => (l < 0 ? fl || null : srgbToLab(...hexToRgb(colors[l].picture || colors[l].hex)));
   const paper = new Set(colors.filter((k) => !bg.has(k.id) && (k.inside || (fabric && k.thread?.hex === fabric.thread?.hex && deltaE2000(srgbToLab(...hexToRgb(k.picture || k.hex)), fl) < CROSS.paper))).map((k) => k.id));
   const inId = analysis.inside >= 0 && colors[analysis.inside]?.inside && !bg.has(analysis.inside) ? analysis.inside : -1;
   const inks = colors.filter((k) => !bg.has(k.id)).map((k) => k.id);
@@ -1515,14 +1516,30 @@ function crossStitch(img, analysis, opts) {
       const x = i % w, y = (i - x) / w, b = bx[k];
       if (x < b[0]) b[0] = x; if (y < b[1]) b[1] = y; if (x > b[2]) b[2] = x; if (y > b[3]) b[3] = y; b[4]++; b[5] += x; b[6] += y;
     }
+    // (a piece whose colour lies between the two colours beside it is the blend along their edge, not a line: an
+    // owl's outline anti-aliased to the paper came out as 33 short lavender lines and 33 trims)
+    const nb = Array.from({ length: count + 1 }, () => new Map()), me = labAt(id), gone = new Uint8Array(count + 1);
+    for (let i = 0; i < n; i++) {
+      const k = cl[i]; if (!k) continue;
+      const x = i % w;
+      for (const j of [x > 0 ? i - 1 : -1, x < w - 1 ? i + 1 : -1, i - w, i + w]) {
+        if (j < 0 || j >= n || cl[j] === k || labels[j] === id) continue;
+        const l = bg.has(labels[j]) ? -1 : labels[j];
+        nb[k].set(l, (nb[k].get(l) || 0) + 1);
+      }
+    }
+    for (let k = 1; k <= count; k++) {
+      const [[A] = [], [B] = []] = [...nb[k].entries()].sort((p, q) => q[1] - p[1]), a = A === undefined ? null : labAt(A), b = B === undefined ? null : labAt(B);
+      if (a && b && deltaE2000(a, me) + deltaE2000(me, b) <= CROSS.blend * deltaE2000(a, b)) gone[k] = 1;
+    }
     const dots = [], sk = { w, h, data: new Uint8Array(n) }, wd = [];
     const dot = (b) => { const L = Math.max(b[2] - b[0], b[3] - b[1]) + 1, s = Math.min(b[2] - b[0], b[3] - b[1]) + 1; return L < CROSS.dot[1] * res && s >= CROSS.dot[0] * res && b[4] >= 0.6 * res * res; };
-    for (let k = 1; k <= count; k++) if (dot(bx[k])) {
+    for (let k = 1; k <= count; k++) if (!gone[k] && dot(bx[k])) {
       const b = bx[k], r = Math.max(0.5, Math.min(1, (Math.max(b[2] - b[0], b[3] - b[1]) + 1) / res / 2 - 0.1)), [X, Y] = pxMm([b[5] / b[4], b[6] / b[4]]);
       dots.push([[X - r, Y - r], [X + r, Y + r], [X, Y], [X + r, Y - r], [X - r, Y + r]]);
     }
     const dt = dts.get(id);
-    for (let i = 0; i < n; i++) if (cl[i] && !dot(bx[cl[i]])) { sk.data[i] = 1; wd.push(dt[i]); }
+    for (let i = 0; i < n; i++) if (cl[i] && !gone[cl[i]] && !dot(bx[cl[i]])) { sk.data[i] = 1; wd.push(dt[i]); }
     const tours = [];
     if (wd.length) {
       wd.sort((a, b) => a - b);

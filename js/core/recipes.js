@@ -115,7 +115,7 @@ export const PICTURES = { fleck: 3, enclosed: 0.8, eyes: 6, start: 4, edge: 0.75
 // A three-quarter cross fills an empty cell on a diagonal edge whose corner's two quarters are `quarter[0]` of a
 // colour crossed beside it and the other two under `quarter[1]` picture. Travel along cell edges costs `cost` (under crosses still to come, beside crosses sewn or sewn later, beside ones
 // sewn before; never across open fabric), at most `reach`, else a jump.
-export const CROSS = { thin: 0.6, stitch: 2, line: 2, dot: [0.8, 2.5], cells: [1, 0.8, 0.6], min: 1.5, trouble: 0.12, phases: 4, covered: 0.35, part: 0.5, letter: 4, bold: 1, hidden: 0.5, surround: 0.6, paper: 10, quarter: [0.6, 0.3],
+export const CROSS = { thin: 0.6, stitch: 2, line: 2, dot: [0.8, 2.5], cells: [1, 0.8, 0.6], min: 1.5, trouble: 0.12, phases: 4, covered: 0.35, part: 0.5, letter: 4, bold: 1, hidden: 0.5, blend: 1.25, surround: 0.6, paper: 10, quarter: [0.6, 0.3],
   cost: { under: 1, beside: 1.5, over: 3 }, reach: 6, travel: 10 };
 // Shading (core/shade.js, roadmap PX4; numbers: docs/pictures.md). Two colours' regions, each `wide` mm across
 // somewhere, meet in a soft gradient when the picture (blurred `blur` mm) takes `soft` mm or more to change from one to
