@@ -361,9 +361,14 @@ pe900_check against this baseline and ships as its own release (`docs/releases.m
 - [ ] **C5-DI Direction (PX3 leftover + novel)**: Follow the shape on the Picture panel and whether it is the
   default; trial: each region's angle from the picture's own texture or brush strokes (structure tensor), kept only
   where look and pe900_check say so. Owns picture.js direction UI, digitize.js `form` hook, fill.js angles. Wave 2.
-- [ ] **C5-AU Style chosen per picture (novel trial)**: Filled, Line drawing or Cross-stitch picked from the picture
+- [x] **C5-AU Style chosen per picture (novel trial)**: Filled, Line drawing or Cross-stitch picked from the picture
   (flat colour areas, line share, photo-ness), proven on the corpus as the style a person would pick. Wave 2, after
   LN and XS (better styles change the choice). Owns artcheck.js and its picture.js hook.
+  done: `chooseStyle` (thin-stroke share of the ink by local thickness, colours drawn in; `STYLE`) starts a new
+  picture as a line drawing when it is one, the reason under Style; labels written first
+  (`tests/fixtures/style_labels.json`), 69/74 agree (always-Filled 64/74), no filled picture moved; `picture_corpus.sh
+  ... styles`. left: Cross-stitch is never chosen (photos measure like soft-shaded clip art); crayon/marker strokes
+  and a sheet of doodles under a bold title start Filled.
 - [ ] **C5-SB Scoreboard**: refresh `tests/fixtures/quality.json` (pictures: Filled 18 files now, baseline 12) after
   the rounds above.
 - Parked: JEF (`w6-jef`) needs Janome's order for 27 more thread numbers; no source to measure them from yet (the 127

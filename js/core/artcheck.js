@@ -291,7 +291,7 @@ export function chooseStyle(f, size) {
   const { line, wide, inks } = STYLE, k = (wide * f.long) / 2;
   const thin = f.thick.reduce((a, v, r) => a + (r > 0 && r <= k ? v : 0), 0);
   if (f.ink > 0 && thin >= line && (f.colours || 0) <= inks) {
-    return { style: "line", start: true, line: +thin.toFixed(3), why: "Looks like a line drawing, so it's sewn as one: its lines are traced in running stitch." };
+    return { style: "line", start: true, line: +thin.toFixed(3), why: "Looks like a line drawing, so it's sewn as one." };
   }
   return { style: "fill", start: false, line: +thin.toFixed(3), why: "" };
 }
