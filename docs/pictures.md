@@ -446,13 +446,55 @@ Reference for this part of Needleworks: the rules, the reason for each (it stops
   Travel may follow any thin line of its colour, also one too short to keep (`thin`, not the walks kept): it sews
   one run where the picture has a line. Worse: only along lines that are sewn (the samples' trims 1,162 -> 1,551,
   more than before any of this, and the small bouquet's stems came apart).
-- Line drawing (`opts.line`, Auto = darkest): outlines once where colours meet, none between colours within ΔE00 15;
-  dark bands (`BAND`) and whole even strokes sewn once along their centre (both edges drew double lines), decided once
-  per colour (centre lines if 80 % of its long pieces are strokes; fat letters outlined; marker lines up to 6 mm;
-  spurs pruned at 0.6 width; narrow elongated parts of any colour centre-lined); text dots a short out-and-back line;
-  `closeSlivers`; `lineEnds` reach the ink's edge; pieces under 2 mm dropped (`spur: 1`: pruning cut letters apart);
-  ends within 2 mm of another drawing joined (3 mm drew bars). JPEG ringing is fabric: thin pieces under 5 mm of a colour
-  at least 30 ΔE00 from the fabric whose own pixels are under 30 % of that (40 % with no floor cut etsy_1's lavender).
+- Line drawing (`lineArt`; `opts.line` sews everything in that one thread, Auto = each line in its own colour's
+  thread). C5-LN, from the review of the 15 worst line drawings (all one thread, one 0.4 mm run, inner lines lost):
+  - Colours told apart finer than the threads (`fineColours`, `FINE`): seeds are each thread's colour and the fabric,
+    then farthest first any colour 10 ΔE00 from every seed that holds 0.5 mm² (flat pixels first, then any pixel that
+    is not a blend between the colours 2 px either side and has 2 neighbours within 6: a pale pink doodle column was
+    labelled fabric at 4 threads). Each added colour sews in the thread most of its pixels were labelled, or the thread
+    it is a blend of with the fabric (a grey shadow had been given the orange thread). Within 8 of the fabric (white,
+    with no fabric colour) it is fabric: a see-through sticker's die-cut white was a ring. A textured picture (under
+    `FINE.flat` 0.7 of its ink flat 3 px inside: photo noise 0.02, watercolours 0.51-0.63, crayon 0.64, flat art 0.87+)
+    keeps its thread labels: its grain drew 147 squiggles, crayon flecks tangled the strokes. It is traced in its darkest
+    thread (and its bands as triple runs, not satin) when its threads walked apart cost over 1.5x the trims and 10 more:
+    the batch's etsy pictures went 20 -> 68 trims (etsy_1), 25 -> 160 (etsy_8). A shape's outline on the fabric in a
+    colour under 25 from it is sewn in the nearest colour within 30 that stands 35 out (a grey cat on a grey page).
+  - A line where colours meet: `ALIKE` 8 ΔE00 apart (15 lost the sky/teal ridge, 14.6, and an owl's outline from its
+    wing, 10.3); two shades of one thread `SHADE` 15, or 8 where the picture steps within a pixel (a dog's fur drew 40
+    rings; a dinosaur's crisp spots stay). Only where the picture has a step: across 1 mm each side it changes by half
+    the two colours' difference (`STEP`; a sunset's gradient drew a straight line across the sky; at 2 px a tabby's
+    1-2 mm soft stripes went). Thin blends move into a colour beside them: the two furthest apart of the colours holding
+    a sixth of the piece's edge (an outline anti-aliased through two greys left grey rings round a robot), three rounds
+    (dashes beside an owl's outline); and a thin shade under 15 apart whose edge is soft. A pale colour (under 35 from
+    the fabric) against another whose edge on the fabric fades (2 px out still not the fabric's colour) on 4/5 of it is a
+    shadow: fabric, the whole colour when it is so as a whole (a soft shadow under "Holly" was traced in orange satin).
+  - One centre line per band: dark bands under `BAND` 4 mm (3 left a palm trunk and a robot's neck as two lines), and
+    a dark colour's long thin part wherever it lies (not only on the fabric); a long part of any colour counts only the
+    fabric round the drawing (a robot's white grille lines, fabric closed in, made the strips between them satin bars).
+    Strokes must be crisp on half their edge. Fat letters are outlined only when too narrow for satin.
+  - Weight from the measured width (`WEIGHT`): thin lines a run (out and back), from 0.9 mm a triple run, from 1.5 mm
+    a satin column as wide as the line along it (out as its centre-run underlay, back as the satin; a band's width is
+    its median depth, so a whole outline is one weight: an owl's came out part satin, part triple), up to 6 mm; dots
+    (0.8-2.5 mm thin pieces, and solid round pieces up to 4 mm) a satin across their long axis, as wide as each chord
+    (bold i dots and eyes had been hollow rings). Thread per line: one skeleton of everything, each edge in the thread
+    most of its pixels were drawn in (per pixel, an ear's outline alternated two threads, a trim each time); an outline
+    between two colours is in the one that stands out more from the fabric. Threads sewn lightest first.
+  - Unchanged: `closeSlivers`; `lineEnds` reach the ink's edge; pieces under 2 mm dropped (`spur: 1`: pruning cut
+    letters apart); ends within 2 mm of another drawing joined (3 mm drew bars); a piece under 6 mm lying within 0.8 mm
+    of a line twice its length for 4/5 of it is dropped (a fleck of a blend: ticks on a robot's corners). JPEG ringing
+    is fabric: thin pieces under 5 mm of a colour at least 30 ΔE00 from the fabric whose own pixels are under 30 % of
+    that (40 % with no floor cut etsy_1's lavender).
+  - Routing: each drawing is entered where it is also within 2 mm of a drawing still to sew (it ends where it began, so
+    that is where the needle leaves it): trims 9.7 -> 8.8 a case.
+  - Measured (picture_corpus, 57 line cases, still scored against the filled picture until C5-LK): look 42.2 -> 54.2
+    (logo +16.8, mascot +13, drawing +24, shapes +12, cartoon +12, flat illustration +10, photo/watercolour +8.5);
+    marker 24.7 -> 84.6, text_dots 30 -> 86.8, crayon 28 -> 73, doodle sheet 34 -> 77, monogram 22 -> 64; trims
+    8.6 -> 8.8 a case, loose 0.02 -> 0; pe900_check all ok. Down: lavender_title 61.5 -> 53.7 (its pale lavender
+    title now sewn lavender, as drawn, not in the darkest thread), photo cat 46.5 -> ~42 (grey outline in its own
+    thread), soft_shadow 43 -> 40 (the shadow left out: the scorer counts it as ink).
+  - Left: laurel leaves touching in a chain still sew as one wobbly satin (their neck depth can't be told from crayon's
+    flecks); a 50 px picture's blurred rim is a satin ring; trims between separate drawings (no travel along sewn lines
+    yet; doodle sheet 45, owl 23); lock ticks on small circles.
 - Cross-stitch (`cross` mm cells): a row is two diagonal zigzags out and back plus one straight stitch (climbing every
   edge drew bowties); runs chained by Dijkstra over cell corners, else a jump over 5 mm; a lone cell dropped only if
   nothing touches it.
