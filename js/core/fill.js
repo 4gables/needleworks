@@ -326,8 +326,12 @@ export function routeFill(groups, comp, mask, res, budget = routeBudget(), worn 
       let p = left.splice(k, 1)[0]; if (rev) p = p.slice().reverse();
       const d = cur ? Math.hypot(p[0][0] - cur[0], p[0][1] - cur[1]) : Infinity;
       if (cur && d > res && ((!r && gi < spare) || (inOrder && gi === groups.length - 1 && short(p)))) continue;
-      // within 1 mm: sew straight on (skipping a first point that would make a stitch under 0.4 mm)
-      if (cur && d <= res) out[out.length - 1].push(...(d < 0.4 * res ? p.slice(1) : p));
+      // within 1 mm: sew straight on. The first point is left out only when the needle is in it already (0.1 mm).
+      // Left out under 0.4 mm, it was every section's first row end at 0.35-0.4 mm rows: sections split where the
+      // step along a curved edge leaves the shape begin one row on, so that row began at its first needle point
+      // inside, 2 mm from the edge, and a bare wedge showed there (a tester's logos, 2026-11: 30 on a 95 mm letter).
+      // A link that sews 0.3 mm or less is the caller's to mend (`noTiny` moves the row end along its row).
+      if (cur && d <= res) out[out.length - 1].push(...(d < 0.1 * res ? p.slice(1) : p));
       else if (r && r.sewnMm <= SEWN) out[out.length - 1].push(...R.stitches(r), ...p);
       else out.push(p.slice());
       if (gi === groups.length - 1) R.markSewn(p);

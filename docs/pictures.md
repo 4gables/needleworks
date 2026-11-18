@@ -35,7 +35,15 @@ Reference for this part of Needleworks: the rules, the reason for each (it stops
   under its 0.6 mm lines and its 24 dots, inside sewn white, were flecks folded into it. Mandala 100 mm 66.6 -> 75.1
   (stitches 16,832 -> 5,876), 60 mm 71.3 -> 81.5, every dot back. White lettering on a badge, a jersey's diamonds, an
   eye's white and bold letters' counters are closed in by thick ink and stay sewn (a counter inside thin small print
-  is fabric now too). Corpus (all of C5-KE): Filled look line art 75.9 -> 80.8, drawing 82.2 -> 83.4, no kind down;
+  is fabric now too).
+  - Only a drawing made of lines has paper (tester, 2026-11: "if the design is fully surrounded by a different
+    colour the inside needs to be white, not transparent"). Where a quarter (`LINE_SOLID`) of the design's ink is
+    thick, every closed-in piece of 25 mm² (`LINE_SMALL`) or more is sewn whatever rings it: a mascot drawn in
+    outline over block letters was fabric at 6 threads. Smaller pieces keep the rule above, so the o of thin small
+    print stays open. Thick ink is counted through 0.4 mm (`LINE_EDGE`): the soft edge between a white letter and
+    the solid oval round it is a ring of a third colour one pixel wide, which read as a thin line, and a white Y in
+    a blue oval was left out. "Leave it out" on the page still leaves it.
+  Corpus (all of C5-KE): Filled look line art 75.9 -> 80.8, drawing 82.2 -> 83.4, no kind down;
   line flower 77.5 -> 81.5, line cat 76.6 -> 80.4, crayon 79.2 -> 84.2, doodle sheet 76.8 -> 82.1; pastel lines -0.6
   (its white between pastel lines is fabric now, 4,510 -> 1,621 stitches). Filled stitches 663 k -> 630 k, trims
   1,635 -> 1,554, loose 33 -> 25 (line flower 60 mm 0 -> 2, watercolour flowers 100 mm trims 11 -> 14); every file
@@ -277,6 +285,29 @@ Reference for this part of Needleworks: the rules, the reason for each (it stops
   off by default: on the corpus it saves 3 % of trims and stitches with look unchanged (79.1 -> 79.2), but one flat
   landscape loses 3.7 and a few cases gain a loose thread (numbers in stitch-model.md). `DENSITY` Standard 0.4 (the app's default; `DEFAULTS.density` is Dense) / Dense
   0.35; 0.3 fails the check (row links under 0.3 mm). Row steps split to 3 mm, row-end stitches over 4 mm halved.
+- Small lettering (`digitize.js` `smallText`, numbers `TEXT`; a tester's logo, 2026-11: a 447 px picture at 90 mm,
+  its second line 4 mm capitals with 0.7 mm strokes; "I want the lettering to be more clear"). Rows of lettering are
+  found as the page's check finds them (`artShapes(...).rows`), on labels where a colour between the fabric's and a
+  darker sewn colour counts as the darker; a word up to 3 letter heights (`word`) along the line joins its row. In a
+  row 2-6 mm tall (`least`, `small`; under 2 mm the "rows" are flecks along a bold word's edge), in a flat picture
+  (`flat` 0.55, the verdict's own line for "shaded like a photo": etsy_8's photographed 3 mm script title cost 45
+  trims and 28 loose threads at 120 mm and read no better):
+  - One thread a letter: the in-between colour (a dark stroke's soft edge, learned as a grey of its own when threads
+    are to spare: half of each letter was grey, some all grey) is the letters' colour where it touches a letter
+    (3 px) or is a whole stroke; what is left of it in the row is fabric.
+  - Letters apart: each letter's core (a pixel inside its edge) grows back out, all at once, and where two meet is
+    fabric. Round letters 0.2 mm apart touch at 8 px per mm, and SCHOOL's centre line ran through all six.
+  - Sewn along the strokes' centres whatever their width (as fill rows a millimetre long each letter was a ragged
+    block), not thickened the pixel other lines are. Its dots stay dots (an i's dot under 1 mm of line was dropped).
+  - Every letter kept: an I is 3.5 mm of line, under the 6 mm a group of lines needs and the 8 mm a piece only a jump
+    reaches needs (UNIVERSITY lost both I's and its T).
+  - A jump between letters, never a stitch or a travel run: sewn moves of up to 2 mm joined letter to letter at
+    whatever height the last stroke ended, and the router's half-mm cells took the word for one region and ran
+    straight through its o's. The machine leaves jumps that short uncut: threads to snip, as between the Design
+    tab's print letters, counted in the file's note.
+  - Left: a stroke the picture draws in one or two pixels can come out short (a Y's arm at 90 mm); each letter ends
+    in its locks, a small knot at 4 mm; lettering under 6 mm is still better typed in Design your own, as the page's
+    check says. `opts.lettering: false` sews as before.
 - Stitch types (PX2, `digitize.js` `columnNets`/`netStitches`, numbers in `recipes.js` `COLUMNS`; research I4, after
   Goldman's expired auto-digitizing patents: thick or thin from the distance to the edge along the skeleton, satin
   anchored at ends and junctions). Each piece of a colour, after the clean shapes and the specks and lines above, is

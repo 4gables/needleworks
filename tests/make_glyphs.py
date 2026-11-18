@@ -40,4 +40,9 @@ export function glyphs(family) {
   return cache.get(family);
 }
 """
-(root / "js/core/glyphs.js").write_text(head + body + tail)
+# (what follows the table is kept as the file has it: written from this script's own copy, a later change there,
+# `registerGlyphs` for a maker's own font, was lost and the page stopped loading)
+dest = root / "js/core/glyphs.js"
+now = dest.read_text() if dest.exists() else ""
+if "const cache" in now: tail = now[now.index("const cache"):]
+dest.write_text(head + body + tail)

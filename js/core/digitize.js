@@ -14,6 +14,7 @@ import { cleanShapes } from "./regions.js";
 import { shading } from "./shade.js";
 import { PEC_MATCH, hexToRgb, nearestBrotherThread, pecThread, pyRound, rgbToHex } from "./threads.js";
 import { DEFAULTS, across, deltaE2000, faintLines, pixels, srgbToLab } from "./palette.js";
+import { artShapes } from "./artcheck.js";
 export { DEFAULTS, analyze, labelWith, learnColours, pictureInk, toPalette } from "./palette.js";
 
 export { FILL_PATTERNS, fillPolygon, routeBudget };   // (core/fill.js)
@@ -190,7 +191,7 @@ function faintKept(img, labels, w, h, colors, used, res) {
 // not a line). White lettering on a badge, a jersey's diamonds, an eye's white, a white star in a red ring and the
 // counters of bold letters are closed in by thick ink and stay sewn. Not when the person asked for it sewn ("all").
 // Returns { labels (a copy when anything changed), mm2: the area left as fabric }.
-const LINE_INK = 0.4;
+const LINE_INK = 0.4, LINE_SOLID = 0.25, LINE_SMALL = 25, LINE_EDGE = 0.4;
 function lineInside(labels, w, h, colors, res) {
   const ins = colors.find((c) => c.inside), bg = colors.find((c) => c.background), n = w * h;
   if (!ins || !bg) return { labels, mm2: 0 };
@@ -200,17 +201,25 @@ function lineInside(labels, w, h, colors, res) {
   if (!any) return { labels, mm2: 0 };
   // thick ink: within reach of a disc COLUMNS.min across inside one colour (a morphological opening)
   const thick = new Uint8Array(n), r = (COLUMNS.min / 2) * res;
+  let ink = 0, solid = 0;
   for (const c of colors) {
     if (c.background || c.inside) continue;
     const s = { w, h, data: new Uint8Array(n) };
     let has = false;
-    for (let i = 0; i < n; i++) if (labels[i] === c.id) { s.data[i] = 1; has = true; }
+    for (let i = 0; i < n; i++) if (labels[i] === c.id) { s.data[i] = 1; has = true; ink++; }
     if (!has) continue;
     const dt = distanceTransform(s), core = { w, h, data: new Uint8Array(n).fill(1) };
     for (let i = 0; i < n; i++) if (dt[i] > r) core.data[i] = 0;
     const to = distanceTo(core, r + 1);
-    for (let i = 0; i < n; i++) if (s.data[i] && to[i] <= r + 0.5) thick[i] = 1;
+    for (let i = 0; i < n; i++) if (s.data[i] && to[i] <= r + 0.5) { thick[i] = 1; solid++; }
   }
+  // Only a drawing made of lines has paper. Where the design has solid parts (LINE_SOLID of its ink thick), what it
+  // closes in is part of it and is sewn, whatever rings it (a tester, 2026-11: "if the design is fully surrounded by
+  // a different colour the inside needs to be white, not transparent"): a mascot drawn in outline over block letters
+  // was left as fabric. Not a piece under LINE_SMALL mm²: the counter of an o in thin print stays open (6 mm capitals: 20 mm²).
+  // And thick ink counts through a soft edge (`near`: LINE_EDGE mm): the blend between a white letter and the solid
+  // oval round it is a ring of a third colour a pixel wide, which read as a thin line, and the letter was left out.
+  const whole = solid >= LINE_SOLID * ink, near = distanceTo({ w, h, data: thick.map((v) => 1 - v) }, LINE_EDGE * res + 1);
   const { labels: cl, count } = label(m), rim = new Int32Array(count + 1), fat = new Int32Array(count + 1), size = new Int32Array(count + 1);
   for (let i = 0; i < n; i++) {
     const c = cl[i]; if (!c) continue;
@@ -218,12 +227,12 @@ function lineInside(labels, w, h, colors, res) {
     const x = i % w;
     for (const j of [x > 0 ? i - 1 : -1, x < w - 1 ? i + 1 : -1, i - w, i + w]) {
       if (j < 0 || j >= n || cl[j] || labels[j] < 0) continue;
-      rim[c]++; if (thick[j]) fat[c]++;
+      rim[c]++; if (near[j] <= LINE_EDGE * res) fat[c]++;
     }
   }
   const go = new Uint8Array(count + 1);
   let mm2 = 0;
-  for (let c = 1; c <= count; c++) if (rim[c] && fat[c] < LINE_INK * rim[c]) { go[c] = 1; mm2 += size[c]; }
+  for (let c = 1; c <= count; c++) if (rim[c] && fat[c] < LINE_INK * rim[c] && !(whole && size[c] >= LINE_SMALL * res * res)) { go[c] = 1; mm2 += size[c]; }
   if (!mm2) return { labels, mm2: 0 };
   const out = labels.slice();
   for (let i = 0; i < n; i++) if (cl[i] && go[cl[i]]) out[i] = bg.id;
@@ -518,6 +527,100 @@ function netStitches(net, start, sat) {
   return out;
 }
 
+// Small lettering in a picture (a logo's second line: 3-4 mm capitals with strokes a third of a mm wide; a tester,
+// 2026-11: "I want the lettering to be more clear"). Its rows are found as the page's check finds them (artcheck.js
+// `artShapes`: three or more letter-like pieces on one baseline), on labels where a colour between the fabric's and
+// a darker one counts as the darker (a thin dark stroke's soft edge is learned as a grey of its own when threads are
+// to spare, and half of each letter was grey). In a row under TEXT.small mm tall:
+// - that in-between colour is the letters' colour (one thread a letter, the stroke its full width);
+// - every piece is kept, however little thread it sews (an I is 3.5 mm of line: under the 6 mm a group of lines
+//   needs and the 8 mm a piece only a jump reaches needs; UNIVERSITY lost its two I's and its T);
+// - the needle jumps from letter to letter where the move would cross fabric (a sewn move of up to 2 mm joined S to
+//   C to H at whatever height the last stroke ended: the word read as one scribble). The machine leaves a jump that
+//   short uncut, so each is a thread to snip, as between the Design tab's print letters, and is counted.
+// Returns { labels (a copy when anything changed), px: 1 on every pixel of such a row, rows }.
+const TEXT = { small: 6, least: 2, pad: 0.4, word: 3, flat: 0.55 };
+function smallText(labels, w, h, colors, used, res) {
+  const fab = colors.find((c) => c.background), none = { labels, px: null, rows: 0 };
+  if (!fab || !used.length) return none;
+  const lab = (c) => srgbToLab(...hexToRgb(c.picture || c.hex)), e = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]), F = lab(fab);
+  // each sewn colour's darker end: the sewn colour furthest from the fabric that it lies between the fabric and
+  const to = new Map();
+  for (const q of used) {
+    if (q.inside) continue;   // (the fabric's colour closed in by the design is no one's soft edge)
+    let best = null, bd = e(F, lab(q));
+    for (const c of used) if (c !== q && e(F, lab(c)) > bd && e(F, lab(q)) + e(lab(q), lab(c)) <= 1.25 * e(F, lab(c))) { best = c; bd = e(F, lab(c)); }
+    if (best) to.set(q.id, best.id);
+  }
+  const L = to.size ? labels.map((v) => (to.has(v) ? to.get(v) : v)) : labels;
+  const rows = artShapes({ w, h, labels: L, colors }, res).rows.filter((r) => r.mm < TEXT.small && r.mm >= TEXT.least);   // (under 2 mm: flecks along a bold word's edge, on one line as letters are)
+  if (!rows.length) return none;
+  // (a word a space away is the row's too: a piece of the colour as tall as the letters, level with them, within
+  // TEXT.word heights of the row's end. "OF" after "UNIVERSITY" was not in its row, and its F stayed half grey)
+  for (const col of new Set(rows.map((r) => r.col))) {
+    const m = { w, h, data: new Uint8Array(w * h) };
+    for (let i = 0; i < w * h; i++) if (L[i] === col) m.data[i] = 1;
+    const { labels: cl, count } = label(m), x0 = new Int32Array(count + 1).fill(w), x1 = new Int32Array(count + 1).fill(-1), y0 = new Int32Array(count + 1).fill(h), y1 = new Int32Array(count + 1).fill(-1);
+    for (let i = 0; i < w * h; i++) { const c = cl[i]; if (!c) continue; const x = i % w, y = (i - x) / w; if (x < x0[c]) x0[c] = x; if (x > x1[c]) x1[c] = x; if (y < y0[c]) y0[c] = y; if (y > y1[c]) y1[c] = y; }
+    for (const r of rows) if (r.col === col) for (let more = true; more;) {
+      more = false;
+      const H = r.box[3] - r.box[1] + 1;
+      for (let c = 1; c <= count; c++) {
+        if (x0[c] >= r.box[0] && x1[c] <= r.box[2]) continue;
+        const gap = Math.max(r.box[0] - x1[c], x0[c] - r.box[2]);
+        if (gap > TEXT.word * H || y0[c] < r.box[1] - 0.2 * H || y1[c] > r.box[3] + 0.2 * H || y1[c] - y0[c] + 1 < 0.5 * H || x1[c] - x0[c] + 1 > 1.6 * H) continue;
+        r.box[0] = Math.min(r.box[0], x0[c]); r.box[2] = Math.max(r.box[2], x1[c]); more = true;
+      }
+    }
+  }
+  // Letters apart, each whole. Their cores (the letters' colour a pixel inside its edge; a piece too thin to have one
+  // is its own core, and so is a stroke that is all soft edge: a piece of the in-between colour, as tall as half
+  // the row, touching no letter) grow back out through the colour and then up to 3 px into the in-between colour,
+  // all at once; where two meet, and wherever the in-between colour is left over, is fabric. So a neck a pixel or
+  // two wide between two letters is cut (round letters 0.2 mm apart touch once drawn at 8 px a mm: SCHOOL was one
+  // piece and its centre line ran from letter to letter), and a soft edge never bridges two. By the row's box alone
+  // the soft top edge of a red word under a black row turned black.
+  const px = new Int16Array(w * h), out = labels.slice(), pad = Math.round(TEXT.pad * res), id = new Int32Array(w * h), n = w * h;
+  for (const r of rows) {
+    // (a pixel above and below, no more: the dark top edge of the next line's bold word was sewn as ticks)
+    const X0 = Math.max(0, r.box[0] - pad), X1 = Math.min(w - 1, r.box[2] + pad), Y0 = Math.max(0, r.box[1] - 1), Y1 = Math.min(h - 1, r.box[3] + 1), H = r.box[3] - r.box[1] + 1;
+    const each = (f) => { for (let y = Y0; y <= Y1; y++) for (let x = X0; x <= X1; x++) f(y * w + x, x, y); };
+    const around = (i, f) => { const x = i % w; for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) { const X = x + dx, j = i + dy * w + dx; if ((dx || dy) && X >= 0 && X < w && j >= 0 && j < n) f(j); } };
+    const ink = (i) => labels[i] === r.col, soft = (i) => to.get(labels[i]) === r.col;
+    each((i) => { px[i] = r.col + 1; id[i] = 0; });
+    let ids = 0;
+    // 8-connected pieces of `ok` pixels in the box, each { all, y0, y1, touches (an ink pixel beside it) }
+    const pieces = (ok) => {
+      const seen = new Set(), found = [];
+      each((s) => {
+        if (seen.has(s) || !ok(s)) return;
+        const p = { all: [s], y0: h, y1: -1, touches: false }, st = [s]; seen.add(s);
+        while (st.length) { const i = st.pop(), y = Math.floor(i / w); if (y < p.y0) p.y0 = y; if (y > p.y1) p.y1 = y; around(i, (j) => { if (ink(j)) p.touches = true; if (!seen.has(j) && ok(j) && j % w >= X0 && j % w <= X1 && Math.floor(j / w) >= Y0 && Math.floor(j / w) <= Y1) { seen.add(j); st.push(j); p.all.push(j); } }); }
+        found.push(p);
+      });
+      return found;
+    };
+    const core = (i) => { if (!ink(i)) return false; let all = true; around(i, (j) => { if (!ink(j)) all = false; }); return all; };
+    let front = [];
+    for (const p of pieces(core)) { ids++; for (const i of p.all) { id[i] = ids; front.push(i); } }
+    for (const p of pieces(ink)) if (!p.all.some((i) => id[i])) { ids++; for (const i of p.all) { id[i] = ids; front.push(i); } }
+    for (const p of pieces(soft)) if (!p.touches && p.y0 >= r.box[1] - 1 && p.y1 <= r.box[3] + 1 && p.y1 - p.y0 + 1 >= 0.5 * H) { ids++; for (const i of p.all) { id[i] = ids; out[i] = r.col; front.push(i); } }
+    const depth = new Uint8Array(n);
+    while (front.length) {
+      const next = [], set = [];
+      for (const i of front) if (id[i] > 0) around(i, (j) => {
+        if (id[j] || px[j] !== r.col + 1 || !(ink(j) || (soft(j) && depth[i] < 3))) return;
+        let k = 0, two = false; around(j, (q) => { if (id[q] > 0) { if (!k) k = id[q]; else if (id[q] !== k) two = true; } });
+        set.push([j, two ? -1 : k, soft(j) ? depth[i] + 1 : depth[i]]);
+      });
+      for (const [j, k, dp] of set) if (!id[j]) { id[j] = k; depth[j] = dp; if (k > 0) next.push(j); }
+      front = next;
+    }
+    each((i) => { if (ink(i) || soft(i)) out[i] = id[i] > 0 ? r.col : fab.id; });
+  }
+  return { labels: out, px, rows: rows.length };
+}
+
 function build(img, analysis, opts) {
   const o = { ...DEFAULTS, ...opts };
   const { w, h, colors } = analysis;
@@ -529,7 +632,12 @@ function build(img, analysis, opts) {
   const faint = faintKept(img, analysis.labels, w, h, colors, used0, o.res);
   const paper = o.inside === "all" ? { labels: faint.labels, mm2: 0 } : lineInside(faint.labels, w, h, colors, o.res);
   const clean = o.shapes === false ? { labels: paper.labels } : cleanShapes(paper.labels, w, h, colors, o.res, { img, keep: o.details === "all" ? "all" : "" });
-  const { labels, folded } = foldFlecks(clean.labels, w, h, colors, used0, o.res);
+  const flecked = foldFlecks(clean.labels, w, h, colors, used0, o.res), folded = flecked.folded;
+  // (small lettering: one thread a letter, every letter kept, no sewn moves between letters)
+  // (not in a picture shaded like a photo, `TEXT.flat`: a photographed title's strokes are grain, and etsy_8's two
+  // lines of 3 mm script cost 45 trims and 28 loose threads to read no better)
+  const lettered = o.lettering === false || (analysis.flat != null && analysis.flat < TEXT.flat) ? { labels: flecked.labels, px: null, rows: 0 } : smallText(flecked.labels, w, h, colors, used0, o.res), labels = lettered.labels;
+  const inText = ([x, y]) => { if (!lettered.px) return false; const X = Math.round(x * o.res + w / 2), Y = Math.round(y * o.res + h / 2); return X >= 0 && Y >= 0 && X < w && Y < h && lettered.px[Y * w + X] > 0; };
   // (soft gradients sewn as blends of two threads, core/shade.js: `of` says where a colour sews, `rows` its rows there)
   const sh = shading(img, labels, colors, used0, o.res, o);
   const res = o.res;
@@ -670,7 +778,10 @@ function build(img, analysis, opts) {
     let anyThin = false;
     for (let i = 0; i < w * h; i++) {
       if (!cl[i]) continue;
-      if (line(cl[i]) && between.has(cl[i]) && edgeOf(i, between.get(cl[i]))) { cl[i] = 0; mask.data[i] = 0; }
+      // (small lettering is sewn along its strokes' centres, whatever their width: as rows a millimetre long each
+      // letter was a ragged block. Not its dots: an i's dot is a dot, kept and filled as before)
+      if (lettered.px && lettered.px[i] === col.id + 1 && !dot(cl[i])) { thin.data[i] = 1; anyThin = true; cl[i] = 0; mask.data[i] = 0; }
+      else if (line(cl[i]) && between.has(cl[i]) && edgeOf(i, between.get(cl[i]))) { cl[i] = 0; mask.data[i] = 0; }
       else if (line(cl[i])) { thin.data[i] = 1; anyThin = true; cl[i] = 0; mask.data[i] = 0; }
       else if (speck(cl[i])) { cl[i] = 0; mask.data[i] = 0; }
     }
@@ -818,7 +929,8 @@ function build(img, analysis, opts) {
       // each line out as a triple run (it shows like a thin outline) and back, so a connected line has no jumps.
       // A line out and back is four passes: it shows about as well as a thin outline drawn in the picture.
       const thick = { w, h, data: thin.data.slice() };
-      for (let i = 0; i < w * h; i++) if (thin.data[i]) { const x = i % w; if (x < w - 1) thick.data[i + 1] = 1; if (i + w < w * h) thick.data[i + w] = 1; }
+      // (not small lettering: a pixel thicker, letters a pixel or two apart joined)
+      for (let i = 0; i < w * h; i++) if (thin.data[i] && !(lettered.px && lettered.px[i])) { const x = i % w; if (x < w - 1) thick.data[i + 1] = 1; if (i + w < w * h) thick.data[i + w] = 1; }
       const walks = order(skeletonEdges(thick, 2, { spur: 1 })).map((seq) => {
         const mm = seq.map(([p, kind]) => [toMm(p), kind]);
         return { mm, len: mm.reduce((a, [p, kind]) => a + (kind === "run" ? arclen(p).at(-1) : 0), 0) };
@@ -852,15 +964,16 @@ function build(img, analysis, opts) {
       walks.forEach((t, i) => { const r = find(i), e = ext.get(r) || [Infinity, Infinity, -Infinity, -Infinity]; for (const [p] of t.mm) for (const [x, y] of p) { e[0] = Math.min(e[0], x); e[1] = Math.min(e[1], y); e[2] = Math.max(e[2], x); e[3] = Math.max(e[3], y); } ext.set(r, e); });
       const lineLike = (r) => { const e = ext.get(r); return Math.hypot(e[2] - e[0], e[3] - e[1]) >= 0.5 * total.get(r); };
       const sewn = (r) => long.get(r) || (lineLike(r) ? total.get(r) : 0);
-      for (let i = walks.length - 1; i >= 0; i--) if (walks[i].len < 1.5 && (long.get(find(i)) || !lineLike(find(i)))) walks[i].drop = true;
+      for (const t of walks) t.text = t.len >= 1 && inText(t.mm[0][0][0]);
+      for (let i = walks.length - 1; i >= 0; i--) if (walks[i].len < 1.5 && !walks[i].text && (long.get(find(i)) || !lineLike(find(i)))) walks[i].drop = true;
       walks.forEach((t, i) => {
-        if (t.drop || sewn(find(i)) < GROUP) return;
+        if (t.drop || (!t.text && sewn(find(i)) < GROUP)) return;
         fine.hairlines++;
         const paths = t.mm.map(([p, kind]) => {
           const q = followRun(p, 1.5, 0.1, 0.6);
           return kind === "run" && q.length > 1 ? [...q, ...q.slice(0, -1).reverse(), ...q.slice(1)] : q;
         });
-        blocks.push({ centre: paths[0][0], paths, kind: "run", thread: 3 * t.len });
+        blocks.push({ centre: paths[0][0], paths, kind: "run", thread: 3 * t.len, ...(t.text ? { text: true, meant: true } : {}) });
       });
     }
     // the columns, each net a block entered at whichever of its nodes is nearest the needle (`make`)
@@ -1050,6 +1163,9 @@ function build(img, analysis, opts) {
       else {
         const gap = Math.hypot(p[0][0] - d.cur[0], p[0][1] - d.cur[1]);
         if (gap <= 2 && !crosses(d.cur, p[0])) d.path((q = noTiny(p, d.cur)));
+        // (between small letters: a jump, never a stitch or a travel run across the fabric. The router's half-mm
+        // cells take a word's letters, a few tenths apart, for one region, and its way ran straight through the o's)
+        else if (gap > 0.6 && (b.text || inText(d.cur))) { q = jumpTo(b, p); fine.letters = (fine.letters || 0) + 1; }
         else {
           const r = gap <= TRAVEL ? R.route(toPx(d.cur), toPx(p[0]), SEWN, 1.5 * gap + 3) : null;
           if (r && r.sewnMm <= SEWN && r.mm <= 1.5 * gap + 3) d.path([d.cur, ...(q = noTiny([...toMm(R.stitches(r)), ...p], d.cur))]);

@@ -20,6 +20,8 @@ export const FONTS = [
   { family: "NW Italianno", name: "Italianno", note: "like Bickley Script" },
   { family: "NW Quicksand", name: "Quicksand", note: "print", print: true },
   { family: "NW Josefin Sans", name: "Josefin Sans", note: "print", print: true },
+  { family: "NW Poppins", name: "Poppins", note: "print, bold and round", print: true },
+  { family: "NW Zilla Slab", name: "Zilla Slab", note: "print, with serifs", print: true },
 ];
 export const fontOf = (family) => FONTS.find((f) => f.family === family) || FONTS[0];
 // Bold display fonts for appliqué letters (cut from fabric, outlined in satin), not centre-line lettering.

@@ -56,6 +56,12 @@ Reference for this part of Needleworks: the rules, the reason for each (it stops
   hole, then rows across the fill's every 2.5 mm, also 0.4 mm inside. The edge run holds the fabric where the rows
   pull hardest. Its points are the outline's moved along their normals; one that lands under 0.28 mm from the edge
   (a sharp corner, a narrow neck) is left out and the run broken there.
+- **A section joined to the last keeps its first row end** (`routeFill`: within 1 mm the needle sews straight on;
+  the next section's first point is left out only within 0.1 mm of the needle). Until 2026-11 it was left out under
+  0.4 mm, which is every join at 0.35-0.4 mm rows: `sewRows` splits a fill wherever the step along a curved edge
+  leaves the shape, each split began one row on, and that row started at its first needle point inside, about 2 mm
+  from the edge: a bare wedge at the outline (a tester's logos: about 30 on a 95 mm letter, on every curved fill).
+  A join that sews 0.3 mm or less is mended by the caller (`noTiny` in pictures, `untiny` on the Design tab).
 - **Sections in row order, each entered at its first row** (`routeFill(…, inOrder)`). Going to whichever end of the
   first section was nearer sewed it backwards and stranded the rest behind finished rows. Where parts remain, the
   sweep from the far side is tried too and the fewer kept. Each part is a trim.

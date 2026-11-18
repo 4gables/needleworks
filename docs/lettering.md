@@ -132,6 +132,11 @@ Reference for this part of Needleworks: the rules, the reason for each (it stops
   and NFD alike, used by the editor, Download note and names batches. Per-font `min` x-height feeds `minSize` (default
   4 mm). Fonts after Meow Script are free lookalikes of embroiderydesigns.com samples (`note`). Try a font in
   `tests/browser/fonts.html?name=<word>`; reject unjoined or spurred ones (Petit Formal, Comforter, Damion).
+  Poppins SemiBold and Zilla Slab SemiBold (2026-11, a tester: "ZigZag has really good fonts") are the kinds of
+  print face ZigZag's makers pick from their computer's own fonts: a bold round sans (its default is the first of
+  Poppins, Inter, Arial…, bold) and a serif. ZigZag bundles no font; ours are the OFL faces, subset to Latin
+  (U+0020-017F and punctuation) with `pyftsubset`. Tried and left out: Courier Prime Bold (typewriter): its slab
+  feet threw the monogram sizes (lettering_look: V 0.60 of M's height for 0.68, O 1.14 of V's).
 
 ## Own fonts (`js/studio/ownfont.js`)
 - The maker picks a .ttf or .otf from their device (Font list, last entry). It is read in the page and never leaves
