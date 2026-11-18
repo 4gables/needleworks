@@ -297,16 +297,22 @@ Reference for this part of Needleworks: the rules, the reason for each (it stops
     (3 px) or is a whole stroke; what is left of it in the row is fabric.
   - Letters apart: each letter's core (a pixel inside its edge) grows back out, all at once, and where two meet is
     fabric. Round letters 0.2 mm apart touch at 8 px per mm, and SCHOOL's centre line ran through all six.
-  - Sewn along the strokes' centres whatever their width (as fill rows a millimetre long each letter was a ragged
-    block), not thickened the pixel other lines are. Its dots stay dots (an i's dot under 1 mm of line was dropped).
+  - Sewn as satin, never as fill rows (a millimetre long, each letter was a ragged block) and never as one line of
+    thread (v37 sewed each stroke as a triple run; owner, 2026-11: "I don't think the single thread looks so good").
+    Letters under 5 mm (`column`): each stroke's centre line (not thickened the pixel other lines are) out and back
+    as a run, then out as a satin of one width, 0.17 of the letters' height (`narrow`; 0.6-0.9 mm), whatever the
+    stroke's own width. Letters of 5-6 mm: the strokes grown to 0.8 mm (`pen`, never over a fifth of the height) and
+    sewn as satin columns of their own shape, whatever `plain` and `cover` say of them. Tried at 4 mm: columns of the
+    strokes' own width grown to 1.1 mm closed every counter and ran R into P, MEDICINE read MEDKINE; at 0.8 mm the
+    same at 3.3 mm. Its dots stay dots (an i's dot under 1 mm of line was dropped).
   - Every letter kept: an I is 3.5 mm of line, under the 6 mm a group of lines needs and the 8 mm a piece only a jump
     reaches needs (UNIVERSITY lost both I's and its T).
   - A jump between letters, never a stitch or a travel run: sewn moves of up to 2 mm joined letter to letter at
     whatever height the last stroke ended, and the router's half-mm cells took the word for one region and ran
     straight through its o's. The machine leaves jumps that short uncut: threads to snip, as between the Design
     tab's print letters, counted in the file's note.
-  - Left: a stroke the picture draws in one or two pixels can come out short (a Y's arm at 90 mm); each letter ends
-    in its locks, a small knot at 4 mm; lettering under 6 mm is still better typed in Design your own, as the page's
+  - Left: a stroke the picture draws in one or two pixels can come out short (a Y's arm at 90 mm); the satin's edge
+    follows every wobble of a centre line traced from a few pixels (lumpy at 3 mm); lettering under 6 mm is still better typed in Design your own, as the page's
     check says. `opts.lettering: false` sews as before.
 - Stitch types (PX2, `digitize.js` `columnNets`/`netStitches`, numbers in `recipes.js` `COLUMNS`; research I4, after
   Goldman's expired auto-digitizing patents: thick or thin from the distance to the edge along the skeleton, satin
