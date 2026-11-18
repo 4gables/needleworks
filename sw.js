@@ -11,8 +11,8 @@
 // cache.
 // (`SET`: a fingerprint of the list below, written with the hashes. It is part of the cache's name, so a release whose
 // files changed can never install into the cache the running one is serving from, version number bumped or not.)
-const SET = "e84c036126eb";
-const CACHE = `needleworks-v37-${SET}`, SHARED = "needleworks-shared";
+const SET = "d0a8bceb6dfe";
+const CACHE = `needleworks-v38-${SET}`, SHARED = "needleworks-shared";
 const FILES = {
   "index.html": "ce483d1692e8eb37d3323ba5a5afee9e057b9d2085627320b3e4e6eeca32a03a",
   "manifest.webmanifest": "82f627e1def5254866cf364a55a1c2a85e2c3dd61abeeb890829362969fcfb63",
@@ -46,7 +46,7 @@ const FILES = {
   "js/core/brandcharts.js": "85f4772a2de19ab56691d984a8aad930b2c427cd34498c70f66933c6f09199be",
   "js/core/brands.js": "cb0a36b5fe3128de55654bdd350bdc86508f11fb089eb822bd73b7a26eba1c59",
   "js/core/design.js": "524343b1e64430e00794de16ca112806f34725c49e18755d2bf02416ef276fbb",
-  "js/core/digitize.js": "6f95a40bd7d125eab1c9d619762a43f89743fcfa43f27440ddada03f3308a90a",
+  "js/core/digitize.js": "a7ac20d6ec54de0001d30cee2ac7ee8f7888575e6dba1ee3190493b68869871c",
   "js/core/fonts.js": "eff92c64949a5983d3d2ae4804ff6cbf7ca1a6547998767f276c8d07b9cd26f9",
   "js/core/glyphs.js": "1aa94c2a28d8343fa6837d8f0591e325a9128063bfce81d968bf592feda6cbf3",
   "js/core/formats.js": "6c635b29d843e7eb112ad773f92f79b26ea0ad17769889104b271faa2915b76e",
