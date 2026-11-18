@@ -636,7 +636,8 @@ function build(img, analysis, opts) {
   // (small lettering: one thread a letter, every letter kept, no sewn moves between letters)
   // (not in a picture shaded like a photo, `TEXT.flat`: a photographed title's strokes are grain, and etsy_8's two
   // lines of 3 mm script cost 45 trims and 28 loose threads to read no better)
-  const lettered = o.lettering === false || (analysis.flat != null && analysis.flat < TEXT.flat) ? { labels: flecked.labels, px: null, rows: 0 } : smallText(flecked.labels, w, h, colors, used0, o.res), labels = lettered.labels;
+  // (nor where that can't be told: a picture sewn without its scale, as the batch page's are)
+  const lettered = o.lettering === false || !(analysis.flat >= TEXT.flat) ? { labels: flecked.labels, px: null, rows: 0 } : smallText(flecked.labels, w, h, colors, used0, o.res), labels = lettered.labels;
   const inText = ([x, y]) => { if (!lettered.px) return false; const X = Math.round(x * o.res + w / 2), Y = Math.round(y * o.res + h / 2); return X >= 0 && Y >= 0 && X < w && Y < h && lettered.px[Y * w + X] > 0; };
   // (soft gradients sewn as blends of two threads, core/shade.js: `of` says where a colour sews, `rows` its rows there)
   const sh = shading(img, labels, colors, used0, o.res, o);

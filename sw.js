@@ -11,7 +11,7 @@
 // cache.
 // (`SET`: a fingerprint of the list below, written with the hashes. It is part of the cache's name, so a release whose
 // files changed can never install into the cache the running one is serving from, version number bumped or not.)
-const SET = "ccd68b5a71c1";
+const SET = "e84c036126eb";
 const CACHE = `needleworks-v37-${SET}`, SHARED = "needleworks-shared";
 const FILES = {
   "index.html": "ce483d1692e8eb37d3323ba5a5afee9e057b9d2085627320b3e4e6eeca32a03a",
@@ -46,7 +46,7 @@ const FILES = {
   "js/core/brandcharts.js": "85f4772a2de19ab56691d984a8aad930b2c427cd34498c70f66933c6f09199be",
   "js/core/brands.js": "cb0a36b5fe3128de55654bdd350bdc86508f11fb089eb822bd73b7a26eba1c59",
   "js/core/design.js": "524343b1e64430e00794de16ca112806f34725c49e18755d2bf02416ef276fbb",
-  "js/core/digitize.js": "59565a3b1666a8cc3e353994ab6c44806fb8c8cc174491302d2f896ccc09a2f1",
+  "js/core/digitize.js": "6f95a40bd7d125eab1c9d619762a43f89743fcfa43f27440ddada03f3308a90a",
   "js/core/fonts.js": "eff92c64949a5983d3d2ae4804ff6cbf7ca1a6547998767f276c8d07b9cd26f9",
   "js/core/glyphs.js": "1aa94c2a28d8343fa6837d8f0591e325a9128063bfce81d968bf592feda6cbf3",
   "js/core/formats.js": "6c635b29d843e7eb112ad773f92f79b26ea0ad17769889104b271faa2915b76e",
@@ -57,7 +57,7 @@ const FILES = {
   "js/core/fill.js": "f7b2dc0ab451ad43038d0fb615a1985ff2b5ad87708955da1532927b283831f3",
   "js/core/machines.js": "afd9fe6fc812a0b03d903fc54a374b3246ac27539c9cff7d5ea546ed9e81c135",
   "js/core/artcheck.js": "4f7ecbcdb825c2b83930802b6d84d603f4d60d79a0cb022a3ce75b59acb9bb9a",
-  "js/core/palette.js": "35ba45bbe0ca556fcced703b38ef0a38abcd172c45404e20bb25a59adb7401ea",
+  "js/core/palette.js": "f03b690bbc353e63f16e8df61cb56eb12c170c9c1ba62589fa3b761ee61d0538",
   "js/core/recipes.js": "6615acc6173a094219c1f1a55d7546783689141bc4c2289b22017bf84397c53f",
   "js/core/raster.js": "b7f39ab3343d79066522fa5a4ef65bd4719e06fdb165c67f6b9dae88042ab93d",
   "js/core/regions.js": "4e24ba2c2d89c91a51bf3952db56ff4346d73783921a877911b97e1d45ad5813",
