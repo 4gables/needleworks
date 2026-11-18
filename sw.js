@@ -11,12 +11,12 @@
 // cache.
 // (`SET`: a fingerprint of the list below, written with the hashes. It is part of the cache's name, so a release whose
 // files changed can never install into the cache the running one is serving from, version number bumped or not.)
-const SET = "938ea4fd07f7";
-const CACHE = `needleworks-v36-${SET}`, SHARED = "needleworks-shared";
+const SET = "e84c036126eb";
+const CACHE = `needleworks-v37-${SET}`, SHARED = "needleworks-shared";
 const FILES = {
   "index.html": "ce483d1692e8eb37d3323ba5a5afee9e057b9d2085627320b3e4e6eeca32a03a",
   "manifest.webmanifest": "82f627e1def5254866cf364a55a1c2a85e2c3dd61abeeb890829362969fcfb63",
-  "css/app.css": "4dc644a0e4bb2ede40dc6e0efe659306b0c466d38a2f79ec71ca98518fc1d205",
+  "css/app.css": "57be72c34a404b2c9b8ffa88297878db99298f33ad99771b28e2fde76f977234",
   "assets/icon-192.png": "19ae131e0ea47270a4cd0eefdac045f1811f7b3b25966a08d27e3c94b3262c76",
   "assets/icon-512.png": "343d901ae82aef47b3c8313c36ad8c6c79609e8aa60d96ea983336fd170e863a",
   "assets/sample-flower.png": "ecacd191496defa4bd71af6d3570c7b67c30714002eaf1749f1a9d7eb2a52d00",
@@ -34,28 +34,30 @@ const FILES = {
   "fonts/MeowScript-Regular.woff2": "6474877a65e2abfb9ccb2d340f4b18388a40757a601f7e08b535d767973986db",
   "fonts/MsMadi-Regular.woff2": "2c1e1005cc16e15249f5c57946444544e070887074fd0c47445e543569539e00",
   "fonts/Parisienne-Regular.woff2": "bee4e3a50b562be2ff9d3fd3479046176b95022adf083a1ad0261f029a1736d6",
+  "fonts/Poppins-SemiBold.woff2": "53748661c28ed6adb3bc673ac2ad1351a3943c1b153dea3e6c97b00f1cf83518",
   "fonts/Quicksand-SemiBold.woff2": "e1aae18db74960291963ac48c289937d16a6d738a33ed9e60bd238d7d93e2be4",
   "fonts/RougeScript-Regular.woff2": "a1f1bd5aec6038a803a13b0e6e57c057786400df7e6aa49392677185962d8a31",
   "fonts/Sacramento-Regular.woff2": "299d61f6171d04bf3ffc19f45cf015ca50301d34df5425b5643cfe86c5742029",
   "fonts/Satisfy-Regular.woff2": "693c536670f722fc975f38664c4b87315e5b3b784e01200fe309ecaed9c090e3",
   "fonts/Yellowtail-Regular.woff2": "4be14e2b33416b292c558bbb36b6ca50ee7a44dab395fd475a7d45830c99b6f8",
+  "fonts/ZillaSlab-SemiBold.woff2": "b7e8f316b83ba8889baf7a9993fb5805c845a04d985a08b3df483efddf9a99aa",
   "js/app.js": "fd85d3cc23c7e90840a2fe013dfa66a7c2f011f07069cf497af1b817f65314f7",
   "js/words.js": "32351ae8626fa69c73fbb07762152d451d8c812b98a9172210705a9fa2fc6ac4",
   "js/core/brandcharts.js": "85f4772a2de19ab56691d984a8aad930b2c427cd34498c70f66933c6f09199be",
   "js/core/brands.js": "cb0a36b5fe3128de55654bdd350bdc86508f11fb089eb822bd73b7a26eba1c59",
   "js/core/design.js": "524343b1e64430e00794de16ca112806f34725c49e18755d2bf02416ef276fbb",
-  "js/core/digitize.js": "c38d348671da966bd444d3a603a4d735d8b1fbf7c86e7f229fdcf420d75a6a43",
-  "js/core/fonts.js": "17f00207b7a5ae85ec8ae5059a1a7122a0ab059cd27a70f27e607db74790e5ce",
-  "js/core/glyphs.js": "5923a80f5f9c7d8be7e271af557783d7b3ee46c00bf0c4185f8840f344e99433",
+  "js/core/digitize.js": "6f95a40bd7d125eab1c9d619762a43f89743fcfa43f27440ddada03f3308a90a",
+  "js/core/fonts.js": "eff92c64949a5983d3d2ae4804ff6cbf7ca1a6547998767f276c8d07b9cd26f9",
+  "js/core/glyphs.js": "1aa94c2a28d8343fa6837d8f0591e325a9128063bfce81d968bf592feda6cbf3",
   "js/core/formats.js": "6c635b29d843e7eb112ad773f92f79b26ea0ad17769889104b271faa2915b76e",
   "js/core/formats-out.js": "6c340ec9036e5a7efc78ced8b6a7e3d9af9dd8e8773d230c8120302da33e333c",
   "js/core/geom.js": "63e2280fc822305b2b65dc8822f567108e9df2ebdeb18a0f40b5ea9be929ef0a",
   "js/core/colour.js": "ceb89ab0511bd2c9673945b2c90f71565ffd0a934bc5b299dab1279fc9758da2",
   "js/core/density.js": "fc507b2818e7cdb700d52d88ac328a784b89ddac6f609fcc469b95c4805a237e",
-  "js/core/fill.js": "6d35487bd93bfd15264960fd8d0cb660509fac03666d40a3a8a574a7253505e8",
+  "js/core/fill.js": "f7b2dc0ab451ad43038d0fb615a1985ff2b5ad87708955da1532927b283831f3",
   "js/core/machines.js": "afd9fe6fc812a0b03d903fc54a374b3246ac27539c9cff7d5ea546ed9e81c135",
-  "js/core/artcheck.js": "865411d345f32f805987419fef7147dbeefc48922c3bb23c2b8398d61678a68b",
-  "js/core/palette.js": "6eb13c38bde5bff34a22854ab8e70c9d9745cd18bfc7fc38cb9e85927ba04853",
+  "js/core/artcheck.js": "4f7ecbcdb825c2b83930802b6d84d603f4d60d79a0cb022a3ce75b59acb9bb9a",
+  "js/core/palette.js": "f03b690bbc353e63f16e8df61cb56eb12c170c9c1ba62589fa3b761ee61d0538",
   "js/core/recipes.js": "6615acc6173a094219c1f1a55d7546783689141bc4c2289b22017bf84397c53f",
   "js/core/raster.js": "b7f39ab3343d79066522fa5a4ef65bd4719e06fdb165c67f6b9dae88042ab93d",
   "js/core/regions.js": "4e24ba2c2d89c91a51bf3952db56ff4346d73783921a877911b97e1d45ad5813",

@@ -800,7 +800,7 @@ export function labelWith(img, model, crop = [0, 0, 1, 1], { inside = "auto", re
   const area = new Array(G).fill(0);
   for (let i = 0; i < n; i++) if (labels[i] >= 0) area[labels[i]]++;
   const colors = model.colors.map((c) => ({ ...c, area: area[c.id] }));
-  return { w, h, labels, colors, merged: model.merged, frame: !!model.frame, empty: model.empty, lost: model.lost || 0, closed: closed / n };
+  return { w, h, labels, colors, merged: model.merged, frame: !!model.frame, empty: model.empty, lost: model.lost || 0, closed: closed / n, flat: model.scale ? model.flat : null };   // (how flat the picture is, where it could be judged: the scale known)
 }
 // The lines in the picture too thin to keep: a pixel or two wide, unlike the fabric (ΔE over 20) yet read as fabric, 2 px
 // clear of anything sewn (not the blend round a shape's edge). A logo's 1 px grey rule vanished without a word.

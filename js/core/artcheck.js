@@ -238,6 +238,8 @@ export function artShapes(a, res, crop = [0, 0, 1, 1], skip = []) {
     small: { n: small.length, spots: small.sort((p, q) => q.area - p.area).slice(0, SPOTS).map((p) => spot(p.x0, p.y0, p.x1, p.y1)), need: need(across, ART.detail) },
     // (need: the thinnest quarter of them reaching ART.line; a line's width is the mean of its ridge)
     thin: { n: thin.length, spots: thin.slice(0, SPOTS).map((t) => spot(rx0[t.c], ry0[t.c], rx1[t.c], ry1[t.c])), need: need(thinW, ART.line) },
+    // (the rows themselves, working px: digitize.js sews small lettering by them, `smallText`)
+    rows: text.map((t) => ({ mm: t.mm, col: t.col, box: t.box.slice() })),
     text: { n: text.length, mm: text.length ? +text[0].mm.toFixed(1) : 0, small: text.filter((t) => t.mm < ART.text).length,
       spots: text.filter((t) => t.mm < ART.text).slice(0, SPOTS).map((t) => spot(...t.box)), need: text.length && text[0].mm < ART.text ? +(ART.text / text[0].mm).toFixed(3) : 0 },
   };

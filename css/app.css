@@ -36,6 +36,8 @@
 @font-face { font-family: "NW Italianno"; src: url("../fonts/Italianno-Regular.woff2") format("woff2"); font-display: block; }
 @font-face { font-family: "NW Quicksand"; src: url("../fonts/Quicksand-SemiBold.woff2") format("woff2"); font-display: block; }
 @font-face { font-family: "NW Josefin Sans"; src: url("../fonts/JosefinSans-SemiBold.woff2") format("woff2"); font-display: block; }
+@font-face { font-family: "NW Poppins"; src: url("../fonts/Poppins-SemiBold.woff2") format("woff2"); font-display: block; }
+@font-face { font-family: "NW Zilla Slab"; src: url("../fonts/ZillaSlab-SemiBold.woff2") format("woff2"); font-display: block; }
 
 :root {
   --bg: #fcfbfa;
