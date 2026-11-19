@@ -414,11 +414,15 @@ bunched at each inner corner of a K. Then: open the site to other people without
 - [x] **S6-A2 Choose what is sewn**: a tap leaves a sewn part of a picture empty or sews the fabric's colour
   (pictures.md `applyAreas`). A see-through picture is sewn exactly as cut out already.
 - [x] **S6-A3 Mitred corners**: a picture outline's sharp corner as two straight legs (stitch-model.md "Satin").
-- [ ] **S6-A4 Sewn proof**: the owner sews the cougar and the K again; a ladder of squares at 0.4 / 0.3 / 0.25 /
-  0.2 mm if the cover is still in question.
-- [ ] **S6-A5 Picture clean-up tools** (erase, merge two colours, crop): scoped from what testers get stuck on.
-- [ ] Not looked at: the Design tab's satin borders and lettering at sharp corners (`satin`'s `mitre` is on for
-  pictures only); the taps of S6-A2 are not kept over a reload.
+- [ ] **S6-A4 Sewn proof**: the owner sews the cougar and the K again (v39 or later), and the ladder
+  (`node tests/ladder.mjs OUT.pes`: four 22 mm squares at rows 0.4 / 0.3 / 0.25 / 0.2 mm, a line above the 0.4 one)
+  if the cover is still in question.
+- [x] **S6-A5 Picture clean-up tools** (v40): Rub out and Join two colours in "Choose what is sewn", Crop beside
+  Rotate; the dialog's changes are kept with the last picture over a reload (pictures.md).
+- [x] **Corners elsewhere** (v40): the mitre's point is cut short at corners sharper than square; lettering and the
+  Design tab's borders were measured and keep their fan (stitch-model.md "Satin corners").
+- [x] **What v39 cost**, measured: the look score's fall is the pull alone, the trims' rise is fills with holes
+  (stitch-model.md "Cover"); `look.json` re-saved.
 
 **The paid version (plan; nothing built).** Until its cutover the present site stays live from the public repo and
 gets every fix. One codebase, two builds: the UI calls one async `js/engine.js`; `engine-local.js` is today's app

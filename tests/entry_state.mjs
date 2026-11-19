@@ -13,7 +13,7 @@
 // (round 14) Recent designs: every entry point that replaces the dirty design lists it under Recent designs (a fresh
 // profile's untouched starter isn't); after a reload it opens again as it was, byte for byte in its PES, and the
 // design it replaced goes into the list. The Picture tab's own picture and its settings come back after a reload
-// (IndexedDB), the same file; and with storage refused (private mode) both tabs still work.
+// (IndexedDB), the same file, with a part tapped empty still empty; and with storage refused (private mode) both tabs still work.
 // usage: node tests/cdp.mjs PORT start DIR; serve the site (tests/batch_server.py out/batch HTTP); then
 //        node tests/entry_state.mjs PORT http://127.0.0.1:HTTP      (~3 min; prints DONE <checks> <problems>)
 const [port, base] = process.argv.slice(2);
@@ -126,18 +126,23 @@ for (const [name, go, carries = []] of ENTRIES) {
 // the Picture tab's picture and settings after a reload
 const pic = async () => run(`location.hash = "#picture"; await __e.wait(() => document.body.dataset.mode === "picture" && !document.getElementById("pic-use").hidden && !document.getElementById("download").disabled, 60000);
   await __e.settle(1500); await __e.wait(() => !document.getElementById("download").disabled, 60000); const v = nwTest.view();
-  return { drop: document.querySelector("#pic-drop .drop-text").textContent, colors: document.getElementById("pic-colors").value, style: document.querySelector("#pic-style [aria-pressed=true]")?.dataset.s, bytes: __e.state().bytes, file: v?.filename };`);
+  return { drop: document.querySelector("#pic-drop .drop-text").textContent, colors: document.getElementById("pic-colors").value, style: document.querySelector("#pic-style [aria-pressed=true]")?.dataset.s, bytes: __e.state().bytes, file: v?.filename, areas: document.getElementById("pic-areas-said").textContent };`);
 {
   await fresh();
   await pic();
   await run(`__e.put("#pic-file", new Uint8Array(await (await fetch("assets/sample-flower.png")).arrayBuffer()), "my rose.png", "image/png"); await new Promise((r) => setTimeout(r, 1500));
     document.querySelector('#pic-style [data-s="cross"]').click(); const c = document.getElementById("pic-colors"); c.value = 4; c.dispatchEvent(new Event("input", { bubbles: true })); await new Promise((r) => setTimeout(r, 800));`);
+  // (a part tapped empty in "Choose what is sewn": kept with the picture, or it came back sewn after a reload)
+  await pic();
+  await run(`document.getElementById("pic-areas").click(); const cv = document.getElementById("areas-canvas"), r = cv.getBoundingClientRect();
+    cv.dispatchEvent(new MouseEvent("click", { bubbles: true, clientX: r.left + r.width / 2, clientY: r.top + r.height / 2 })); document.getElementById("areas-done").click(); await new Promise((r) => setTimeout(r, 800));`);
   const was = await pic();
+  check("Picture: a part tapped in Choose what is sewn is counted", /1 change by you/.test(was.areas), was.areas);
   check("Picture: the picture chosen is in use", /my rose/.test(was.drop) && was.colors === "4" && was.style === "cross", JSON.stringify(was));
   await call("goto", `${base}/?v=p${Date.now()}#design`); await sleep(2500);
   const got = await pic();
   check("Picture: after a reload, the same picture", /Your last picture, my rose\.png/.test(got.drop), got.drop);
-  for (const k of ["colors", "style", "bytes", "file"]) check(`Picture: after a reload, ${k} as it was`, got[k] === was[k], `${got[k]}, was ${was[k]}`);
+  for (const k of ["colors", "style", "bytes", "file", "areas"]) check(`Picture: after a reload, ${k} as it was`, got[k] === was[k], `${got[k]}, was ${was[k]}`);
   // storage refused (private mode, full): the tabs work as before
   await fresh();
   const off = await run(`for (const k of ["setItem", "getItem"]) Storage.prototype[k] = () => { throw new DOMException("no", "SecurityError"); };

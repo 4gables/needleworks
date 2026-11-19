@@ -65,7 +65,7 @@ async function sewPicture(s, wk, isStale = () => false) {
   const learn = p.learn.img;
   const opts = { colors: s.colors, scale: k, removeBackground: s.bg, fillAngle: s.angle, ...(s.follow ? { direction: "auto" } : {}), density: DENSITY[s.density] || DENSITY.standard, details: s.details, shade: s.shade, inside: s.inside, ...(s.smooth == null ? {} : { smooth: s.smooth }), skip: s.skip, ...(s.swap && Object.keys(s.swap).length ? { swap: s.swap } : {}), hoop: s.hoop, turn: s.turn, palette: s.palette, style: s.style, cross: s.cross, line: s.line || undefined, edge: s.edge || undefined };
   // (the areas the person set to sewn or empty, kept as fractions of the whole picture: here of the learned copy)
-  if (s.areas?.length) opts.areas = s.areas.map((a) => ({ x: (a.x * bitmap.width - box.sx) / box.sw, y: (a.y * bitmap.height - box.sy) / box.sh, sew: !!a.sew }));
+  if (s.areas?.length) opts.areas = s.areas.map((a) => toCopy(a, bitmap, box));
   // (kept per colour count: the checks try other counts)
   if (!p.models.has(key)) {
     const pick = wk === picJobs && p.choose, m = await wk.run({ key, learn, opts, pick });
@@ -86,7 +86,7 @@ async function sewPicture(s, wk, isStale = () => false) {
 }
 export async function makePicture() {
   const p = state.pic; if (!p.bitmap) return;
-  if (!p.sample) store.set("pic.last", { style: p.style, colors: p.colors, size: p.size, angle: p.angle, follow: followOf(p), cross: p.cross, bg: p.bg, line: p.line, details: detailsOf(p) });
+  if (!p.sample) store.set("pic.last", { style: p.style, colors: p.colors, size: p.size, angle: p.angle, follow: followOf(p), cross: p.cross, bg: p.bg, line: p.line, details: detailsOf(p), areas: p.part ? [] : p.areas || [] });
   // (nothing from another tab stays on screen, with its Download, while this picture stitches)
   if (state.mode === "picture" && state.view && state.view !== state.views.picture) setView(null);
   const req = ++p.req; busy(true, "Stitching your picture…");
@@ -330,51 +330,104 @@ $("pic-inside").onclick = (e) => {
   state.pic.inside = b.dataset.inside; state.pic.skip = []; state.pic.swap = {}; makePicture();
 };
 // Choose what is sewn, part by part (core/palette.js `applyAreas`): the picture as it will be sewn, each pixel in its
-// thread's colour and bare fabric as a checked pattern. A tap on a sewn part leaves it empty, a tap on the fabric's
-// colour sews it, a tap on a part already changed puts it back. Nothing is stitched until "Sew it this way".
-const AREAS = { seeds: [], m: null };
+// thread's colour and bare fabric as a checked pattern. Three things a tap can do (`tool`): leave a sewn part empty or
+// sew the fabric's colour (a tap on a part already changed puts it back); rub a mark out with a brush; join two
+// colours (every part in the first tapped is sewn in the second's thread). Nothing is stitched until "Sew it this way".
+// (seeds here are fractions of the learned copy, `pic.areas` of the whole picture: `seedMap`)
+const AREAS = { seeds: [], m: null, tool: "tap", r: 0.03, first: null, stroke: null, wait: 0 };
+const HOW = {
+  tap: "Tap a part to leave it empty. Tap an empty part to sew it. Tap it again to put it back. The checked pattern is bare fabric.",
+  rub: "Rub over a mark to take it out: a speck, a shadow, writing you don't want. What you rub is left as bare fabric.",
+  join: "Tap a colour, then the colour to sew it in. Every part in the first colour is sewn in the second.",
+};
+const seedMap = (a, fx, fy, fr) => (a.rub ? { rub: a.rub.map(([x, y]) => [fx(x), fy(y)]), r: a.r * fr } : { x: fx(a.x), y: fy(a.y), ...(a.to ? { to: { x: fx(a.to.x), y: fy(a.to.y) } } : { sew: !!a.sew }) });
+const toCopy = (a, b, box) => seedMap(a, (x) => (x * b.width - box.sx) / box.sw, (y) => (y * b.height - box.sy) / box.sh, b.width / box.sw);
+const toWhole = (a, b, box) => seedMap(a, (x) => (box.sx + x * box.sw) / b.width, (y) => (box.sy + y * box.sh) / b.height, box.sw / b.width);
 const areasModel = () => ({ bg: AREAS.m.bg, inside: AREAS.m.inside });
 const areasNow = (seeds = AREAS.seeds) => { const m = AREAS.m, l = m.labels.slice(); applyAreas(l, m.w, m.h, seeds, m.frac, areasModel()); return l; };
 function areasUI() {
   const p = state.pic, n = (p.areas || []).length;
   $("pic-areas-row").hidden = !p.map || !p.bitmap;
-  $("pic-areas-said").textContent = n ? `(${n} part${n === 1 ? "" : "s"} changed by you)` : "";
+  $("pic-areas-said").textContent = n ? `(${n} change${n === 1 ? "" : "s"} by you)` : "";
 }
 function areasDraw() {
   const m = AREAS.m, c = $("areas-canvas"), l = areasNow(), skip = new Set(state.pic.skip || []), swap = state.pic.swap || {};
-  c.width = m.w; c.height = m.h;
+  if (c.width !== m.w || c.height !== m.h) { c.width = m.w; c.height = m.h; }
   const rgb = new Map(m.colors.map((q) => [q.id, hexToRgb(swap[q.id]?.hex || q.hex)])), img = new ImageData(m.w, m.h), d = img.data, sq = Math.max(4, Math.round(Math.max(m.w, m.h) / 60));
   for (let y = 0, i = 0; y < m.h; y++) for (let x = 0; x < m.w; x++, i++) {
     const L = l[i], sewn = L >= 0 && L !== m.bg && !skip.has(L), k = ((Math.floor(x / sq) + Math.floor(y / sq)) & 1) ? 196 : 250, q = sewn ? rgb.get(L) : [k, k, k + 6];   // (grey enough that white thread isn't taken for it)
     d[i * 4] = q[0]; d[i * 4 + 1] = q[1]; d[i * 4 + 2] = q[2]; d[i * 4 + 3] = 255;
   }
   c.getContext("2d").putImageData(img, 0, 0);
+  $("areas-undo").disabled = !AREAS.seeds.length;
 }
+function areasTool(t) {
+  AREAS.tool = t; AREAS.first = null;
+  for (const b of $("areas-tool").children) b.setAttribute("aria-pressed", String(b.dataset.t === t));
+  $("areas-how").textContent = HOW[t]; $("areas-brush").hidden = t !== "rub"; $("areas-canvas").classList.toggle("draw", t === "rub");
+}
+$("areas-tool").onclick = (e) => { const b = e.target.closest("[data-t]"); if (b) { areasTool(b.dataset.t); $("areas-said").textContent = ""; } };
+$("areas-brush").onclick = (e) => {
+  const b = e.target.closest("[data-r]"); if (!b) return;
+  AREAS.r = +b.dataset.r; for (const q of $("areas-brush").children) q.setAttribute("aria-pressed", String(q === b));
+};
 $("pic-areas").onclick = () => {
   const p = state.pic, m = p.map; if (!m) return;
-  const { box } = m, W = p.bitmap.width, H = p.bitmap.height;
-  AREAS.m = m; AREAS.seeds = (p.areas || []).map((a) => ({ x: (a.x * W - box.sx) / box.sw, y: (a.y * H - box.sy) / box.sh, sew: !!a.sew }));
-  $("areas-said").textContent = ""; areasDraw(); $("areas").showModal();
+  AREAS.m = m; AREAS.seeds = (p.areas || []).map((a) => toCopy(a, p.bitmap, m.box));
+  $("areas-said").textContent = ""; areasTool("tap"); areasDraw(); $("areas").showModal();
 };
+// where on the copy a pointer is: its pixel, and the same place as a fraction of the learned copy
+function areasAt(e) {
+  const m = AREAS.m, r = $("areas-canvas").getBoundingClientRect(), u = ((e.clientX - r.left) / r.width) * m.w, v = ((e.clientY - r.top) / r.height) * m.h;
+  const x = Math.min(m.w - 1, Math.max(0, Math.floor(u))), y = Math.min(m.h - 1, Math.max(0, Math.floor(v)));
+  return { i: y * m.w + x, u, v, fx: m.frac[0] + (u / m.w) * (m.frac[2] - m.frac[0]), fy: m.frac[1] + (v / m.h) * (m.frac[3] - m.frac[1]) };
+}
 $("areas-canvas").onclick = (e) => {
-  const m = AREAS.m, c = e.currentTarget, r = c.getBoundingClientRect();
-  const x = Math.min(m.w - 1, Math.max(0, Math.floor(((e.clientX - r.left) / r.width) * m.w))), y = Math.min(m.h - 1, Math.max(0, Math.floor(((e.clientY - r.top) / r.height) * m.h))), i = y * m.w + x;
-  const cur = areasNow(), said = $("areas-said");
+  if (AREAS.tool === "rub") return;
+  const m = AREAS.m, { i, fx, fy } = areasAt(e), cur = areasNow(), said = $("areas-said"), L = cur[i], seed = { x: fx, y: fy };
+  const sewn = L >= 0 && L !== m.bg && !(state.pic.skip || []).includes(L);
+  if (AREAS.tool === "join") {
+    if (!sewn) { said.textContent = "That is bare fabric. Tap a sewn colour."; return; }
+    if (!AREAS.first) { AREAS.first = { ...seed, L }; said.textContent = "Now tap the colour to sew it in."; return; }
+    if (AREAS.first.L === L) { said.textContent = "That is the same colour. Tap a different one."; return; }
+    AREAS.seeds.push({ x: AREAS.first.x, y: AREAS.first.y, to: seed }); AREAS.first = null;
+    said.textContent = "Joined: both are sewn in one thread now."; areasDraw(); return;
+  }
   // (a part already changed: its own tap is taken back, so it is again what the picture made it)
   for (let k = AREAS.seeds.length - 1; k >= 0; k--) {
     if (areasNow(AREAS.seeds.filter((_, j) => j !== k))[i] === cur[i]) continue;
     AREAS.seeds.splice(k, 1); said.textContent = "Put back as it was."; areasDraw(); return;
   }
-  const L = cur[i], seed = { x: m.frac[0] + ((x + 0.5) / m.w) * (m.frac[2] - m.frac[0]), y: m.frac[1] + ((y + 0.5) / m.h) * (m.frac[3] - m.frac[1]) };
   if (L >= 0 && L !== m.bg) { AREAS.seeds.push({ ...seed, sew: false }); said.textContent = "That part is left empty now."; }
   else if (L >= 0 && m.inside >= 0) { AREAS.seeds.push({ ...seed, sew: true }); said.textContent = "That part is sewn now."; }
   else { said.textContent = "That part is see-through in your picture, so it has no colour to sew."; return; }
   areasDraw();
 };
-$("areas-reset").onclick = () => { AREAS.seeds = []; $("areas-said").textContent = "Every part is as the picture made it."; areasDraw(); };
+// The brush: one stroke is one change (Undo takes the whole stroke back). A point is kept each third of the brush
+// moved, 400 at most; the picture is drawn again once a frame.
+$("areas-canvas").onpointerdown = (e) => {
+  if (AREAS.tool !== "rub" || !AREAS.m) return;
+  const m = AREAS.m, c = e.currentTarget, { u, v, fx, fy } = areasAt(e);
+  e.preventDefault(); try { c.setPointerCapture(e.pointerId); } catch { /* a synthetic pointer */ }
+  AREAS.stroke = { rub: [[fx, fy]], r: (AREAS.r * Math.max(m.w, m.h) * (m.frac[2] - m.frac[0])) / m.w, at: [u, v] };
+  AREAS.seeds.push(AREAS.stroke); $("areas-said").textContent = ""; areasDraw();
+};
+$("areas-canvas").onpointermove = (e) => {
+  const s = AREAS.stroke, m = AREAS.m; if (!s || s.rub.length >= 400) return;
+  const { u, v, fx, fy } = areasAt(e);
+  if (Math.hypot(u - s.at[0], v - s.at[1]) < Math.max(1, (AREAS.r * Math.max(m.w, m.h)) / 3)) return;
+  s.at = [u, v]; s.rub.push([fx, fy]);
+  if (!AREAS.wait) AREAS.wait = requestAnimationFrame(() => { AREAS.wait = 0; areasDraw(); });
+};
+$("areas-canvas").onpointerup = $("areas-canvas").onpointercancel = () => {
+  const s = AREAS.stroke; if (!s) return;
+  AREAS.stroke = null; delete s.at; areasDraw(); $("areas-said").textContent = "Rubbed out. Undo puts it back.";
+};
+$("areas-undo").onclick = () => { if (AREAS.seeds.pop()) { AREAS.first = null; $("areas-said").textContent = "Your last change is taken back."; areasDraw(); } };
+$("areas-reset").onclick = () => { AREAS.seeds = []; AREAS.first = null; $("areas-said").textContent = "Every part is as the picture made it."; areasDraw(); };
 $("areas-done").onclick = () => {
-  const p = state.pic, { box } = AREAS.m, W = p.bitmap.width, H = p.bitmap.height;
-  p.areas = AREAS.seeds.map((a) => ({ x: (box.sx + a.x * box.sw) / W, y: (box.sy + a.y * box.sh) / H, sew: a.sew }));
+  const p = state.pic;
+  p.areas = AREAS.seeds.map((a) => toWhole(a, p.bitmap, AREAS.m.box));
   $("areas").close(); areasUI(); makePicture();
 };
 // Every Brother thread, by hue then light to dark (greys last), for "More colours"
@@ -682,6 +735,14 @@ export async function lastPicture() {
   }
   loadSample();
 }
+// The parts set to sewn or empty on the last visit's picture (S6-A2), checked: they come back with it. (They were lost
+// on a reload: the picture returned with its gap sewn white again.) Kept with the whole picture only, not one part.
+const keptAreas = () => {
+  const a = (store.get("pic.last", {}) || {}).areas, f = (v) => Number.isFinite(v) && v >= -1 && v <= 2, pt = (q) => q && f(q.x) && f(q.y);
+  if (!Array.isArray(a)) return [];
+  return a.filter((q) => q && (Array.isArray(q.rub) ? q.rub.length <= 400 && f(q.r) && q.rub.every((v) => Array.isArray(v) && f(v[0]) && f(v[1])) : pt(q) && (!q.to || pt(q.to)))).slice(0, 200)
+    .map((q) => (q.rub ? { rub: q.rub.map((v) => [v[0], v[1]]), r: q.r } : q.to ? { x: q.x, y: q.y, to: { x: q.to.x, y: q.to.y } } : { x: q.x, y: q.y, sew: !!q.sew }));
+};
 // (`again`: the kept picture from the last visit, not kept again)
 export async function loadPicture(file, sample = false, again = false) {
   if (file && /\.(pes|pec|dst)$/i.test(file.name)) { openDesign(file); return; }   // (an embroidery file: open it as one)
@@ -693,9 +754,9 @@ export async function loadPicture(file, sample = false, again = false) {
     // (the Small details choice is about one picture: a new one starts with specks left out, as the panel shows.
     // "Keep" taken for the last picture stayed on for the next with nothing said.)
     if (!again && state.pic.details === "all") { state.pic.details = "most"; detailsUI(); }
-    Object.assign(state.pic, { file, bitmap, sample, box: null, key: state.pic.key + 1, skip: [], swap: {}, areas: [], inside: "auto", smooth: null, edge: false, edgeSeen: false, models: new Map(), autoLine: "", choose: !sample && !again, picked: null });
+    Object.assign(state.pic, { file, bitmap, sample, box: null, key: state.pic.key + 1, skip: [], swap: {}, areas: again ? keptAreas() : [], inside: "auto", smooth: null, edge: false, edgeSeen: false, models: new Map(), autoLine: "", choose: !sample && !again, picked: null });
     Object.assign(state.pic, { whole: bitmap, part: 0, partThumbs: null, found: sample ? null : findParts(bitmap) }); partsUI();
-    setThumb(file); $("pic-rotate").hidden = false;
+    setThumb(file); $("pic-rotate").hidden = $("pic-crop").hidden = false;
     $("pic-drop").querySelector(".drop-text").innerHTML = sample ? "<b>Choose your own picture</b> or drop it here." : `${again ? "Your last picture, " : ""}<b>${escapeHtml(file.name)}</b> · choose another`;
     $("pic-sample-note").hidden = !sample;
     $("pic-settings").hidden = false;
@@ -761,15 +822,65 @@ function markThumb(spots) {
   }
   thumb.src = c.toDataURL(); thumb.alt = "Your picture, with the parts that are left out ringed";
 }
-// a quarter turn clockwise; the turned picture is what gets stitched (and shown in the thumbnail)
-$("pic-rotate").onclick = async () => {
-  // (the whole picture turns, and its parts are found again)
-  const p = state.pic, b = p.whole || p.bitmap; if (!b) return;
-  const c = makeCanvas(b.height, b.width), ctx = c.getContext("2d");
-  ctx.translate(b.height, 0); ctx.rotate(Math.PI / 2); ctx.drawImage(b, 0, 0);
+// The picture replaced by a canvas drawn from it (turned, cropped): the new picture is what gets stitched, shown in the
+// thumbnail and kept for the next visit; its parts are found again and nothing chosen for the old one carries over.
+async function replacePicture(c) {
+  const p = state.pic;
   Object.assign(p, { bitmap: await createImageBitmap(c), box: null, key: p.key + 1, skip: [], swap: {}, areas: [], edge: false, edgeSeen: false, models: new Map() });
   Object.assign(p, { whole: p.bitmap, part: 0, partThumbs: null, found: p.sample ? null : findParts(p.bitmap) }); partsUI();
   const blob = c.convertToBlob ? await c.convertToBlob() : await new Promise((r) => c.toBlob(r));
   setThumb(blob); if (!p.sample) keepPicture(blob, p.file.name.replace(/\.[^.]+$/, ".png"));
   makePicture();
+}
+// a quarter turn clockwise (the whole picture turns)
+$("pic-rotate").onclick = async () => {
+  const p = state.pic, b = p.whole || p.bitmap; if (!b) return;
+  const c = makeCanvas(b.height, b.width), ctx = c.getContext("2d");
+  ctx.translate(b.height, 0); ctx.rotate(Math.PI / 2); ctx.drawImage(b, 0, 0);
+  await replacePicture(c);
+};
+// Crop: drag across the part of the picture to keep. (A screenshot with a logo in one corner, a photo of a page: the
+// rest was sewn too, or took the colours the logo needed.) `box`: the part, in the picture's own pixels.
+const CROP = { b: null, k: 1, box: null, from: null };
+function cropDraw() {
+  const c = $("crop-canvas"), g = c.getContext("2d"), { b, k, box } = CROP;
+  g.drawImage(b, 0, 0, c.width, c.height);
+  if (!box) return;
+  const [x0, y0, x1, y1] = box.map((v) => v * k);
+  g.fillStyle = "rgba(0,0,0,.55)";
+  g.fillRect(0, 0, c.width, y0); g.fillRect(0, y1, c.width, c.height - y1); g.fillRect(0, y0, x0, y1 - y0); g.fillRect(x1, y0, c.width - x1, y1 - y0);
+  g.lineWidth = Math.max(2, c.width / 300); g.strokeStyle = "#fff"; g.strokeRect(x0, y0, x1 - x0, y1 - y0);
+}
+const cropAt = (e) => { const c = $("crop-canvas"), r = c.getBoundingClientRect(), { b } = CROP; return [Math.max(0, Math.min(b.width, ((e.clientX - r.left) / r.width) * b.width)), Math.max(0, Math.min(b.height, ((e.clientY - r.top) / r.height) * b.height))]; };
+$("pic-crop").onclick = () => {
+  const p = state.pic, b = p.whole || p.bitmap; if (!b) return;
+  const c = $("crop-canvas"), k = Math.min(1, 1000 / Math.max(b.width, b.height));
+  c.width = Math.max(1, Math.round(b.width * k)); c.height = Math.max(1, Math.round(b.height * k));
+  Object.assign(CROP, { b, k: c.width / b.width, box: null, from: null });
+  $("crop-done").disabled = true; $("crop-said").textContent = ""; cropDraw(); $("crop").showModal();
+};
+$("crop-canvas").onpointerdown = (e) => {
+  if (!CROP.b) return;
+  e.preventDefault(); try { e.currentTarget.setPointerCapture(e.pointerId); } catch { /* a synthetic pointer */ }
+  CROP.from = cropAt(e); CROP.box = null; $("crop-done").disabled = true; $("crop-said").textContent = ""; cropDraw();
+};
+$("crop-canvas").onpointermove = (e) => {
+  if (!CROP.from) return;
+  const [x, y] = cropAt(e), [fx, fy] = CROP.from;
+  CROP.box = [Math.min(x, fx), Math.min(y, fy), Math.max(x, fx), Math.max(y, fy)].map(Math.round); cropDraw();
+};
+$("crop-canvas").onpointerup = $("crop-canvas").onpointercancel = () => {
+  if (!CROP.from) return;
+  CROP.from = null;
+  const q = CROP.box, ok = q && q[2] - q[0] >= 16 && q[3] - q[1] >= 16;
+  if (!ok) { CROP.box = null; cropDraw(); }
+  $("crop-done").disabled = !ok;
+  $("crop-said").textContent = ok ? `Keeping ${Math.round((100 * (q[2] - q[0]) * (q[3] - q[1])) / (CROP.b.width * CROP.b.height))} % of the picture. Drag again to change it.` : "Too small to sew. Drag across a bigger part.";
+};
+$("crop-done").onclick = async () => {
+  const q = CROP.box, b = CROP.b; if (!q || !b) return;
+  const c = makeCanvas(q[2] - q[0], q[3] - q[1]);
+  c.getContext("2d").drawImage(b, -q[0], -q[1]);
+  $("crop").close(); CROP.b = null;
+  await replacePicture(c);
 };
