@@ -484,6 +484,9 @@ ul.problems { margin: 0; padding-left: 18px; list-style: disc; display: grid; ga
 .names h2 { margin: 0; font-size: 20px; }
 .names textarea { width: 100%; box-sizing: border-box; font: 18px/1.5 var(--body); padding: 10px 12px; border: 1.5px solid var(--line); border-radius: 10px; background: var(--bg); color: var(--ink); resize: vertical; }
 .names .row { display: flex; gap: 10px; justify-content: flex-end; }
+.areas { width: min(720px, 94vw); }
+.areas canvas { display: block; max-width: 100%; max-height: 60vh; margin: 0 auto; border: 1.5px solid var(--line); border-radius: 10px; cursor: pointer; touch-action: manipulation; image-rendering: pixelated; }
+.areas .row { flex-wrap: wrap; }
 .names .warn { color: var(--warn); }
 .spool-chips { display: flex; flex-wrap: wrap; gap: 6px; max-height: 120px; overflow: auto; }
 .spool-chips span { display: inline-flex; align-items: center; gap: 5px; font-size: 13px; border: 1px solid var(--line); border-radius: 999px; padding: 2px 8px 2px 3px; }
