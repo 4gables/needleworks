@@ -270,6 +270,13 @@ const PICS = [
   { name: "white_diamonds", n: 2, cases: [["fill", 100, 2], ["fill", 40, 6]], layers: [
     { role: "ink", col: "#2a7fc1", draw: (c) => { c.fillStyle = "#2a7fc1"; c.beginPath(); [[250, 90], [550, 90], [720, 330], [640, 380], [560, 270], [560, 540], [240, 540], [240, 270], [160, 380], [80, 330]].forEach(([x, y], i) => (i ? c.lineTo(x, y) : c.moveTo(x, y))); c.closePath(); c.fill(); } },
     { role: "ink", col: "#ffffff", draw: (c) => { c.fillStyle = "#ffffff"; for (let y = 0; y < 3; y++) for (let x = 0; x < 3; x++) { const X = 300 + x * 100, Y = 170 + y * 140; c.beginPath(); c.moveTo(X, Y - 62); c.lineTo(X + 42, Y); c.lineTo(X, Y + 62); c.lineTo(X - 42, Y); c.closePath(); c.fill(); } } }] },
+  // Ashley's cougar (2026-11): the page seen through the design (the gap between its back legs) is closed in like the
+  // white that is part of it, and was sewn white. The person taps it empty (`areas`: [x, y, sew] in the picture):
+  // the gap stays bare (a "bg" piece) and the white dot beside it, not tapped, is still sewn.
+  { name: "gap_chosen", n: 2, areas: [[0.4, 0.5, false]], cases: [["fill", 100, 2], ["fill", 60, 6], ["cross", 100, 2]], layers: [
+    { role: "ink", col: "#14274e", draw: (c) => { c.fillStyle = "#14274e"; c.beginPath(); c.roundRect(110, 120, 580, 360, 60); c.fill(); } },
+    { role: "bg", col: "#ffffff", draw: (c) => { c.fillStyle = "#ffffff"; c.beginPath(); c.roundRect(200, 200, 240, 200, 30); c.fill(); } },
+    { role: "ink", col: "#ffffff", draw: (c) => { circle(c, 560, 300, 70); c.fillStyle = "#ffffff"; c.fill(); } }] },
   // Ashley's sheet (2026-11), as a class: several things apart from each other, drawn to look stitched (`stitched`:
   // every inked pixel shaded by a thread-like hatch and grain, so no area is flat), with a shaded grey that is not the
   // white beside it. Unsmoothed, the grey and the white were learned as one colour and a silver cup sewed flat white.
@@ -307,7 +314,7 @@ const PICS = [
 // picture; reported per kind and style with the change from tests/fixtures/look.json. The corpus's own drawings by kind,
 // and the AI-style art of tests/browser/art.js (no drawn regions to check: only the file's checks and the look)
 const KINDS = { logo: "logo_bold_1c logo_regular_2c logo_thin_3c text_dots jpeg_logo lavender_title", drawing: "rules crayon marker pastel_lines doodle_sheet child_drawing ground_line ground_line_inset",
-  shapes: "outline_vs_filled png_clear png_badge tiny_50px huge_6000px one_colour near_identical framed panel very_dark dark_on_black white_inside white_diamonds polka_dots",
+  shapes: "outline_vs_filled png_clear png_badge tiny_50px huge_6000px one_colour near_identical framed panel very_dark dark_on_black white_inside white_diamonds gap_chosen polka_dots",
   gradient: "gradient soft_shadow", photo: "photo_noise jpeg_flower" };
 for (const p of PICS) p.kind = Object.keys(KINDS).find((k) => KINDS[k].split(" ").includes(p.name)) || (p.name.startsWith("stitched_") ? "stitched sheet" : "other");
 for (const a of ART) PICS.push({ ...a, art: true, colours: false, n: 6, layers: [{ role: "art", draw: (c, r) => a.draw(c, r) }],
@@ -420,6 +427,8 @@ async function sew(bitmap, c) {
   const learn = pictureImage(bitmap, box, Math.max(1, Math.round(box.sw * k)), Math.max(1, Math.round(box.sh * k)));
   const hoop = c.turn ? { ...HOOP, w: HOOP.h, h: HOOP.w } : HOOP;
   const opts = { colors: c.colors, scale: k, removeBackground: true, fillAngle: 45, density: DENSITY.standard, skip: [], hoop, turn: !!c.turn, palette: null, style: c.style, cross: c.cross || 2.5, line: undefined, edge: c.edge || undefined, details: Q.get("details") || undefined, shadeDebug: Q.has("shadedebug") || undefined, ...(Q.get("dir") ? { direction: Q.get("dir") } : {}), ...(FORCE === undefined ? {} : { smooth: FORCE }) };   // (?details=all: the Small details choice; the page's own default without)
+  // (the areas a person set to sewn or empty, as the page hands them over: fractions of the learned copy)
+  if (c.areas) opts.areas = c.areas.map(([x, y, sew]) => ({ x: (x * bitmap.width - box.sx) / box.sw, y: (y * bitmap.height - box.sy) / box.sh, sew }));
   const m = await job({ key, learn, opts });
   if (!m.ok) return { error: m.error, code: m.code };
   const r = await sewSized((pl) => job({ key, ref: c.tag.split(`_${c.style}_`)[0], learn, img: pictureImage(bitmap, pl.crop, pl.w, pl.h), crop: pl.frac, opts }),
@@ -654,7 +663,7 @@ async function run(spec) {
   const list = spec.cases || (QUICK ? [["fill", 100, Math.max(1, spec.n)]] : [["fill", 60, Math.max(1, spec.n)], ["fill", 120, 6], ["line", 100, Math.max(1, spec.n)], ["cross", 100, Math.max(1, spec.n)], ...(spec.extra || [])]);
   log(`${spec.name}: ${bitmap.width}x${bitmap.height}, ${reg ? reg.pieces.length : 0} pieces (${Math.round(performance.now() - t0)} ms)`);
   for (const [style, size, colors, turn, edge] of list) {
-    const tag = `pc_${spec.name}_${style}_s${size}_c${colors}${turn ? "_turned" : ""}${edge ? "_edge" : ""}`, c = { tag, style, size, colors, turn, edge }, bad = [];
+    const tag = `pc_${spec.name}_${style}_s${size}_c${colors}${turn ? "_turned" : ""}${edge ? "_edge" : ""}`, c = { tag, style, size, colors, turn, edge, areas: spec.areas }, bad = [];
     const t1 = performance.now();
     let s;
     try { s = await sew(bitmap, c); } catch (e) { s = { error: e.message, code: "throw" }; }

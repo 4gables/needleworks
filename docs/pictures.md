@@ -49,6 +49,15 @@ Reference for this part of Needleworks: the rules, the reason for each (it stops
   1,635 -> 1,554, loose 33 -> 25 (line flower 60 mm 0 -> 2, watercolour flowers 100 mm trims 11 -> 14); every file
   passes pe900_check. Not done: a counter of bold lettering on the fabric (panel s120's D, sewn beige) is the same
   shape as a white star in a red ring, which the owner wants sewn; nothing here tells them apart yet.
+- Choose what is sewn, part by part (`applyAreas`, `pic.areas`; a tester's cougar had the gap between its back legs
+  sewn white, 2026-11): no rule tells page seen through a design from the same colour meant as part of it, and
+  `inside` is all of it or none, so the person taps the part in "Choose what is sewn" (the picture in its thread
+  colours, bare fabric as a checked pattern). A tap on a sewn part leaves it as fabric, a tap on the fabric's colour
+  sews it in the closed-in colour's thread, a tap on a changed part takes its tap back. Each tap is a point
+  ({ x, y, sew }, fractions of the whole picture, so it holds at any Size, colour count and style) applied after
+  every rule of `labelWith`, to the area joined to it by pixel sides. A see-through part has no colour to sew. The
+  taps are forgotten with the picture, and when the background or the edge band choice changes (the picture is cut
+  differently). Guard: picture_corpus `gap_chosen`. Not done: the taps are not kept over a reload.
 - A closed-in part left bare (`spare`) that is a quarter of the picture or more (framed_s100_edge's cream panel at 3
   colours) is said as what to sew it on: "That is most of the design: sew it on cream fabric, or sew it in cream too
   (4 threads)" (picture.js `insideNote`). Keeping it sewn at the count would take a design colour.
