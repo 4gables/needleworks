@@ -211,6 +211,8 @@ with a table per kind and style.
   row's mean is real (the score is deterministic); 2 points down fails the run;
   cases 3+ points down or up are listed as `worse:`/`better:`. The stitch columns beside it (stitches, trims, loose)
   are the price: a better look bought with twice the trims is a choice, not a win.
+- A sewing test for the owner's own fabric (not a check): `node tests/ladder.mjs OUT.pes`, squares of fill at four
+  row spacings.
 - **Re-save** after a round that is meant to move it: `LOOK_SAVE=1 zsh tests/picture_corpus.sh CDP HP OUT` copies
   the run's `look.json` to `tests/fixtures/look.json`.
 - **Weak spots**: the page colour stands in for the fabric (a photo's backdrop that is not one colour, or a pale

@@ -58,6 +58,15 @@ Reference for this part of Needleworks: the rules, the reason for each (it stops
   every rule of `labelWith`, to the area joined to it by pixel sides. A see-through part has no colour to sew. The
   taps are forgotten with the picture, and when the background or the edge band choice changes (the picture is cut
   differently). Guard: picture_corpus `gap_chosen`. Not done: the taps are not kept over a reload.
+- The same dialog's other tools (S6-A5), each one more entry in `pic.areas`, applied in the order made: **Rub out**
+  ({ rub: the brush's path, r }: bare fabric under the brush; a speck, a shadow, a signature) and **Join two
+  colours** ({ x, y, to }: every part in the colour under the first point is sewn in the thread of the colour under
+  the second). Undo takes the last entry back. What the person removed is not "left out": the worker takes it off
+  the ink `keptParts` measures (a rubbed-out scribble was ringed as a lost part). The entries are kept in `pic.last`
+  with the last visit's picture and come back with it (whole picture only, not one part of several); a new, turned
+  or cropped picture starts with none. Corpus: `gap_chosen`, `mark_rubbed`, `colours_joined`.
+- **Crop** (beside Rotate): drag across the part to keep; the cropped picture replaces the picture as a turned one
+  does (`replacePicture`: kept for the next visit, parts found again, nothing chosen carries over).
 - A closed-in part left bare (`spare`) that is a quarter of the picture or more (framed_s100_edge's cream panel at 3
   colours) is said as what to sew it on: "That is most of the design: sew it on cream fabric, or sew it in cream too
   (4 threads)" (picture.js `insideNote`). Keeping it sewn at the count would take a design colour.
