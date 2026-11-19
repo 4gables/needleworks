@@ -353,6 +353,20 @@ function columnNets(px, more, w, h, own, res, toMm, dotted) {
     es = [["a", "b", [[cx + u[0] * t0, cy + u[1] * t0], [cx + u[0] * t1, cy + u[1] * t1]]]];
     dotted = true;
   }
+  // (two centre lines that meet at a node nothing else comes to are one line: left as two, each ended at the node as
+  // a column's end does, and where the node sat on a corner of an outline both fanned round it: `satin`'s mitre
+  // needs the corner inside one line)
+  for (let again = true; again; ) {
+    again = false;
+    const at = new Map();
+    es.forEach((e, k) => { for (const v of [e[0], e[1]]) { if (!at.has(v)) at.set(v, []); at.get(v).push(k); } });
+    for (const [v, ks] of at) {
+      if (ks.length !== 2 || ks[0] === ks[1]) continue;
+      const [e1, e2] = [es[ks[0]], es[ks[1]]], p1 = e1[1] === v ? e1[2] : e1[2].slice().reverse(), p2 = e2[0] === v ? e2[2] : e2[2].slice().reverse();
+      const joined = [e1[1] === v ? e1[0] : e1[1], e2[0] === v ? e2[1] : e2[0], [...p1, ...p2.slice(1)]];
+      es = es.filter((_, k) => k !== ks[0] && k !== ks[1]); es.push(joined); again = true; break;
+    }
+  }
   const E = [], deg = new Map(), cov = new Uint8Array(cw * ch);
   for (const [a, b] of es) for (const k of [a, b]) deg.set(k, (deg.get(k) || 0) + 1);
   for (const [a, b, p0] of es) {
@@ -522,7 +536,7 @@ function netStitches(net, start, sat) {
     if (kind === "run") {
       if (c.mid >= sat.zigzagFrom) out.push(p[0], ...satin(p, c.W, 2.5, 0, false, false, (t) => Math.max(0.05, c.a(t * c.L) + c.b(t * c.L) - 0.8)), p[p.length - 1]);
       else out.push(...run(p, 1.2));
-    } else out.push(...satin(p, c.W, sat.gap, COLUMNS.pull + sat.pull, false, true, null, (s) => [c.a(s), c.b(s), c.k(s)]));
+    } else out.push(...satin(p, c.W, sat.gap, COLUMNS.pull + sat.pull, false, true, null, (s) => [c.a(s), c.b(s), c.k(s)], { mitre: true }));
   }
   return out;
 }

@@ -165,7 +165,8 @@ export function followRun(p, length = 1.6, tol = 0.1, min = 0.8) {
 // (`shape`, optional: (mm along, length) -> null, or [a, b, k]: the half-widths on the normal's side and the other,
 // never over width / 2, and the stitch's slant: it runs along normal + k x tangent, so its ends stay a and b off
 // the line. A stroke end the font cuts on a slant ends on that slant instead of square.)
-export function satin(p, width, density = 0.4, pullComp = 0.2, closed = false, fold = false, wAt = null, shape = null) {
+// (`opts.mitre`: a sharp turn of the line is sewn as a mitre, `mitres` below)
+export function satin(p, width, density = 0.4, pullComp = 0.2, closed = false, fold = false, wAt = null, shape = null, opts = null) {
   const station = density / 2;
   let c = resample(p, 0.02, closed);
   let n = normals(c, closed);
@@ -190,12 +191,21 @@ export function satin(p, width, density = 0.4, pullComp = 0.2, closed = false, f
     }
   }
   if (idx[idx.length - 1] !== c.length - 1) idx.push(c.length - 1);
-  const out = [];
-  idx.forEach((i, j) => {
+  const out = [], zones = opts?.mitre && !closed ? mitres(c, ha, hb) : [];
+  let zi = 0, par = 0;
+  idx.forEach((i, j0) => {
+    // (a mitred corner: its two legs' stitches once, in place of the stations within it)
+    const z = zones[zi];
+    if (z && i > z.lo) {
+      if (!z.done) { z.done = true; for (const [a, b] of mitreStitches(z, station)) { const q = par++ % 2 === 0 ? a : b, l = out[out.length - 1]; if (!l || Math.hypot(q[0] - l[0], q[1] - l[1]) > 0.35) out.push(q); } }
+      if (i < z.hi) return;
+      zi++;
+    }
+    const j = par++;
     const sgn = j % 2 === 0 ? 1 : -1, half = sgn > 0 ? ha(i) : hb(i);
     let r = half;
-    if (j > 0 && j < idx.length - 1) {
-      const thisSide = sgn > 0 ? A : B, other = sgn > 0 ? B : A, k = idx[j - 1];
+    if (j0 > 0 && j0 < idx.length - 1) {
+      const thisSide = sgn > 0 ? A : B, other = sgn > 0 ? B : A, k = idx[j0 - 1];
       const gThis = Math.hypot(thisSide[i][0] - thisSide[k][0], thisSide[i][1] - thisSide[k][1]);
       const gOther = Math.hypot(other[i][0] - other[k][0], other[i][1] - other[k][1]);
       // (inner edge hit at under half the outer's rate: a 1.5 mm satin round a 3 mm radius hit it every 0.21 mm)
@@ -204,6 +214,69 @@ export function satin(p, width, density = 0.4, pullComp = 0.2, closed = false, f
     if (!fold) out.push([c[i][0] + n[i][0] * r * sgn, c[i][1] + n[i][1] * r * sgn]);
     else { const e = sgn > 0 ? A[i] : B[i]; out.push([c[i][0] + (e[0] - c[i][0]) * (r / half), c[i][1] + (e[1] - c[i][1]) * (r / half)]); }
   });
+  return out;
+}
+
+// Sharp corners of a satin's line, to sew as mitres. Round a sharp turn every stitch of a satin fans from one point
+// on the inside of the turn: the thread piles up there in a knot and the outside spreads into a wedge wider than
+// the column (a tester's K outline, 2026-11: "bunching" at each inner corner). A digitizer sews such a corner as two
+// straight legs that meet on the line from the inner corner to the outer point, each leg's stitches square across
+// it and growing shorter toward the point: no two share a hole.
+// c: the line (0.02 mm steps); ha, hb: each side's half-width at a point. A corner is a turn of MITRE.turn degrees
+// or more between the legs' directions, MITRE.sharp of it made within 1.5 widths of the corner (a tight ring turns
+// as far, evenly: no corner), 2.5 widths or more from both ends of the line.
+// Returns [{ lo, hi (the points the mitre replaces), P (where the legs' lines meet), u1, u2 (their directions),
+// tan (of half the inside angle), side (1: the normal's side is the inside), in1, out1, in2, out2 (half-widths) }].
+export const MITRE = { turn: 60, sharp: 0.7, least: 0.5 };
+function mitres(c, ha, hb) {
+  const n = c.length; if (n < 40) return [];
+  const ws = []; for (let i = 0; i < n; i += 25) ws.push(ha(i) + hb(i));
+  ws.sort((a, b) => a - b);
+  // (the centre line of a drawn corner is rounded for about a width either way: the legs' directions are read from
+  // 1.5 to 2.5 widths off, and the mitre replaces the 1.5 widths either side)
+  const w0 = ws[ws.length >> 1], H = Math.round(Math.max(0.8, w0) / 0.02), d1 = Math.round(1.5 * H), d2 = Math.round(2.5 * H);
+  if (n < 2 * d2 + 2) return [];
+  const ang = (i, d) => {
+    const ux = c[i][0] - c[i - d][0], uy = c[i][1] - c[i - d][1], vx = c[i + d][0] - c[i][0], vy = c[i + d][1] - c[i][1], L = Math.hypot(ux, uy) * Math.hypot(vx, vy);
+    return L ? Math.acos(Math.max(-1, Math.min(1, (ux * vx + uy * vy) / L))) : 0;
+  };
+  const cand = [];
+  for (let i = d2; i < n - d2; i += 2) { const t = ang(i, d1); if (t >= (0.7 * MITRE.turn * Math.PI) / 180) cand.push([t, i]); }
+  cand.sort((a, b) => b[0] - a[0] || a[1] - b[1]);
+  const taken = [], out = [];
+  const unit = (a, b) => { const L = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1; return [(b[0] - a[0]) / L, (b[1] - a[1]) / L]; };
+  for (const [t, i] of cand) {
+    if (taken.some((k) => Math.abs(k - i) < 2 * d1)) continue;
+    taken.push(i);
+    const a0 = c[i - d1], b0 = c[i + d1], u1 = unit(c[i - d2], a0), u2 = unit(b0, c[i + d2]), cr = u1[0] * u2[1] - u1[1] * u2[0];
+    const turn = Math.acos(Math.max(-1, Math.min(1, u1[0] * u2[0] + u1[1] * u2[1])));
+    if (turn < (MITRE.turn * Math.PI) / 180 || t < MITRE.sharp * turn || Math.abs(cr) < 0.2) continue;
+    // (where the two legs' lines meet: a0 + u1 s = b0 - u2 r)
+    const sA = ((b0[0] - a0[0]) * u2[1] - (b0[1] - a0[1]) * u2[0]) / cr, P = [a0[0] + u1[0] * sA, a0[1] + u1[1] * sA], side = cr > 0 ? 1 : -1;
+    // (each leg's own width: the least where its direction was read, where the other leg isn't measured with it)
+    const least = (f, from, to) => { let m = Infinity; for (let k = Math.max(0, from); k <= Math.min(n - 1, to); k += 5) m = Math.min(m, f(k)); return m; };
+    const fin = side > 0 ? ha : hb, fout = side > 0 ? hb : ha;
+    out.push({ lo: i - d1, hi: i + d1, P, u1, u2, tan: Math.tan((Math.PI - turn) / 2), side, T1: sA, T2: (b0[0] - P[0]) * u2[0] + (b0[1] - P[1]) * u2[1],
+      in1: least(fin, i - d2, i - d1), out1: least(fout, i - d2, i - d1), in2: least(fin, i + d1, i + d2), out2: least(fout, i + d1, i + d2) });
+  }
+  return out.filter((z) => z.T1 > 0 && z.T2 > 0).sort((a, b) => a.lo - b.lo);
+}
+// A mitred corner's stitches, each [the end on the normal's side, the other end]: the first leg toward the corner and
+// on past it to the outer point, then the second leg back from the point. At t mm before the corner along a leg the
+// stitch reaches t x tan (half the inside angle) toward the inside, its own half-width at most: up to the line the two
+// legs share. Past the corner that is negative: the stitch lies wholly on the outside, down to MITRE.least mm long.
+function mitreStitches(z, station) {
+  const out = [], leg = (u, hin, hout, T, toward) => {
+    const nx = -u[1] * z.side, ny = u[0] * z.side, end = -Math.max(0, hout - MITRE.least) / z.tan, ts = [];
+    for (let t = T; t > end; t -= station) ts.push(t);
+    if (!toward) ts.reverse();
+    for (const t of ts) {
+      const x = z.P[0] + u[0] * (toward ? -t : t), y = z.P[1] + u[1] * (toward ? -t : t), r = Math.min(hin, t * z.tan);
+      const I = [x + nx * r, y + ny * r], O = [x - nx * hout, y - ny * hout];
+      out.push(z.side > 0 ? [I, O] : [O, I]);
+    }
+  };
+  leg(z.u1, z.in1, z.out1, z.T1, true); leg(z.u2, z.in2, z.out2, z.T2, false);
   return out;
 }
 
