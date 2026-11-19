@@ -35,7 +35,38 @@ Reference for this part of Needleworks: the rules, the reason for each (it stops
 - Satin borders 2.5-4 mm (frames, patch/appliqué and in-the-hoop edges): `edgeWalk` (run 0.4 mm inside each edge,
   open, ending where the zigzag starts), zigzag, satin: Ink/Stitch contour underlay, a firm edge on felt.
 
+## Satin corners (`geom.js` `satin` with `{ mitre: true }`, `mitres`, `MITRE`; v39)
+- Round a sharp turn every stitch of a satin fans from one point on the inside of the turn: the thread piles into
+  a knot there and the outside spreads into a wedge wider than the column (a tester's K outline, sewn 2026-11-18:
+  bunching at each inner corner). Such a corner is sewn as a mitre: two straight legs, each leg's stitches square
+  across it, meeting on the line from the inner corner to the outer point and growing shorter toward the point
+  (down to `MITRE.least` 0.5 mm). No two stitches share a hole.
+- A corner: the legs' directions (read 1.5 to 2.5 column widths either side, since a drawn corner's centre line is
+  rounded for about a width) turn `MITRE.turn` 60° or more, `MITRE.sharp` 0.7 of it within 1.5 widths (a tight ring
+  turns as far, evenly: no corner), 2.5 widths or more from both ends of the line. Gentler turns fan as before.
+- On for a picture's satin columns only (`netStitches`). `columnNets` joins centre lines that meet at a node nothing
+  else comes to, so a corner the skeleton put a node on lies inside one line. Not looked at: the Design tab's satin
+  borders and lettering.
+
 ## Fills of drawn shapes (`fill.js` `fillPolygon`)
+- **Cover (v39; sewn 2026-11-18).** A fill sewn on a black sweatshirt at rows 0.4 mm apart was an open mesh, the
+  fabric showing through, while the screen showed it solid. Two causes:
+  - The published tatami spacing (0.38-0.40 mm) is from one forward row to the next forward row: two passes of
+    thread. It was read here as one pass, so our fills laid 3.4 mm of thread per mm² (underlay included) against a
+    sold design's 6.0, whose rows measure 0.18-0.20 mm apart. `ROWS` is now 0.25 (standard: pictures, knit) and 0.2
+    (solid: other fabrics, Extra solid on the Picture tab): 5.2 and 6.3 mm per mm². The underlay's rows across are
+    1.25 mm apart (`UNDERLAY.rows`; sold 1.1-1.3, ours 2.5).
+  - The preview drew thread 0.56 mm wide ("it spreads"), so rows 0.4 mm apart overlapped on screen. It draws 0.4 mm
+    (render.js): a gap the fabric will show is a gap on the screen.
+- **Rows turn on one needle point** (`sewRows`, `curvedRows`; `TATAMI.turn` 0.45 mm). Each turn was two points, the
+  row spacing apart: a tiny stitch (0.3 mm or less) at any spacing under 0.35, which is why the rows were never
+  closer. Where a row's end and the next row's start are within `turn`, the one further out along the rows is
+  kept, as a zigzag turns. 0 tiny stitches over the batches' fills, and a third fewer needle hits along every edge
+  (27 % more stitches for 60 % more rows).
+- **Travel inside a fill** (`makeRouter` `pathTo`): a route's points are worked out only when the route is used, and
+  straightened by a forward walk (each point the last cell in turn the one before sees). Looking back from the far
+  end for the furthest cell seen was 11 of a logo's 14 s (art_logo_mountain: 10 s at v38, 21 s at the closer rows,
+  4.5 s now).
 - Patches, filled motifs and the motif either side of lettering. Pictures fill through `tatami` on their own
   drawing (`docs/pictures.md`); the Open tab's re-stitching asks for `raster: true` (its outlines are traced from a
   drawing of the file's stitches, stair-stepped already).
