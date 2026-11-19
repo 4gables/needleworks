@@ -4,7 +4,7 @@
 // Open tab's re-stitching (doctor.js) all fill through here. (Part of digitize.js until 2026-11.)
 import { distanceTransform, label } from "./raster.js";
 import { arclen, resample, smooth } from "./geom.js";
-import { CONTOUR, FILLS, FORM, PICTURES, ROWS, TATAMI } from "./recipes.js";
+import { CONTOUR, FILLS, FORM, PICTURES, ROWS, TATAMI, UNDERLAY } from "./recipes.js";
 
 // the fill angle (degrees) and working pixels per mm when nothing else is asked (8: 5 lost the narrow notches of
 // small lettering, e.g. an M)
@@ -110,6 +110,13 @@ export function sewRows(rows, U, V, res, L, pattern, leaves) {
       // where the edge runs nearly along the rows, the step to the next row is long (up to 7.6 mm): a loose stitch
       // lying on top. Split into steps of 3 mm at most along it.
       const q = cur[cur.length - 1], n = q ? Math.ceil(Math.hypot(pts[0][0] - q[0], pts[0][1] - q[1]) / (3 * res)) : 1;
+      // (the turn: one needle point, the one further out along the rows, where the two are within TATAMI.turn)
+      if (q && cur.length > 1 && pts.length > 1 && Math.hypot(pts[0][0] - q[0], pts[0][1] - q[1]) < TATAMI.turn * res) {
+        const uq = q[0] * U[0] + q[1] * U[1], up = pts[0][0] * U[0] + pts[0][1] * U[1];
+        if (fwd ? up < uq : up > uq) cur[cur.length - 1] = pts[0];
+        cur.push(...pts.slice(1));
+        return;
+      }
       for (let i = 1; i < n; i++) cur.push([q[0] + ((pts[0][0] - q[0]) * i) / n, q[1] + ((pts[0][1] - q[1]) * i) / n]);
       cur.push(...pts);
     });
@@ -347,8 +354,8 @@ export function routeFill(groups, comp, mask, res, budget = routeBudget(), worn 
 // opts.pattern: a FILL_PATTERNS key; opts.share: this layer's part of the density across the shape (see tatami);
 // opts.underlay: false for a second layer
 // Under the fill: an edge run 0.4 mm inside the outline in 2.5 mm stitches, then rows across the fill's own every
-// 2.5 mm in 3 mm stitches, kept 0.4 mm inside too (the fill's row ends cover both)
-const UNDER = { inset: 0.4, run: 2.5, rows: 2.5, stitch: 3 };
+// UNDERLAY.rows mm in 3 mm stitches, kept 0.4 mm inside too (the fill's row ends cover both)
+const UNDER = { inset: 0.4, run: 2.5, rows: UNDERLAY.rows, stitch: 3 };
 // A shape drawn and measured for filling: its mask (inset), its separate parts and each pixel's distance to the edge.
 // None of it depends on how the shape is filled, so it's kept by the outlines, the inset and the scale: a change of
 // row spacing (30 wt thread, knit) drew and measured every filled shape again, two distance transforms and a labelling
@@ -798,7 +805,7 @@ function formOf(comp, mask, res, prefer) {
   let f = comp.pixels.length < FORM.picture * res * res ? { angle: prefer } : formPick(comp, mask, res, prefer, comp.dt);
   if (f.angle !== prefer || f.field) {
     const plain = { ...comp, form: null }, sew = (a, field) => {
-      const under = tatami(mask, plain, res, { angle: a + 90, spacing: 2.5, stitch: 3, inset: 0.4, pull: 0 });
+      const under = tatami(mask, plain, res, { angle: a + 90, spacing: UNDERLAY.rows, stitch: 3, inset: 0.4, pull: 0 });
       const fill = field ? curvedRows(plain, mask, res, comp.dt, { spacing: ROWS.standard, stitch: TATAMI.stitch, pull: 0.15, fd: field, inside: (x, y) => { const X = Math.round(x), Y = Math.round(y); return X >= 0 && Y >= 0 && X < mask.w && Y < mask.h && comp.labels[Y * mask.w + X] === comp.id; } })?.paths : tatami(mask, plain, res, { angle: a, spacing: ROWS.standard, stitch: TATAMI.stitch, pull: 0.15 });
       return fill?.length ? routeFill([under, fill], comp, mask, res, routeBudget(), WORN, false, 0, null, PICTURES.edge).length : Infinity;
     };
@@ -1064,6 +1071,12 @@ function curvedRows(comp, mask, res, dt, { spacing, stitch, pull, pattern = "tat
       if (end && Math.hypot(ps[ps.length - 1][0] - end[0], ps[ps.length - 1][1] - end[1]) < Math.hypot(ps[0][0] - end[0], ps[0][1] - end[1])) ps = ps.reverse();
       if (end && leaves(end, ps[0])) { cur = []; paths.push(cur); }
       const z = cur[cur.length - 1], m = z ? Math.ceil(Math.hypot(ps[0][0] - z[0], ps[0][1] - z[1]) / (3 * res)) : 1;
+      // (the turn on one needle point, as `sewRows`: the row's own start when the last row's end lies further along it)
+      if (z && cur.length > 1 && ps.length > 1 && Math.hypot(ps[0][0] - z[0], ps[0][1] - z[1]) < TATAMI.turn * res) {
+        if ((z[0] - ps[0][0]) * (ps[1][0] - ps[0][0]) + (z[1] - ps[0][1]) * (ps[1][1] - ps[0][1]) > 0) cur[cur.length - 1] = ps[0];
+        cur.push(...ps.slice(1));
+        continue;
+      }
       for (let i = 1; i < m; i++) cur.push([z[0] + ((ps[0][0] - z[0]) * i) / m, z[1] + ((ps[0][1] - z[1]) * i) / m]);
       cur.push(...ps);
     }
@@ -1095,7 +1108,7 @@ export function fillPolygon(poly, { angle = FILL.angle, density = ROWS.solid, re
       // (angle "auto": the part's own, `formPick`, through comp.form as a picture's)
       if (angle === "auto") comp.form = FILL.angle;
       const a = angle === "auto" ? FILL.angle : angle;
-      const under = underlay ? tatami(mask, comp, res, { angle: a + 90, spacing: 2.5, stitch: 3, inset: 0.4, pull: 0 }) : [];
+      const under = underlay ? tatami(mask, comp, res, { angle: a + 90, spacing: UNDER.rows, stitch: 3, inset: 0.4, pull: 0 }) : [];
       const fill = tatami(mask, comp, res, { angle: a, spacing: density, stitch, pull: 0.15, pattern, share });
       paths.push(...routeFill([under, fill], comp, mask, res).map(toMm));
     }

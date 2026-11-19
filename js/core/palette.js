@@ -12,7 +12,7 @@ export const DEFAULTS = {
   sizeMm: 100,        // longest side of the finished design
   removeBackground: true,
   fillAngle: FILL.angle,   // degrees
-  density: 0.35,      // mm between fill rows (DENSITY.solid)
+  density: 0.25,      // mm between fill rows (DENSITY.standard)
   res: FILL.res,      // working pixels per mm (5 lost the narrow notches of small lettering, e.g. an M)
 };
 // ---------- colour ----------

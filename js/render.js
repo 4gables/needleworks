@@ -188,7 +188,9 @@ export function draw(canvas, design, opts = {}) {
   // (a gingham's checks break a thin line up: every thread on one gets a halo of the cloth's base colour, so a
   // running-stitch outline and a step view's faint name still read on blue gingham in Sew along)
   const busy = bg && !bg.solid && !bd ? bg.base : null;
-  const tw = Math.max(0.6, 5.6 * s);       // a stitched thread lies ~0.55 mm wide (it spreads)
+  // (40 wt thread lies about 0.4 mm wide. Drawn 0.56 mm until 2026-11, "it spreads": rows 0.4 mm apart looked solid
+  // here and sewed as an open mesh, the fabric showing through. The screen must show a gap the fabric will show.)
+  const tw = Math.max(0.6, 4 * s);
   ctx.lineCap = "round"; ctx.lineJoin = "round";
   if (opts.ghost && upto < total) {   // what's still to sew, faint, under what's sewn
     const gw = Math.max(0.6, tw * 0.5);

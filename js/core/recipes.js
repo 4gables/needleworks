@@ -66,8 +66,13 @@ export const BORDERS = {
   frame: { width: 3.0, gap: 0.4, pull: 0.3, inset: 0, zigzag: [2.1, 2.0] },
 };
 
-// Fill rows (mm apart). 0.3 fails the tiny-stitch check (row links under 0.3 mm).
-export const ROWS = { solid: 0.35, standard: 0.4 };
+// Fill rows (mm apart, one pass of thread each). Sold designs lie 0.18-0.20 mm apart (docs/roadmap.md): the
+// published "0.38-0.40 mm" tatami spacing is from one forward row to the next forward row, two passes of thread, and
+// was read here as one until 2026-11 (0.35 and 0.4: half the thread, and the fabric showed through every fill sewn
+// on a dark sweatshirt). Rows this close turn as a zigzag (`TATAMI.turn`), so no row link is a tiny stitch.
+export const ROWS = { solid: 0.2, standard: 0.25 };
+// Under a fill: rows across the fill's own, this far apart (mm; sold designs' lattice is 1.1-1.3, ours was 2.5).
+export const UNDERLAY = { rows: 1.25 };
 
 // Pictures (Filled): what is made sewable before any stitch is planned (docs/pictures.md).
 //   fleck:    a piece of one colour this small (mm²), or a dot (see digitize.js), lying inside other sewn colours ...
@@ -106,7 +111,10 @@ export const SHAPES = { band: 0.5, between: 1.25, side: 0.2, fleck: 3, enclosed:
 // point, a leaf's half). `steady`: each satin stitch lies square to the centre line's direction averaged over that
 // many stroke widths either way (square to every wiggle, small letters sewed as fans).
 export const COLUMNS = { min: 1.0, wide: 4, long: 2, into: 0.6, cap: 1.4, tip: 0.5, solid: 0.85, stub: 3, short: 0.2, even: 2.2, pull: 0.1, thread: 0.2, small: 3, cover: 0.9, mitre: 0.25, taper: 2.5, steady: 0.75 };
-export const PICTURES = { fleck: 3, enclosed: 0.8, eyes: 6, start: 4, edge: 0.75,
+//   pull:     how far a fill's rows run past the shape's edge at both ends (mm; shapes under 2 mm across 0.05, or
+//             the gaps between thin letters close). 0.15 until 2026-11: a fill sewn on a sweatshirt drew back from its
+//             outline and the fabric showed between them; 0.2 is the published figure for cotton (FILLS).
+export const PICTURES = { fleck: 3, enclosed: 0.8, eyes: 6, start: 4, edge: 0.75, pull: 0.2,
   details: { all: { start: 0, share: 0, lone: 0 }, most: { start: 7, share: 0.1, lone: 8 } } };
 // Shading (core/shade.js, roadmap PX4; numbers: docs/pictures.md). Two colours' regions, each `wide` mm across
 // somewhere, meet in a soft gradient when the picture (blurred `blur` mm) takes `soft` mm or more to change from one to
@@ -177,7 +185,10 @@ export const FILLS = {
 export const fillRecipe = (fabric) => FILLS[fabric] || FILLS.cotton;
 // A drawn shape's fill rows (core/fill.js `fillPolygon`): needle points `stitch` mm apart along a row; a stitch over
 // `loose` mm (a row's short remainder merged into its last stitch) is halved, since one that long lies loose on top.
-export const TATAMI = { stitch: 3.5, loose: 4 };
+// `turn`: where one row's end and the next row's start are nearer than this (mm), the rows turn on one needle point,
+// the one further out, as a zigzag does (two points there were a stitch of the row spacing: under 0.3 mm, the
+// checker's tiny stitch, at rows 0.25 mm apart; 0.45 still sews over 0.3 mm once rounded to the file's 0.1 mm).
+export const TATAMI = { stitch: 3.5, loose: 4, turn: 0.45 };
 
 // --- PX3: fill direction that follows the form (core/fill.js `formAngle`; docs/stitch-model.md) ---
 //   least, picture: a part under this many mm² keeps the caller's angle; a picture's part under `picture`: on the
@@ -207,9 +218,8 @@ export const FORM = { least: 4, picture: 100, ragged: [4, 25, 20], blur: 4, step
 // [least, most, the editor's step].
 //   angle:   the rows' direction, degrees, 0 across and 90 up and down; 30 and 210 are one fill, so it is kept in
 //            (-90, 90]. Any angle sews: the travel router and the scrap rule work at every angle.
-//   spacing: rows apart (mm). Never closer than ROWS.solid: at 0.3 the step from one row to the next is the checker's
-//            tiny stitch (and 24 hits per mm² comes nearer at every row end along an edge). 0.8, twice the
-//            standard rows, still reads as a light fill; further the fabric shows between rows.
+//   spacing: rows apart (mm). Never closer than ROWS.solid (sold designs' closest; 24 hits per mm² comes nearer at
+//            every row end along an edge). At 0.8 the fabric shows between the rows on purpose: a light fill.
 //   length:  stitch length along a row (mm). From 1.5 (shorter crowds the row ends, where every row puts two hits)
 //            to TATAMI.loose: longer is halved anyway (a loose stitch lying on top).
 //   pull:    how far each row runs past its outline at both ends (mm; FILLS' pull). 0.6 is towel's 0.4 and a half

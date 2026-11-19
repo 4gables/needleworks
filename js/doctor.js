@@ -4,7 +4,7 @@
 import { COLOR_CHANGE, END, JUMP, STITCH, STOP, TRIM, designBlockAgrees, readEmbroidery, writePES } from "./core/formats.js";
 import { Design, relieve } from "./core/design.js";
 import { density, threadBlocks } from "./core/density.js";
-import { LIMITS, MOVES } from "./core/recipes.js";
+import { LIMITS, MOVES, UNDERLAY } from "./core/recipes.js";
 import { fillPolygon } from "./core/fill.js";
 import { distanceTransform } from "./core/raster.js";
 import { contours } from "./studio/quilt.js";
@@ -534,12 +534,12 @@ function refill(runs, angle, taken = new Set(), scale = 0, from = null) {
   const loops = contours(shape).filter((l) => l.length > 8).map((l) => l.map(([x, y]) => [x0 + x / R, y0 + y / R]));
   if (!loops.length) return null;
   // the source's row spacing, from the thread it lays per mm² (all its stitches here, underlay and travel too, at its
-  // own size) less what our underlay adds (a row every 2.5 mm), kept within ROWS: the copy covers as the source did
+  // own size) less what our underlay adds (a row every UNDERLAY.rows mm), kept within ROWS: the copy covers as the source did
   // at any size (rows within 15° of the fill's direction alone read gnome's hat as 0.18 for 0.15, and the old 0.35
   // floor gave its fills half the thread at 50 and 250 %; peace.pes's, re-stitched at 0.4, took 41-67 % more)
   let thread = 0;
   if (scale) for (const p of runs) for (let i = 1; i < p.length; i++) thread += Math.hypot(p[i][0] - p[i - 1][0], p[i][1] - p[i - 1][1]);
-  const perMm2 = (thread * scale) / (mine.length / (R * R)) - 1 / 2.5;
+  const perMm2 = (thread * scale) / (mine.length / (R * R)) - 1 / UNDERLAY.rows;
   const density = thread ? clamp(perMm2 > 0 ? 1 / perMm2 : Infinity, ROWS) : 0.4;
   // (rows the same way round, started from the end nearer the needle: the tatami starts at the outline's far point
   // along its angle turned by (1, -1), and at the opposite one at angle + 180°)
