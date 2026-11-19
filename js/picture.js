@@ -345,7 +345,7 @@ function areasDraw() {
   c.width = m.w; c.height = m.h;
   const rgb = new Map(m.colors.map((q) => [q.id, hexToRgb(swap[q.id]?.hex || q.hex)])), img = new ImageData(m.w, m.h), d = img.data, sq = Math.max(4, Math.round(Math.max(m.w, m.h) / 60));
   for (let y = 0, i = 0; y < m.h; y++) for (let x = 0; x < m.w; x++, i++) {
-    const L = l[i], sewn = L >= 0 && L !== m.bg && !skip.has(L), k = ((Math.floor(x / sq) + Math.floor(y / sq)) & 1) ? 236 : 255, q = sewn ? rgb.get(L) : [k, k, k];
+    const L = l[i], sewn = L >= 0 && L !== m.bg && !skip.has(L), k = ((Math.floor(x / sq) + Math.floor(y / sq)) & 1) ? 196 : 250, q = sewn ? rgb.get(L) : [k, k, k + 6];   // (grey enough that white thread isn't taken for it)
     d[i * 4] = q[0]; d[i * 4 + 1] = q[1]; d[i * 4 + 2] = q[2]; d[i * 4 + 3] = 255;
   }
   c.getContext("2d").putImageData(img, 0, 0);
