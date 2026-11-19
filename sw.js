@@ -11,12 +11,12 @@
 // cache.
 // (`SET`: a fingerprint of the list below, written with the hashes. It is part of the cache's name, so a release whose
 // files changed can never install into the cache the running one is serving from, version number bumped or not.)
-const SET = "55095c863cc5";
-const CACHE = `needleworks-v39-${SET}`, SHARED = "needleworks-shared";
+const SET = "4f03bef5606a";
+const CACHE = `needleworks-v40-${SET}`, SHARED = "needleworks-shared";
 const FILES = {
-  "index.html": "278a188500360a179a9b3912669904109f3043377b52bd5e17cecc58e289bfd4",
+  "index.html": "12a17025caa95e5a2aeb5d8cef5879305218fc4a26df4891a1c9aecdc5e13e83",
   "manifest.webmanifest": "82f627e1def5254866cf364a55a1c2a85e2c3dd61abeeb890829362969fcfb63",
-  "css/app.css": "4a4be9d730d14d422148104a4027dee2c73a38535e8c48a17ee2b1ddaf837831",
+  "css/app.css": "90a757b5e0fd2062dacc324befc0ae4cb3c29395af78f020b967eafc277fb853",
   "assets/icon-192.png": "19ae131e0ea47270a4cd0eefdac045f1811f7b3b25966a08d27e3c94b3262c76",
   "assets/icon-512.png": "343d901ae82aef47b3c8313c36ad8c6c79609e8aa60d96ea983336fd170e863a",
   "assets/sample-flower.png": "ecacd191496defa4bd71af6d3570c7b67c30714002eaf1749f1a9d7eb2a52d00",
@@ -51,13 +51,13 @@ const FILES = {
   "js/core/glyphs.js": "1aa94c2a28d8343fa6837d8f0591e325a9128063bfce81d968bf592feda6cbf3",
   "js/core/formats.js": "6c635b29d843e7eb112ad773f92f79b26ea0ad17769889104b271faa2915b76e",
   "js/core/formats-out.js": "6c340ec9036e5a7efc78ced8b6a7e3d9af9dd8e8773d230c8120302da33e333c",
-  "js/core/geom.js": "08eac4fe5e9b4955183d5ecbd32d84b370015077d9940d0ce889ca4612c6ef4f",
+  "js/core/geom.js": "6185d2a0bbf6162d5adcce6430d4212aabf55b2823ea8de6e909bce44bf00474",
   "js/core/colour.js": "ceb89ab0511bd2c9673945b2c90f71565ffd0a934bc5b299dab1279fc9758da2",
   "js/core/density.js": "fc507b2818e7cdb700d52d88ac328a784b89ddac6f609fcc469b95c4805a237e",
   "js/core/fill.js": "44343c0a1b733c2de3326496fb491af3931300dda4c2268cb9801bac3acd8c16",
   "js/core/machines.js": "afd9fe6fc812a0b03d903fc54a374b3246ac27539c9cff7d5ea546ed9e81c135",
   "js/core/artcheck.js": "4f7ecbcdb825c2b83930802b6d84d603f4d60d79a0cb022a3ce75b59acb9bb9a",
-  "js/core/palette.js": "f96b77a29f8c75134d9d11ba81e2118786664399a4c116421a19f4536692f1b9",
+  "js/core/palette.js": "c7cb9a5656b919cc0f37d85f515927d96622a16493f091b136c5bde01ad07313",
   "js/core/recipes.js": "7ad9765949559be6f3e9041c0d0378890d3b509d86ed87d77ca2a631e3f9e251",
   "js/core/raster.js": "b7f39ab3343d79066522fa5a4ef65bd4719e06fdb165c67f6b9dae88042ab93d",
   "js/core/regions.js": "4e24ba2c2d89c91a51bf3952db56ff4346d73783921a877911b97e1d45ad5813",
@@ -68,7 +68,7 @@ const FILES = {
   "js/doctor.js": "3fc2558d6c0dbb0ff2798b305b98e4214bbde880134658a4b8d9a3c7bd2227b2",
   "js/opened.js": "4a56f6bbcd1d67639d19ca1f052ec421d32b7cde6fedf5a016f827f11ccd4b84",
   "js/artwords.js": "ceaa16cdfcf9f20f929df194a4439ff3521f9bd407aa5271f56a0f6b7d12d038",
-  "js/picture.js": "189fa30dd7768db10b126ea589df20e6186f9cd83b2f41538787275664a3e944",
+  "js/picture.js": "6d4489ff861f6cbabd19354a8a7474b16ad21851a8a664223b15d96f9ca372c7",
   "js/threadui.js": "8ceabd64367deaaa390dd1b99ff44ae7f6ee9a461d188c77e9c35263747af525",
   "js/along.js": "5332fceae5092f2989d8fe09ddf64167bbd7d6e0004fb3eed174a149ecd03545",
   "js/onitem.js": "e8f881bc81209ff19ee6a80c75afa0abb9a2f120077228d9370b5c864e054f6d",
@@ -104,7 +104,7 @@ const FILES = {
   "js/studio/ui.js": "6176bfbaa9b4c1b3057ff615989a8eb30f863ad9ebb722edd28aa4f18e03643d",
   "js/doctor-worker.js": "3317fbb8ef871771b787b51a9778e16fe4b0d0269e3bedbcc4128c482beed8fc",
   "js/quilt-worker.js": "75ae9e71b130b2bafcb5fee6e169ffdd39e7cea9de949cbb344900bc5b6da76c",
-  "js/worker.js": "44f00b3ffd95591bbb1f80845660f4b2c23c9508b1308294f1cc180aaee681a3",
+  "js/worker.js": "3a90c16cb68cac6dac9c06e9110c2312c9cb7603bb7527b4d3a1537709e942f1",
   "js/zip.js": "d3d529808cf0618975057f7a71bf6044059204da36a7ffc62d4679f627c6fcb3",
   "js/gate.js": "938788b4ff6f1ef97b0ded2d32c29c9dcada1159df4d91c5e0c96eb4bb48bcef",
   "js/jobs.js": "1309a0a2ad6edd8d872c0e7af21e48da0041406b1f901d8a95c3af157a6d6617",

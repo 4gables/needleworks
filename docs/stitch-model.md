@@ -41,12 +41,18 @@ Reference for this part of Needleworks: the rules, the reason for each (it stops
   bunching at each inner corner). Such a corner is sewn as a mitre: two straight legs, each leg's stitches square
   across it, meeting on the line from the inner corner to the outer point and growing shorter toward the point
   (down to `MITRE.least` 0.5 mm). No two stitches share a hole.
+- A leg stops where its stitch's outer end is `MITRE.reach` 1.5 half-widths from the corner: a square corner keeps its
+  point (1.41), a sharper one is cut short (at 135° the point would stand 2.6 half-widths out, a thorn past the ink).
 - A corner: the legs' directions (read 1.5 to 2.5 column widths either side, since a drawn corner's centre line is
   rounded for about a width) turn `MITRE.turn` 60° or more, `MITRE.sharp` 0.7 of it within 1.5 widths (a tight ring
   turns as far, evenly: no corner), 2.5 widths or more from both ends of the line. Gentler turns fan as before.
 - On for a picture's satin columns only (`netStitches`). `columnNets` joins centre lines that meet at a node nothing
-  else comes to, so a corner the skeleton put a node on lies inside one line. Not looked at: the Design tab's satin
-  borders and lettering.
+  else comes to, so a corner the skeleton put a node on lies inside one line.
+- Not for lettering (measured 2026-11-19, every font, A-Z a-z 0-9 at 25 mm): a letter's corners are mostly joins
+  between strokes, which have their own tapers; the mitre reached 1-8 letters a font, and there it put points on
+  rounded fonts (Quicksand's B D E F P R, a script's cusps) and stood V and A apexes 5 mm past the letter. The centre
+  line can't tell a font's round corner from a sharp one; the fan follows the ink either way.
+- Not for the Design tab's borders: every frame shape is filleted (`shapes.js`), so its satin turns on a curve.
 
 ## Fills of drawn shapes (`fill.js` `fillPolygon`)
 - **Cover (v39; sewn 2026-11-18).** A fill sewn on a black sweatshirt at rows 0.4 mm apart was an open mesh, the
@@ -70,6 +76,14 @@ Reference for this part of Needleworks: the rules, the reason for each (it stops
 - Patches, filled motifs and the motif either side of lettering. Pictures fill through `tatami` on their own
   drawing (`docs/pictures.md`); the Open tab's re-stitching asks for `raster: true` (its outlines are traced from a
   drawing of the file's stitches, stair-stepped already).
+- **What the closer rows cost, measured (2026-11-19).** Against v38 on the same picture cases: the look score of
+  Filled fell 0.1-1.5 by kind, and all of it is the pull (`PICTURES.pull` 0.15 -> 0.2): with 0.15 put back the eight
+  worst cases score 79.2 against v38's 79.2 (77.3 at 0.2). The score draws stitches where the needle goes and knows
+  nothing of fabric drawing in, so any reach past the edge reads as a fatter shape; the pull stays (denser rows pull
+  more, and the owner sews knit fleece) and `look.json` was re-saved. Trims: the path straightening and the closer
+  underlay change nothing (17.6 and 17.3 against 17.7 a case); the rise is shapes with holes (a shirt with nine
+  diamonds: 0 -> 2 jumps inside its fill), where closer rows leave more sections behind finished rows with no hidden
+  way to them. Not a fault of one place; a fix is a different section order, a round of its own.
 - **Rows come from the outline, not a drawing of it.** Each row is the row's line cut by the outline's edges
   (even-odd, holes too), less every stretch within `inset` of an edge (the line through each edge's capsule).
   Read off the 8 px/mm drawing, a row end sat a mean 0.06 mm and up to 0.19 mm off the edge (p95 0.13; a pixel plus

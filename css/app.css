@@ -487,6 +487,10 @@ ul.problems { margin: 0; padding-left: 18px; list-style: disc; display: grid; ga
 .areas { width: min(720px, 94vw); }
 .areas canvas { display: block; max-width: 100%; max-height: 60vh; margin: 0 auto; border: 1.5px solid var(--line); border-radius: 10px; cursor: pointer; touch-action: manipulation; image-rendering: pixelated; }
 .areas .row { flex-wrap: wrap; }
+.areas .seg { margin: 6px 0; }
+.areas canvas.draw { cursor: crosshair; touch-action: none; }
+#crop-canvas { image-rendering: auto; cursor: crosshair; touch-action: none; }
+.pic-tools { display: flex; flex-wrap: wrap; gap: 8px; justify-self: start; }
 .names .warn { color: var(--warn); }
 .spool-chips { display: flex; flex-wrap: wrap; gap: 6px; max-height: 120px; overflow: auto; }
 .spool-chips span { display: inline-flex; align-items: center; gap: 5px; font-size: 13px; border: 1px solid var(--line); border-radius: 999px; padding: 2px 8px 2px 3px; }

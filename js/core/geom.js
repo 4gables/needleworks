@@ -227,7 +227,7 @@ export function satin(p, width, density = 0.4, pullComp = 0.2, closed = false, f
 // as far, evenly: no corner), 2.5 widths or more from both ends of the line.
 // Returns [{ lo, hi (the points the mitre replaces), P (where the legs' lines meet), u1, u2 (their directions),
 // tan (of half the inside angle), side (1: the normal's side is the inside), in1, out1, in2, out2 (half-widths) }].
-export const MITRE = { turn: 60, sharp: 0.7, least: 0.5 };
+export const MITRE = { turn: 60, sharp: 0.7, least: 0.5, reach: 1.5 };
 function mitres(c, ha, hb) {
   const n = c.length; if (n < 40) return [];
   const ws = []; for (let i = 0; i < n; i += 25) ws.push(ha(i) + hb(i));
@@ -265,9 +265,11 @@ function mitres(c, ha, hb) {
 // on past it to the outer point, then the second leg back from the point. At t mm before the corner along a leg the
 // stitch reaches t x tan (half the inside angle) toward the inside, its own half-width at most: up to the line the two
 // legs share. Past the corner that is negative: the stitch lies wholly on the outside, down to MITRE.least mm long.
+// A leg stops where its stitch's outer end is MITRE.reach half-widths from the corner: a square corner keeps its point
+// (1.41), a sharper one is cut short (at 135 degrees the point would stand 2.6 half-widths out, a thorn past the ink).
 function mitreStitches(z, station) {
   const out = [], leg = (u, hin, hout, T, toward) => {
-    const nx = -u[1] * z.side, ny = u[0] * z.side, end = -Math.max(0, hout - MITRE.least) / z.tan, ts = [];
+    const nx = -u[1] * z.side, ny = u[0] * z.side, end = -Math.min(Math.max(0, hout - MITRE.least) / z.tan, hout * Math.sqrt(MITRE.reach ** 2 - 1)), ts = [];
     for (let t = T; t > end; t -= station) ts.push(t);
     if (!toward) ts.reverse();
     for (const t of ts) {

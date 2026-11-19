@@ -122,7 +122,7 @@
         <span class="drop-text"><b>Choose a picture</b> or drop it here. You can also paste one.</span>
       </label>
       <button type="button" id="pic-paste" class="ghost" hidden>Paste a picture</button>
-      <button type="button" id="pic-rotate" class="ghost" hidden>⟳ Rotate picture</button>
+      <div class="pic-tools"><button type="button" id="pic-rotate" class="ghost" hidden>⟳ Rotate picture</button><button type="button" id="pic-crop" class="ghost" hidden>Crop</button></div>
       <fieldset class="field" id="pic-parts-row" hidden>
         <legend>This picture has <span id="pic-parts-n"></span> separate parts</legend>
         <div id="pic-parts" class="pic-parts" role="group" aria-label="Which part to sew"></div>
@@ -213,7 +213,7 @@
           <div id="pic-palette" class="palette"></div>
           <div id="pic-swap" class="pic-swap" role="region" aria-label="This thread" hidden></div>
           <p class="hint" id="pic-inside" role="status" hidden></p>
-          <p class="hint" id="pic-areas-row" hidden><button type="button" class="link" id="pic-areas">Choose what is sewn, part by part</button> <span id="pic-areas-said"></span></p>
+          <p class="hint" id="pic-areas-row" hidden><button type="button" class="link" id="pic-areas">Choose what is sewn, rub out a mark, join two colours</button> <span id="pic-areas-said"></span></p>
           <p class="hint" id="pic-merged" hidden></p>
           <label class="check small" id="pic-mine-row" hidden><input type="checkbox" id="pic-mine"> Use only threads I own</label>
         </fieldset>
@@ -380,10 +380,29 @@
 <dialog id="areas" class="names areas" aria-labelledby="areas-title">
   <form method="dialog">
     <h2 id="areas-title">Choose what is sewn</h2>
-    <p class="hint">Tap a part to leave it empty. Tap an empty part to sew it. Tap it again to put it back. The checked pattern is bare fabric.</p>
+    <div class="seg" id="areas-tool" role="group" aria-label="What a tap does">
+      <button type="button" data-t="tap" aria-pressed="true">Sew or leave empty</button>
+      <button type="button" data-t="rub" aria-pressed="false">Rub out</button>
+      <button type="button" data-t="join" aria-pressed="false">Join two colours</button>
+    </div>
+    <p class="hint" id="areas-how"></p>
+    <div class="seg" id="areas-brush" role="group" aria-label="Brush size" hidden>
+      <button type="button" data-r="0.012" aria-pressed="false">Small brush</button>
+      <button type="button" data-r="0.03" aria-pressed="true">Medium</button>
+      <button type="button" data-r="0.07" aria-pressed="false">Large</button>
+    </div>
     <canvas id="areas-canvas" role="img" aria-label="Your picture: its sewn parts in their thread colours, bare fabric as a checked pattern"></canvas>
     <p class="hint" id="areas-said" role="status"></p>
-    <div class="row"><button type="button" class="ghost" id="areas-reset">Start again</button><button type="submit" class="ghost" value="cancel">Cancel</button><button type="button" class="primary" id="areas-done">Sew it this way</button></div>
+    <div class="row"><button type="button" class="ghost" id="areas-undo">Undo</button><button type="button" class="ghost" id="areas-reset">Start again</button><button type="submit" class="ghost" value="cancel">Cancel</button><button type="button" class="primary" id="areas-done">Sew it this way</button></div>
+  </form>
+</dialog>
+<dialog id="crop" class="names areas" aria-labelledby="crop-title">
+  <form method="dialog">
+    <h2 id="crop-title">Crop the picture</h2>
+    <p class="hint">Drag across the part to keep. Only that part is sewn.</p>
+    <canvas id="crop-canvas" role="img" aria-label="Your picture, with the part to keep marked"></canvas>
+    <p class="hint" id="crop-said" role="status"></p>
+    <div class="row"><button type="submit" class="ghost" value="cancel">Cancel</button><button type="button" class="primary" id="crop-done" disabled>Keep this part</button></div>
   </form>
 </dialog>
 <dialog id="rename" class="names" aria-labelledby="rename-title">

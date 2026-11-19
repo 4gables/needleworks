@@ -49,5 +49,7 @@ What was tried and rejected (don't retry without new numbers) and what is known 
   patch's loops come inset already (`inset` 0), so its run sews. Fixing it changes every filled motif (a stitch
   round, not Z1a's byte-identical one); until then the editor's Underneath offers a motif only Rows across / Nothing.
 - Flow: fill-internal hidden moves in `fillPolygon`, repeated tie-in holes in `Design.path`, ~47 script moves on arcs.
+- Lettering and Design-tab borders keep the satin's fan at corners: the mitre was tried on lettering and rejected
+  (stitch-model.md "Satin corners": points on rounded fonts, apexes past the letter).
 - Text: CJK/Arabic names save as design.pes (the fonts lack them anyway).
 - Not built: photo stitch, free-standing lace, 3D puff.
