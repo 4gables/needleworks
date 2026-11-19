@@ -1,7 +1,7 @@
 /*! Needleworks (c) 2026 4Gables. All rights reserved. Proprietary, see LICENSE. https://4gables.com/needleworks/ */
 // Runs picture digitizing off the main thread.
 import { DEFAULTS, MOST, digitize, keptParts, labelWith, learnColours, pictureInk, toPalette } from "./core/digitize.js";
-import { insideOf } from "./core/palette.js";
+import { applyAreas, insideOf } from "./core/palette.js";
 import { writePES } from "./core/formats.js";
 import { turnForMachine } from "./core/design.js";
 import { nearestBrotherThread } from "./core/threads.js";
@@ -37,7 +37,13 @@ self.onmessage = (e) => {
     // (what of the picture was left out, measured on the learned copy: the same parts at every Size and colour count)
     model.full ||= labelWith(learn, m);
     if (ref?.key !== e.data.ref) ref = { key: e.data.ref, ink: pictureInk(learn, labelWith(learn, learnColours(learn, { ...opts, colors: MOST }))) };
-    fine.kept = keptParts(ref.ink, model.full, design.pattern(), { w: img.width, h: img.height, res, origin }, crop, opts);
+    // (what the person emptied or rubbed out is not "left out": a rubbed-out scribble was ringed as a lost part)
+    let ink = ref.ink;
+    if (areas) {
+      const f = model.full, l = f.labels.slice(); applyAreas(l, f.w, f.h, areas, [0, 0, 1, 1], m);
+      ink = { ...ink, data: ink.data.map((v, i) => (v && !(l[i] !== f.labels[i] && (l[i] < 0 || l[i] === m.bg)) ? 1 : 0)) };
+    }
+    fine.kept = keptParts(ink, model.full, design.pattern(), { w: img.width, h: img.height, res, origin }, crop, opts);
     // what will sew well and what won't (core/artcheck.js): the picture once per colour count, its shapes at this size
     model.art ||= artPicture(learn, model.full);
     const art = { ...model.art, ...artShapes(analysis, res, crop, opts.skip || []) };
