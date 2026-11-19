@@ -292,8 +292,9 @@ Reference for this part of Needleworks: the rules, the reason for each (it stops
   its own measured angle or curved rows, the alternation kept only where its shape doesn't say (`docs/stitch-model.md`
   "Direction that follows the form"); the Picture panel offers it as Follow the shape under More settings (Filled),
   off by default: on the corpus it saves 3 % of trims and stitches with look unchanged (79.1 -> 79.2), but one flat
-  landscape loses 3.7 and a few cases gain a loose thread (numbers in stitch-model.md). `DENSITY` Standard 0.4 (the app's default; `DEFAULTS.density` is Dense) / Dense
-  0.35; 0.3 fails the check (row links under 0.3 mm). Row steps split to 3 mm, row-end stitches over 4 mm halved.
+  landscape loses 3.7 and a few cases gain a loose thread (numbers in stitch-model.md). `DENSITY` (recipes.js `ROWS`): Solid 0.25 mm
+  (the default) / Extra solid 0.2 (fleece, towels, dark fabric); 0.4 and 0.35 until v39, half a sold design's thread
+  (stitch-model.md "Cover"). Pull 0.2 mm (`PICTURES.pull`; 0.05 on shapes under 2 mm), underlay rows 1.25 mm apart. Row steps split to 3 mm, row-end stitches over 4 mm halved.
 - Small lettering (`digitize.js` `smallText`, numbers `TEXT`; a tester's logo, 2026-11: a 447 px picture at 90 mm,
   its second line 4 mm capitals with 0.7 mm strokes; "I want the lettering to be more clear"). Rows of lettering are
   found as the page's check finds them (`artShapes(...).rows`), on labels where a colour between the fabric's and a
