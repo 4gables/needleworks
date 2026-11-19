@@ -242,13 +242,32 @@ export function makeRouter(mask, res, cell, hop = null, budget = routeBudget(), 
     let sewnMm = 0;
     for (let i = 1; i < cells.length; i++) if (sewn[cells[i]]) sewnMm += Math.hypot((cells[i] % gw) - (cells[i - 1] % gw), Math.floor(cells[i] / gw) - Math.floor(cells[i - 1] / gw)) * C / res;
     // pull the staircase straight where a straight line stays inside (and off finished rows if the route was)
-    const ok = (p, q) => along(p, q, (c) => !!inside[c] && !(sewn[c] && !sewnMm));
-    const pts = [a], cs = cells.map(centre); let i = 0;
-    while (i < cs.length - 1) { let j = cs.length - 1; while (j > i + 1 && !ok(pts[pts.length - 1], cs[j])) j--; pts.push(cs[j]); i = j; }
-    pts.push(b);
-    let mm = 0;
-    for (let k = 1; k < pts.length; k++) mm += Math.hypot(pts[k][0] - pts[k - 1][0], pts[k][1] - pts[k - 1][1]) / res;
-    return { pts, sewnMm, mm };
+    // (worked out only when asked for: a way tried and turned down for what lies on finished stitches never needs its
+    // points, and straightening them was most of a busy picture's time, 10 s of a logo's and 21 s at closer rows.
+    // `ok` is `along` with nothing made per step: the same cells, in the same order)
+    const ok = (p, q) => {
+      const steps = Math.max(1, Math.ceil(Math.hypot(q[0] - p[0], q[1] - p[1]) / (C / 2)));
+      for (let k = 0; k <= steps; k++) {
+        const x = p[0] + ((q[0] - p[0]) * k) / steps, y = p[1] + ((q[1] - p[1]) * k) / steps;
+        const c = Math.min(gh - 1, Math.max(0, Math.floor(y / C))) * gw + Math.min(gw - 1, Math.max(0, Math.floor(x / C)));
+        if (!inside[c] || (sewn[c] && !sewnMm)) return false;
+      }
+      return true;
+    };
+    let made = null;
+    const make = () => {
+      if (made) return made;
+      const pts = [a], cs = cells.map(centre); let i = 0;
+      // (each point is the last cell in turn that the one before sees straight: looking from the far end back for the
+      // furthest cell seen walked a long way's every line, 11 of a logo's 14 s; a cell seen again past one that isn't
+      // costs a bend more, under stitches)
+      while (i < cs.length - 1) { let j = i + 1; while (j < cs.length - 1 && ok(pts[pts.length - 1], cs[j + 1])) j++; pts.push(cs[j]); i = j; }
+      pts.push(b);
+      let mm = 0;
+      for (let k = 1; k < pts.length; k++) mm += Math.hypot(pts[k][0] - pts[k - 1][0], pts[k][1] - pts[k - 1][1]) / res;
+      return (made = { pts, mm });
+    };
+    return { sewnMm, get pts() { return make().pts; }, get mm() { return make().mm; } };
   }
   const spent = () => mine <= 0 || budget.cells <= 0;
   // the way from a to b (px), or null
