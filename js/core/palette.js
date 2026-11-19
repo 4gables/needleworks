@@ -12,7 +12,7 @@ export const DEFAULTS = {
   sizeMm: 100,        // longest side of the finished design
   removeBackground: true,
   fillAngle: FILL.angle,   // degrees
-  density: 0.35,      // mm between fill rows (DENSITY.solid)
+  density: 0.25,      // mm between fill rows (DENSITY.standard)
   res: FILL.res,      // working pixels per mm (5 lost the narrow notches of small lettering, e.g. an M)
 };
 // ---------- colour ----------
@@ -713,7 +713,8 @@ function learnOnce(img, opts = {}) {
 // the background's colour) stays fabric. Returns `closed` too: the share of the picture that is closed in.
 // `inside`: "auto" sews the closed-in colour unless the model has no thread to spare for it (`spare`), "all" sews it
 // always (the person asked), "none" leaves it as fabric.
-export function labelWith(img, model, crop = [0, 0, 1, 1], { inside = "auto", res = 0 } = {}) {
+// `areas`: the person's own word on single areas, after every rule above (`applyAreas`).
+export function labelWith(img, model, crop = [0, 0, 1, 1], { inside = "auto", res = 0, areas = null } = {}) {
   // (labelled from a gentler smoothing than the colours were learned from, squares 2 px across: at 3 px a script
   // title's 0.8 mm strokes wore away)
   // (labelled from a gentler smoothing than the colours were learned from: squares one picture pixel across on the
@@ -797,10 +798,38 @@ export function labelWith(img, model, crop = [0, 0, 1, 1], { inside = "auto", re
       if (inside === "all" || (inside === "auto" && !model.spare)) for (let i = 0; i < n; i++) if (cl[i] && keep[cl[i]]) labels[i] = model.inside;
     }
   }
+  // (`plain`: the labels before the person's areas, for the page to show what a tap would change)
+  const plain = areas?.length ? labels.slice() : labels;
+  if (areas?.length) applyAreas(labels, w, h, areas, crop, model);
   const area = new Array(G).fill(0);
   for (let i = 0; i < n; i++) if (labels[i] >= 0) area[labels[i]]++;
   const colors = model.colors.map((c) => ({ ...c, area: area[c.id] }));
-  return { w, h, labels, colors, merged: model.merged, frame: !!model.frame, empty: model.empty, lost: model.lost || 0, closed: closed / n, flat: model.scale ? model.flat : null };   // (how flat the picture is, where it could be judged: the scale known)
+  return { w, h, labels, plain, colors, merged: model.merged, frame: !!model.frame, empty: model.empty, lost: model.lost || 0, closed: closed / n, flat: model.scale ? model.flat : null };   // (how flat the picture is, where it could be judged: the scale known)
+}
+// One area: every pixel joined to pixel i (by a side) that has i's label takes the label `to`. Returns how many.
+export function fillArea(labels, w, h, i, to) {
+  const from = labels[i], n = w * h; if (from === to) return 0;
+  const st = [i]; labels[i] = to; let c = 0;
+  while (st.length) {
+    const j = st.pop(), x = j % w; c++;
+    for (const k of [x > 0 ? j - 1 : -1, x < w - 1 ? j + 1 : -1, j - w, j + w]) if (k >= 0 && k < n && labels[k] === from) { labels[k] = to; st.push(k); }
+  }
+  return c;
+}
+// What the person chose for single areas of the picture, in the order they chose it. No rule tells the page seen
+// through a design (the gap between a mascot's legs) from the same colour meant as part of it (its white body), and
+// `inside` is all of it or none: a tester's cougar had the gap between its back legs sewn white (2026-11). So the
+// person taps the area: { x, y, sew } with x, y fractions of the learned copy. sew false: the sewn area under the
+// point is left as fabric. sew true: the fabric under it (the background's colour; not see-through, which has no
+// colour to sew) is sewn in the background's thread, the closed-in colour's (`inside`).
+export function applyAreas(labels, w, h, areas, crop, model) {
+  for (const a of areas) {
+    const x = Math.floor(((a.x - crop[0]) / (crop[2] - crop[0])) * w), y = Math.floor(((a.y - crop[1]) / (crop[3] - crop[1])) * h);
+    if (!(x >= 0 && y >= 0 && x < w && y < h)) continue;
+    const i = y * w + x, L = labels[i], fabric = L < 0 || L === model.bg;
+    if (!a.sew && !fabric) fillArea(labels, w, h, i, model.bg >= 0 ? model.bg : -1);
+    else if (a.sew && L >= 0 && L === model.bg && model.inside >= 0) fillArea(labels, w, h, i, model.inside);
+  }
 }
 // The lines in the picture too thin to keep: a pixel or two wide, unlike the fabric (ΔE over 20) yet read as fabric, 2 px
 // clear of anything sewn (not the blend round a shape's edge). A logo's 1 px grey rule vanished without a word.

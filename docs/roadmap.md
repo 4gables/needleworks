@@ -200,7 +200,7 @@ of v28 (agents that had not seen the work) found:
   software, three hobby-tool files, three poor auto-digitized ones, one conversion. Earlier "better than Brother's
   samples" lines were measured on those. Brother's 379 real samples are inside the PE-DESIGN VM only.
 - Against the three commercial designs: our fills lay 2.8 mm of thread per mm² where they lay 6.0 (rows 0.35 mm
-  apart against 0.18-0.20, lattice 2.5 mm against 1.1-1.3); pictures and fine lines have 47 % of stitches under
+  apart against 0.18-0.20, lattice 2.5 mm against 1.1-1.3; closed in v39, stitch-model.md "Cover"); pictures and fine lines have 47 % of stitches under
   0.8 mm against 5-7 %; pictures trim 12-28 times per 1,000 stitches against 0.4-1.8 and pile colour on colour
   (to 32 hits/mm²); the inside of satin curves crowds (same-side gap p5 0.21 against 0.28); every fill is at 45°;
   36 % of wide print columns have no underlay. At or better than them: trims on lettering, borders, patches and
@@ -403,6 +403,48 @@ pe900_check against this baseline and ships as its own release (`docs/releases.m
   the rounds above.
 - Parked: JEF (`w6-jef`) needs Janome's order for 27 more thread numbers; no source to measure them from yet (the 127
   Janome-sponsored designs gave 51).
+
+## Cycle 6: what the machine showed, and a paid version (owner, 2026-11-18)
+
+Sewn by the owner on sweatshirts: fills an open mesh, a logo's gap between two legs sewn white, an outline's satin
+bunched at each inner corner of a K. Then: open the site to other people without giving the code away.
+
+- [x] **S6-A1 Solid fills**: rows 0.25 / 0.2 mm, the turn on one needle point, underlay rows 1.25 mm, picture pull
+  0.2 mm, the preview's thread at its real width, fill travel 2-5x faster (stitch-model.md "Cover").
+- [x] **S6-A2 Choose what is sewn**: a tap leaves a sewn part of a picture empty or sews the fabric's colour
+  (pictures.md `applyAreas`). A see-through picture is sewn exactly as cut out already.
+- [x] **S6-A3 Mitred corners**: a picture outline's sharp corner as two straight legs (stitch-model.md "Satin").
+- [ ] **S6-A4 Sewn proof**: the owner sews the cougar and the K again; a ladder of squares at 0.4 / 0.3 / 0.25 /
+  0.2 mm if the cover is still in question.
+- [ ] **S6-A5 Picture clean-up tools** (erase, merge two colours, crop): scoped from what testers get stuck on.
+- [ ] Not looked at: the Design tab's satin borders and lettering at sharp corners (`satin`'s `mitre` is on for
+  pictures only); the taps of S6-A2 are not kept over a reload.
+
+**The paid version (plan; nothing built).** Until its cutover the present site stays live from the public repo and
+gets every fix. One codebase, two builds: the UI calls one async `js/engine.js`; `engine-local.js` is today's app
+(owner, testers), `engine-remote.js` a thin public client whose engine runs on AWS Lambda (the same `js/core` and
+`js/studio` files, no dependencies).
+
+- [ ] **B0 Seam**: every engine call an async job through `js/engine.js`; Design-tab `compose` off the main
+  thread. Proof: batches byte-identical.
+- [ ] **B1 Server engine**: `server/handler.mjs` takes the workers' job messages; the browser sends pixels
+  (lettering drawn by its canvas and sent as bitmaps). Proof: the batches through the local server give the same
+  bytes. To settle first: whether lettering asks for bitmaps at sizes it works out mid-fit (then the server draws
+  glyph outlines itself), and whether `Design` knows which stitches are underlay and locks.
+- [ ] **B2 Thin client**: the preview gets the visible stitches only (no underlay, no locks: a file rebuilt from it
+  sews badly), with counts, fit, problems, steps and the sew sheet worked out on the server from the whole file. A
+  release guard fails if the public build can reach `js/core`, the studio's engine, `doctor.js`, `quality.js` or
+  `formats*.js`.
+- [ ] **B3 AWS**: Lambda behind a Function URL and CloudFront, S3 for uploads (24 h), DynamoDB for codes and
+  per-address limits, a concurrency cap and a budget alarm; `server/admin.mjs mint`; `POST /file` builds the whole
+  file from the stored job, runs the gate, spends one use of a code.
+- [ ] **B4 Cutover**: the source repo private, a fresh public repo with only the thin build at the same address,
+  the full app at a signed-in address, a privacy page (pictures are uploaded), no offline use. Each step that
+  cannot be undone is confirmed with the owner first.
+- [ ] **B5 Later**: Stripe checkout issues a code; the file is emailed.
+
+Limits accepted: the code and its history have been public; preview stitches can still be read out of the page;
+every setting change is a round trip.
 
 ## Verdict
 Strong, and kept: the machine layer (locked writer, PEC box, palette, locks, the 5 mm loose-thread rule, 24 hits

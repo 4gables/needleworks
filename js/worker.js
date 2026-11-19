@@ -25,8 +25,9 @@ self.onmessage = (e) => {
       return;
     }
     // (a line drawing draws the edges of colours: the fabric's colour inside the design stays fabric)
-    const inside = insideOf(opts), lk = `${key}:${img.width}x${img.height}:${crop.join(",")}:${inside}`;
-    if (labelled?.key !== lk) labelled = { key: lk, analysis: labelWith(img, m, crop, { inside, res: DEFAULTS.res }) };
+    // (`areas`: the areas the person set to sewn or empty, core/palette.js `applyAreas`)
+    const inside = insideOf(opts), areas = opts.areas?.length ? opts.areas : null, lk = `${key}:${img.width}x${img.height}:${crop.join(",")}:${inside}:${areas ? JSON.stringify(areas) : ""}`;
+    if (labelled?.key !== lk) labelled = { key: lk, analysis: labelWith(img, m, crop, { inside, res: DEFAULTS.res, areas }) };
     const analysis = labelled.analysis;
     const p = opts.palette?.length ? toPalette(analysis, opts.palette) : analysis;
     // a thread picked on a colour's chip (`swap`: id -> { hex: a Brother thread's }) sews that colour instead of the one it
@@ -44,7 +45,9 @@ self.onmessage = (e) => {
     const pattern = opts.turn ? turnForMachine(design.pattern()) : design.pattern();
     const bytes = writePES(pattern);
     self.postMessage({ id, ok: true, pattern, bytes, summary, fine, art,
-      colors: a.colors, merged: analysis.merged, closed: analysis.closed || 0, spare: !!m.spare && inside === "auto", flat: m.flat, smooth: !!m.smooth, framed: !!analysis.frame, owned: a.owned, labels: labels || a.labels, w: a.w, h: a.h, res }, [bytes.buffer]);
+      colors: a.colors, merged: analysis.merged, closed: analysis.closed || 0, spare: !!m.spare && inside === "auto", flat: m.flat, smooth: !!m.smooth, framed: !!analysis.frame, owned: a.owned, labels: labels || a.labels, w: a.w, h: a.h, res,
+      // (for "Choose what is sewn": each pixel's colour before the person's areas, the fabric's id and the closed-in colour's)
+      areaMap: { labels: analysis.plain, w: analysis.w, h: analysis.h, bg: m.bg, inside: m.inside, colors: analysis.colors.map((c) => ({ id: c.id, hex: c.hex, background: !!c.background })) } }, [bytes.buffer]);
   } catch (err) {
     self.postMessage({ id, ok: false, error: err.message || String(err), code: err.code });
   }

@@ -8,7 +8,7 @@ import { Design } from "./design.js";
 import { FILL, FILL_PATTERNS, SEWN, WORN, fillPolygon, makeRouter, routeBudget, routeFill, tatami } from "./fill.js";
 import { arclen, followRun, normals, resample, run, satin } from "./geom.js";
 import { MARGIN } from "./machines.js";
-import { COLUMNS, LIMITS, PICTURES, ROWS, SHADE, SHAPES, letterRecipe } from "./recipes.js";
+import { COLUMNS, LIMITS, PICTURES, ROWS, SHADE, SHAPES, UNDERLAY, letterRecipe } from "./recipes.js";
 import { distanceTransform as wholeDT, label, order, skeletonEdges, tour } from "./raster.js";
 import { cleanShapes } from "./regions.js";
 import { shading } from "./shade.js";
@@ -18,8 +18,8 @@ import { artShapes } from "./artcheck.js";
 export { DEFAULTS, analyze, labelWith, learnColours, pictureInk, toPalette } from "./palette.js";
 
 export { FILL_PATTERNS, fillPolygon, routeBudget };   // (core/fill.js)
-// fill row spacing in mm. Solid covers the fabric; standard is lighter and faster. 0.3 fails the PE900 check:
-// the links between rows become stitches under 0.3 mm, which nest.
+// fill row spacing in mm (recipes.js ROWS): standard covers the fabric, solid is closer still for fleece, towels and
+// dark fabric.
 export const DENSITY = ROWS;   // (core/recipes.js)
 // A colour's fill reaches this far (mm) under the colours sewn after it, so thread pull can't open a gap of fabric
 // where two colours meet (digitizing guides: 0.2-0.4 mm).
@@ -102,10 +102,10 @@ const R10 = (v) => pyRound(v * 10);
 const sewnLen = (a, b) => Math.hypot(R10(b[0]) - R10(a[0]), R10(b[1]) - R10(a[1]));
 const tinyStep = (a, b) => { const d = sewnLen(a, b); return d > 0 && d <= LIMITS.tiny; };
 
-// No tiny stitch in a path (mm). A fill's rows are 0.35-0.4 mm apart, so the link from one row's end to the next
-// row's start is 0.35-0.41 mm where the edge runs square to the rows, and a third of those round to 0.3 mm or less in
-// the file (0.25 + 0.25 at 45 degrees is 0.2 + 0.2): 336 tiny stitches in the 12 sample pictures, every one a row
-// link. The row's end moves along its own row by 0.1-0.4 mm (out first) until the link sews over 0.3 mm; the row
+// No tiny stitch in a path (mm). Rows turn on one needle point (fill.js `sewRows`), so a row link is no stitch of
+// its own; what is left is where sections join and travel meets a row (when rows were 0.35-0.4 mm apart and each
+// turn two points, a third of the links rounded to 0.3 mm or less in the file: 336 tiny stitches in the 12 sample
+// pictures). The point moves along its own row by 0.1-0.4 mm (out first) until the link sews over 0.3 mm; the row
 // keeps its place and the edge moves by less than a thread's width. Dropping the point (`untiny`) would take the
 // row's end off the edge instead. first: the point the needle is at (never moved).
 function noTiny(pts, first = null) {
@@ -353,6 +353,20 @@ function columnNets(px, more, w, h, own, res, toMm, dotted) {
     es = [["a", "b", [[cx + u[0] * t0, cy + u[1] * t0], [cx + u[0] * t1, cy + u[1] * t1]]]];
     dotted = true;
   }
+  // (two centre lines that meet at a node nothing else comes to are one line: left as two, each ended at the node as
+  // a column's end does, and where the node sat on a corner of an outline both fanned round it: `satin`'s mitre
+  // needs the corner inside one line)
+  for (let again = true; again; ) {
+    again = false;
+    const at = new Map();
+    es.forEach((e, k) => { for (const v of [e[0], e[1]]) { if (!at.has(v)) at.set(v, []); at.get(v).push(k); } });
+    for (const [v, ks] of at) {
+      if (ks.length !== 2 || ks[0] === ks[1]) continue;
+      const [e1, e2] = [es[ks[0]], es[ks[1]]], p1 = e1[1] === v ? e1[2] : e1[2].slice().reverse(), p2 = e2[0] === v ? e2[2] : e2[2].slice().reverse();
+      const joined = [e1[1] === v ? e1[0] : e1[1], e2[0] === v ? e2[1] : e2[0], [...p1, ...p2.slice(1)]];
+      es = es.filter((_, k) => k !== ks[0] && k !== ks[1]); es.push(joined); again = true; break;
+    }
+  }
   const E = [], deg = new Map(), cov = new Uint8Array(cw * ch);
   for (const [a, b] of es) for (const k of [a, b]) deg.set(k, (deg.get(k) || 0) + 1);
   for (const [a, b, p0] of es) {
@@ -522,7 +536,7 @@ function netStitches(net, start, sat) {
     if (kind === "run") {
       if (c.mid >= sat.zigzagFrom) out.push(p[0], ...satin(p, c.W, 2.5, 0, false, false, (t) => Math.max(0.05, c.a(t * c.L) + c.b(t * c.L) - 0.8)), p[p.length - 1]);
       else out.push(...run(p, 1.2));
-    } else out.push(...satin(p, c.W, sat.gap, COLUMNS.pull + sat.pull, false, true, null, (s) => [c.a(s), c.b(s), c.k(s)]));
+    } else out.push(...satin(p, c.W, sat.gap, COLUMNS.pull + sat.pull, false, true, null, (s) => [c.a(s), c.b(s), c.k(s)], { mitre: true }));
   }
   return out;
 }
@@ -668,7 +682,7 @@ function build(img, analysis, opts) {
   // where each colour's fill will surely lie: over 0.6 mm inside a shape that isn't a speck. A travel run sewn there
   // by an earlier colour is covered.
   // (the thread a fill of so many px sews: its rows and its underlay)
-  const fillThread = (px) => (px / (res * res)) * (1 / o.density + 1 / 2.5);
+  const fillThread = (px) => (px / (res * res)) * (1 / o.density + 1 / UNDERLAY.rows);
   const solid = new Uint8Array(w * h), budget = routeBudget();
   for (const col of used) {
     const m = { w, h, data: new Uint8Array(w * h) };
@@ -939,9 +953,9 @@ function build(img, analysis, opts) {
       const widthMm = (2 * maxDt) / res, centre = [sx / mine.length, sy / mine.length];
       // anything with width is a solid fill that matches its outline exactly
       // pull compensation widens a fill past its edge; on thin letters that closes the gaps between them
-      const shaded = sh.rows(col.id, comp, mask, { spacing: o.density, stitch: 3.5, pull: widthMm < 2 ? 0.05 : 0.15 });
-      const under = shaded ? shaded.under : tatami(mask, comp, res, { angle: angle + 90, spacing: 2.5, stitch: 3, inset: 0.4, pull: 0 });
-      const fill = shaded ? shaded.fill : tatami(mask, comp, res, { angle, spacing: o.density, stitch: 3.5, pull: widthMm < 2 ? 0.05 : 0.15 });
+      const shaded = sh.rows(col.id, comp, mask, { spacing: o.density, stitch: 3.5, pull: widthMm < 2 ? 0.05 : PICTURES.pull });
+      const under = shaded ? shaded.under : tatami(mask, comp, res, { angle: angle + 90, spacing: UNDERLAY.rows, stitch: 3, inset: 0.4, pull: 0 });
+      const fill = shaded ? shaded.fill : tatami(mask, comp, res, { angle, spacing: o.density, stitch: 3.5, pull: widthMm < 2 ? 0.05 : PICTURES.pull });
       blocks.push({ centre, paths: routeFill([under, fill], comp, mask, res, budget, WORN, false, 0, shaded && under2 ? cellOf(comp) : null, PICTURES.edge, shaded && under2 ? 90 : 30).map(toMm), kind: "fill", comp: comp.id, thread: fillThread(mine.length), meant: dot(comp.id) || (mark(comp.id) && size[comp.id] < 2 * dotPx) });
       filled[comp.id] = 1;
     }

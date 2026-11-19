@@ -202,8 +202,8 @@
           <fieldset class="field" id="pic-density-row">
             <legend>Fill</legend>
             <div id="pic-density" class="chips">
-              <button type="button" data-d="standard" aria-pressed="true">Standard</button>
-              <button type="button" data-d="solid" aria-pressed="false">Dense (felt, patches, dark fabric)</button>
+              <button type="button" data-d="standard" aria-pressed="true">Solid</button>
+              <button type="button" data-d="solid" aria-pressed="false">Extra solid (fleece, towels, dark fabric)</button>
             </div>
           </fieldset>
         </details>
@@ -213,6 +213,7 @@
           <div id="pic-palette" class="palette"></div>
           <div id="pic-swap" class="pic-swap" role="region" aria-label="This thread" hidden></div>
           <p class="hint" id="pic-inside" role="status" hidden></p>
+          <p class="hint" id="pic-areas-row" hidden><button type="button" class="link" id="pic-areas">Choose what is sewn, part by part</button> <span id="pic-areas-said"></span></p>
           <p class="hint" id="pic-merged" hidden></p>
           <label class="check small" id="pic-mine-row" hidden><input type="checkbox" id="pic-mine"> Use only threads I own</label>
         </fieldset>
@@ -374,6 +375,15 @@
     <label class="check small" id="names-shrink-row"><input type="checkbox" id="names-shrink" checked> Make long names smaller so they fit</label>
     <div class="names-thumbs" id="names-thumbs"></div>
     <div class="row"><button type="submit" class="ghost" value="cancel" id="names-cancel">Cancel</button><button type="button" class="primary" id="names-make">Make the files</button></div>
+  </form>
+</dialog>
+<dialog id="areas" class="names areas" aria-labelledby="areas-title">
+  <form method="dialog">
+    <h2 id="areas-title">Choose what is sewn</h2>
+    <p class="hint">Tap a part to leave it empty. Tap an empty part to sew it. Tap it again to put it back. The checked pattern is bare fabric.</p>
+    <canvas id="areas-canvas" role="img" aria-label="Your picture: its sewn parts in their thread colours, bare fabric as a checked pattern"></canvas>
+    <p class="hint" id="areas-said" role="status"></p>
+    <div class="row"><button type="button" class="ghost" id="areas-reset">Start again</button><button type="submit" class="ghost" value="cancel">Cancel</button><button type="button" class="primary" id="areas-done">Sew it this way</button></div>
   </form>
 </dialog>
 <dialog id="rename" class="names" aria-labelledby="rename-title">

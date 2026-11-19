@@ -49,6 +49,15 @@ Reference for this part of Needleworks: the rules, the reason for each (it stops
   1,635 -> 1,554, loose 33 -> 25 (line flower 60 mm 0 -> 2, watercolour flowers 100 mm trims 11 -> 14); every file
   passes pe900_check. Not done: a counter of bold lettering on the fabric (panel s120's D, sewn beige) is the same
   shape as a white star in a red ring, which the owner wants sewn; nothing here tells them apart yet.
+- Choose what is sewn, part by part (`applyAreas`, `pic.areas`; a tester's cougar had the gap between its back legs
+  sewn white, 2026-11): no rule tells page seen through a design from the same colour meant as part of it, and
+  `inside` is all of it or none, so the person taps the part in "Choose what is sewn" (the picture in its thread
+  colours, bare fabric as a checked pattern). A tap on a sewn part leaves it as fabric, a tap on the fabric's colour
+  sews it in the closed-in colour's thread, a tap on a changed part takes its tap back. Each tap is a point
+  ({ x, y, sew }, fractions of the whole picture, so it holds at any Size, colour count and style) applied after
+  every rule of `labelWith`, to the area joined to it by pixel sides. A see-through part has no colour to sew. The
+  taps are forgotten with the picture, and when the background or the edge band choice changes (the picture is cut
+  differently). Guard: picture_corpus `gap_chosen`. Not done: the taps are not kept over a reload.
 - A closed-in part left bare (`spare`) that is a quarter of the picture or more (framed_s100_edge's cream panel at 3
   colours) is said as what to sew it on: "That is most of the design: sew it on cream fabric, or sew it in cream too
   (4 threads)" (picture.js `insideNote`). Keeping it sewn at the count would take a design colour.
@@ -283,8 +292,9 @@ Reference for this part of Needleworks: the rules, the reason for each (it stops
   its own measured angle or curved rows, the alternation kept only where its shape doesn't say (`docs/stitch-model.md`
   "Direction that follows the form"); the Picture panel offers it as Follow the shape under More settings (Filled),
   off by default: on the corpus it saves 3 % of trims and stitches with look unchanged (79.1 -> 79.2), but one flat
-  landscape loses 3.7 and a few cases gain a loose thread (numbers in stitch-model.md). `DENSITY` Standard 0.4 (the app's default; `DEFAULTS.density` is Dense) / Dense
-  0.35; 0.3 fails the check (row links under 0.3 mm). Row steps split to 3 mm, row-end stitches over 4 mm halved.
+  landscape loses 3.7 and a few cases gain a loose thread (numbers in stitch-model.md). `DENSITY` (recipes.js `ROWS`): Solid 0.25 mm
+  (the default) / Extra solid 0.2 (fleece, towels, dark fabric); 0.4 and 0.35 until v39, half a sold design's thread
+  (stitch-model.md "Cover"). Pull 0.2 mm (`PICTURES.pull`; 0.05 on shapes under 2 mm), underlay rows 1.25 mm apart. Row steps split to 3 mm, row-end stitches over 4 mm halved.
 - Small lettering (`digitize.js` `smallText`, numbers `TEXT`; a tester's logo, 2026-11: a 447 px picture at 90 mm,
   its second line 4 mm capitals with 0.7 mm strokes; "I want the lettering to be more clear"). Rows of lettering are
   found as the page's check finds them (`artShapes(...).rows`), on labels where a colour between the fabric's and a

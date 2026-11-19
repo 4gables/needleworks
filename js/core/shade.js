@@ -29,7 +29,7 @@ import { sewRows, tatami } from "./fill.js";
 import { deltaE2000 } from "./palette.js";
 import { distanceTransform } from "./raster.js";
 import { regionsOf } from "./regions.js";
-import { SHADE } from "./recipes.js";
+import { SHADE, UNDERLAY } from "./recipes.js";
 import { hexToRgb } from "./threads.js";
 
 // the row thresholds: (i + 0.5) / L in bit-reversed order of i (L = 8: 0 4 2 6 1 5 3 7)
@@ -325,7 +325,7 @@ export function shading(img, labels, colors, used, res, o = {}) {
       const main = gid[i] ? byRank(groups[gid[i] - 1]).find((c) => has.get(c)[i]) === cid : true;
       if (main) { sub[i] = 1; subPx.push(i); }
     }
-    const under = subPx.length ? tatami(mask, { id: 1, labels: sub, dt: distanceTransform({ w, h, data: sub }), pixels: subPx }, res, { angle: G.angle + 90, spacing: 2.5, stitch: 3, inset: 0.4, pull: 0 }) : [];
+    const under = subPx.length ? tatami(mask, { id: 1, labels: sub, dt: distanceTransform({ w, h, data: sub }), pixels: subPx }, res, { angle: G.angle + 90, spacing: UNDERLAY.rows, stitch: 3, inset: 0.4, pull: 0 }) : [];
     return { under, fill };
   }
   const area = groups.reduce((t, g) => t + g.area, 0);
