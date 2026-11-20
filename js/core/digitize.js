@@ -316,7 +316,7 @@ function foldFlecks(labels, w, h, colors, used, res) {
 // is measured across the shape along the normal (a round end narrows as the shape does; the distance to the edge
 // alone would sew it as a diamond), at most COLUMNS.cap times that distance at the centre line, so a junction's
 // other strokes don't count. A column stops where it is under COLUMNS.tip across.
-function columnNets(px, more, w, h, own, res, toMm, dotted, serif = 0) {
+function columnNets(px, more, w, h, own, res, toMm, dotted, serif = 0, apex = 0) {
   let x0 = w, x1 = -1, y0 = h, y1 = -1;
   for (const i of [...px, ...more]) { const x = i % w, y = (i - x) / w; if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
   const ox = Math.max(0, x0 - 2), oy = Math.max(0, y0 - 2), cw = Math.min(w - 1, x1 + 2) - ox + 1, ch = Math.min(h - 1, y1 + 2) - oy + 1;
@@ -388,8 +388,8 @@ function columnNets(px, more, w, h, own, res, toMm, dotted, serif = 0) {
   // skeleton rounds the corner off and prunes its point as a spur, and sewn along it an N came out an "n", its corners
   // bare (cover 0.6-0.9, so it stayed a fill). There the line is cut into its strokes, each carried on straight to the
   // ink's edge, as a digitizer lays an N: three columns that lap at the corners)
-  if (!dotted && COLUMNS.apex) {
-    const k = Math.max(2, Math.ceil(stroke / (0.1 * res))), f = Math.round(1.6 * k), cut = [],   // (f: a leg's direction is read from k to f along it: an N's diagonal is 4 widths long between its corners)
+  if (!dotted && apex) {
+    const k = Math.max(2, Math.ceil(stroke / (0.1 * res))), f = Math.round(COLUMNS.legs * k), cut = [],   // (f: a leg is read straight from k to f along it, COLUMNS.legs widths: over 1.6 a thin arc, a cat's eye, passed as two straight legs and was cut)
     unit = (a, b) => { const L = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1; return [(b[0] - a[0]) / L, (b[1] - a[1]) / L]; };
     const grow = (p, u) => { const o = []; let [x, y] = p; for (let t = 0; t < 4 * stroke && at(x + u[0] * 0.5, y + u[1] * 0.5); t += 0.5) { x += u[0] * 0.5; y += u[1] * 0.5; o.push([x, y]); } return o; };
     let n = 0;
@@ -397,7 +397,7 @@ function columnNets(px, more, w, h, own, res, toMm, dotted, serif = 0) {
       const q = resample(e[2], 0.1 * res), tops = [], pick = [];
       if (e[0] !== e[1]) for (let i = f; i < q.length - f; i++) {
         const u = unit(q[i - f], q[i - k]), v = unit(q[i + k], q[i + f]), t = Math.acos(Math.max(-1, Math.min(1, u[0] * v[0] + u[1] * v[1])));
-        if (t < (COLUMNS.apex * Math.PI) / 180) continue;
+        if (t < (apex * Math.PI) / 180) continue;
         // (both legs straight where their directions are read: a U's bend turns as far, all the way round)
         const h = k >> 1, bend = (a, m, b) => { const u1 = unit(a, m), u2 = unit(m, b); return Math.acos(Math.max(-1, Math.min(1, u1[0] * u2[0] + u1[1] * u2[1]))); };
         if (Math.max(bend(q[i - f], q[(2 * i - k - f) >> 1], q[i - k]), bend(q[i + k], q[(2 * i + k + f) >> 1], q[i + f])) > (COLUMNS.straight * Math.PI) / 180) continue;
@@ -1008,12 +1008,17 @@ function build(img, analysis, opts) {
         // (and only when its columns cover the piece: thinning prunes a stroke shorter than it is wide as a spur, and a
         // slab F's middle arm was left bare)
         const fine2 = (n) => n.length && n.cover >= COLUMNS.cover && (!stroke || plain(n));
+        // (a piece its strokes don't cover is tried cut at its sharp corners, COLUMNS.apex: an N, an M, a V. Only then:
+        // cut everywhere, a cat's thin eye that sewed well was cut at its curl and sewn askew, look 82.8 -> 80.9)
+        let cutAt = 0;
+        // (or one they cover with ink to spare, under COLUMNS.whole, when cut it covers COLUMNS.gain more: an M's corners)
+        if (stroke && COLUMNS.apex && (!fine2(nets) || nets.cover < COLUMNS.whole)) { const alt = columnNets(q.px, more, w, h, own, res, toMm, false, 0, COLUMNS.apex); if (fine2(alt) && (!fine2(nets) || alt.cover >= nets.cover + COLUMNS.gain)) { nets = alt; cutAt = COLUMNS.apex; } }
         // (a piece its strokes don't cover is tried again with its serifs kept as strokes, COLUMNS.serif: a slab I is
         // a stem and two bars, as a cap's is sewn. Only then: kept for every piece, the dead ends at a V's point and
         // a T's bar made joints of three in letters that sewed well without them)
         // (or that they cover with ink to spare, under COLUMNS.whole: then the serifs' way is taken when it covers
         // COLUMNS.gain more. A slab E's strokes cover 0.93 of it, its serifs bare)
-        if (stroke && COLUMNS.serif && (!fine2(nets) || nets.cover < COLUMNS.whole)) { const alt = columnNets(q.px, more, w, h, own, res, toMm, false, COLUMNS.serif); const count = (n) => n.reduce((t, x) => t + x.edges.length, 0);
+        if (stroke && COLUMNS.serif && (!fine2(nets) || nets.cover < COLUMNS.whole)) { const alt = columnNets(q.px, more, w, h, own, res, toMm, false, COLUMNS.serif, cutAt || (fine2(nets) ? 0 : COLUMNS.apex)); const count = (n) => n.reduce((t, x) => t + x.edges.length, 0);
           // (and only when it found serifs, more strokes than before: a thin arc gained no stroke, only a longer one
           // that "covered more" sewn askew, and a cat's eye came out a smear)
           if (fine2(alt) && count(alt) > count(nets) && (!fine2(nets) || alt.cover >= nets.cover + COLUMNS.gain)) nets = alt; }

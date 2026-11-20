@@ -91,7 +91,7 @@ export const SHAPES = { band: 0.5, between: 1.25, side: 0.2, fleck: 3, enclosed:
 // a column when along each centre line its width rises and falls at most `taper` times its range (a brush stroke's
 // point, a leaf's half). `steady`: each satin stitch lies square to the centre line's direction averaged over that
 // many stroke widths either way (square to every wiggle, small letters sewed as fans).
-export const COLUMNS = { min: 1.0, wide: 4, long: 2, into: 0.6, cap: 1.4, tip: 0.5, solid: 0.85, stub: 3, short: 0.2, even: 2.2, pull: 0.1, thread: 0.2, small: 3, cover: 0.9, mitre: 0.25, taper: 2.5, steady: 0.75, letter: 1.6, run: 6, apex: 115, sharp: 0.85, past: 0.25, lap: 0.4, serif: 0.9, whole: 0.97, gain: 0.03, straight: 12 };
+export const COLUMNS = { min: 1.0, wide: 4, long: 2, into: 0.6, cap: 1.4, tip: 0.5, solid: 0.85, stub: 3, short: 0.2, even: 2.2, pull: 0.1, thread: 0.2, small: 3, cover: 0.9, mitre: 0.25, taper: 2.5, steady: 0.75, letter: 1.6, run: 6, apex: 115, sharp: 0.85, legs: 2.5, past: 0.25, lap: 0.4, serif: 0.9, whole: 0.97, gain: 0.03, straight: 12 };
 //   pull:     how far a fill's rows run past the shape's edge at both ends (mm; shapes under 2 mm across 0.05, or
 //             the gaps between thin letters close). 0.15 until 2026-11: a fill sewn on a sweatshirt drew back from its
 //             outline and the fabric showed between them; 0.2 is the published figure for cotton (FILLS).
