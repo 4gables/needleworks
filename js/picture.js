@@ -2,26 +2,24 @@
 // The Picture tab: a picture to stitches. The picture's worker jobs (newest kept, restarted when too slow), its
 // settings and sizes, the palette and thread swaps, what was left out and the fixes that bring it back, the sample
 // and the picture kept from the last visit. (Part of app.js until 2026-11.)
-import { turnPattern } from "./core/design.js";
+import { turnPattern } from "./core/turn.js";
 import { designStats, machineThreads, readEmbroidery } from "./core/formats.js";
-import { DENSITY, LEARN, MOST, contentBox, cutPart, findParts, lostMuch, picturePlan, pictureImage, sewSized } from "./core/digitize.js";
-import { applyAreas } from "./core/palette.js";
+import { DENSITY, LEARN, MOST, chooseStyle, contentBox, cutPart, findParts, lostMuch, picturePlan, pictureImage, sewSized } from "./core/picprep.js";
+import { applyAreas } from "./core/areas.js";
 import { PEC_MATCH, hexToRgb, nearestBrotherThread, pecThread } from "./core/threads.js";
-import { fix } from "./doctor.js";
 import { moves } from "./quality.js";
 import { LOOK, TIP, isolate } from "./words.js";
 import { safeName } from "./core/typed.js";
 import { colourWord, lab } from "./core/brands.js";
 import { MARGIN } from "./core/machines.js";
 import { artGuide, artSaid } from "./artwords.js";
-import { chooseStyle } from "./core/artcheck.js";
-import { COLORS as LINE_THREADS } from "./studio/ui.js";
+import { COLORS as LINE_THREADS } from "./common.js";
 import { $, forgetPicture, hoop, keepPicture, kept, square, state, store, turned } from "./state.js";
 import { next } from "./focus.js";
 import { nearOwn, ownedPalette, ownedSpools, owns, threadHtml, threadLabel } from "./threadui.js";
 import { mmText } from "./words.js";
-import { jobQueue } from "./jobs.js";
-import { busy, escapeHtml, openDesign, paint, setMode, setView, showError, studio, warnUI } from "./app.js";   // (used when things happen, never while this file loads: app.js loads after it)
+import { BUILD, pictureJobs } from "./engine.js";
+import { askCode, busy, escapeHtml, openDesign, paint, setMode, setView, showError, studio, warnUI } from "./app.js";   // (used when things happen, never while this file loads: app.js loads after it)
 
 export const sizeLabel = (v) => mmText(v);
 // ---------- picture ----------
@@ -29,7 +27,7 @@ export const sizeLabel = (v) => mmText(v);
 // photo once routed for over 5 minutes and every later change queued behind it): the worker is replaced and the
 // picture tab says what to try. `stop()` drops what's waiting and running (the checks of settings that just changed).
 function picWorker() {
-  const q = jobQueue(new URL("./worker.js", import.meta.url), { limit: 60000, eager: true, slow: "This picture is taking too long to stitch. Try fewer colours, a smaller size, or Line drawing." });
+  const q = pictureJobs({ limit: 60000, eager: true, slow: "This picture is taking too long to stitch. Try fewer colours, a smaller size, or Line drawing." });
   // (a worker that died says so in the picture tab's words)
   return { run: async (msg) => { const r = await q.run(msg); return r.died ? { ok: false, error: "Something went wrong while stitching this picture. " + r.error } : r; }, stop: q.stop };
 }
@@ -132,19 +130,22 @@ export async function makePicture() {
     $("pic-size-note").textContent = off ? `It sews ${got} mm long, not ${want}: ${s.style === "cross" ? `cross-stitch grows ${s.cross} mm at a time, and parts too small for a cross drop out` : "parts too small to sew at this Size drop out"}, so the nearest it can be is ${got} mm.` : "";
   }
   // (a busy picture: how many separate pieces the machine cuts the thread between, counted on the file)
+  // (counted on the whole file where this is its preview: a preview moves on where it leaves stitches out)
   { let cuts = 0, was = 0; for (const [, , c] of r.pattern.stitches) { if ((c === 1 || c === 2) && was === 0) cuts++; was = c === 1 || c === 2 ? 1 : 0; }
-    p.busy = s.style === "fill" && cuts >= BUSY ? { cuts, stitches: r.pattern.stitches.filter((q) => q[2] === 0).length } : null; }
+    if (r.real) cuts = r.real.cuts;
+    p.busy = s.style === "fill" && cuts >= BUSY ? { cuts, stitches: r.real ? r.real.stitches : r.pattern.stitches.filter((q) => q[2] === 0).length } : null; }
   p.fine = { ...r.fine, tries: r.tries }; p.checking = false;
   fineUI(r.fine); shadeNote(r.fine);
   const base = safeName((state.pic.file?.name || "picture").replace(/\.[^.]+$/, "") + (p.part ? `_${p.part}` : ""), "picture");
-  const v = { pattern: r.pattern, verifyAgainst: r.pattern, bytes: r.bytes, filename: `${base}${state.pic.style === "line" ? "_line" : state.pic.style === "cross" ? "_cross" : ""}.pes`, fabric: "linen",
+  // (`job`, `real`: the paid build's preview, its whole file's id and counts, app.js `setView`)
+  const v = { pattern: r.pattern, verifyAgainst: r.pattern, bytes: r.bytes, job: r.job, real: r.real, filename: `${base}${state.pic.style === "line" ? "_line" : state.pic.style === "cross" ? "_cross" : ""}.pes`, fabric: "linen",
     sheet: turned() ? { notes: [$("done-turn").textContent] } : undefined,
     // (what the panel says of it, as every surface says it: words.js)
     get problems() { return [...(state.pic.fineProblems || []), ...(state.pic.ownedProblem ? [state.pic.ownedProblem] : []), ...(state.pic.framed ? [{ id: "framed", level: TIP, text: FRAMED }] : [])]; },
   };
   state.views.picture = v;
   // (adding needs a design there to add to)
-  $("pic-use").hidden = false; $("pic-add").hidden = $("pic-or").hidden = (() => { try { return studio.empty(); } catch { return true; } })();
+  $("pic-use").hidden = BUILD === "paid"; $("pic-add").hidden = $("pic-or").hidden = (() => { try { return studio.empty(); } catch { return true; } })();
   if (state.mode === "picture") setView(v);
   if (lostMuch(r.fine.kept)) checkLost(s, req);
 }
@@ -155,6 +156,8 @@ function pictureError(r) {
   $("empty").textContent = "";   // (not "Choose a picture" beside the error)
   if (r.code === "cross") msg.push(p.cross > 1.5 ? (bigger ? "Try smaller crosses or a bigger Size." : "Try smaller crosses.") : bigger ? "Try a bigger Size." : "");
   else if (r.code === "small" && !bigger) msg.push("It's as big as this hoop allows.");
+  // (the paid build: the day's free previews used up)
+  if (r.code === "daily") { showError(r.error, { label: "Enter a download code", run: () => askCode(null, makePicture) }); return; }
   showError(msg.filter(Boolean).join(" "), r.code === "small" && bigger ? { label: "Make it as big as fits", run: () => setSize(p.max) } : r.code === "skipped" ? { label: "Sew every thread", run: () => { p.skip = []; makePicture(); } } : undefined);
 }
 function setSize(mm) { state.pic.size = mm; $("pic-size").value = mm; $("pic-size-out").textContent = sizeLabel(mm); makePicture(); }

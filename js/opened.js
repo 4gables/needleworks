@@ -1,17 +1,17 @@
 /*! Needleworks (c) 2026 4Gables. All rights reserved. Proprietary, see LICENSE. https://4gables.com/needleworks/ */
 // The Open tab: a design file opened, checked and shown, the fixes offered (sizes, colours, thinning, re-stitching
 // in the doctor's worker), and where a dropped or shared file goes. (Part of app.js until 2026-11.)
-import { turnPattern } from "./core/design.js";
+import { turnPattern } from "./core/turn.js";
 import { designStats, machineThreads, readEmbroidery, writePES } from "./core/formats.js";
 import { MARGIN } from "./core/machines.js";
 import { hexToRgb, nearestBrotherThread, pecThread } from "./core/threads.js";
-import { DST_COLOURS, checkup, fix, openedFile, pauses, shortJumps, sortedChanges } from "./doctor.js";
+import { DST_COLOURS, checkup, openedFile, pauses, shortJumps, sortedChanges } from "./checkup.js";
 import { HARD, MAX_BLOCKS, denseWords, moves } from "./quality.js";
 import { BLOCK, LOOK, TIP } from "./words.js";
-import { jobQueue } from "./jobs.js";
+import { doctorJobs } from "./engine.js";
 import { safeName } from "./core/typed.js";
 import { apart, lab } from "./core/brands.js";
-import { savedDesign } from "./studio/ui.js";
+import { savedDesign } from "./common.js";
 import { $, hoop, square, state, turned } from "./state.js";
 import { keepFocus } from "./focus.js";
 import { loadPicture } from "./picture.js";
@@ -70,7 +70,7 @@ export async function openDesign(file) {
 let docJobs = null, docSeq = 0, docBusy = 0;
 // (a fix past a minute and a half is stopped and said: nothing limited it, and "Re-stitching…" could spin for good)
 async function docJob(msg) {
-  docJobs ||= jobQueue(new URL("./doctor-worker.js", import.meta.url), { limit: 90000, slow: "it's taking too long at this size. Try a size nearer the design's own." });
+  docJobs ||= doctorJobs({ limit: 90000, slow: "it's taking too long at this size. Try a size nearer the design's own." });
   const r = await docJobs.run(msg);
   if (r.stale) return;
   if (r.died) { docIdle(); if (state.mode === "open") showError("Something went wrong while fixing this design. " + r.error); return; }
@@ -80,7 +80,7 @@ async function docJob(msg) {
   // (a size meant to fit, made smaller till the re-stitched copy did: that's the size now, and nothing bigger fits)
   const o = state.opened;
   if (r.scale != null && r.scale !== o.opts.scale) { o.opts.scale = r.scale; (o.fits ||= {})[fieldKey()] = r.scale; sizeUI(); }
-  showError(""); showOpened(r.pattern, r.bytes, r.check, true);
+  showError(""); showOpened(r.pattern, r.bytes, r.check, true, r.job ? { job: r.job, real: r.real } : null);
 }
 const docIdle = () => { clearTimeout(docBusy); busy(false); };
 // the opened file as it stands after the checkup's fixes (none: its own bytes, as they came)
@@ -95,7 +95,8 @@ function openView() {
   const h = hoop(), fit = scale <= largest().scale + 1e-9 ? [h.w - 2 * MARGIN, h.h - 2 * MARGIN] : null;
   docJob({ id, d: o.fixBase || o.d, opts: { ...o.opts, join: o.colourless }, fit });
 }
-function showOpened(p, bytes, check, changed) {
+// (`paid`: the paid build's preview of a fixed copy, its whole file's id and counts)
+function showOpened(p, bytes, check, changed, paid = null) {
   const o = state.opened, { scale, tiny, thin, sort, split, satin } = o.opts;
   // ("fixed" only when it passes the check: never a "_fixed" file that fails, nor "_fixed_fixed" from the dialog; and
   // only when something needed fixing: shrinking ticks Remove tiny stitches and Thin by itself, and a plain resize of
@@ -105,7 +106,7 @@ function showOpened(p, bytes, check, changed) {
   const fixed = fixes && !check.verdict.length;
   // (too many thread changes to write as PES: shown from its own bytes, no download)
   if (o.stuck) bytes = o.bytes;
-  const v = { pattern: p, verifyAgainst: o.stuck ? null : changed || !o.isPes ? p : null, bytes,
+  const v = { ...(paid || {}), pattern: p, verifyAgainst: o.stuck ? null : changed || !o.isPes ? p : null, bytes,
     // (a fixed copy has a name of its own: the plain and fixed copies of rosacea.dst were both rosacea.pes)
     filename: `${o.base}${scale !== 1 ? `_${Math.round(scale * 100)}pct` : ""}.pes`, fabric: "linen", source: o.stuck ? o.bytes : changed || !o.isPes ? null : o.bytes,
     blockLabel: "Too many thread changes",

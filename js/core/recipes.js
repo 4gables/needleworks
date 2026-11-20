@@ -3,24 +3,10 @@
 // none re-types one. (Until 2026-11 the same limit was typed into six files: the 24 in design.js, quality.js,
 // render.js and doctor.js, the 0.3 mm in seven places.) tests/pe900_check.py keeps its own copies on purpose: it is
 // the outside check and shares nothing with the app.
-
-// What the machine and the checker allow.
-export const LIMITS = {
-  hits: 24,       // needle hits in any 1 mm square of one colour block, at any 0.1 mm grid offset: the densest spot in sold designs
-  tiny: 3,        // 0.1 mm: a stitch this short or shorter piles thread (Ink/Stitch's minimum stitch length)
-  longest: 121,   // 0.1 mm: 12.1 mm, the longest needle move the machine makes in one stitch
-  blocks: 99,     // colour blocks the PE900 steps through in one design
-  recentre: 200,  // mm from the centre: past it a design is moved onto the centre (a PES box holds 204.8 mm)
-};
-
-// Moves between parts (mm). The PE900 never trims a jump at or under its "jump stitch not to trim" setting, 5 mm at
-// the lowest (manual p.38): a 2-5 mm move is a loose thread to snip by hand, which is worse than a trim.
-export const MOVES = {
-  sewn: 2,        // up to this a move is simply stitched (Design.path)
-  trimmed: 5,     // over this the machine cuts the thread itself
-  looseFrom: 1,   // a jump from this to `trimmed` is counted as a loose thread (shortJumps, pe900_check)
-  costLoose: 1.5, // against 1 for a trim and 0 for a sewn move (geom.js moveCost)
-};
+// (what the machine and the checker allow, the row spacings and the picture guide's numbers are in core/limits.js,
+// which the page reads too)
+import { ART, LIMITS, MOVES, ROWS, STYLE } from "./limits.js";
+export { ART, LIMITS, MOVES, ROWS, STYLE };
 
 // Thread weight: Automatic is 40 wt with lettering under a 6 mm x-height sewn for 60 wt. 30 wt is about 1.3x as thick
 // as 40 (satins 15 % more open, fills 0.05 mm); 60 wt about 0.75x (satins 12 % closer; fills stay, 0.3 mm rows fail
@@ -66,11 +52,6 @@ export const BORDERS = {
   frame: { width: 3.0, gap: 0.4, pull: 0.3, inset: 0, zigzag: [2.1, 2.0] },
 };
 
-// Fill rows (mm apart, one pass of thread each). Sold designs lie 0.18-0.20 mm apart (docs/roadmap.md): the
-// published "0.38-0.40 mm" tatami spacing is from one forward row to the next forward row, two passes of thread, and
-// was read here as one until 2026-11 (0.35 and 0.4: half the thread, and the fabric showed through every fill sewn
-// on a dark sweatshirt). Rows this close turn as a zigzag (`TATAMI.turn`), so no row link is a tiny stitch.
-export const ROWS = { solid: 0.2, standard: 0.25 };
 // Under a fill: rows across the fill's own, this far apart (mm; sold designs' lattice is 1.1-1.3, ours was 2.5).
 export const UNDERLAY = { rows: 1.25 };
 
@@ -128,33 +109,6 @@ export const PICTURES = { fleck: 3, enclosed: 0.8, eyes: 6, start: 4, edge: 0.75
 // runs `over` mm under the next, the next `under` mm back over it. `hide`: a thread's travel may run this far (mm)
 // inside where a later thread alone sews every row (under rows still to come).
 export const SHADE = { blur: 0.4, soft: 2, blend: 1.3, border: 8, wide: 6, near: 10, far: 30, band: 12, area: 25, agree: 0.5, field: 1, levels: 2, run: 1, reach: 1, over: 0.3, under: 0.1, hide: 0.5 };
-
-// Art that stitches well (PX6: the Picture tab's guide for making a picture, and its check of a picture; core/artcheck.js,
-// docs/pictures.md). What a picture needs, measured at the size it is sewn, from the digitizer's own rules:
-//   line:    mm. A line or part narrower than this gets no fill: it is sewn as one running line along its centre,
-//            thinner than drawn (digitize.js: "lines under 1 mm sew a triple run"; Ink/Stitch's satin columns from 1 mm).
-//   detail, dot: a separate piece under `dot` mm² and under `detail` mm across is a speck: left out, or sewn in the
-//            colour round it (digitize.js's specks and flecks: 4 mm² and 2.5 mm).
-//   gap:     mm. Gaps between parts of one colour narrower than this close up once sewn (digitize.js `MIN_GAP`).
-//   text:    mm tall. Lettering in a picture is sewn as filled shapes; a bold letter's strokes are about a sixth of its
-//            height, so under 6 mm they fall under `line` and its holes under `gap`. (Typed lettering in Design your
-//            own is sewn as lettering, from 4 mm: docs/lettering.md.)
-//   fewest:  thread colours a picture is asked for in the guide: 4 to digitize.js `MOST` (the Thread colours slider's
-//            top). Fewer than 4 flattens most illustrations; each one more is a thread change.
-//   blend:   share of a picture's ink in smooth colour ramps (gradients) over which they are said: they sew as bands.
-//   page:    share of the picture's edge one colour must hold for the background to be plain (found and left
-//            unsewn); under it the background is busy and sewn as part of the design.
-//   ask:     the guide's prompt asks for lines and details this many times the least, as shares of the picture: it
-//            is worked out for the hoop filled, and art is often sewn at half that; an AI tool's "thick" also varies.
-export const ART = { line: 1, detail: 2.5, dot: 4, gap: 0.5, text: 6, fewest: 4, blend: 0.12, page: 0.8, ask: 2 };
-// The style a fresh picture starts in (artcheck.js `chooseStyle`, docs/pictures.md "Style chosen per picture"):
-//   line: share of the ink in thin strokes for a line drawing. Line art 0.92-1, etsy_7's doodle sheet 0.60; filled
-//         pictures 0.44 at most (etsy_3's flower sheet), logos and lettering under 0.4.
-//   wide: a thin stroke's width, as a share of the picture's longer side (1.6 %: 13 px of 800). A regular-weight
-//         wordmark's strokes are 2-2.5 %, line art's 1-1.5 %.
-//   inks: colours (artPicture's) a line drawing is drawn in, at most. Photos of embroidered wildflower sheets are as
-//         thin (0.58-0.73) in 8-13 colours, and a person sews them Filled.
-export const STYLE = { line: 0.55, wide: 0.016, inks: 4 };
 
 // --- S1: pieces sewn in one go ---
 // Two pieces of script lettering are stitched across, not trimmed apart, when their columns are at most `gap` mm

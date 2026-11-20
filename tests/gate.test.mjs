@@ -32,7 +32,8 @@ for (const f of files.filter((f) => f !== "js/gate.js")) {
 // ---- 2. the exits, by name: each one calls handOut ----
 const EXITS = {
   "js/app.js": ["Share (the phone's share sheet)", "Download (one file, or a design in two hoopings as a zip)", "Save a fixed copy (one file)",
-    "Save fixed copies (the zip again)", "Cut files (fabric shapes, SVG or DXF, one handOut for both)"],
+    "Save fixed copies (the zip again)", "Cut files (fabric shapes, SVG or DXF, one handOut for both)",
+    "Download with a code (the paid build: the whole file fetched from the server)"],
   "js/along.js": ["One for each name (zip)"],
   "js/studio/ui.js": ["Save design (.needleworks.json)"],
 };

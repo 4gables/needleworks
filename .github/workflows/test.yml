@@ -25,6 +25,8 @@ jobs:
       - run: node tests/sewn_lint.mjs
       - run: node tests/open_fuzz.test.mjs
       - run: node tests/flow_lint.test.mjs
+      - run: node tests/door.test.mjs
+      - run: node tests/server.test.mjs
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"

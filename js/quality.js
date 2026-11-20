@@ -7,7 +7,7 @@ import { stopWords } from "./words.js";
 import { COLOR_CHANGE, JUMP, STITCH, STOP, TRIM, designBlockAgrees, readEmbroidery } from "./core/formats.js";
 
 import { density } from "./core/density.js";
-import { LIMITS } from "./core/recipes.js";
+import { LIMITS } from "./core/limits.js";
 
 // (core/recipes.js holds the numbers; pe900_check has MAX_PER_MM2, MAX_STITCH, MAX_BLOCKS)
 export const LIMIT = LIMITS.hits;         // needle hits per mm² per colour block

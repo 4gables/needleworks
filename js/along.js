@@ -1,12 +1,12 @@
 /*! Needleworks (c) 2026 4Gables. All rights reserved. Proprietary, see LICENSE. https://4gables.com/needleworks/ */
 // Sew along (a step per screen at the machine, the screen kept awake) and the One for each name dialog: what is
 // said as names are typed, and the files made. (Part of app.js until 2026-11.)
-import { turnForMachine } from "./core/design.js";
+import { turnForMachine } from "./engine.js";
 import { writePES } from "./core/formats.js";
 import { colorBlocks, draw } from "./render.js";
 import { TURN_PIC, firstStep, stepTime, told, youHtml } from "./sheet.js";
 import { handOut, judge } from "./gate.js";
-import { shortJumps } from "./doctor.js";
+import { shortJumps } from "./checkup.js";
 import { problemsItems, problemsOf, shownOn, mmText } from "./words.js";
 import { brief, monogramHelp, safeName, tidy, uniqueName } from "./core/typed.js";
 import { apart } from "./core/brands.js";

@@ -7,7 +7,8 @@ import { sewn, label } from "./pieces.js";
 
 export const SCRIPT = "NW Great Vibes", PRINT = "NW Josefin Sans", ROUND = "NW Quicksand", BOLD = "NW Yellowtail";
 // exact Brother PEC thread colours, so the name on screen is the one the machine shows
-export const RED = "#ed171f", NAVY = "#0e1f7c", BLACK = "#000000";
+import { BLACK, NAVY, RED } from "../common.js";
+export { BLACK, NAVY, RED };
 export const PINK = "#f993bc", WHITE = "#f0f0f0";
 // the next piece id (one counter for starters and the editor)
 export const ids = { next: 1 };

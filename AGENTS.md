@@ -32,6 +32,11 @@ measurements behind each number are in the code's comments.
   `outline.js`, `quilt.js`, `motifs.js`, `borders.js` (decorative and blanket-stitch borders), `layout.js` (Arrange: circle,
   corners, flip, monogram orders), `ownfont.js` (a maker's own font file, kept in the browser), `settings.js` (a
   piece's own stitch settings: checked, clamped, the shared row grid). pieces.js still re-exports what moved out of it.
+- `js/engine.js` (the engine's door: the only way the page reaches what makes stitches; `engine-remote.js` is the paid
+  build's, `tests/door.test.mjs` holds the page to it), `picjob.js`/`docjob.js` (the workers' jobs, run by the server
+  too), `checkup.js` (what reads a file: checkup, loads, pauses, an opened file), `common.js`, `wire.js` and the
+  `remote-*.js` workers (paid build), `core/limits.js`, `turn.js`, `grid.js`, `picprep.js`, `areas.js` (read by the
+  page in both builds). `server/` (the paid build's server and its public build script): `docs/paid-version.md`.
 - `js/doctor.js` + `doctor-worker.js` (Open tab fixes), `quality.js` (the checker's rules), `words.js` (problems
   list per view, stop/thread vocabulary), `gate.js` (the only exit for files: `handOut`), `sheet.js` (step text, sew
   sheet, cut file), `render.js` (`draw`), `jobs.js` (one job queue for the three workers, with time limits), `worker.js`,
@@ -121,6 +126,7 @@ Read the topic's file before changing its code; each holds the rules, their reas
 | App and UI: layout tiers, focus, exit gate, steps and words, sew sheet, offline | `docs/app-ui.md` |
 | Tests, batches, the VM, the Brother diff, what each check guards | `docs/testing.md` |
 | Tried and rejected; known and not done | `docs/decisions.md` |
+| The paid version: what is protected, the two builds, the server, where it runs | `docs/paid-version.md` |
 | PES/PEC/DST byte layouts (the clean-room spec) | `docs/formats-spec.md` |
 | PES writer changes wanted, and how one ships | `docs/writer-changes.md` |
 

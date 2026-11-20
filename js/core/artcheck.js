@@ -8,7 +8,9 @@
 //   thin, lettering too small. Every finding carries `spots` (fractions of the learned copy, as keptParts' are, for
 //   the page to ring on the picture) and, where a bigger Size would mend it, `need`: how many times bigger.
 // Measures only: nothing here changes what is sewn.
-import { ART, STYLE } from "./recipes.js";
+import { ART } from "./recipes.js";
+import { chooseStyle } from "./picprep.js";
+export { chooseStyle };
 import { pixels, srgbToLab as labOf } from "./palette.js";
 import { hexToRgb } from "./threads.js";
 import { distanceTransform, label } from "./raster.js";
@@ -282,18 +284,4 @@ export function artStyle(img, L) {
   }
   for (let i = 0; i < n; i++) if (ink.data[i]) thick[Math.min(CAP + 1, Math.max(1, Math.round(T[i])))]++;
   return { ink: +(inked / n).toFixed(4), thick: thick.map((c) => +(c / inked).toFixed(4)), rest: +(rest / inked).toFixed(2), long: Math.max(w, h) };
-}
-// The style a fresh picture starts in: Line drawing when at least STYLE.line of its ink lies in strokes no wider than
-// STYLE.wide of the picture's longer side, drawn in at most STYLE.inks colours (artPicture's count, the page's colour
-// with them); else Filled. Cross-stitch is never the start (a photo and a soft-shaded illustration measured alike:
-// the person picks it). Scale-free: a line drawing is one at any Size (measured at the Size, the line cat's thin share
-// fell from 0.98 at 100 mm to 0.25 at 150 mm). `size` (mm) only says in the reason how fine the lines sew.
-// Returns { style, start, why, line } (`start`: the page starts the picture in it; `line`: the thin share).
-export function chooseStyle(f, size) {
-  const { line, wide, inks } = STYLE, k = (wide * f.long) / 2;
-  const thin = f.thick.reduce((a, v, r) => a + (r > 0 && r <= k ? v : 0), 0);
-  if (f.ink > 0 && thin >= line && (f.colours || 0) <= inks) {
-    return { style: "line", start: true, line: +thin.toFixed(3), why: "Looks like a line drawing, so it's sewn as one." };
-  }
-  return { style: "fill", start: false, line: +thin.toFixed(3), why: "" };
 }

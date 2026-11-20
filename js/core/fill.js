@@ -5,10 +5,11 @@
 import { distanceTransform, label } from "./raster.js";
 import { arclen, resample, smooth } from "./geom.js";
 import { CONTOUR, FILLS, FORM, PICTURES, ROWS, TATAMI, UNDERLAY } from "./recipes.js";
+import { RES } from "./limits.js";
 
 // the fill angle (degrees) and working pixels per mm when nothing else is asked (8: 5 lost the narrow notches of
 // small lettering, e.g. an M)
-export const FILL = { angle: 45, res: 8 };
+export const FILL = { angle: 45, res: RES };
 
 // Travel may lie on this colour's finished stitches for this far (mm) in all: a few stitches of the same thread on its
 // own fill against a trim, two locks and often a loose thread to snip (2 mm until 2026-10-30: 3 mm took 5-15% of the

@@ -2,7 +2,7 @@
 // Draw a stitch pattern ({ stitches: [[x, y, cmd]] in 0.1 mm, threads }) like real thread on fabric.
 import { COLOR_CHANGE, JUMP, STITCH, TRIM } from "./core/formats.js";
 import { lab as labRgb, luminance, rgbOf } from "./core/colour.js";
-import { LIMITS } from "./core/recipes.js";
+import { LIMITS } from "./core/limits.js";
 
 export function colorBlocks(design) {
   const blocks = [];

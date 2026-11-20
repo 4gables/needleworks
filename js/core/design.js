@@ -3,6 +3,8 @@
 import { COLOR_CHANGE, END, JUMP, STITCH, TRIM, writePES } from "./formats.js";
 import { MARGIN } from "./machines.js";
 import { EASE, LIMITS, LOCKS, TIE_INS } from "./recipes.js";
+import { turnPattern } from "./turn.js";
+export { turnPattern };
 import { Hits, threadBlocks } from "./density.js";
 import { pyRound } from "./threads.js";
 
@@ -24,6 +26,24 @@ function bare(p, d, pts) {
     && pts.some((q) => ((q[0] - p[0]) * d[0] + (q[1] - p[1]) * d[1]) / L >= L + LOCKS.past);
 }
 
+// What a stitch is for, where the paid build's preview leaves it out. `UNDER`: the points (mm, the very arrays handed
+// to `path`) a builder made as underlay.
+export const ROLE = { lock: 2, under: 1 };
+export const UNDER = new WeakSet();
+// The file without its locks and underlay, for showing: where stitches were left out the needle moves on, as a jump
+// when the gap is over 2 mm (a line across the shape otherwise). Threads, blocks and pauses are the file's own.
+export function previewOf(p) {
+  const out = [];
+  let gap = false, last = null;
+  for (const s of p.stitches) {
+    if (s[2] === STITCH && s[3]) { gap = true; continue; }
+    if (s[2] === STITCH && gap && last && Math.hypot(s[0] - last[0], s[1] - last[1]) > 20) out.push([s[0], s[1], JUMP]);
+    out.push([s[0], s[1], s[2]]); gap = false;
+    if (s[2] === STITCH || s[2] === JUMP) last = s;
+  }
+  return { ...p, stitches: out };
+}
+
 export class Design {
   // ease: stitches give way where this colour is already thick (the Design tab's pieces; pictures and the Open tab's
   // fixes sew as they always have)
@@ -37,8 +57,12 @@ export class Design {
     if (this.hits) this.hits.clear();   // (the limit is per colour block)
   }
 
-  st(cmd, [x, y], counted = false) {
-    this.stitches.push([x * 10, y * 10, cmd]);
+  // role (a stitch's fourth value, only where there is one): LOCK for a tie-in's or tie-off's stitch, UNDER for one
+  // made from a point a builder put in `UNDER`. Nothing in a file depends on it: the writer reads three values. The
+  // paid build's preview is the file without these stitches (`previewOf`, docs/paid-version.md).
+  st(cmd, p, counted = false, role = 0) {
+    const [x, y] = p, r = role || (cmd === STITCH && UNDER.has(p) ? ROLE.under : 0);
+    this.stitches.push(r ? [x * 10, y * 10, cmd, r] : [x * 10, y * 10, cmd]);
     if (this.hits && cmd === STITCH && !counted) this.hits.add(pyRound(x * 10), pyRound(y * 10));
   }
 
@@ -218,7 +242,7 @@ export class Design {
         // it, it stood 0.4 mm off a fine-line letter's stroke, a nub at the top of an H: tester, 2026-11)
         const p = pts[0], q = [p[0] + d[0], p[1] + d[1]], k = inward(p, d, pts.slice(1, 7));
         const e = bare(p, d, pts.slice(1, 7)) ? [q[0] + u[0] * LOCKS.past, q[1] + u[1] * LOCKS.past] : [p[0] - (k * d[1]) / 2, p[1] + (k * d[0]) / 2];
-        [p, q, e, q, p].forEach((r, i) => this.st(STITCH, r, counted ? false : !i));   // (the start is counted with the run's points)
+        [p, q, e, q, p].forEach((r, i) => this.st(STITCH, r, counted ? false : !i, i < 4 ? ROLE.lock : 0));   // (the start is counted with the run's points)
       }
     } else if (Math.hypot(pts[0][0] - at[0], pts[0][1] - at[1]) >= 0.3) this.st(STITCH, pts[0], true);   // (a run that starts where the needle is needs no extra stitch)
     for (let i = 1; i < pts.length; i++) this.st(STITCH, pts[i], true);
@@ -244,7 +268,7 @@ export class Design {
     // (further back along the line where the last stitches were a single line of thread: as a tie-in's)
     const k = inward(c, d, this.recent || []), q = [c[0] + d[0], c[1] + d[1]];
     const e = bare(c, d, this.recent || []) ? [q[0] + (d[0] / 0.7) * LOCKS.past, q[1] + (d[1] / 0.7) * LOCKS.past] : [q[0] - (k * d[1]) / 2, q[1] + (k * d[0]) / 2];
-    for (const r of [q, c, e, c]) this.st(STITCH, r);
+    for (const r of [q, c, e, c]) this.st(STITCH, r, false, ROLE.lock);
     this.cur = this.at = null;
   }
 
@@ -262,7 +286,7 @@ export class Design {
     this.shifted = null;
     if (Math.max(-x0, x1, -y0, y1) > LIMITS.recentre) {
       const cx = Math.round((x0 + x1) * 5), cy = Math.round((y0 + y1) * 5);
-      this.stitches = this.stitches.map(([x, y, c]) => [x - cx, y - cy, c]);
+      this.stitches = this.stitches.map((s) => (s.length > 3 ? [s[0] - cx, s[1] - cy, s[2], s[3]] : [s[0] - cx, s[1] - cy, s[2]]));
       this.shifted = [cx, cy];
     }
     this.check();
@@ -409,9 +433,4 @@ export function relieve(st, limit = LIMITS.hits) {
 export function turnForMachine(p) {
   const t = turnPattern(p);
   return { ...t, stitches: relieve(t.stitches) };
-}
-
-// A quarter turn of a pattern (y down): clockwise turns a sideways design into the machine's hoop, and back.
-export function turnPattern(p, clockwise = true) {
-  return { ...p, stitches: p.stitches.map(([x, y, c]) => (clockwise ? [-y, x, c] : [y, -x, c])) };
 }
