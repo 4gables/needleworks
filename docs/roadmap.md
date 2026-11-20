@@ -452,8 +452,7 @@ reader, the counts, the checker's rules, the drawing) ships in both builds: it i
   confirmed with the owner first.
 - [x] **Trial address** (2026-11-20): the public build at 4gables.com/needleworks-next (repo `4gables/needleworks-next`,
   built files only), swapped onto the live address at C4. The paid site does pictures only (owner): no Design tab.
-- [ ] **C5 Small lettering in pictures** (branch `px8-smalltext`; pictures.md "Small lettering"): built and seen on the
-  probe; batches, corpus, VM and release still to do. Then Stripe.
+- [x] **C5 Small lettering in pictures** (v42; pictures.md "Small lettering"). Then Stripe.
 
 Limits accepted: the code and its history have been public (0 forks, 0 stars on 2026-11-19); a visitor's browser
 keeps the old engine in its offline cache until its next visit; preview stitches can still be read out of the page;

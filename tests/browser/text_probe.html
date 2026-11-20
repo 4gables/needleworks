@@ -35,6 +35,8 @@ for (const [name, paint] of Object.entries(CASES)) for (const bg of ["clear", "w
   const t0 = performance.now();
   const r = await sewSized((pl) => job({ key, ref: key, learn, img: pictureImage(bitmap, pl.crop, pl.w, pl.h), ...(!Q.has("coarse") && finer(m.flat, pl.crop, pl.w) ? { img2: pictureImage(bitmap, pl.crop, 2 * pl.w, 2 * pl.h) } : {}), crop: pl.frac, opts }), (fit) => picturePlan(box, m.boxes.filter((_, i) => !m.colors[i].background), size, HOOP, undefined, fit), { style });
   if (!r.ok) { log(`${name} ${bg}: ${r.error}`); continue; }
+  // (each file kept by the batch server, for the machine checker and PE-DESIGN)
+  await fetch(`/save/text_${name}_${bg}_${style}.pes`, { method: "POST", body: r.bytes });
   const st = r.pattern.stitches, S = +Q.get("zoom") || 9;   // px per mm on the sheet
   let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9, n = 0, trims = 0; for (const [x, y, k2] of st) { if (k2 === 0) { n++; x0 = Math.min(x0, x); y0 = Math.min(y0, y); x1 = Math.max(x1, x); y1 = Math.max(y1, y); } if (k2 === 2) trims++; }
   const cv = document.createElement("canvas"); cv.width = ((x1 - x0) / 10 + 4) * S; cv.height = ((y1 - y0) / 10 + 4) * S; cv.style.width = cv.width / (window.devicePixelRatio || 1) + "px";
