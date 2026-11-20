@@ -214,7 +214,7 @@ function heap() {
 // knots (px, or 0): where strokes cross, thinning often leaves two or three junctions a few pixels apart, joined by
 // edges shorter than this; each is contracted to one junction at their middle (`untangle`). Every edge is sewn out and
 // back as a full-width column, so a 0.2 mm edge sewed a little star of satin across the join (towel "The Smiths").
-export function skeletonEdges(mask, stroke, { spur = 1.3, dots = false, sk = null, reach = false, tongues = 0, knots = 0 } = {}) {
+export function skeletonEdges(mask, stroke, { spur = 1.3, dots = false, sk = null, reach = false, tongues = 0, knots = 0, stubs = 0 } = {}) {
   const { pos, edges } = skeletonGraph(sk || skeletonize(mask));
   const ink = (x, y) => { const X = Math.round(x), Y = Math.round(y); return X >= 0 && Y >= 0 && X < mask.w && Y < mask.h && mask.data[Y * mask.w + X]; };
   const tongue = ([, , p], fromA) => {
@@ -224,9 +224,11 @@ export function skeletonEdges(mask, stroke, { spur = 1.3, dots = false, sk = nul
     const u = [(e[0] - c[0]) / L, (e[1] - c[1]) / L];
     let t = 0;
     while (t < stroke * 2 && ink(e[0] + u[0] * (t + 0.5), e[1] + u[1] * (t + 0.5))) t += 0.5;
-    return q.length + t >= Math.max(stroke * 1.5, tongues);
+    // (`stubs`: a dead end is kept from this many stroke widths, its length and the ink past it: a slab serif's arm,
+    // 1.25 widths from the stem's middle to its end, where a square end's corner spur is 0.7)
+    return q.length + t >= (stubs ? stroke * stubs : Math.max(stroke * 1.5, tongues));
   };
-  let kept = prune(edges, stroke * spur, tongues ? tongue : null);
+  let kept = prune(edges, stroke * spur, tongues || stubs ? tongue : null);
   if (knots) kept = untangle(kept, pos, knots, reach);
   const out = kept.map(([a, b, path]) => {
     const pts = path.map((q) => q.slice());

@@ -342,7 +342,7 @@ function columnNets(px, more, w, h, own, res, toMm, dotted) {
     }
     return false;
   };
-  if (!dotted) { es = skeletonEdges(pm, stroke, { spur: 1 }).filter((e) => e[2].length > 1 && (e[0] !== e[1] || loopLen(e[2]) >= 2 * stroke || rings(e[2]))); lineEnds(es, pm, stroke); }
+  if (!dotted) { es = skeletonEdges(pm, stroke, { spur: 1, stubs: COLUMNS.serif }).filter((e) => e[2].length > 1 && (e[0] !== e[1] || loopLen(e[2]) >= 2 * stroke || rings(e[2]))); lineEnds(es, pm, stroke); }
   if (!es.length) {
     // (the long axis: the shape's second moments)
     let n = 0, sx = 0, sy = 0, xx = 0, yy = 0, xy = 0;
@@ -534,13 +534,15 @@ function solidity(px, w) {
 // leaf's half, 0 to 4 mm across, sewed as a fan; an outline is even). Else the piece stays a fill.
 function plain(nets) {
   let all = 0, short = 0;
-  const wd = [];
+  const wd = [], near = [];
   for (const net of nets) for (const e of net.edges) {
     const L = e.s[e.s.length - 1];
     all += L;
     if (e.a !== e.b && L < COLUMNS.stub * net.W) short += L;
-    for (let i = 0; i < e.s.length; i++) if (e.s[i] > net.W && L - e.s[i] > net.W) wd.push(e.A[i] + e.B[i]);
+    for (let i = 0; i < e.s.length; i++) { if (e.s[i] > net.W && L - e.s[i] > net.W) wd.push(e.A[i] + e.B[i]); if (e.s[i] > net.W / 2 && L - e.s[i] > net.W / 2) near.push(e.A[i] + e.B[i]); }
   }
+  // (a small letter's strokes are all short: an H's five, each under two widths. Measured from half a width off their ends)
+  if (wd.length < 10 && near.length >= 10) wd.splice(0, wd.length, ...near);
   if (!all) return false;
   wd.sort((x, y) => x - y);
   const spread = wd.length < 10 ? 1 : wd[Math.floor(0.9 * (wd.length - 1))] / wd[Math.floor(0.1 * (wd.length - 1))];
