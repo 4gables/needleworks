@@ -108,6 +108,22 @@ const FILES = {
   "js/zip.js": "d3d529808cf0618975057f7a71bf6044059204da36a7ffc62d4679f627c6fcb3",
   "js/gate.js": "938788b4ff6f1ef97b0ded2d32c29c9dcada1159df4d91c5e0c96eb4bb48bcef",
   "js/jobs.js": "1309a0a2ad6edd8d872c0e7af21e48da0041406b1f901d8a95c3af157a6d6617",
+  "js/api.js": "",
+  "js/checkup.js": "",
+  "js/common.js": "",
+  "js/docjob.js": "",
+  "js/engine-remote.js": "",
+  "js/engine.js": "",
+  "js/picjob.js": "",
+  "js/remote-doctor.js": "",
+  "js/remote-picture.js": "",
+  "js/remote-worker.js": "",
+  "js/wire.js": "",
+  "js/core/areas.js": "",
+  "js/core/grid.js": "",
+  "js/core/limits.js": "",
+  "js/core/picprep.js": "",
+  "js/core/turn.js": "",
 };
 const hex = (buf) => [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, "0")).join("");
 self.addEventListener("install", (e) => {

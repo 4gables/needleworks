@@ -18,7 +18,7 @@ import { $, forgetPicture, hoop, keepPicture, kept, square, state, store, turned
 import { next } from "./focus.js";
 import { nearOwn, ownedPalette, ownedSpools, owns, threadHtml, threadLabel } from "./threadui.js";
 import { mmText } from "./words.js";
-import { pictureJobs } from "./engine.js";
+import { BUILD, pictureJobs } from "./engine.js";
 import { busy, escapeHtml, openDesign, paint, setMode, setView, showError, studio, warnUI } from "./app.js";   // (used when things happen, never while this file loads: app.js loads after it)
 
 export const sizeLabel = (v) => mmText(v);
@@ -130,19 +130,22 @@ export async function makePicture() {
     $("pic-size-note").textContent = off ? `It sews ${got} mm long, not ${want}: ${s.style === "cross" ? `cross-stitch grows ${s.cross} mm at a time, and parts too small for a cross drop out` : "parts too small to sew at this Size drop out"}, so the nearest it can be is ${got} mm.` : "";
   }
   // (a busy picture: how many separate pieces the machine cuts the thread between, counted on the file)
+  // (counted on the whole file where this is its preview: a preview moves on where it leaves stitches out)
   { let cuts = 0, was = 0; for (const [, , c] of r.pattern.stitches) { if ((c === 1 || c === 2) && was === 0) cuts++; was = c === 1 || c === 2 ? 1 : 0; }
-    p.busy = s.style === "fill" && cuts >= BUSY ? { cuts, stitches: r.pattern.stitches.filter((q) => q[2] === 0).length } : null; }
+    if (r.real) cuts = r.real.cuts;
+    p.busy = s.style === "fill" && cuts >= BUSY ? { cuts, stitches: r.real ? r.real.stitches : r.pattern.stitches.filter((q) => q[2] === 0).length } : null; }
   p.fine = { ...r.fine, tries: r.tries }; p.checking = false;
   fineUI(r.fine); shadeNote(r.fine);
   const base = safeName((state.pic.file?.name || "picture").replace(/\.[^.]+$/, "") + (p.part ? `_${p.part}` : ""), "picture");
-  const v = { pattern: r.pattern, verifyAgainst: r.pattern, bytes: r.bytes, filename: `${base}${state.pic.style === "line" ? "_line" : state.pic.style === "cross" ? "_cross" : ""}.pes`, fabric: "linen",
+  // (`job`, `real`: the paid build's preview, its whole file's id and counts, app.js `setView`)
+  const v = { pattern: r.pattern, verifyAgainst: r.pattern, bytes: r.bytes, job: r.job, real: r.real, filename: `${base}${state.pic.style === "line" ? "_line" : state.pic.style === "cross" ? "_cross" : ""}.pes`, fabric: "linen",
     sheet: turned() ? { notes: [$("done-turn").textContent] } : undefined,
     // (what the panel says of it, as every surface says it: words.js)
     get problems() { return [...(state.pic.fineProblems || []), ...(state.pic.ownedProblem ? [state.pic.ownedProblem] : []), ...(state.pic.framed ? [{ id: "framed", level: TIP, text: FRAMED }] : [])]; },
   };
   state.views.picture = v;
   // (adding needs a design there to add to)
-  $("pic-use").hidden = false; $("pic-add").hidden = $("pic-or").hidden = (() => { try { return studio.empty(); } catch { return true; } })();
+  $("pic-use").hidden = BUILD === "paid"; $("pic-add").hidden = $("pic-or").hidden = (() => { try { return studio.empty(); } catch { return true; } })();
   if (state.mode === "picture") setView(v);
   if (lostMuch(r.fine.kept)) checkLost(s, req);
 }

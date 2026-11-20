@@ -14,7 +14,7 @@ import { brief, monogramHelp, safeName, tidy, uniqueName, withSwash } from "./co
 import { BRANDS, apart, brotherNum, chartSpools, exampleSpools, lab, nearestSpool, nearestSpools, ownSpoolOf, spools } from "./core/brands.js";
 import { COLORS as LINE_THREADS, savedDesign } from "./common.js";
 // (everything that makes stitches comes through this one door: docs/app-ui.md "The engine's door")
-import { fixedCopy, initStudio } from "./engine.js";
+import { BUILD, fixedCopy, initStudio, wholeFile } from "./engine.js";
 import { $, designHoop, designTurned, fileFormat, forgetPicture, hoop, keepPicture, kept, machineFormat, outName, shownHoop, square, state, store, toMachine, turnCut, turned, turnedFile } from "./state.js";
 import { OUT_FORMATS } from "./core/formats-out.js";
 import { keepFocus, keyboard, live, next } from "./focus.js";
@@ -112,11 +112,14 @@ export function setView(v) {
     try { v.file = v.source ? v.pattern : unwrap(readEmbroidery(v.bytes, v.filename), state.mode === "design" && v.pattern, v.shift ? (turned() ? [-v.shift[1], v.shift[0]] : v.shift) : undefined); }
     catch (err) { v.file = null; showError("This file didn't read back: " + err.message); $("download").disabled = true; $("share").disabled = true; return; }
   }
+  // (the paid build's view is a preview, the file without its locks and underlay: what the whole file sews, cuts and
+  // leaves loose comes with it, `v.real`, and every surface says those: checkup.js keeps them on the pattern)
+  if (v.real && v.file) { v.file.loads = v.real.loads; v.file.shortJumps = v.real.snips; }
   v.shown = turned() ? turnPattern(v.file, false) : v.file; v.heat = null;
   // (the turned hoop's note as the view says it: an in-the-hoop design hoops bare stabilizer, so its fabric goes round)
   $("done-turn-text").textContent = v.turnNote || TURNED;
   v.cache = colorBlocks(v.shown);
-  const st = designStats(v.file), h = hoop(), shown = designStats(v.shown);
+  const st = { ...designStats(v.file), ...(v.real ? { stitches: v.real.stitches } : {}) }, h = hoop(), shown = designStats(v.shown);
   // (a split design is checked part by part when it's downloaded)
   const fits = !!v.split || (st.widthMm <= h.w - 2 * MARGIN && st.heightMm <= h.h - 2 * MARGIN);
   v.whole = !!v.split || !fits;
@@ -176,7 +179,7 @@ export function setView(v) {
   v.facts = [v.fact.size, v.fact.turned ? `hoop turned: drawn below on its side, as the machine's screen shows it (${v.fact.machineSize})` : "", v.fact.stitches, v.fact.stops, v.fact.time, v.fact.hoop, v.fact.snips].filter(Boolean);
   // (`block`: a design that can't be sewn as it is, such as words wrapped round into themselves: no file until it's fixed)
   const blocked = blocking(v);
-  $("download").disabled = !fits || !!blocked; $("share").disabled = !fits || !!v.split || !!blocked;
+  $("download").disabled = !fits || !!blocked; $("share").disabled = !fits || !!v.split || !!blocked || !!v.job;
   // (nor a sew sheet or Sew along for a file that can't be made)
   $("sheet-print").disabled = $("along-open").disabled = !fits || !!v.split || !!blocked; $("cut-files").hidden = !v.sheet?.cut?.length; $("names-open").hidden = !!v.split || !namesFor();
   // (Make another, by the preview too: on a phone the one under the starters is 1,475 px down, past the preview and the
@@ -191,7 +194,7 @@ export function setView(v) {
   warnUI(v);
   // (the file's own verdict, as tests/pe900_check.py would give it, a moment later: not on every frame of a drag)
   clearTimeout(qTimer);
-  if (fits && !v.split && !v.verdict) qTimer = setTimeout(() => { if (state.view === v) { v.verdict = verdictOf(v.bytes); warnUI(v); } }, 250);
+  if (fits && !v.split && !v.verdict) qTimer = setTimeout(() => { if (state.view === v) { v.verdict = v.real ? v.real.verdict : verdictOf(v.bytes); warnUI(v); } }, 250);
   // (and the size controls: "Largest that fits the 5x7" stayed after the hoop was changed to 4x4 on another tab)
   if (state.mode === "open" && state.opened) { tabs.opened.openInfo(v, st, fits); if ($("doc-scale")) tabs.opened.sizeUI(); }
   $("download").textContent = v.split ? `Download ${v.split.length} files (.zip)` : !fits ? "Too big for this hoop" : blocked ? v.blockLabel || "Fix the lettering first" : v.action || `Download ${outName(v.filename)}`;
@@ -536,6 +539,8 @@ addEventListener("keydown", (e) => {
 });
 $("download").onclick = () => {
   const v = state.view; if (!v) return;
+  // (the paid build: this view is a preview, and its whole file is fetched for a code)
+  if (v.job) { askCode(v); return; }
   // never hand out a file we haven't proven decodes to exactly this design and the machine can take
   // (judged on the bytes saved, every time: a verdict made earlier from the design described something else, and an
   // opened file's PEC header listing 2 threads for 1 block was saved "Checked")
@@ -547,6 +552,31 @@ $("download").onclick = () => {
   if (r.ok && v === state.views.design) studio.downloaded();
   downloaded(v, !!v.split, r.files, r.ok);
 };
+// The paid build's Download (docs/paid-version.md): the code is asked for, the whole file fetched with it, and that
+// file leaves through the gate like any other. The code is kept for next time; what went wrong is said in the dialog.
+function askCode(v) {
+  const d = $("code"), note = $("code-note"), go = $("code-go"), say = (t) => { note.textContent = t; note.hidden = !t; };
+  $("code-in").value = store.get("code", ""); say(""); go.disabled = false; go.textContent = "Download";
+  $("code-file").textContent = outName(v.filename);
+  go.onclick = async () => {
+    const code = $("code-in").value.trim();
+    if (!code) { say("Type your download code first."); $("code-in").focus(); return; }
+    go.disabled = true; go.textContent = "Fetching…"; say("");
+    const r = await wholeFile(v.job, code);
+    go.disabled = false; go.textContent = "Download";
+    if (!r.ok) { say(r.error); $("code-in").focus(); return; }
+    store.set("code", code);
+    let out;
+    try { out = handOut([{ name: v.filename, bytes: r.bytes, against: readEmbroidery(r.bytes, v.filename) }], { hoop: hoop(), format: state.fileFormat }); }
+    catch (err) { say("The file didn't pass its last check: " + err.message); return; }
+    if (!out.ok && !out.files.some((f) => f.hard.length)) { say("Download stopped: " + out.error); return; }
+    d.close();
+    if (r.left != null && Number.isFinite(r.left)) toast(`Your code has ${r.left} ${r.left === 1 ? "download" : "downloads"} left.`);
+    downloaded(v, false, out.files, out.ok);
+  };
+  modal(d); $("code-in").focus();
+}
+$("code-in").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); $("code-go").click(); } });
 // (a copy of a file that fails the quality check, fixed by the design doctor: engine.js `fixedCopy`)
 // (never "_fixed_fixed": "_fixed" once, at the end, whatever the name had: peace_fixed_80pct.pes -> peace_80pct_fixed.pes)
 export const fixedName = (name) => name.replace(/_fixed(?=[_.])/g, "").replace(/(\.\w+)$/, "_fixed$1");
@@ -830,10 +860,19 @@ function refresh() { if (state.mode === "picture") makePicture(); else if (state
 
 // ---------- tabs ----------
 const MODES = ["picture", "design", "open"];
+// The paid build (docs/paid-version.md): the engine is on the server, and the page says what that changes.
+const PAID = BUILD === "paid";
+if (PAID) {
+  document.body.dataset.build = "paid";
+  const t = $("tab-design"); t.disabled = true; t.tabIndex = -1; t.textContent = "Design your own (coming soon)";
+  $("foot-where").innerHTML = 'Your picture is sent to our server to be turned into stitches, and is not kept there. <a href="privacy.html">Privacy and terms</a>';
+}
 export function setMode(mode, push = true) {
   // (#bookmark: the bookmark had a panel of its own until 2026-10-31; old links open the Bookmark starter)
   if (mode === "bookmark") { setMode("design", false); history.replaceState(null, "", "#design"); oldBookmark(); return; }
   if (!MODES.includes(mode)) mode = "design";
+  // (the paid build has no Design tab yet: its tab says so, and every way to it lands on Picture)
+  if (PAID && mode === "design") mode = "picture";
   state.mode = mode;
   document.body.dataset.mode = mode;
   for (const m of MODES) $("panel-" + m).hidden = m !== mode;
@@ -857,7 +896,7 @@ export function setMode(mode, push = true) {
   else if (mode === "design" && !state.views.design) studio.make();
   else setView(state.views[mode] || null);
 }
-const TABS = MODES;
+const TABS = PAID ? MODES.filter((m) => m !== "design") : MODES;
 for (const m of TABS) $("tab-" + m).onclick = () => setMode(m);
 document.querySelector(".tabs").addEventListener("keydown", (e) => {
   // (in the order they're shown: MODES' order sent → from Design back to Picture)

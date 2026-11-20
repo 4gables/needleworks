@@ -95,6 +95,7 @@ select { background: var(--panel); border: 1px solid var(--line); border-radius:
   border-radius: 14px; width: fit-content; max-width: calc(100% - 40px); overflow-x: auto; }
 .tabs button { border: 0; background: transparent; padding: 10px 18px; border-radius: 10px; cursor: pointer; font-weight: 700;
   color: var(--muted); white-space: nowrap; min-height: 44px; }
+.tabs button:disabled { opacity: .55; cursor: default; }
 .tabs button[aria-selected="true"] { background: var(--panel); color: var(--ink); box-shadow: 0 1px 2px rgba(0,0,0,.08), 0 2px 10px rgba(80,20,30,.06); }
 
 /* workspace */

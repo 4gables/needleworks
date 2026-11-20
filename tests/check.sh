@@ -15,7 +15,7 @@ changed=$(git diff --name-only $REF -- . ; git diff --name-only)
 has() { print -- "$changed" | grep -qE "$1"; }
 
 say "changed since $REF: $(print -- "$changed" | sort -u | grep -c .) files"
-for t in formats doctor open_fuzz gate text sw flow_lint; do run "$t.test" 600 node tests/$t.test.mjs; done
+for t in formats doctor open_fuzz gate text sw flow_lint door; do run "$t.test" 600 node tests/$t.test.mjs; done
 run sewn_lint 60 node tests/sewn_lint.mjs
 
 $PY tests/batch_server.py $OUT/batch $HP >/dev/null 2>&1 & SRV=$!

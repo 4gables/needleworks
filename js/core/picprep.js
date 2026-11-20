@@ -70,6 +70,8 @@ export async function sewSized(job, plan, { style = "fill", cross = 2.5, fit = n
     if (!r.ok) return r;
     let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
     for (const [x, y, c] of r.pattern.stitches) if (c === 0) { if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
+    // (the paid build's reply is a preview: the size is the whole file's)
+    if (r.real?.extent) [x0, y0, x1, y1] = r.real.extent;
     const got = x1 > x0 || y1 > y0 ? Math.max(x1 - x0, y1 - y0) / 10 : 0, e = { fit: f, got, off: miss(got, pl.sizeMm), r, plan: pl };
     tries.push(e);
     if (!best || e.off < best.off - 1e-6) best = e;

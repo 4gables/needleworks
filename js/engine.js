@@ -13,6 +13,8 @@ import { readEmbroidery, validatePES, writePES } from "./core/formats.js";
 import { verdictOf } from "./quality.js";
 
 export const BUILD = "full";
+// (the paid build fetches a job's whole file for a code; here the page holds every file whole)
+export const wholeFile = async () => ({ ok: false, error: "" });
 export { initStudio } from "./studio/ui.js";
 export { turnForMachine } from "./core/design.js";
 

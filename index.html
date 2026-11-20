@@ -344,9 +344,19 @@
 </main>
 
 <footer class="foot">
-  <p>Everything runs in your browser. Your pictures and files never leave your computer.</p>
+  <p id="foot-where">Everything runs in your browser. Your pictures and files never leave your computer.</p>
   <p>© 2026 <a href="https://4gables.com/">4gables.com</a>. All rights reserved. <a href="https://github.com/4gables/needleworks/blob/main/LICENSE">Licence</a></p>
 </footer>
+<dialog id="code" class="names" aria-labelledby="code-title">
+  <form method="dialog">
+    <h2 id="code-title">Download this design</h2>
+    <p>Type your download code to save <b id="code-file"></b>. A design you have already downloaded with a code is free to fetch again with it.</p>
+    <label for="code-in">Download code</label>
+    <input id="code-in" type="text" autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="64">
+    <p class="warn" id="code-note" role="alert" hidden></p>
+    <div class="row"><button type="button" class="primary" id="code-go">Download</button><button type="submit" class="ghost" id="code-cancel">Cancel</button></div>
+  </form>
+</dialog>
 <dialog id="done" class="names" aria-labelledby="done-title">
   <form method="dialog">
     <h2 id="done-title">Saved to your downloads</h2>

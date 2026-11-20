@@ -32,8 +32,11 @@ async function kept(reply, store) {
   const shown = previewOf(reply.pattern), loads = blockLoads(full);
   let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
   for (const [x, y, c] of reply.pattern.stitches) if (c === 0) { if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
+  // (the separate pieces the thread is cut between, as the Picture tab counts them)
+  let cuts = 0, was = 0;
+  for (const [, , c] of reply.pattern.stitches) { if ((c === 1 || c === 2) && was === 0) cuts++; was = c === 1 || c === 2 ? 1 : 0; }
   return { ...reply, pattern: shown, bytes: writePES(shown), job: id,
-    real: { stitches: loads.reduce((a, b) => a + b.stitches, 0), loads, snips: shortJumps(full), verdict: verdictOf(whole), extent: [x0, y0, x1, y1], bytes: whole.length } };
+    real: { stitches: loads.reduce((a, b) => a + b.stitches, 0), loads, snips: shortJumps(full), verdict: verdictOf(whole), extent: [x0, y0, x1, y1], cuts, bytes: whole.length } };
 }
 
 export async function handle({ method, path, body, who }, store) {
