@@ -9,7 +9,8 @@ case "${1:-}" in
   mint)
     USES=${2:?how many designs}; NOTE=${3:-}
     # (letters and digits that can't be misread: no 0 O 1 I L)
-    CODE=$(LC_ALL=C tr -dc 'ABCDEFGHJKMNPQRSTUVWXYZ23456789' </dev/urandom | head -c 8); CODE="${CODE:0:4}-${CODE:4:4}"
+    # (`|| true`: head stops reading after 8 and tr ends on a closed pipe, which pipefail would take for a failure)
+    CODE=$( (LC_ALL=C tr -dc 'ABCDEFGHJKMNPQRSTUVWXYZ23456789' </dev/urandom || true) | head -c 8); CODE="${CODE:0:4}-${CODE:4:4}"
     aws dynamodb put-item --table-name $TABLE --condition-expression "attribute_not_exists(k)" \
       --item "{\"k\":{\"S\":\"code#$CODE\"},\"left\":{\"N\":\"$USES\"},\"issued\":{\"N\":\"$USES\"},\"note\":{\"S\":\"$NOTE\"},\"at\":{\"S\":\"$(date -u +%F)\"}}"
     echo "$CODE  ($USES designs${NOTE:+, $NOTE})" ;;
