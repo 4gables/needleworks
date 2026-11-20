@@ -18,7 +18,7 @@ export function serve(kind) {
     const { id, $code, ...msg } = e.data;
     let reply;
     try {
-      for (const k of ["learn", "img"]) if (msg[k]) msg[k] = plain(msg[k]);
+      for (const k of ["learn", "img", "img2"]) if (msg[k]) msg[k] = plain(msg[k]);
       const sent = await pipe(pack(msg), new CompressionStream("gzip"));
       if (sent.length > MOST) { self.postMessage({ ok: false, code: "big", error: BIG, id }); return; }
       const res = await fetch(`${API}/job/${kind}`, { method: "POST", headers: { "content-type": "application/octet-stream", ...($code ? { "x-code": $code } : {}) }, body: sent });

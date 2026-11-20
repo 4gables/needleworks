@@ -11,8 +11,8 @@
 // cache.
 // (`SET`: a fingerprint of the list below, written with the hashes. It is part of the cache's name, so a release whose
 // files changed can never install into the cache the running one is serving from, version number bumped or not.)
-const SET = "5178015555ae";
-const CACHE = `needleworks-v41-${SET}`, SHARED = "needleworks-shared";
+const SET = "2ee2b9b09df4";
+const CACHE = `needleworks-v42-${SET}`, SHARED = "needleworks-shared";
 const FILES = {
   "index.html": "3548c7c1922462dc061258df315b66d6318d45d014a973685caf0228f89d472f",
   "manifest.webmanifest": "82f627e1def5254866cf364a55a1c2a85e2c3dd61abeeb890829362969fcfb63",
@@ -41,12 +41,12 @@ const FILES = {
   "fonts/Satisfy-Regular.woff2": "693c536670f722fc975f38664c4b87315e5b3b784e01200fe309ecaed9c090e3",
   "fonts/Yellowtail-Regular.woff2": "4be14e2b33416b292c558bbb36b6ca50ee7a44dab395fd475a7d45830c99b6f8",
   "fonts/ZillaSlab-SemiBold.woff2": "b7e8f316b83ba8889baf7a9993fb5805c845a04d985a08b3df483efddf9a99aa",
-  "js/app.js": "06876b22bc8253bafb4946b716c1fb23dbd070318c7b9fdc769bbae09769adba",
+  "js/app.js": "d678906ebc5226e0853ea187acddf97924f3cc4bce936234677dc9b6201c8e93",
   "js/words.js": "32351ae8626fa69c73fbb07762152d451d8c812b98a9172210705a9fa2fc6ac4",
   "js/core/brandcharts.js": "85f4772a2de19ab56691d984a8aad930b2c427cd34498c70f66933c6f09199be",
   "js/core/brands.js": "cb0a36b5fe3128de55654bdd350bdc86508f11fb089eb822bd73b7a26eba1c59",
   "js/core/design.js": "616cd759d665209a80236e18de9b230675db3626efb8ea08846cffbd7bb15e18",
-  "js/core/digitize.js": "7478dd39f3bd6c84a54a07c53dc229bb766a35cc7155f5b7ce779b9c7699325e",
+  "js/core/digitize.js": "0ddeb029331a48df4d354f6946e27842b2fe286ff8c71b09661676b40775c3eb",
   "js/core/fonts.js": "eff92c64949a5983d3d2ae4804ff6cbf7ca1a6547998767f276c8d07b9cd26f9",
   "js/core/glyphs.js": "1aa94c2a28d8343fa6837d8f0591e325a9128063bfce81d968bf592feda6cbf3",
   "js/core/formats.js": "6c635b29d843e7eb112ad773f92f79b26ea0ad17769889104b271faa2915b76e",
@@ -56,7 +56,7 @@ const FILES = {
   "js/core/density.js": "fc507b2818e7cdb700d52d88ac328a784b89ddac6f609fcc469b95c4805a237e",
   "js/core/fill.js": "48d998b7c5188af34d929e04c4c5e28df9d9aeb462160232b64392c7ee4a54e4",
   "js/core/machines.js": "afd9fe6fc812a0b03d903fc54a374b3246ac27539c9cff7d5ea546ed9e81c135",
-  "js/core/artcheck.js": "d1572bd2df78a003997298b4f41b9fa9c89810203f263be9aba4e48983e29736",
+  "js/core/artcheck.js": "9ef46c385020931906673772e4232d02a8f2a3c2c6fb531c9cbd85b98efb28d9",
   "js/core/palette.js": "be3c5634876b2154853b75ca866eb9dbf23d94e11ea6d04f17a5e43193755403",
   "js/core/recipes.js": "aadd751eeffb0d792eb67706f34808f7ded8e46fe0ec139cae1605e2c55e45da",
   "js/core/raster.js": "efc1a4b2164d5b16b0f073c2ce75c80b253e5e23b7f2f963f8c9ca2c961e1110",
@@ -68,7 +68,7 @@ const FILES = {
   "js/doctor.js": "5653d26f544b9f11cd96ee2381bebae5c5c98ae74a6d78f690d70b2045820b83",
   "js/opened.js": "c0e40a9c5328d974ba46d62d25fcd49ce8308ef1b33f16ff829bef5fd225dc71",
   "js/artwords.js": "2a11e7dd198bc1aeffab3bc276046b11cffc87ffc63279b966eb2cd8529937e3",
-  "js/picture.js": "df3e362ed8f80dd353f9614a3889a3adffbc9914acb46bde63cb919df7616102",
+  "js/picture.js": "3a83bfec598bf043fb21133276ce05e5cc8c3ecbf9b243d253fea3772eacca81",
   "js/threadui.js": "8ceabd64367deaaa390dd1b99ff44ae7f6ee9a461d188c77e9c35263747af525",
   "js/along.js": "5877433450bc9b2e8c474a46829e506b62a16b805fee20dc6bd68284239e4c7c",
   "js/onitem.js": "e8f881bc81209ff19ee6a80c75afa0abb9a2f120077228d9370b5c864e054f6d",
@@ -114,15 +114,15 @@ const FILES = {
   "js/docjob.js": "45b38fc1478cb83475fac8c33ac0bf52400628b021cdc5f8481f08840f4f426a",
   "js/engine-remote.js": "2837be697ddb7d072dbd443af9a47908c30754cce755332610ca36fe8d943438",
   "js/engine.js": "54ebce28d057c475ef63437b508256e0455f97c2081250a0fd98e2fb11c8d71c",
-  "js/picjob.js": "e010ef885c66f0865cfb949dc37fbfb829e787fac65d39646d528078d7a97d96",
+  "js/picjob.js": "18322d642fb004d46beb73c0114f8dd372b95b7d5e2c98c1dbe255fe1e8c51ad",
   "js/remote-doctor.js": "6d020d6b9fac3b75ac9099a3f4b9cbd39b430d010112e1cb16da128d228db8f7",
   "js/remote-picture.js": "2e11a1b7a2d22e285576f8ccc3b05b903a1fb603df2b7cf285c4485848d67543",
-  "js/remote-worker.js": "d41f63fa70379aaae37115e027d7c701fed6c777fffea1040029f1fc0a328e11",
+  "js/remote-worker.js": "4a5f0b8a153cc8e9066638f3c27c3822fed7277c3979f1c15fc4a6af00774cf9",
   "js/wire.js": "425d2623b9bb3f28d35c109996c01d8ddf7f540c92f359ba3dcf1c9a6e57298f",
   "js/core/areas.js": "0e5729ec0ae789f426adc49ecc1f2d3e9a21b8c47dd3cc06639f8e9db49801e4",
   "js/core/grid.js": "c213a2103ab299554d805123c3172f7a2aa2a5283c894154aa8dda76008167cb",
   "js/core/limits.js": "b71e5e934d1735cda51f8f4e7f131f4e3570cc08f57fb12f119afe2b2af09816",
-  "js/core/picprep.js": "fb32c13601e92763b4a4e472d09617730670a9b0491ca283096486f40664462c",
+  "js/core/picprep.js": "66d84de80b018aa3b1d5dcf440c668ca9650d75cbf82816a8c4cd506678e6bc8",
   "js/core/turn.js": "6b2c99d6192fef78e95e488126776194a368a0e89b1bd48009f2123ce7394081",
 };
 const hex = (buf) => [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, "0")).join("");

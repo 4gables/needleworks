@@ -185,6 +185,9 @@ export function cutPart(whole, found, n) {
   return c;
 }
 
+// A flat picture (a logo, lettering) is also sent twice as fine as it is worked at, when it has the pixels: small
+// letters' strokes are read from that copy (digitize.js `o.fine`). `flat`: the worker's measure of it (0-1).
+export const finer = (flat, crop, w) => flat >= 0.55 && crop.sw >= 1.2 * w;
 // the picture's colours are learned from a copy this size (px, longer side) whatever the Size or hoop, so changing
 // either never changes the threads
 export const LEARN = 800;
@@ -205,7 +208,8 @@ export function pictureImage(bitmap, box, w, h) {
 export function chooseStyle(f, size) {
   const { line, wide, inks } = STYLE, k = (wide * f.long) / 2;
   const thin = f.thick.reduce((a, v, r) => a + (r > 0 && r <= k ? v : 0), 0);
-  if (f.ink > 0 && thin >= line && (f.colours || 0) <= inks) {
+  // (a picture of words is sewn as lettering, Filled: picjob.js `wordsShare`)
+  if (f.ink > 0 && thin >= line && (f.colours || 0) <= inks && !(f.words >= 0.6)) {
     return { style: "line", start: true, line: +thin.toFixed(3), why: "Looks like a line drawing, so it's sewn as one." };
   }
   return { style: "fill", start: false, line: +thin.toFixed(3), why: "" };

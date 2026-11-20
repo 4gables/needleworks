@@ -4,7 +4,7 @@
 // and the picture kept from the last visit. (Part of app.js until 2026-11.)
 import { turnPattern } from "./core/turn.js";
 import { designStats, machineThreads, readEmbroidery } from "./core/formats.js";
-import { DENSITY, LEARN, MOST, chooseStyle, contentBox, cutPart, findParts, lostMuch, picturePlan, pictureImage, sewSized } from "./core/picprep.js";
+import { DENSITY, LEARN, MOST, chooseStyle, contentBox, cutPart, finer, findParts, lostMuch, picturePlan, pictureImage, sewSized } from "./core/picprep.js";
 import { applyAreas } from "./core/areas.js";
 import { PEC_MATCH, hexToRgb, nearestBrotherThread, pecThread } from "./core/threads.js";
 import { moves } from "./quality.js";
@@ -69,13 +69,13 @@ async function sewPicture(s, wk, isStale = () => false) {
     const pick = wk === picJobs && p.choose, m = await wk.run({ key, learn, opts, pick });
     if (!m.ok || isStale()) return isStale() ? { stale: true } : m;
     if (pick && m.pick) { const st = startStyle(m.pick, s.size); if (st) { s.style = opts.style = st; if (!p.sample) store.set("pic.last", { ...store.get("pic.last", {}), style: st }); } }
-    p.models.set(key, { boxes: m.boxes, colors: m.colors });
+    p.models.set(key, { boxes: m.boxes, colors: m.colors, flat: m.flat || 0 });
   }
-  const { boxes, colors } = p.models.get(key), sewn = boxes.filter((_, i) => !colors[i].background && !s.skip.includes(i));
+  const { boxes, colors, flat } = p.models.get(key), sewn = boxes.filter((_, i) => !colors[i].background && !s.skip.includes(i));
   const fk = JSON.stringify([key, s.size, opts]);
   const r = await sewSized(async (pl) => {
     if (isStale()) return { ok: false, stale: true };
-    const q = await wk.run({ key, ref: `${p.key}:${s.bg}:${s.edge ? 1 : 0}:${s.smooth ?? "auto"}`, learn, img: pictureImage(bitmap, pl.crop, pl.w, pl.h), crop: pl.frac, opts });
+    const q = await wk.run({ key, ref: `${p.key}:${s.bg}:${s.edge ? 1 : 0}:${s.smooth ?? "auto"}`, learn, img: pictureImage(bitmap, pl.crop, pl.w, pl.h), ...(finer(flat, pl.crop, pl.w) ? { img2: pictureImage(bitmap, pl.crop, 2 * pl.w, 2 * pl.h) } : {}), crop: pl.frac, opts });
     return isStale() ? { ok: false, stale: true } : q;
   }, (fit) => picturePlan(box, sewn, s.size, s.hoop, undefined, fit), { style: s.style, cross: s.cross, fit: picFits.get(fk) });
   if (r.stale || isStale()) return { stale: true };

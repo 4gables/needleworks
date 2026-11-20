@@ -1,0 +1,54 @@
+<!doctype html><meta charset="utf-8"><title>text probe</title>
+<style>body{font:12px system-ui;margin:8px;background:#fff} .c{display:inline-block;margin:4px;vertical-align:top} canvas{border:1px solid #ccc;display:block}</style>
+<div id="out"></div>
+<script type="module">
+// Small lettering in pictures, by eye: words drawn at known heights, sewn as the Picture tab sews them (Filled), and
+// drawn 8x. ?only=name, ?size=mm (the picture's sewn width), ?style=fill|line
+import { DENSITY, LEARN, contentBox, finer, pictureImage, picturePlan, sewSized } from "../../js/core/picprep.js";
+import { hoop as getHoop } from "../../js/core/machines.js";
+const Q = new URLSearchParams(location.search), HOOP = getHoop(), W = +Q.get("size") || 110, PXMM = 12;
+const worker = new Worker(new URL("../../js/worker.js", import.meta.url), { type: "module" }); let seq = 0;
+const job = (msg) => new Promise((ok) => { const id = ++seq; const h = (e) => { if (e.data.id === id) { worker.removeEventListener("message", h); ok(e.data); } }; worker.addEventListener("message", h); worker.postMessage({ ...msg, id }); });
+await Promise.all(['700 40px "NW Poppins"', '400 40px "NW Zilla Slab"', '400 40px "NW Sacramento"'].map((f) => document.fonts.load(f).catch(() => {})));
+// a line of words whose capitals are `mm` tall when the picture is sewn W mm wide
+const line = (g, text, font, mm, x, y, colour) => { g.font = `${font.replace("SIZE", "100px")}`; const cap = g.measureText("H").actualBoundingBoxAscent; g.font = font.replace("SIZE", `${(100 * mm * PXMM) / cap}px`); g.fillStyle = colour; g.fillText(text, x, y); };
+const SANS = '700 SIZE "NW Poppins", Arial, sans-serif', REG = '400 SIZE Arial, sans-serif', SERIF = '400 SIZE "NW Zilla Slab", Georgia, serif';
+const CASES = {
+  sans: (g) => [6, 5, 4, 3, 2.5].forEach((mm, i) => line(g, `SCHOOL OF MEDICINE ${mm}`, SANS, mm, 20, 90 + i * 100, "#0e1f7c")),
+  regular: (g) => [6, 5, 4, 3, 2.5].forEach((mm, i) => line(g, `University of Louisville ${mm}`, REG, mm, 20, 90 + i * 100, "#111")),
+  serif: (g) => [6, 5, 4, 3, 2.5].forEach((mm, i) => line(g, `Established 1798 Kentucky ${mm}`, SERIF, mm, 20, 90 + i * 100, "#8a1020")),
+  onshape: (g) => { g.fillStyle = "#0e1f7c"; g.beginPath(); g.ellipse(660, 270, 640, 250, 0, 0, 7); g.fill(); [6, 4, 3].forEach((mm, i) => line(g, `SCHOOL OF MEDICINE ${mm}`, SANS, mm, 200, 180 + i * 110, "#ffffff")); },
+};
+const out = document.getElementById("out"), log = (t) => { out.append(Object.assign(document.createElement("div"), { textContent: t })); };
+for (const [name, paint] of Object.entries(CASES)) for (const bg of ["clear", "white"]) {
+  if (Q.get("only") && !Q.get("only").split(",").includes(name)) continue;
+  if (Q.get("bg") && Q.get("bg") !== bg) continue;
+  const c = new OffscreenCanvas(W * PXMM, 560), g = c.getContext("2d");
+  if (bg === "white") { g.fillStyle = "#fff"; g.fillRect(0, 0, c.width, c.height); }
+  paint(g);
+  const bitmap = c, box = contentBox(bitmap), key = `${name}:${bg}:${Math.random()}`, k = LEARN / Math.max(box.sw, box.sh);
+  const learn = pictureImage(bitmap, box, Math.max(1, Math.round(box.sw * k)), Math.max(1, Math.round(box.sh * k)));
+  const style = Q.get("style") || "fill", size = (W * box.sw) / c.width;
+  const opts = { colors: 4, scale: k, removeBackground: true, fillAngle: 45, density: DENSITY.standard, skip: [], hoop: HOOP, turn: false, palette: null, style, cross: 2.5, details: "most", shade: "auto", inside: "auto" };
+  const m = await job({ key, learn, opts, pick: true });
+  if (!m.ok) { log(`${name} ${bg}: ${m.error}`); continue; }
+  const t0 = performance.now();
+  const r = await sewSized((pl) => job({ key, ref: key, learn, img: pictureImage(bitmap, pl.crop, pl.w, pl.h), ...(!Q.has("coarse") && finer(m.flat, pl.crop, pl.w) ? { img2: pictureImage(bitmap, pl.crop, 2 * pl.w, 2 * pl.h) } : {}), crop: pl.frac, opts }), (fit) => picturePlan(box, m.boxes.filter((_, i) => !m.colors[i].background), size, HOOP, undefined, fit), { style });
+  if (!r.ok) { log(`${name} ${bg}: ${r.error}`); continue; }
+  // (each file kept by the batch server, for the machine checker and PE-DESIGN)
+  await fetch(`/save/text_${name}_${bg}_${style}.pes`, { method: "POST", body: r.bytes });
+  const st = r.pattern.stitches, S = +Q.get("zoom") || 9;   // px per mm on the sheet
+  let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9, n = 0, trims = 0; for (const [x, y, k2] of st) { if (k2 === 0) { n++; x0 = Math.min(x0, x); y0 = Math.min(y0, y); x1 = Math.max(x1, x); y1 = Math.max(y1, y); } if (k2 === 2) trims++; }
+  const cv = document.createElement("canvas"); cv.width = ((x1 - x0) / 10 + 4) * S; cv.height = ((y1 - y0) / 10 + 4) * S; cv.style.width = cv.width / (window.devicePixelRatio || 1) + "px";
+  const d = cv.getContext("2d"); d.fillStyle = bg === "white" || name !== "onshape" ? "#f4efe6" : "#f4efe6"; d.fillRect(0, 0, cv.width, cv.height); d.lineWidth = 0.4 * S; d.lineCap = "round";
+  let block = 0, last = null; d.strokeStyle = r.pattern.threads[0].color;
+  for (const [x, y, k2] of st) { const p = [((x - x0) / 10 + 2) * S, ((y - y0) / 10 + 2) * S];
+    if (k2 === 5) { block++; d.strokeStyle = r.pattern.threads[block]?.color || "#000"; last = null; continue; }
+    if (k2 === 0 && last) { d.beginPath(); d.moveTo(...last); d.lineTo(...p); d.stroke(); }
+    last = k2 === 0 || k2 === 1 ? p : null; }
+  const div = Object.assign(document.createElement("div"), { className: "c" });
+  div.append(Object.assign(document.createElement("div"), { textContent: `${name} / ${bg} / ${style} (words ${m.pick?.words}, thin ${JSON.stringify(m.pick?.thick?.slice?.(0,3))}): ${n} stitches, ${trims} trims, ${r.pattern.threads.length} threads, letters ${r.fine?.letters ?? "-"}, ${Math.round(performance.now() - t0)} ms` }), cv);
+  out.append(div);
+}
+document.title = "DONE";
+</script>

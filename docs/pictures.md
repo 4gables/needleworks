@@ -311,6 +311,28 @@ Reference for this part of Needleworks: the rules, the reason for each (it stops
   row 2-6 mm tall (`least`, `small`; under 2 mm the "rows" are flecks along a bold word's edge), in a flat picture
   (`flat` 0.55, the verdict's own line for "shaded like a photo": etsy_8's photographed 3 mm script title cost 45
   trims and 28 loose threads at 120 mm and read no better):
+  - **2026-11 (owner: "pictures only, and it must work with small fonts"), measured on `tests/browser/text_probe.html`**
+    (words drawn at 6, 5, 4, 3 and 2.5 mm, bold, regular, serif, and white on a navy oval; before: 3 mm capitals were
+    blobs, "University of" sewed as "Universily ol", 2.5 mm was unreadable, a see-through picture's words were
+    hairlines, white words on navy vanished; after: every row reads down to 3 mm, 2.5 mm reads in a plain face):
+    - A see-through picture has no fabric colour: its rows are found all the same (they were skipped).
+    - Rows up to 9 mm (`small`, was 6): a 6 mm serif line, lower case 4 mm, fell to the fill and column rules. From
+      6 mm (`sure`) a row needs six letters (`many`): three parts of a fox mascot's face, 7 mm tall and level, were
+      taken for a word and sewn as strokes (look 83 to 76, 32 mm² bare).
+    - The stroke's width goes by the letters' height (`textWide`): thread is 0.4 mm thick, so a 0.6 mm satin made a
+      1 mm stroke on a 3 mm letter. Under 3.2 mm (`line`) a stroke is one line of thread three times over (the
+      owner's "single thread doesn't look good" was said of 4 mm letters, which stay satin); from there a satin
+      of 0.35 mm growing to 0.7 mm at 5 mm (`least2`, `most`).
+    - A letter's short strokes are kept: dead ends from half a stroke, carried to the ink's edge (`reach`), dots
+      too. They were cut as thinning noise: t and f lost their crossbars, i its dot.
+    - **The finer copy** (`picprep.js` `finer`, the job's `img2`, `o.fine`): a flat picture is also sent twice as
+      fine as it is worked at, when it has the pixels, and the letters' centre lines are read from that copy. At
+      8 px a mm a 3 mm letter is 24 px tall: an M's notch, a crossbar, the gap between two letters are one pixel
+      or none. This alone made 2.5 mm readable and mended every M.
+    - Lettering on a filled colour is sewn after that colour, whichever is lighter: the fill's rows reach 0.2 mm
+      past every edge and closed over white letters sewn first.
+    - A picture of words (`picjob.js` `wordsShare` 0.6 or more of its ink in rows) starts as Filled: as a line
+      drawing its letters were joined by the lines between them.
   - One thread a letter: the in-between colour (a dark stroke's soft edge, learned as a grey of its own when threads
     are to spare: half of each letter was grey, some all grey) is the letters' colour where it touches a letter
     (3 px) or is a whole stroke; what is left of it in the row is fabric.

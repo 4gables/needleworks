@@ -450,7 +450,9 @@ reader, the counts, the checker's rules, the drawing) ships in both builds: it i
 - [ ] **C4 Cutover**: the source repo renamed and private, a fresh public repo with only the thin build at the
   same address; the owner runs the full app locally and testers get codes. Each step that cannot be undone is
   confirmed with the owner first.
-- [ ] **C5 Design tab on the server** (needs a canvas there for lettering), then Stripe.
+- [x] **Trial address** (2026-11-20): the public build at 4gables.com/needleworks-next (repo `4gables/needleworks-next`,
+  built files only), swapped onto the live address at C4. The paid site does pictures only (owner): no Design tab.
+- [x] **C5 Small lettering in pictures** (v42; pictures.md "Small lettering"). Then Stripe.
 
 Limits accepted: the code and its history have been public (0 forks, 0 stars on 2026-11-19); a visitor's browser
 keeps the old engine in its offline cache until its next visit; preview stitches can still be read out of the page;

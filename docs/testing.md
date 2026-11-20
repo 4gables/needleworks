@@ -22,6 +22,9 @@ Reference for this part of Needleworks: the rules, the reason for each (it stops
   tests/cdp.mjs PORT CMD` (commands in its header). `start` disables timer throttling (a 300 ms debounce took 57 s)
   and keeps temp files beside the profile (TMPDIR, MAC_CHROMIUM_TMPDIR). With `nocache` app.js may not start: check
   `document.body.dataset.mode`, navigate again. Subagents hand reports back.
+- Small lettering in pictures, by eye: `tests/browser/text_probe.html` (words drawn at 6 to 2.5 mm in three faces and
+  white on a colour, sewn as the Picture tab sews them and drawn large; `?only=`, `?bg=clear|white`, `?zoom=`,
+  `?coarse` without the finer copy). It saves each file to the batch server for `pe900_check.py`.
 - VM check (before shipping stitch changes): UTM "PESCHECK" with the PE-DESIGN 11 trial over VNC
   (`/Volumes/4TB_SSD/vm-pescheck/tools/vnc.py`); files in on an ISO (`hdiutil makehybrid -iso -joliet`, `cat` it over
   `vm-pescheck/files.iso`); `vm-pescheck/tools/boxcheck2.ps1` (box == stitch minimum: "FITS n/n"), then open them
