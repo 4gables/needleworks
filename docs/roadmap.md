@@ -424,30 +424,34 @@ bunched at each inner corner of a K. Then: open the site to other people without
 - [x] **What v39 cost**, measured: the look score's fall is the pull alone, the trims' rise is fills with holes
   (stitch-model.md "Cover"); `look.json` re-saved.
 
-**The paid version (plan; nothing built).** Until its cutover the present site stays live from the public repo and
-gets every fix. One codebase, two builds: the UI calls one async `js/engine.js`; `engine-local.js` is today's app
-(owner, testers), `engine-remote.js` a thin public client whose engine runs on AWS Lambda (the same `js/core` and
-`js/studio` files, no dependencies).
+**The paid version (owner, 2026-11-19: cut over now; Picture and Open first, Design follows).** Until the cutover
+the present site stays live from the public repo and gets every fix. One codebase, two builds, no build step: the
+page takes everything that *makes* stitches from one module, `js/engine.js`; the public build swaps that file for
+`js/engine-remote.js`, whose jobs run on AWS Lambda (the same `js/core` files). What only *reads* a file (the
+reader, the counts, the checker's rules, the drawing) ships in both builds: it is not what is being protected.
 
-- [ ] **B0 Seam**: every engine call an async job through `js/engine.js`; Design-tab `compose` off the main
-  thread. Proof: batches byte-identical.
-- [ ] **B1 Server engine**: `server/handler.mjs` takes the workers' job messages; the browser sends pixels
-  (lettering drawn by its canvas and sent as bitmaps). Proof: the batches through the local server give the same
-  bytes. To settle first: whether lettering asks for bitmaps at sizes it works out mid-fit (then the server draws
-  glyph outlines itself), and whether `Design` knows which stitches are underlay and locks.
-- [ ] **B2 Thin client**: the preview gets the visible stitches only (no underlay, no locks: a file rebuilt from it
-  sews badly), with counts, fit, problems, steps and the sew sheet worked out on the server from the whole file. A
-  release guard fails if the public build can reach `js/core`, the studio's engine, `doctor.js`, `quality.js` or
-  `formats*.js`.
-- [ ] **B3 AWS**: Lambda behind a Function URL and CloudFront, S3 for uploads (24 h), DynamoDB for codes and
-  per-address limits, a concurrency cap and a budget alarm; `server/admin.mjs mint`; `POST /file` builds the whole
-  file from the stored job, runs the gate, spends one use of a code.
-- [ ] **B4 Cutover**: the source repo private, a fresh public repo with only the thin build at the same address,
-  the full app at a signed-in address, a privacy page (pictures are uploaded), no offline use. Each step that
-  cannot be undone is confirmed with the owner first.
-- [ ] **B5 Later**: Stripe checkout issues a code; the file is emailed.
+- [ ] **C1a Split read from make**: the read-side code the page needs moves out of the engine's files into its own
+  (the checker's limits out of `recipes.js`, the hoop turn out of `design.js`, the checkup out of `doctor.js`, a
+  picture's canvas work out of `digitize.js`), re-exported where it was. Proof: batches byte-identical.
+- [ ] **C1b One door**: the page imports what makes stitches only from `js/engine.js` (the picture and doctor
+  jobs, a picture's plan, the fixes, the gate, the Design tab). Proof: batches byte-identical, check.sh.
+- [ ] **C1c Server engine**: `server/handler.mjs` takes the workers' job messages (pixels sent raw and gzipped: no
+  canvas on the server for pictures), keeps the whole file, answers with the preview. `Design` marks underlay and
+  locks; the preview is the file without them. Proof: the same jobs through the server and the page give the same
+  whole file; a file rebuilt from the preview fails the checker's lock rule.
+- [ ] **C2 AWS**: Lambda (concurrency capped) behind CloudFront, S3 for kept files (30 days), DynamoDB for codes
+  and per-address limits, a $5 budget alert; `server/admin.mjs mint`; `POST /file` runs the gate and spends one
+  use of a code. Free tier; the owner's account already holds his older sites (left alone).
+- [ ] **C3 Thin client**: `engine-remote.js`, a script that writes the public file set, a guard that fails if that
+  set can reach a file that makes stitches, the Design tab shown as coming, the code dialog at Download, a
+  privacy and terms page (pictures are uploaded). Proof: ui_sweep and files_flow on the thin build.
+- [ ] **C4 Cutover**: the source repo renamed and private, a fresh public repo with only the thin build at the
+  same address; the owner runs the full app locally and testers get codes. Each step that cannot be undone is
+  confirmed with the owner first.
+- [ ] **C5 Design tab on the server** (needs a canvas there for lettering), then Stripe.
 
-Limits accepted: the code and its history have been public; preview stitches can still be read out of the page;
+Limits accepted: the code and its history have been public (0 forks, 0 stars on 2026-11-19); a visitor's browser
+keeps the old engine in its offline cache until its next visit; preview stitches can still be read out of the page;
 every setting change is a round trip.
 
 ## Verdict
