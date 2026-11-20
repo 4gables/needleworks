@@ -442,8 +442,9 @@ reader, the counts, the checker's rules, the drawing) ships in both builds: it i
 - [x] **C2 AWS**: Lambda (concurrency capped) behind CloudFront, S3 for kept files (30 days), DynamoDB for codes
   and per-address limits, a $5 budget alert; `server/admin.mjs mint`; `POST /file` runs the gate and spends one
   use of a code. Free tier; the owner's account already holds his older sites (left alone).
-- [ ] **C3 Thin client** (built and working against the live server, 2026-11-19; still to do: the Open tab's fixes and
-  the offline copy tried in the public build, ui checks on it): `engine-remote.js`, a script that writes the public file set, a guard that fails if that
+- [ ] **C3 Thin client** (built and working against the live server, 2026-11-19, with 2,000 previews a day and 300
+  requests a minute per address, lifted by a code; still to do: the offline copy tried in the public build, ui
+  checks on it): `engine-remote.js`, a script that writes the public file set, a guard that fails if that
   set can reach a file that makes stitches, the Design tab shown as coming, the code dialog at Download, a
   privacy and terms page (pictures are uploaded). Proof: ui_sweep and files_flow on the thin build.
 - [ ] **C4 Cutover**: the source repo renamed and private, a fresh public repo with only the thin build at the
