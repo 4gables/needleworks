@@ -430,19 +430,20 @@ page takes everything that *makes* stitches from one module, `js/engine.js`; the
 `js/engine-remote.js`, whose jobs run on AWS Lambda (the same `js/core` files). What only *reads* a file (the
 reader, the counts, the checker's rules, the drawing) ships in both builds: it is not what is being protected.
 
-- [ ] **C1a Split read from make**: the read-side code the page needs moves out of the engine's files into its own
+- [x] **C1a Split read from make**: the read-side code the page needs moves out of the engine's files into its own
   (the checker's limits out of `recipes.js`, the hoop turn out of `design.js`, the checkup out of `doctor.js`, a
   picture's canvas work out of `digitize.js`), re-exported where it was. Proof: batches byte-identical.
-- [ ] **C1b One door**: the page imports what makes stitches only from `js/engine.js` (the picture and doctor
+- [x] **C1b One door**: the page imports what makes stitches only from `js/engine.js` (the picture and doctor
   jobs, a picture's plan, the fixes, the gate, the Design tab). Proof: batches byte-identical, check.sh.
-- [ ] **C1c Server engine**: `server/handler.mjs` takes the workers' job messages (pixels sent raw and gzipped: no
+- [x] **C1c Server engine**: `server/handler.mjs` takes the workers' job messages (pixels sent raw and gzipped: no
   canvas on the server for pictures), keeps the whole file, answers with the preview. `Design` marks underlay and
   locks; the preview is the file without them. Proof: the same jobs through the server and the page give the same
   whole file; a file rebuilt from the preview fails the checker's lock rule.
-- [ ] **C2 AWS**: Lambda (concurrency capped) behind CloudFront, S3 for kept files (30 days), DynamoDB for codes
+- [x] **C2 AWS**: Lambda (concurrency capped) behind CloudFront, S3 for kept files (30 days), DynamoDB for codes
   and per-address limits, a $5 budget alert; `server/admin.mjs mint`; `POST /file` runs the gate and spends one
   use of a code. Free tier; the owner's account already holds his older sites (left alone).
-- [ ] **C3 Thin client**: `engine-remote.js`, a script that writes the public file set, a guard that fails if that
+- [ ] **C3 Thin client** (built and working against the live server, 2026-11-19; still to do: the Open tab's fixes and
+  the offline copy tried in the public build, ui checks on it): `engine-remote.js`, a script that writes the public file set, a guard that fails if that
   set can reach a file that makes stitches, the Design tab shown as coming, the code dialog at Download, a
   privacy and terms page (pictures are uploaded). Proof: ui_sweep and files_flow on the thin build.
 - [ ] **C4 Cutover**: the source repo renamed and private, a fresh public repo with only the thin build at the

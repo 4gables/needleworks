@@ -33,6 +33,24 @@ round can be picked up cold.
 - Stores: the whole file by job id (S3, 30 days), codes and per-address limits (DynamoDB). Locally both are in
   memory (`node server/dev.mjs`).
 
+## Where it runs (2026-11-19)
+- AWS account of the owner (it also holds his older sites and Lambdas in us-east-1: left alone), region **us-west-2**,
+  everything named `needleworks*`: Lambda `needleworks` (x86, 3 GB, 60 s, 3 at once at most), its function URL
+  `https://maawcz4aku4p7pnq3msmuwh7se0wtuzy.lambda-url.us-west-2.on.aws` (answers only pages on 4gables.com and
+  the public build served at 127.0.0.1:8831), bucket `needleworks-files-<account>-us-west-2` (files/ deleted after
+  30 days), table `needleworks` (on demand), role `needleworks-lambda`, logs kept 14 days.
+- Put there, and updated, by `bash server/deploy.sh` in AWS CloudShell (no keys on any computer). While the repo is
+  public CloudShell clones it; once it is private, upload a zip of `js/` and `server/` with CloudShell's Upload file.
+- Codes: `bash server/admin.sh mint USES NOTE | show CODE | list` in CloudShell.
+- Try the public build here: `node server/build-public.mjs OUT ADDRESS`, serve OUT on 127.0.0.1:8831. With
+  `node server/dev.mjs` as ADDRESS (http://127.0.0.1:8787) the codes are TEST and ONCE.
+- Speed: the server is 3-4 times slower than a recent Mac. A drawn 180 x 135 mm picture: 6 s here, 18 s there (24 s on
+  arm64 with 1.8 GB); 60 mm: 1 s here, under 5 s there with a cold start. The time is spread over the picture's
+  analysis (no one hot spot): making the engine faster is a round of its own.
+- Proof so far: the batches (2,324 files) and the picture corpus are byte-identical to v40 on the full app; the
+  server's whole file equals the page's for the same job; a file downloaded from the live server with a code passes
+  `pe900_check.py`.
+
 ## Known and accepted
 - The Design tab is not in the public build until round C5; the tab says so.
 - In the public build a failing opened file gets no one-tap fixed copy at Download (the Checkup's fixes still run).
