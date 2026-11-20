@@ -1013,7 +1013,10 @@ function build(img, analysis, opts) {
         // a T's bar made joints of three in letters that sewed well without them)
         // (or that they cover with ink to spare, under COLUMNS.whole: then the serifs' way is taken when it covers
         // COLUMNS.gain more. A slab E's strokes cover 0.93 of it, its serifs bare)
-        if (stroke && COLUMNS.serif && (!fine2(nets) || nets.cover < COLUMNS.whole)) { const alt = columnNets(q.px, more, w, h, own, res, toMm, false, COLUMNS.serif); if (fine2(alt) && (!fine2(nets) || alt.cover >= nets.cover + COLUMNS.gain)) nets = alt; }
+        if (stroke && COLUMNS.serif && (!fine2(nets) || nets.cover < COLUMNS.whole)) { const alt = columnNets(q.px, more, w, h, own, res, toMm, false, COLUMNS.serif); const count = (n) => n.reduce((t, x) => t + x.edges.length, 0);
+          // (and only when it found serifs, more strokes than before: a thin arc gained no stroke, only a longer one
+          // that "covered more" sewn askew, and a cat's eye came out a smear)
+          if (fine2(alt) && count(alt) > count(nets) && (!fine2(nets) || alt.cover >= nets.cover + COLUMNS.gain)) nets = alt; }
         if (!fine2(nets)) continue;
         cols.push({ px: q.px, c, whole, nets, meant: dot(c) || (mark(c) && size[c] < 2 * dotPx) });
         for (const i of q.px) { colPx[i] = 1; cl[i] = 0; mask.data[i] = 0; thin.data[i] = 0; }
