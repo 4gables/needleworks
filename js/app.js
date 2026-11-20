@@ -868,14 +868,15 @@ const MODES = ["picture", "design", "open"];
 const PAID = BUILD === "paid";
 if (PAID) {
   document.body.dataset.build = "paid";
-  const t = $("tab-design"); t.disabled = true; t.tabIndex = -1; t.textContent = "Design your own (coming soon)";
+  // (pictures are what the paid build does, owner 2026-11-20: no Design tab on it, so none is promised)
+  const t = $("tab-design"); t.disabled = true; t.tabIndex = -1; t.hidden = true;
   $("foot-where").innerHTML = 'Your picture is sent to our server to be turned into stitches, and is not kept there. <a href="privacy.html">Privacy and terms</a>';
 }
 export function setMode(mode, push = true) {
   // (#bookmark: the bookmark had a panel of its own until 2026-10-31; old links open the Bookmark starter)
   if (mode === "bookmark") { setMode("design", false); history.replaceState(null, "", "#design"); oldBookmark(); return; }
   if (!MODES.includes(mode)) mode = "design";
-  // (the paid build has no Design tab yet: its tab says so, and every way to it lands on Picture)
+  // (the paid build has no Design tab: every way to it lands on Picture)
   if (PAID && mode === "design") mode = "picture";
   state.mode = mode;
   document.body.dataset.mode = mode;
