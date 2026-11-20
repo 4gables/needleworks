@@ -46,6 +46,9 @@ Reference for this part of Needleworks: the rules, the reason for each (it stops
 - A corner: the legs' directions (read 1.5 to 2.5 column widths either side, since a drawn corner's centre line is
   rounded for about a width) turn `MITRE.turn` 60° or more, `MITRE.sharp` 0.7 of it within 1.5 widths (a tight ring
   turns as far, evenly: no corner), 2.5 widths or more from both ends of the line. Gentler turns fan as before.
+- Each leg's width is the least where its direction was read, but never within half a width of the line's end: a
+  column narrows to its tip there, and a leg only 2.5 widths long took its tip's width (a sewn logo's L's,
+  2026-11-20: each foot 0.7 mm wide from the corner out, full width only past the mitre). Guard: flow_lint.test.
 - On for a picture's satin columns only (`netStitches`). `columnNets` joins centre lines that meet at a node nothing
   else comes to, so a corner the skeleton put a node on lies inside one line.
 - Not for lettering (measured 2026-11-19, every font, A-Z a-z 0-9 at 25 mm): a letter's corners are mostly joins
