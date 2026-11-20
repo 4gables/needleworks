@@ -476,7 +476,7 @@ function columnNets(px, more, w, h, own, res, toMm, dotted) {
       if (!pair) continue;
       const cut = Math.max(0, Math.max(half(pair[0].e), half(pair[1].e)) - COLUMNS.lap);
       // (and is as wide as the branch usually is: by the joint its normal runs along the stroke it joins)
-      for (const t of list) if (!pair.includes(t)) { t.e[t.atA ? "ta" : "tb"] = cut; for (const r of [t.e.A, t.e.B]) { const m = r.slice().sort((x, y) => x - y)[r.length >> 1] * 1.1; for (let i = 0; i < r.length; i++) if (r[i] > m) r[i] = m; } }
+      for (const t of list) if (!pair.includes(t)) { t.e[t.atA ? "ta" : "tb"] = cut; t.e.A0 ||= t.e.A.slice(); t.e.B0 ||= t.e.B.slice(); for (const r of [t.e.A, t.e.B]) { const m = r.slice().sort((x, y) => x - y)[r.length >> 1] * 1.1; for (let i = 0; i < r.length; i++) if (r[i] > m) r[i] = m; } }
     }
   }
   // (connected sets of centre lines: each one walk)
@@ -539,16 +539,17 @@ function plain(nets) {
     const L = e.s[e.s.length - 1];
     all += L;
     if (e.a !== e.b && L < COLUMNS.stub * net.W) short += L;
-    for (let i = 0; i < e.s.length; i++) { if (e.s[i] > net.W && L - e.s[i] > net.W) wd.push(e.A[i] + e.B[i]); if (e.s[i] > net.W / 2 && L - e.s[i] > net.W / 2) near.push(e.A[i] + e.B[i]); }
+    // (as measured, `A0`: not as a branch was evened by its joint)
+    const A = e.A0 || e.A, B = e.B0 || e.B;
+    for (let i = 0; i < e.s.length; i++) { if (e.s[i] > net.W && L - e.s[i] > net.W) wd.push(A[i] + B[i]); if (e.s[i] > net.W / 2 && L - e.s[i] > net.W / 2) near.push(A[i] + B[i]); }
   }
-  // (a small letter's strokes are all short: an H's five, each under two widths. Measured from half a width off their ends)
-  if (wd.length < 10 && near.length >= 10) wd.splice(0, wd.length, ...near);
   if (!all) return false;
-  wd.sort((x, y) => x - y);
-  const spread = wd.length < 10 ? 1 : wd[Math.floor(0.9 * (wd.length - 1))] / wd[Math.floor(0.1 * (wd.length - 1))];
-  // (short strokes between junctions are a letter's when they are all one width, COLUMNS.letter: an E, an N, an M.
-  // A ragged patch's are every width)
-  if (short > COLUMNS.short * all) return wd.length >= 10 && spread <= COLUMNS.letter;
+  const spreadOf = (v) => { v.sort((x, y) => x - y); return v.length < 10 ? 1 : v[Math.floor(0.9 * (v.length - 1))] / v[Math.floor(0.1 * (v.length - 1))]; };
+  // (short strokes between junctions are a letter's when they are all one width, COLUMNS.letter, and together
+  // COLUMNS.run widths long: an E, an H, an A. A ragged patch's are every width, and a fat letter's X is four stubs
+  // that sew as a knot. A small letter's strokes are each under two widths: measured from half a width off their ends)
+  if (short > COLUMNS.short * all) { const v = wd.length >= 10 ? wd : near; return v.length >= 10 && all >= COLUMNS.run * nets[0].W && spreadOf(v) <= COLUMNS.letter; }
+  const spread = spreadOf(wd);
   if (wd.length < 10) return true;
   if (spread <= COLUMNS.even) return true;
   // (or uneven only as a taper is: along each centre line the width rises and falls at most `taper` times its range,
