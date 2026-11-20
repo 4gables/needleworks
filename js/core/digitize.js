@@ -308,6 +308,16 @@ function foldFlecks(labels, w, h, colors, used, res) {
   return { labels: next, folded };
 }
 
+// A centre line's reach `r` (one side) near a joint, within `zone` of that end (`atStart`; `s`: each sample's distance
+// along, the same unit), no more than `k` times what it is just past there (the next `zone`): by the joint the normal
+// runs down the other stroke. Measured just past it, not along the whole line: a serif U's thick stem was capped to
+// the median of its thin bowl and sewn a third of its width, off to one side (2026-11)
+function capJoint(r, s, atStart, zone, k) {
+  const L = s[s.length - 1], d = (i) => (atStart ? s[i] : L - s[i]), near = r.filter((_, i) => d(i) >= zone && d(i) < 2 * zone);
+  const v = (near.length >= 3 ? near : r).slice().sort((x, y) => x - y), m = v[v.length >> 1] * k;
+  for (let i = 0; i < r.length; i++) if (d(i) < zone && r[i] > m) r[i] = m;
+}
+
 // A column piece (`px`: its pixels in the working copy, `w` x `h`; `more`: pixels of the fill it grows out of, which
 // its ends may reach into) as satin nets, each a connected set of centre lines: [{ edges: [{ a, b, p (mm), s (mm
 // along p), A, B (each side's reach, mm, on p's normal's side and the other) }], W (its width, mm), dotted }].
@@ -342,7 +352,7 @@ function columnNets(px, more, w, h, own, res, toMm, dotted, serif = 0, apex = 0)
     }
     return false;
   };
-  if (!dotted) { es = skeletonEdges(pm, stroke, { spur: 1, stubs: serif }).filter((e) => e[2].length > 1 && (e[0] !== e[1] || loopLen(e[2]) >= 2 * stroke || rings(e[2])));
+  if (!dotted) { es = skeletonEdges(pm, stroke, { spur: 1, stubs: serif, forks: true }).filter((e) => e[2].length > 1 && (e[0] !== e[1] || loopLen(e[2]) >= 2 * stroke || rings(e[2])));
     // (a short dead end is a serif's arm when it lies square to one stroke at its node and straight on from another,
     // or from its own twin: an I's serif either side of its stem, an E's past its top arm. A V's or an A's point leaves
     // a dead end too, straight on from both legs and square to neither: dropped, or the point is a joint of three)
@@ -404,7 +414,11 @@ function columnNets(px, more, w, h, own, res, toMm, dotted, serif = 0, apex = 0)
         // (and nearly all of the turn made within a stroke's width of the point, COLUMNS.sharp of it: a small U's
         // bend has straight legs too, but turns all the way along)
         const u2 = unit(q[i - k], q[i - h]), v2 = unit(q[i + h], q[i + k]), near = Math.acos(Math.max(-1, Math.min(1, u2[0] * v2[0] + u2[1] * v2[1])));
-        if (near >= COLUMNS.sharp * t) tops.push([t, i]);
+        // (or the ink runs on past the turn, out along the corner's middle, COLUMNS.point strokes or more: a V's point.
+        // A 6 mm V's skeleton turned round over two widths, and its point was left bare; a U's bend reaches half a stroke)
+        const out = unit([0, 0], [u[0] - v[0], u[1] - v[1]]); let r = 0;
+        while (r < 3 * stroke && at(q[i][0] + out[0] * (r + 0.5), q[i][1] + out[1] * (r + 0.5))) r += 0.5;
+        if (near >= COLUMNS.sharp * t || r >= COLUMNS.point * stroke) tops.push([t, i]);
       }
       tops.sort((x, y) => y[0] - x[0] || x[1] - y[1]);
       for (const [, i] of tops) if (!pick.some((j) => Math.abs(j - i) < 2 * f)) pick.push(i);
@@ -459,7 +473,7 @@ function columnNets(px, more, w, h, own, res, toMm, dotted, serif = 0, apex = 0)
     const even = (r) => r.map((_, i) => { let s = 0, k = 0; for (let j = Math.max(0, i - 2); j <= Math.min(r.length - 1, i + 2); j++) { s += r[j]; k++; } return s / k / res; });
     const A = even(ra), B = even(rb);
     // (a stroke cut at an apex is as wide as it usually is: at the corner its normal runs along the next stroke)
-    if (apex) for (const r of [A, B]) { const m = r.slice().sort((x, y) => x - y)[r.length >> 1] * 1.15; for (let i = 0; i < r.length; i++) if (r[i] > m) r[i] = m; }
+    if (apex) { const s0 = q.map((_, i) => 0); for (let i = 1; i < q.length; i++) s0[i] = s0[i - 1] + Math.hypot(q[i][0] - q[i - 1][0], q[i][1] - q[i - 1][1]); for (const r of [A, B]) for (const end of [true, false]) capJoint(r, s0, end, 1.5 * stroke, 1.15); }
     // (only a loose end stops short; a column narrower than `tip` between two others, a leaf's vein in its outline, is
     // sewn `tip` wide: cut out, the vein was lost)
     let i0 = 0, i1 = q.length - 1;
@@ -479,7 +493,7 @@ function columnNets(px, more, w, h, own, res, toMm, dotted, serif = 0, apex = 0)
     // either way, not as it bends under a stitch. Square to every wiggle of a small letter's skeleton, the stitches of
     // a 1.2 mm stroke turned every way at once, a fuzzy fan)
     const s = arclen(p), K = steadySlant(p, s, COLUMNS.steady * stroke / res);
-    E.push({ a, b, p, s, K, A: A.slice(i0, i1 + 1).map((v) => Math.max(lo, v - in2)), B: B.slice(i0, i1 + 1).map((v) => Math.max(lo, v - in2)) });
+    E.push({ a, b, p, s, K, joins: [deg.get(a) > 1, deg.get(b) > 1], A: A.slice(i0, i1 + 1).map((v) => Math.max(lo, v - in2)), B: B.slice(i0, i1 + 1).map((v) => Math.max(lo, v - in2)) });
   }
   // (where three or more strokes meet, the two that run on through each other are one stroke, and the others are
   // branches off it: an E's middle arm off its stem, an A's bar off each leg. A branch's satin stops COLUMNS.lap mm
@@ -498,9 +512,9 @@ function columnNets(px, more, w, h, own, res, toMm, dotted, serif = 0, apex = 0)
       // (the stroke itself is no wider by the joint than it usually is: there its normal runs down the branch, and a
       // serif's bar sewed long stitches down into its stem)
       for (const t of pair) { const e = t.e, L = e.s[e.s.length - 1]; e.A0 ||= e.A.slice(); e.B0 ||= e.B.slice();
-        for (const r of [e.A, e.B]) { const m = r.slice().sort((x, y) => x - y)[r.length >> 1] * 1.1; for (let i = 0; i < r.length; i++) if ((t.atA ? e.s[i] : L - e.s[i]) < (1.5 * stroke) / res && r[i] > m) r[i] = m; } }
+        for (const r of [e.A, e.B]) capJoint(r, e.s, t.atA, (1.5 * stroke) / res, 1.1); }
       // (and is as wide as the branch usually is: by the joint its normal runs along the stroke it joins)
-      for (const t of list) if (!pair.includes(t)) { t.e[t.atA ? "ta" : "tb"] = cut; t.e.A0 ||= t.e.A.slice(); t.e.B0 ||= t.e.B.slice(); for (const r of [t.e.A, t.e.B]) { const m = r.slice().sort((x, y) => x - y)[r.length >> 1] * 1.1; for (let i = 0; i < r.length; i++) if (r[i] > m) r[i] = m; } }
+      for (const t of list) if (!pair.includes(t)) { t.e[t.atA ? "ta" : "tb"] = cut; t.e.A0 ||= t.e.A.slice(); t.e.B0 ||= t.e.B.slice(); for (const r of [t.e.A, t.e.B]) capJoint(r, t.e.s, t.atA, (1.5 * stroke) / res, 1.1); }
     }
   }
   // (connected sets of centre lines: each one walk)
@@ -553,10 +567,21 @@ function solidity(px, w) {
   return A ? px.length / (Math.abs(A) / 2) : 1;
 }
 
+// Whether a centre line's width (as measured, `A0`, smoothed over 9 samples) rises and falls at most `turns` times
+// its range all along it (or barely changes: 0.3 mm). `off`: mm left out at each end that meets another line (where
+// two strokes join the width swells to the joint's: a serif B's bowls failed on that alone)
+function smooth(e, turns, off = 0) {
+  const L = e.s[e.s.length - 1], j = e.joins || [], keep = (i) => e.a === e.b || ((!j[0] || e.s[i] > off) && (!j[1] || L - e.s[i] > off));
+  const A = (e.A0 || e.A).filter((_, i) => keep(i)), B = (e.B0 || e.B).filter((_, i) => keep(i)), v = A.map((a, i) => a + B[i]), k = 4, sm = v.map((_, i) => { let s = 0, n = 0; for (let j = Math.max(0, i - k); j <= Math.min(v.length - 1, i + k); j++) { s += v[j]; n++; } return s / n; });
+  let tv = 0, lo = Infinity, hi = -Infinity;
+  for (let i = 0; i < sm.length; i++) { if (i) tv += Math.abs(sm[i] - sm[i - 1]); lo = Math.min(lo, sm[i]); hi = Math.max(hi, sm[i]); }
+  return !(hi - lo > 0.3 && tv > turns * (hi - lo));
+}
+
 // Whether a stroke's centre lines make plain columns: few short strokes between junctions (a ragged patch thins to a
 // tangle of them, and each is a column turned its own way), and an even width along them away from their ends (a
 // leaf's half, 0 to 4 mm across, sewed as a fan; an outline is even). Else the piece stays a fill.
-function plain(nets) {
+function plain(nets, letter = false) {
   let all = 0, short = 0;
   const wd = [], near = [];
   for (const net of nets) for (const e of net.edges) {
@@ -572,6 +597,10 @@ function plain(nets) {
   // (short strokes between junctions are a letter's when they are all one width, COLUMNS.letter, and together
   // COLUMNS.run widths long: an E, an H, an A. A ragged patch's are every width, and a fat letter's X is four stubs
   // that sew as a knot. A small letter's strokes are each under two widths: measured from half a width off their ends)
+  // (a letter's strokes may swell and thin as a serif face's do, 4-5 times over: Georgia's O, C, S, its thick stems
+  // and hairline bars, all fills when every stroke had to be one width. Each stroke's width turns at most once per
+  // COLUMNS.serifs widths of its length, as a pen's does; a ragged patch's goes up and down all along it)
+  if (letter && COLUMNS.serifs) return all >= COLUMNS.run * nets[0].W && nets.every((net) => net.edges.every((e) => smooth(e, Math.max(COLUMNS.taper, e.s[e.s.length - 1] / (COLUMNS.serifs * net.W)), net.W)));
   if (short > COLUMNS.short * all) { const v = wd.length >= 10 ? wd : near; return v.length >= 10 && all >= COLUMNS.run * nets[0].W && spreadOf(v) <= COLUMNS.letter; }
   const spread = spreadOf(wd);
   if (wd.length < 10) return true;
@@ -584,10 +613,7 @@ function plain(nets) {
   if (!COLUMNS.taper || nets.length !== 1 || nets[0].edges.length !== 1) return false;
   for (const net of nets) for (const e of net.edges) {
     if (e.a === e.b || e.s[e.s.length - 1] < 4 * net.W) return false;
-    const v = e.A.map((a, i) => a + e.B[i]), k = 4, sm = v.map((_, i) => { let s = 0, n = 0; for (let j = Math.max(0, i - k); j <= Math.min(v.length - 1, i + k); j++) { s += v[j]; n++; } return s / n; });
-    let tv = 0, lo = Infinity, hi = -Infinity;
-    for (let i = 0; i < sm.length; i++) { if (i) tv += Math.abs(sm[i] - sm[i - 1]); lo = Math.min(lo, sm[i]); hi = Math.max(hi, sm[i]); }
-    if (hi - lo > 0.3 && tv > COLUMNS.taper * (hi - lo)) return false;
+    if (!smooth(e, COLUMNS.taper)) return false;
   }
   return true;
 }
@@ -818,6 +844,10 @@ function build(img, analysis, opts) {
   // (the thread a fill of so many px sews: its rows and its underlay)
   const fillThread = (px) => (px / (res * res)) * (1 / o.density + 1 / UNDERLAY.rows);
   const solid = new Uint8Array(w * h), budget = routeBudget();
+  // (rows of letters of any size, as the page's check finds them: a stroke in one is a letter's, and may swell and
+  // thin as a serif face's do, COLUMNS.serifs. Not in a photo, as `smallText`)
+  const words = analysis.flat >= TEXT.flat ? artShapes({ w, h, labels, colors }, res).rows : [];
+  const inWords = (px, id) => { const i = px[px.length >> 1], x = i % w, y = (i - x) / w; return words.some((r) => r.col === id && x >= r.box[0] && x <= r.box[2] && y >= r.box[1] && y <= r.box[3]); };
   for (const col of used) {
     const m = { w, h, data: new Uint8Array(w * h) };
     for (let i = 0; i < w * h; i++) m.data[i] = sh.of(i, col.id) ? 1 : 0;
@@ -979,7 +1009,10 @@ function build(img, analysis, opts) {
         const text = !!lettered.px && lettered.px[q.px[0]] === col.id + 1 && !dot(c);
         if (text) {
           const tall = (rowAt(toMm([[q.px[0] % w, Math.floor(q.px[0] / w)]])[0]) || { mm: 0 }).mm >= TEXT.column;
-          const nets = tall && W >= TEXT.satin && whole ? columnNets(q.px, [], w, h, own, res, toMm, false) : [];
+          let nets = tall && W >= TEXT.satin && whole ? columnNets(q.px, [], w, h, own, res, toMm, false) : [];
+          // (cut at its sharp corners where that covers COLUMNS.gain more, as larger letters: a 6 mm N's corners and a
+          // V's and a W's points were left bare, 9-12 % of the letter)
+          if (nets.length && COLUMNS.apex && nets.cover < COLUMNS.whole) { const alt = columnNets(q.px, [], w, h, own, res, toMm, false, 0, COLUMNS.apex); if (alt.length && alt.cover >= nets.cover + COLUMNS.gain) nets = alt; }
           if (nets.length) { cols.push({ px: q.px, c, whole, nets, meant: true, text: true }); for (const i of q.px) { colPx[i] = 1; cl[i] = 0; mask.data[i] = 0; thin.data[i] = 0; } }
           continue;
         }
@@ -1007,7 +1040,7 @@ function build(img, analysis, opts) {
         let nets = columnNets(q.px, more, w, h, own, res, toMm, !stroke);
         // (and only when its columns cover the piece: thinning prunes a stroke shorter than it is wide as a spur, and a
         // slab F's middle arm was left bare)
-        const fine2 = (n) => n.length && n.cover >= COLUMNS.cover && (!stroke || plain(n));
+        const letter = stroke && inWords(q.px, col.id), fine2 = (n) => n.length && n.cover >= COLUMNS.cover && (!stroke || plain(n, letter));
         // (a piece its strokes don't cover is tried cut at its sharp corners, COLUMNS.apex: an N, an M, a V. Only then:
         // cut everywhere, a cat's thin eye that sewed well was cut at its curl and sewn askew, look 82.8 -> 80.9)
         let cutAt = 0;

@@ -202,6 +202,69 @@ function heap() {
   };
 }
 
+// A stroke's end that thinning split in two (a flared serif's foot, a square end's two corners: a short dead end to
+// each side under 1.2 strokes long (a serif's 0.6-1; a small T's bar, 2 a side, is no fork), as far either way from the stroke's own line) ends where it split: both are dropped. Pruned one at a time,
+// one stayed and the stroke bent into that corner; a serif H's stems ran down to one corner of each foot and were
+// sewn askew, a third of the stem bare (2026-11). `forked`: the nodes where a stroke now ends so (straightOn).
+// `bars` ({ pos, ink }: with serifs kept, skeletonEdges `stubs`): a foot over FOOT strokes across is a serif, and is a
+// bar across the stroke's end instead, the stroke running on into its middle (as a slab serif is)
+const FOOT = 1.6;
+function endForks(edges, stroke, bars = null) {
+  const at = new Map(), deg = (k) => at.get(k)?.length || 0;
+  edges.forEach((e, i) => { for (const k of [e[0], e[1]]) { if (!at.has(k)) at.set(k, []); at.get(k).push(i); } });
+  const away = (e, k) => { const p = e[0] === k ? e[2] : e[2].slice().reverse(), o = p[0], q = p[Math.min(p.length - 1, Math.max(2, Math.round(stroke * 0.6)))], L = Math.hypot(q[0] - o[0], q[1] - o[1]); return L < 1 ? null : [(q[0] - o[0]) / L, (q[1] - o[1]) / L]; };
+  const gone = new Set(), forked = new Set(), more = [];
+  for (const [k, list] of at) {
+    if (list.length !== 3) continue;
+    const ends = list.filter((i) => { const e = edges[i]; return e[0] !== e[1] && e[2].length < 1.2 * stroke && deg(e[0] === k ? e[1] : e[0]) === 1; });
+    if (ends.length !== 2) continue;
+    const stem = edges[list.find((i) => !ends.includes(i))], s0 = away(stem, k), u = away(edges[ends[0]], k), v = away(edges[ends[1]], k);
+    if (!s0 || !u || !v) continue;
+    // (the way on: straight out of the stroke; each prong 15-95° off it, one to each side, the two within 35° of each other:
+    // a bracketed serif's prongs measured 55-85°, the bracket's side the steeper)
+    const on = [-s0[0], -s0[1]], ang = (d) => Math.acos(Math.max(-1, Math.min(1, d[0] * on[0] + d[1] * on[1]))) * 180 / Math.PI, side = (d) => Math.sign(on[0] * d[1] - on[1] * d[0]);
+    const a = ang(u), b = ang(v);
+    if (a < 15 || b < 15 || a > 95 || b > 95 || Math.abs(a - b) > 35 || side(u) === side(v)) continue;
+    gone.add(ends[0]); gone.add(ends[1]);
+    const bar = bars && footBar(edges, k, ends, on, stroke, bars);
+    if (bar) { const i = list.find((j) => !ends.includes(j)), st = edges[i], p = st[0] === k ? st[2].slice().reverse() : st[2].slice(); p.push(bar.mid); edges[i] = st[0] === k ? [bar.id, st[1], p.reverse()] : [st[0], bar.id, p]; more.push(...bar.edges); }
+    else forked.add(k);
+  }
+  return { edges: [...edges.filter((_, i) => !gone.has(i)), ...more], forked };
+}
+// The bar across a forked end (endForks): through the two prongs' tips, out to the ink both ways; the stroke's line
+// meets it at `mid`. Null when the foot is no wider than FOOT strokes (a square end's corners) or the line misses it.
+function footBar(edges, k, ends, on, stroke, { pos, ink }) {
+  const tip = (i) => { const e = edges[i]; return e[0] === k ? e[2][e[2].length - 1] : e[2][0]; }, a = tip(ends[0]), b = tip(ends[1]), o = pos.get(k);
+  let d = [b[0] - a[0], b[1] - a[1]]; const L = Math.hypot(d[0], d[1]);
+  if (L < 1) return null;
+  d = [d[0] / L, d[1] / L];
+  // (where the stroke's line, from the fork on, crosses the line through the tips)
+  const den = on[0] * d[1] - on[1] * d[0];
+  if (Math.abs(den) < 0.5) return null;
+  const t = ((a[0] - o[0]) * d[1] - (a[1] - o[1]) * d[0]) / den, mid = [o[0] + on[0] * t, o[1] + on[1] * t];
+  if (t < 0 || t > stroke || !ink(mid[0], mid[1])) return null;
+  const out = (sg) => { let r = 0; while (r < 3 * FOOT * stroke && ink(mid[0] + sg * d[0] * (r + 0.5), mid[1] + sg * d[1] * (r + 0.5))) r += 0.5; return Math.max(0, r - 0.1 * stroke); };
+  const r1 = out(1), r0 = out(-1);
+  if (r0 + r1 < FOOT * stroke) return null;
+  const id = `foot${k}`, ends2 = [`${id}a`, `${id}b`], pa = []; for (let x = 0; x <= r0; x++) pa.push([mid[0] - d[0] * x, mid[1] - d[1] * x]); const pb = []; for (let x = 0; x <= r1; x++) pb.push([mid[0] + d[0] * x, mid[1] + d[1] * x]);
+  pos.set(id, mid); pos.set(ends2[0], pa[pa.length - 1]); pos.set(ends2[1], pb[pb.length - 1]);
+  return { id, mid, edges: [[id, ends2[0], pa], [id, ends2[1], pb]] };
+}
+// Carries a stroke's end (`atA`: its first point) on along its own line to the ink's edge, less a tenth of a stroke
+function straightOn(e, atA, mask, stroke) {
+  const p = atA ? e[2].slice().reverse() : e[2], n = p.length, k = Math.max(2, Math.round(stroke * 0.6));
+  if (n < 2) return;
+  const end = p[n - 1], q = p[Math.max(0, n - 1 - k)], L = Math.hypot(end[0] - q[0], end[1] - q[1]);
+  if (L < 1) return;
+  const u = [(end[0] - q[0]) / L, (end[1] - q[1]) / L], ink = (x, y) => { const X = Math.round(x), Y = Math.round(y); return X >= 0 && Y >= 0 && X < mask.w && Y < mask.h && mask.data[Y * mask.w + X]; };
+  let t = 0;
+  while (t < 2 * stroke && ink(end[0] + u[0] * (t + 0.5), end[1] + u[1] * (t + 0.5))) t += 0.5;
+  t -= stroke * 0.1;
+  for (let d = 1; d <= t; d += 1) p.push([end[0] + u[0] * d, end[1] + u[1] * d]);
+  e[2] = atA ? p.reverse() : p;
+}
+
 // centerline strokes of a mask, smoothed: [[a, b, [[x, y], ...]]] in pixels
 // spur: dead ends shorter than this many stroke widths are thinning noise and get cut.
 // dots: also stitch blobs that thin to a lone point (lettering's i dots)
@@ -214,9 +277,10 @@ function heap() {
 // knots (px, or 0): where strokes cross, thinning often leaves two or three junctions a few pixels apart, joined by
 // edges shorter than this; each is contracted to one junction at their middle (`untangle`). Every edge is sewn out and
 // back as a full-width column, so a 0.2 mm edge sewed a little star of satin across the join (towel "The Smiths").
-export function skeletonEdges(mask, stroke, { spur = 1.3, dots = false, sk = null, reach = false, tongues = 0, knots = 0, stubs = 0 } = {}) {
-  const { pos, edges } = skeletonGraph(sk || skeletonize(mask));
+export function skeletonEdges(mask, stroke, { spur = 1.3, dots = false, sk = null, reach = false, tongues = 0, knots = 0, stubs = 0, forks = false } = {}) {
+  const { pos, edges: edges0 } = skeletonGraph(sk || skeletonize(mask));
   const ink = (x, y) => { const X = Math.round(x), Y = Math.round(y); return X >= 0 && Y >= 0 && X < mask.w && Y < mask.h && mask.data[Y * mask.w + X]; };
+  const { edges, forked } = forks ? endForks(edges0, stroke, stubs ? { pos, ink } : null) : { edges: edges0, forked: null };
   const tongue = ([, , p], fromA) => {
     const q = fromA ? p : p.slice().reverse(), e = q[0], k = Math.min(q.length - 1, Math.max(2, Math.round(stroke * 0.6))), c = q[k];
     const L = Math.hypot(e[0] - c[0], e[1] - c[1]);
@@ -235,6 +299,7 @@ export function skeletonEdges(mask, stroke, { spur = 1.3, dots = false, sk = nul
     pts[0] = pos.get(a).slice(); pts[pts.length - 1] = pos.get(b).slice();
     return [a, b, smooth(pts, Math.max(3, Math.floor(stroke * 0.8) | 1))];
   });
+  if (forked) for (const e of out) for (const atA of [true, false]) if (forked.has(atA ? e[0] : e[1])) straightOn(e, atA, mask, stroke);
   // (`before`: the strokes before the ends reach out; lettering is sized by them, so a word keeps the size it had)
   const done = () => {
     if (!reach) return out;

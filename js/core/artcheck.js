@@ -111,7 +111,7 @@ export function artPicture(img, full) {
 //          blend), not letters.
 //   thin:  lines narrower than ART.line along 3 mm or more of their length (ridges of each colour's own distance to
 //          its edge, so an outline joined to a filled shape counts too), not in lettering.
-//   text:  rows of three or more letter-like pieces of one colour (each 0.8-40 mm tall, at most 1.6 times as wide,
+//   text:  rows of three or more letter-like pieces of one colour (each 0.8-40 mm tall, at most 1.8 times as wide (a bold serif W is 1.67),
 //          a stroke at most 0.45 of its height, 12-75 % of its box inked; neighbours overlapping half the smaller
 //          height, under 1.8 times taller, apart by under 0.8 of the taller; not all one size, as dots in a row are;
 //          strokes within 30 % of each other's width; seven in ten on one baseline).
@@ -162,7 +162,7 @@ export function artShapes(a, res, crop = [0, 0, 1, 1], skip = []) {
   }
   const mm2 = (p) => p.area / (res * res), wd = (p) => (p.x1 - p.x0 + 1) / res, ht = (p) => (p.y1 - p.y0 + 1) / res;
   // lettering
-  const letter = (p) => { const H = ht(p), W = wd(p), fill = p.area / ((p.x1 - p.x0 + 1) * (p.y1 - p.y0 + 1)); return H >= 0.8 && H <= 40 && W <= 1.6 * H && fill >= 0.12 && fill <= 0.75 && widthMm(p.d) <= 0.45 * H; };
+  const letter = (p) => { const H = ht(p), W = wd(p), fill = p.area / ((p.x1 - p.x0 + 1) * (p.y1 - p.y0 + 1)); return H >= 0.8 && H <= 40 && W <= 1.8 * H && fill >= 0.12 && fill <= 0.75 && widthMm(p.d) <= 0.45 * H; };
   const L = P.filter(letter).sort((p, q) => p.x0 - q.x0), up = new Map(L.map((p) => [p.id, p.id]));
   const find = (k) => { while (up.get(k) !== k) { up.set(k, up.get(up.get(k))); k = up.get(k); } return k; };
   for (let i = 0; i < L.length; i++) for (let j = i + 1; j < L.length; j++) {
