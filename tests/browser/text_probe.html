@@ -25,9 +25,11 @@ const out = document.getElementById("out"), log = (t) => { out.append(Object.ass
 for (const [name, paint] of Object.entries(CASES)) for (const bg of ["clear", "white"]) {
   if (Q.get("only") && !Q.get("only").split(",").includes(name)) continue;
   if (Q.get("bg") && Q.get("bg") !== bg) continue;
-  const c = new OffscreenCanvas(W * PXMM, 560), g = c.getContext("2d");
+  // (?img=URL: a picture file in place of the drawn words, sewn `size` mm wide)
+  const file = Q.get("img") && (await createImageBitmap(await (await fetch(Q.get("img"))).blob()));
+  const c = file ? new OffscreenCanvas(file.width, file.height) : new OffscreenCanvas(W * PXMM, 560), g = c.getContext("2d");
   if (bg === "white") { g.fillStyle = "#fff"; g.fillRect(0, 0, c.width, c.height); }
-  paint(g);
+  if (file) g.drawImage(file, 0, 0); else paint(g);
   if (Q.get("soft")) { const k = +Q.get("soft") / c.width, t = new OffscreenCanvas(Math.round(c.width * k), Math.round(c.height * k)); t.getContext("2d").drawImage(c, 0, 0, t.width, t.height); g.clearRect(0, 0, c.width, c.height); g.imageSmoothingQuality = "high"; g.drawImage(t, 0, 0, c.width, c.height); }
   const bitmap = c, box = contentBox(bitmap), key = `${name}:${bg}:${Math.random()}`, k = LEARN / Math.max(box.sw, box.sh);
   const learn = pictureImage(bitmap, box, Math.max(1, Math.round(box.sw * k)), Math.max(1, Math.round(box.sh * k)));
