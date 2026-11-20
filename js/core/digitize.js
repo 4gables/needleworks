@@ -369,9 +369,39 @@ function columnNets(px, more, w, h, own, res, toMm, dotted) {
       es = es.filter((_, k) => k !== ks[0] && k !== ks[1]); es.push(joined); again = true; break;
     }
   }
+  // (a centre line that doubles back at a point, COLUMNS.apex degrees or more: an N's or M's corners, a V's foot. The
+  // skeleton rounds the corner off and prunes its point as a spur, and sewn along it an N came out an "n", its corners
+  // bare (cover 0.6-0.9, so it stayed a fill). There the line is cut into its strokes, each carried on straight to the
+  // ink's edge, as a digitizer lays an N: three columns that lap at the corners)
+  if (!dotted && COLUMNS.apex) {
+    const k = Math.max(2, Math.ceil(stroke / (0.1 * res))), cut = [], unit = (a, b) => { const L = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1; return [(b[0] - a[0]) / L, (b[1] - a[1]) / L]; };
+    const grow = (p, u) => { const o = []; let [x, y] = p; for (let t = 0; t < 4 * stroke && at(x + u[0] * 0.5, y + u[1] * 0.5); t += 0.5) { x += u[0] * 0.5; y += u[1] * 0.5; o.push([x, y]); } return o; };
+    let n = 0;
+    for (const e of es) {
+      const q = resample(e[2], 0.1 * res), tops = [], pick = [];
+      if (e[0] !== e[1]) for (let i = 2 * k; i < q.length - 2 * k; i++) {
+        const u = unit(q[i - 2 * k], q[i - k]), v = unit(q[i + k], q[i + 2 * k]), t = Math.acos(Math.max(-1, Math.min(1, u[0] * v[0] + u[1] * v[1])));
+        if (t < (COLUMNS.apex * Math.PI) / 180) continue;
+        // (both legs straight where their directions are read: a U's bend turns as far, all the way round)
+        const h = k >> 1, bend = (a, m, b) => { const u1 = unit(a, m), u2 = unit(m, b); return Math.acos(Math.max(-1, Math.min(1, u1[0] * u2[0] + u1[1] * u2[1]))); };
+        if (Math.max(bend(q[i - 2 * k], q[i - k - h], q[i - k]), bend(q[i + k], q[i + k + h], q[i + 2 * k])) <= (COLUMNS.straight * Math.PI) / 180) tops.push([t, i]);
+      }
+      tops.sort((x, y) => y[0] - x[0] || x[1] - y[1]);
+      for (const [, i] of tops) if (!pick.some((j) => Math.abs(j - i) < 3 * k)) pick.push(i);
+      if (!pick.length) { cut.push(e); continue; }
+      pick.sort((x, y) => x - y);
+      let from = 0, a = e[0], lead = [];
+      for (const i of pick) {
+        cut.push([a, `apex${n}a`, [...lead, ...q.slice(from, i - k + 1), ...grow(q[i - k], unit(q[i - 2 * k], q[i - k]))], true]);
+        lead = grow(q[i + k], unit(q[i + 2 * k], q[i + k])).reverse(); from = i + k; a = `apex${n++}b`;
+      }
+      cut.push([a, e[1], [...lead, ...q.slice(from)], true]);
+    }
+    es = cut;
+  }
   const E = [], deg = new Map(), cov = new Uint8Array(cw * ch);
   for (const [a, b] of es) for (const k of [a, b]) deg.set(k, (deg.get(k) || 0) + 1);
-  for (const [a, b, p0] of es) {
+  for (const [a, b, p0, apex] of es) {
     let q = resample(p0, 0.1 * res);
     if (q.length < 2) continue;
     // (a sharp turn of the centre line, a star's point on its outline: the outer side reaches 1 / sin(half the
@@ -408,6 +438,8 @@ function columnNets(px, more, w, h, own, res, toMm, dotted) {
     // (evened over 0.2 mm either way: a pixel's stair is not the shape)
     const even = (r) => r.map((_, i) => { let s = 0, k = 0; for (let j = Math.max(0, i - 2); j <= Math.min(r.length - 1, i + 2); j++) { s += r[j]; k++; } return s / k / res; });
     const A = even(ra), B = even(rb);
+    // (a stroke cut at an apex is as wide as it usually is: at the corner its normal runs along the next stroke)
+    if (apex) for (const r of [A, B]) { const m = r.slice().sort((x, y) => x - y)[r.length >> 1] * 1.15; for (let i = 0; i < r.length; i++) if (r[i] > m) r[i] = m; }
     // (only a loose end stops short; a column narrower than `tip` between two others, a leaf's vein in its outline, is
     // sewn `tip` wide: cut out, the vein was lost)
     let i0 = 0, i1 = q.length - 1;
@@ -488,10 +520,15 @@ function plain(nets) {
     if (e.a !== e.b && L < COLUMNS.stub * net.W) short += L;
     for (let i = 0; i < e.s.length; i++) if (e.s[i] > net.W && L - e.s[i] > net.W) wd.push(e.A[i] + e.B[i]);
   }
-  if (!all || short > COLUMNS.short * all) return false;
-  if (wd.length < 10) return true;
+  if (!all) return false;
   wd.sort((x, y) => x - y);
-  if (wd[Math.floor(0.9 * (wd.length - 1))] <= COLUMNS.even * wd[Math.floor(0.1 * (wd.length - 1))]) return true;
+  const spread = wd.length < 10 ? 1 : wd[Math.floor(0.9 * (wd.length - 1))] / wd[Math.floor(0.1 * (wd.length - 1))];
+  // (short strokes between junctions are a letter's when they are all one width, COLUMNS.letter: an E, an N, an M.
+  // A ragged patch's are every width)
+  plain.last = `short ${(short / all).toFixed(2)} spread ${spread.toFixed(2)} n ${wd.length} lo ${wd[Math.floor(0.1 * (wd.length - 1))]?.toFixed(2)} hi ${wd[Math.floor(0.9 * (wd.length - 1))]?.toFixed(2)}`;
+  if (short > COLUMNS.short * all) return wd.length >= 10 && spread <= COLUMNS.letter;
+  if (wd.length < 10) return true;
+  if (spread <= COLUMNS.even) return true;
   // (or uneven only as a taper is: along each centre line the width rises and falls at most `taper` times its range,
   // a brush stroke narrowing to its point (once) or a leaf's half swelling and narrowing again (twice); a ragged
   // patch's width goes up and down all along it)
@@ -862,20 +899,22 @@ function build(img, analysis, opts) {
         // (small lettering is satin from TEXT.satin mm, whatever its strokes' shapes: a letter is short strokes at
         // every angle, which `plain` and `cover` are there to refuse in a ragged patch)
         const text = !!lettered.px && lettered.px[q.px[0]] === col.id + 1 && !dot(c);
+        const DBG = (why, extra) => { (fine.dbg ||= []).push([why, +W.toFixed(2), +A.toFixed(1), whole ? 1 : 0, Math.round((q.px[0] % w) / res), Math.round(Math.floor(q.px[0] / w) / res), extra ?? ""].join(" ")); };
         if (text) {
           const tall = (rowAt(toMm([[q.px[0] % w, Math.floor(q.px[0] / w)]])[0]) || { mm: 0 }).mm >= TEXT.column;
           const nets = tall && W >= TEXT.satin && whole ? columnNets(q.px, [], w, h, own, res, toMm, false) : [];
+          DBG(nets.length ? "text-col" : "text-none", tall ? "tall" : "low");
           if (nets.length) { cols.push({ px: q.px, c, whole, nets, meant: true, text: true }); for (const i of q.px) { colPx[i] = 1; cl[i] = 0; mask.data[i] = 0; thin.data[i] = 0; } }
           continue;
         }
-        if (W < COLUMNS.min) continue;
+        if (W < COLUMNS.min) { if (A > 2) DBG("narrow"); continue; }
         // (nor a piece under COLUMNS.small mm²: a satin that small is all tie-in and tie-off, and the cap on thread per
         // square mm left a 1 mm dot only its locks, a knot. A mark that small stays as it was)
         if (A < COLUMNS.small) continue;
         const stroke = A / (W * W) >= COLUMNS.long;
         // (a part of a wider shape is a column only when it is a stroke: the corners an opening cuts off a fill stay
         // the fill's)
-        if (!whole && !stroke) continue;
+        if (!whole && !stroke) { DBG("part-not-stroke"); continue; }
         // (a dot only when it is a plain blob, nearly convex: a ragged patch sewn as one satin fanned every way)
         if (!stroke && solidity(q.px, w) < COLUMNS.solid) continue;
         // (a stroke cut off a fill reaches COLUMNS.into mm into it, so the two meet with no gap)
@@ -892,7 +931,8 @@ function build(img, analysis, opts) {
         const nets = columnNets(q.px, more, w, h, own, res, toMm, !stroke);
         // (and only when its columns cover the piece: thinning prunes a stroke shorter than it is wide as a spur, and a
         // slab F's middle arm was left bare)
-        if (!nets.length || nets.cover < COLUMNS.cover || (stroke && !plain(nets))) continue;
+        if (!nets.length || nets.cover < COLUMNS.cover || (stroke && !plain(nets))) { DBG(!nets.length ? "no-nets" : nets.cover < COLUMNS.cover ? "cover" : "not-plain", nets.cover?.toFixed(2) + " " + nets.reduce((n, t) => n + t.edges.length, 0) + " " + plain.last); continue; }
+        DBG("col");
         cols.push({ px: q.px, c, whole, nets, meant: dot(c) || (mark(c) && size[c] < 2 * dotPx) });
         for (const i of q.px) { colPx[i] = 1; cl[i] = 0; mask.data[i] = 0; thin.data[i] = 0; }
       }
