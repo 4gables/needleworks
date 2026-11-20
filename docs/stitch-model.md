@@ -56,7 +56,9 @@ Reference for this part of Needleworks: the rules, the reason for each (it stops
 - Where three or more strokes meet, the two that run on through each other are the stroke and the rest are branches
   (`columnNets`, `COLUMNS.lap` 0.4 mm): a branch's satin stops 0.4 mm inside the stroke it joins, the way to the node
   a plain run, and it keeps its usual width by the joint. Sewn to the node, an E's arm and its stem lay across each
-  other over half the stem with both underlays: a knot at every joint.
+  other over half the stem with both underlays: a knot at every joint. "Usual" is its width just past the joint
+  (`capJoint`, within 1.5 widths of it, 1.1 times what it is over the next 1.5), not its median along the whole line: a
+  serif U's thick stem took its thin bowl's median and was sewn a third of its width (2026-11-20).
 - On for a picture's satin columns only (`netStitches`). `columnNets` joins centre lines that meet at a node nothing
   else comes to, so a corner the skeleton put a node on lies inside one line.
 - Not for lettering (measured 2026-11-19, every font, A-Z a-z 0-9 at 25 mm): a letter's corners are mostly joins

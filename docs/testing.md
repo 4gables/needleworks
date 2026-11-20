@@ -29,7 +29,10 @@ Reference for this part of Needleworks: the rules, the reason for each (it stops
   (`?chars=`, `?thin`, `?zoom=`). Per letter: satin share, bare ink %, thread off the ink %, how far it stands past the
   ink's box (mm), most needle points in a 1 mm square; flags and a sheet saved to the batch server
   (`letters_FACE_MM.json`, `.png`). Stitches are laid on the ink by the sewn part's own middle and scale, then the best
-  shift within 2 mm. On demand; the numbers at each release are in docs/pictures.md.
+  shift within 2 mm. Letters are set as a word (a quarter height apart), so the page's check finds their row; a group of
+  identical letters (`chars=HHH`) is no row (dots in a line). `?inline` runs the job on the page instead of the worker,
+  so what digitize.js leaves on `globalThis` while debugging can be read. Headless Chrome keeps modules per port: after
+  an edit, serve on a new port. On demand; the numbers at each release are in docs/pictures.md.
 - VM check (before shipping stitch changes): UTM "PESCHECK" with the PE-DESIGN 11 trial over VNC
   (`/Volumes/4TB_SSD/vm-pescheck/tools/vnc.py`); files in on an ISO (`hdiutil makehybrid -iso -joliet`, `cat` it over
   `vm-pescheck/files.iso`); `vm-pescheck/tools/boxcheck2.ps1` (box == stitch minimum: "FITS n/n"), then open them

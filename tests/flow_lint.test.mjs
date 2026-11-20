@@ -84,6 +84,16 @@ expect("rings()", lint(rings([circle, inner], (l) => [loop(run(l, 2, true))])), 
   for (let i = 1; i < st.length; i++) if (st[i][0] > 1.6 && st[i][0] < 6 && st[i - 1][0] > 1.6 && Math.abs(st[i][1] - st[i - 1][1]) < 2) thin++;
   expect("an L's short foot is sewn its own width", { thin }, "thin", 0);
 }
+// a stem 14 px wide whose foot flares to 40 px, as a serif H's: its centre line ends straight down the stem's middle
+// (raster.js `endForks`), not bent into one corner of the foot (by 4+ px when a fork's prong was pruned one at a time)
+{
+  const { skeletonEdges } = await import("../js/core/raster.js");
+  const w = 60, h = 90, m = { w, h, data: new Uint8Array(w * h) };
+  for (let y = 5; y < 85; y++) for (let x = 0; x < w; x++) { const half = y < 70 ? 7 : 7 + Math.min(13, (y - 70) * 1.5); if (Math.abs(x - 30) <= half) m.data[y * w + x] = 1; }
+  let off = 0;
+  for (const [, , p] of skeletonEdges(m, 14, { spur: 1, forks: true })) for (const [x, y] of p) if (y > 60) off = Math.max(off, Math.abs(x - 30));
+  expect("a flared foot's stem runs straight to it", { bent: off > 2 ? Math.round(off) : 0 }, "bent", 0);
+}
 
 // reference: what the lint finds in our golden files and in professionally made files (not judged)
 const { readFileSync, readdirSync } = await import("fs");

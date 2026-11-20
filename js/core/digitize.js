@@ -600,7 +600,8 @@ function plain(nets, letter = false) {
   // (a letter's strokes may swell and thin as a serif face's do, 4-5 times over: Georgia's O, C, S, its thick stems
   // and hairline bars, all fills when every stroke had to be one width. Each stroke's width turns at most once per
   // COLUMNS.serifs widths of its length, as a pen's does; a ragged patch's goes up and down all along it)
-  if (letter && COLUMNS.serifs) return all >= COLUMNS.run * nets[0].W && nets.every((net) => net.edges.every((e) => smooth(e, Math.max(COLUMNS.taper, e.s[e.s.length - 1] / (COLUMNS.serifs * net.W)), net.W)));
+  // (as well as, not instead of, the rules below: alone it turned a bold logo's small line from satin to fill)
+  if (letter && COLUMNS.serifs && all >= COLUMNS.run * nets[0].W && nets.every((net) => net.edges.every((e) => smooth(e, Math.max(COLUMNS.taper, e.s[e.s.length - 1] / (COLUMNS.serifs * net.W)), net.W)))) return true;
   if (short > COLUMNS.short * all) { const v = wd.length >= 10 ? wd : near; return v.length >= 10 && all >= COLUMNS.run * nets[0].W && spreadOf(v) <= COLUMNS.letter; }
   const spread = spreadOf(wd);
   if (wd.length < 10) return true;
