@@ -10,20 +10,28 @@
 // Saves letters_FACE_MM.json and .png to the batch server.
 import { DENSITY, LEARN, contentBox, finer, pictureImage, picturePlan, sewSized } from "../../js/core/picprep.js";
 import { hoop as getHoop } from "../../js/core/machines.js";
-const Q = new URLSearchParams(location.search), HOOP = getHoop(), PXMM = 12, MM = +Q.get("mm") || 12, PER = +Q.get("per") || Math.max(1, Math.floor(115 / (1.7 * MM)));   // (a picture no wider than the 5x7 hoop is sewn the size it is drawn)
+const Q = new URLSearchParams(location.search), HOOP = getHoop(), PXMM = 12, MM = +Q.get("mm") || 12, PER = +Q.get("per") || Math.max(1, Math.floor(115 / (1.4 * MM)));   // (a picture no wider than the 5x7 hoop is sewn the size it is drawn)
 const FACES = { sans: "700 SIZE Arial, sans-serif", regular: "400 SIZE Arial, sans-serif", slab: "700 SIZE Rockwell, serif", serif: "700 SIZE Georgia, serif", cond: "400 SIZE Impact, sans-serif" };
 const faceName = Q.get("face") || "sans", FACE = FACES[faceName], CHARS = [...(Q.get("chars") || "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789")];
 const LIMIT = { satin: 0.5, bare: 3, over: 3, out: 0.6, peak: 20 };
 const worker = new Worker(new URL("../../js/worker.js", import.meta.url), { type: "module" }); let seq = 0;
-const job = (msg) => new Promise((ok) => { const id = ++seq; const h = (e) => { if (e.data.id === id) { worker.removeEventListener("message", h); ok(e.data); } }; worker.addEventListener("message", h); worker.postMessage({ ...msg, id }); });
+// (?inline: the job runs on this page, so what digitize.js leaves on globalThis can be read; debugging only)
+const { pictureJob } = Q.has("inline") ? await import("../../js/picjob.js") : {};
+const job = Q.has("inline") ? async (msg) => { try { return { ok: true, ...pictureJob(msg) }; } catch (e) { return { ok: false, error: e.message }; } } : (msg) => new Promise((ok) => { const id = ++seq; const h = (e) => { if (e.data.id === id) { worker.removeEventListener("message", h); ok(e.data); } }; worker.addEventListener("message", h); worker.postMessage({ ...msg, id }); });
 const out = document.getElementById("out"), log = (t, bad) => { out.append(Object.assign(document.createElement("div"), { textContent: t, className: bad ? "bad" : "" })); };
 const rows = [], S = 10;   // (S: px per mm of the masks)
 for (let at = 0; at < CHARS.length; at += PER) {
-  const chars = CHARS.slice(at, at + PER), cellW = Math.round(MM * 1.7 * PXMM), cellH = Math.round(MM * 1.9 * PXMM);
-  const c = new OffscreenCanvas(cellW * chars.length, cellH), g = c.getContext("2d");
-  g.font = FACE.replace("SIZE", "100px"); const cap = g.measureText("H").actualBoundingBoxAscent;
-  g.font = FACE.replace("SIZE", `${(100 * MM * PXMM) / cap}px`); g.fillStyle = "#0e1f7c"; g.textAlign = "center";
-  chars.forEach((ch, i) => g.fillText(ch, (i + 0.5) * cellW, Math.round(cellH * 0.5 + (MM * PXMM) / 2)));
+  // (set as a word is, a quarter of the height apart: spaced wider, the page's check found no row of letters and a
+  // letter was judged as any other shape. Each letter's cell runs to the middle of the gaps either side)
+  const chars = CHARS.slice(at, at + PER), cellH = Math.round(MM * 1.9 * PXMM), m0 = new OffscreenCanvas(8, 8).getContext("2d");
+  m0.font = FACE.replace("SIZE", "100px"); const cap = m0.measureText("H").actualBoundingBoxAscent, font = FACE.replace("SIZE", `${(100 * MM * PXMM) / cap}px`); m0.font = font;
+  const gap = 0.25 * MM * PXMM, ink0 = chars.map((ch) => { const t = m0.measureText(ch); return [t.actualBoundingBoxLeft, t.actualBoundingBoxRight]; });
+  const xs = [], edges = [0]; let x = 0.4 * MM * PXMM;
+  ink0.forEach(([l, r], i) => { xs.push(x + l); x += l + r; if (i < ink0.length - 1) { edges.push(x + gap / 2); x += gap; } });
+  const cw0 = Math.round(x + 0.4 * MM * PXMM); edges.push(cw0);
+  const c = new OffscreenCanvas(cw0, cellH), g = c.getContext("2d");
+  g.font = font; g.fillStyle = "#0e1f7c"; g.textAlign = "left";
+  chars.forEach((ch, i) => g.fillText(ch, xs[i], Math.round(cellH * 0.5 + (MM * PXMM) / 2)));
   const box = contentBox(c), key = `${faceName}:${at}:${Math.random()}`, k = LEARN / Math.max(box.sw, box.sh), W = c.width / PXMM, size = (W * box.sw) / c.width;
   const learn = pictureImage(c, box, Math.max(1, Math.round(box.sw * k)), Math.max(1, Math.round(box.sh * k)));
   const opts = { colors: 4, scale: k, removeBackground: true, fillAngle: 45, density: DENSITY.standard, skip: [], hoop: HOOP, turn: false, palette: null, style: "fill", cross: 2.5, details: "most", shade: "auto", inside: "auto" };
@@ -57,9 +65,8 @@ for (let at = 0; at < CHARS.length; at += PER) {
     return a; };
   const sewn = (i) => sm[i * 4 + 3] > 127, nearInk = grown(inkAt, 3), nearSewn = grown(sewn, 2);
   // letter by letter
-  const cw = (cellW / PXMM) * S;
   chars.forEach((ch, n) => {
-    const cx0 = Math.round(n * cw), cx1 = Math.min(iw, Math.round((n + 1) * cw));
+    const cx0 = Math.round((edges[n] / PXMM) * S), cx1 = Math.min(iw, Math.round((edges[n + 1] / PXMM) * S));
     let inkN = 0, bare = 0, over = 0, bx0 = Infinity, bx1 = -Infinity, by0 = Infinity, by1 = -Infinity, sx0 = Infinity, sx1 = -Infinity, sy0 = Infinity, sy1 = -Infinity;
     for (let y = 0; y < ih; y++) for (let x = cx0; x < cx1; x++) { const i = y * iw + x, a = inkAt(i), b = sewn(i);
       if (a) { inkN++; if (!nearSewn[i]) bare++; bx0 = Math.min(bx0, x); bx1 = Math.max(bx1, x); by0 = Math.min(by0, y); by1 = Math.max(by1, y); } else if (b && !nearInk[i]) over++; }
@@ -80,7 +87,7 @@ for (let at = 0; at < CHARS.length; at += PER) {
   const d = cv.getContext("2d"); d.fillStyle = "#f4efe6"; d.fillRect(0, 0, cv.width, cv.height); d.globalAlpha = 0.18; d.drawImage(c, 0, 0, W * Z, (c.height / PXMM) * Z); d.globalAlpha = 1;
   d.lineWidth = Q.has("thin") ? 1 : 0.4 * Z; d.lineCap = "round";
   for (const [a, b, role] of seg) { d.strokeStyle = role === 1 ? "#d08a00" : "#0e1f7c"; d.beginPath(); d.moveTo((a[0] + dx) * Z, (a[1] + dy) * Z); d.lineTo((b[0] + dx) * Z, (b[1] + dy) * Z); d.stroke(); }
-  d.font = "11px system-ui"; chars.forEach((ch, n) => { const w = rows[at + n]; if (!w) return; d.fillStyle = w.flags.length ? "#b00020" : "#333"; d.fillText(`${ch} ${w.flags.join(",") || "ok"} s${w.satin} b${w.bare} o${w.over} x${w.out} p${w.peak}`, n * (cellW / PXMM) * Z + 2, cv.height - 4); });
+  d.font = "11px system-ui"; chars.forEach((ch, n) => { const w = rows[at + n]; if (!w) return; d.fillStyle = w.flags.length ? "#b00020" : "#333"; d.fillText(`${ch} ${w.flags.join(",") || "ok"} s${w.satin} b${w.bare} o${w.over} x${w.out} p${w.peak}`, (edges[n] / PXMM) * Z + 2, cv.height - 4 - (n % 2) * 13); });
   out.append(cv);
   const blob = await new Promise((ok) => cv.toBlob(ok)); await fetch(`/save/letters_${faceName}_${MM}_${at}.png`, { method: "POST", body: blob });
 }

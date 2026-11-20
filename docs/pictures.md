@@ -668,4 +668,24 @@ A fresh picture starts in the style a person would pick (C5-AU): Line drawing wh
 - Flagged of 36 at v46: bold sans 12 mm 5, 6 mm 3; regular 12 mm 3; slab 12 mm 14, 6 mm 11. Left: slab B H K L M P R
   W (fills or a bare serif), the condensed face's F H K M N T V X Y, thick-and-thin serifs (nearly all fills), letters
   whose legs are under two widths (the owner's logo, its 5 mm N, Y, M), a fat X's knot (mascot_fox).
+- Pass 3. The sheet now sets letters as a word is, a quarter of their height apart: spaced 1.7 heights, the page's check
+  found no row of letters. A stroke in a row of letters (artcheck.js `artShapes`, any size, not in a photo) may swell
+  and thin as a serif face's does (`plain` with `letter`): each centre line's width turns at most once per
+  `COLUMNS.serifs` 2.5 widths of its length (`smooth`, leaving out a width at each joint, where it swells to the
+  joint's), and the strokes run `COLUMNS.run` widths. Georgia's widths spread 4-5 times; every letter was a fill.
+  A row's letter may be 1.8 times as wide as tall (a bold serif W is 1.67; at 1.6 it split its row in two).
+- A stroke's width by a joint is capped by what it is just past the joint (`capJoint`), not by its median along the
+  whole line: a serif U's thick stem was capped to its thin bowl's median and sewn a third of its width, off to one side.
+- A stroke's end that thinning split into two short prongs (`raster.js` `endForks`: each under 1.2 widths, 15-95
+  degrees off the stroke, one to each side) ends where it split and runs straight on to the ink. Pruned one at a time,
+  one prong stayed and the stroke bent into that corner: a serif H's stems ran into one corner of each foot. With serif
+  arms kept (the fallback above), a foot over 1.6 widths across is a bar across the end instead, the stroke running
+  into its middle: a bracketed serif sewn as a slab one is. A 6 mm T's bar halves (2 widths a side) are no fork.
+- A sharp corner is also one where the ink runs on past the turn, out along the corner's middle, `COLUMNS.point` 0.9
+  strokes (a 6 mm V's skeleton turned round over two widths); small lettering (`smallText` rows) is tried cut at its
+  corners too.
+- Flagged of 36 at pass 3, on the word-spaced sheet (v46 on the same sheet): serif 12 mm 14 (31), 6 mm 7 (5, peaks
+  of 21-23 within the noise); slab 12 mm 5 (13), 6 mm 18 (18); bold sans 12 mm 4 (5), 6 mm 7 (8); regular 12 mm 3 (2);
+  condensed 12 mm 14 (14). Left: a serif's ball and beak ends (C, G, S, 2), its oldstyle figures (off the baseline, no
+  row), small slab serifs, the condensed face, a 6 mm W's and N's corners and Q's tail.
 
