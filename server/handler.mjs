@@ -6,7 +6,8 @@
 //                                    reply: a gzipped wire block of the worker's reply, the file in it the preview
 //   POST /file                       body: JSON { job, code }; reply: the whole PES file, or JSON { ok: false, error }
 // `store` (server/store-*.mjs): putFile(id, bytes), getFile(id), spend(code, job) -> { ok, left } | { ok: false, error },
-// hit(who) -> false when that address has asked too often.
+// hit(who, code, counted) -> "" , or "often" (too many requests this minute) or "daily" (the day's previews used up: only
+// jobs are `counted`, and none are for a visitor who sends a code of ours).
 import { createHash } from "node:crypto";
 import { gunzipSync, gzipSync } from "node:zlib";
 import { pictureJob } from "../js/picjob.js";
@@ -39,13 +40,20 @@ async function kept(reply, store) {
     real: { stitches: loads.reduce((a, b) => a + b.stitches, 0), loads, snips: shortJumps(full), verdict: verdictOf(whole), extent: [x0, y0, x1, y1], cuts, bytes: whole.length } };
 }
 
-export async function handle({ method, path, body, who }, store) {
+const LIMITS = {
+  often: "Too many changes at once. Wait a moment and try again.",
+  daily: "You've made a lot of previews today. Come back tomorrow, or enter a download code to keep going.",
+};
+
+export async function handle({ method, path, body, who, code = "" }, store) {
   try {
     if (method === "GET" && path === "/health") return json(200, { ok: true });
     if (method !== "POST") return json(405, { ok: false, error: "Not that way." });
     if (!body || body.length > MAX_BODY) return json(413, { ok: false, code: "big", error: "This is too big to send. Try a smaller picture or Size." });
-    if (!(await store.hit(who))) return json(429, { ok: false, code: "often", error: "Too many changes at once. Wait a moment and try again." });
     const job = /^\/job\/(picture|doctor)$/.exec(path);
+    const over = await store.hit(who, String(code).trim().toUpperCase().slice(0, 64), !!job);
+    // (as a job's reply where it is one: the page shows a job's error in its own place)
+    if (over) return job ? block({ ok: false, code: over, error: LIMITS[over] }) : json(429, { ok: false, code: over, error: LIMITS[over] });
     if (job) {
       let reply;
       try { reply = { ok: true, ...(await kept(JOBS[job[1]](unpack(gunzipSync(body))), store)) }; }

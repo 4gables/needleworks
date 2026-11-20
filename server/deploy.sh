@@ -42,9 +42,11 @@ echo "== function $NAME"
 if aws lambda get-function --function-name "$NAME" >/dev/null 2>&1; then
   aws lambda update-function-code --function-name "$NAME" --architectures x86_64 --zip-file fileb:///tmp/nw.zip >/dev/null
   aws lambda wait function-updated --function-name "$NAME"
+  aws lambda update-function-configuration --function-name "$NAME" --environment "Variables={BUCKET=$BUCKET,TABLE=$TABLE,PER_MINUTE=300,PER_DAY=2000}" >/dev/null
+  aws lambda wait function-updated --function-name "$NAME"
 else
   aws lambda create-function --function-name "$NAME" --runtime nodejs22.x --architectures x86_64 --handler server/aws.handler --memory-size 3008 --timeout 60 \
-    --role "arn:aws:iam::$ACCT:role/$ROLE" --environment "Variables={BUCKET=$BUCKET,TABLE=$TABLE,PER_MINUTE=60}" --zip-file fileb:///tmp/nw.zip >/dev/null
+    --role "arn:aws:iam::$ACCT:role/$ROLE" --environment "Variables={BUCKET=$BUCKET,TABLE=$TABLE,PER_MINUTE=300,PER_DAY=2000}" --zip-file fileb:///tmp/nw.zip >/dev/null
   aws lambda wait function-active --function-name "$NAME"
   aws lambda put-function-concurrency --function-name "$NAME" --reserved-concurrent-executions 3 >/dev/null
   aws logs create-log-group --log-group-name "/aws/lambda/$NAME" 2>/dev/null || true
@@ -52,7 +54,7 @@ else
 fi
 
 echo "== address"
-CORS="{\"AllowOrigins\":[$ORIGINS],\"AllowMethods\":[\"POST\",\"GET\"],\"AllowHeaders\":[\"content-type\"],\"ExposeHeaders\":[\"x-uses-left\"],\"MaxAge\":86400}"
+CORS="{\"AllowOrigins\":[$ORIGINS],\"AllowMethods\":[\"POST\",\"GET\"],\"AllowHeaders\":[\"content-type\",\"x-code\"],\"ExposeHeaders\":[\"x-uses-left\"],\"MaxAge\":86400}"
 if aws lambda get-function-url-config --function-name "$NAME" >/dev/null 2>&1; then
   aws lambda update-function-url-config --function-name "$NAME" --auth-type NONE --cors "$CORS" >/dev/null
 else

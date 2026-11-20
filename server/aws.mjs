@@ -4,11 +4,11 @@
 import { handle } from "./handler.mjs";
 import { awsStore } from "./store-aws.mjs";
 
-const store = awsStore({ bucket: process.env.BUCKET, table: process.env.TABLE, perMinute: +process.env.PER_MINUTE || 60 });
+const store = awsStore({ bucket: process.env.BUCKET, table: process.env.TABLE, perMinute: +process.env.PER_MINUTE || 300, perDay: +process.env.PER_DAY || 2000 });
 
 export async function handler(event) {
   const http = event.requestContext?.http || {};
-  const r = await handle({ method: http.method, path: event.rawPath || "/", who: http.sourceIp || "?",
+  const r = await handle({ method: http.method, path: event.rawPath || "/", who: http.sourceIp || "?", code: event.headers?.["x-code"] || "",
     body: event.body ? Buffer.from(event.body, event.isBase64Encoded ? "base64" : "utf8") : Buffer.alloc(0) }, store);
   return { statusCode: r.status, headers: { "content-type": r.type, "cache-control": "no-store", ...(r.headers || {}) }, body: r.body.toString("base64"), isBase64Encoded: true };
 }

@@ -554,13 +554,17 @@ $("download").onclick = () => {
 };
 // The paid build's Download (docs/paid-version.md): the code is asked for, the whole file fetched with it, and that
 // file leaves through the gate like any other. The code is kept for next time; what went wrong is said in the dialog.
-function askCode(v) {
+// (`then`, with no view: the code is only kept, for previews past the day's free ones, and `then` runs)
+export function askCode(v, then = null) {
   const d = $("code"), note = $("code-note"), go = $("code-go"), say = (t) => { note.textContent = t; note.hidden = !t; };
-  $("code-in").value = store.get("code", ""); say(""); go.disabled = false; go.textContent = "Download";
-  $("code-file").textContent = outName(v.filename);
+  $("code-in").value = store.get("code", ""); say(""); go.disabled = false; go.textContent = v ? "Download" : "Keep going";
+  $("code-title").textContent = v ? "Download this design" : "Enter your download code";
+  $("code-what").hidden = !v; $("code-more").hidden = !!v;
+  if (v) $("code-file").textContent = outName(v.filename);
   go.onclick = async () => {
     const code = $("code-in").value.trim();
     if (!code) { say("Type your download code first."); $("code-in").focus(); return; }
+    if (!v) { store.set("code", code); d.close(); then?.(); return; }
     go.disabled = true; go.textContent = "Fetching…"; say("");
     const r = await wholeFile(v.job, code);
     go.disabled = false; go.textContent = "Download";

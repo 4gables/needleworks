@@ -14,13 +14,14 @@ const MOST = 4.3 * 1024 * 1024, BIG = "This picture is too detailed to send at t
 
 export function serve(kind) {
   self.onmessage = async (e) => {
-    const { id, ...msg } = e.data;
+    // (`$code`: the visitor's download code, if they have one: its previews aren't counted against the day's)
+    const { id, $code, ...msg } = e.data;
     let reply;
     try {
       for (const k of ["learn", "img"]) if (msg[k]) msg[k] = plain(msg[k]);
       const sent = await pipe(pack(msg), new CompressionStream("gzip"));
       if (sent.length > MOST) { self.postMessage({ ok: false, code: "big", error: BIG, id }); return; }
-      const res = await fetch(`${API}/job/${kind}`, { method: "POST", headers: { "content-type": "application/octet-stream" }, body: sent });
+      const res = await fetch(`${API}/job/${kind}`, { method: "POST", headers: { "content-type": "application/octet-stream", ...($code ? { "x-code": $code } : {}) }, body: sent });
       const body = new Uint8Array(await res.arrayBuffer());
       if (res.status === 413) reply = { ok: false, code: "big", error: BIG };
       else reply = (res.headers.get("content-type") || "").includes("json") ? JSON.parse(new TextDecoder().decode(body)) : unpack(await pipe(body, new DecompressionStream("gzip")));

@@ -7,10 +7,10 @@ import { memoryStore } from "./store-memory.mjs";
 
 const port = +process.argv[2] || 8787, store = memoryStore({ TEST: Infinity, ONCE: 1 });
 http.createServer(async (req, res) => {
-  const cors = { "access-control-allow-origin": "*", "access-control-allow-headers": "content-type", "access-control-expose-headers": "x-uses-left", "access-control-allow-methods": "POST, GET, OPTIONS" };
+  const cors = { "access-control-allow-origin": "*", "access-control-allow-headers": "content-type, x-code", "access-control-expose-headers": "x-uses-left", "access-control-allow-methods": "POST, GET, OPTIONS" };
   if (req.method === "OPTIONS") { res.writeHead(204, cors); res.end(); return; }
   const parts = []; for await (const c of req) parts.push(c);
-  const t = Date.now(), r = await handle({ method: req.method, path: new URL(req.url, "http://x").pathname, body: Buffer.concat(parts), who: req.socket.remoteAddress }, store);
+  const t = Date.now(), r = await handle({ method: req.method, path: new URL(req.url, "http://x").pathname, body: Buffer.concat(parts), who: req.socket.remoteAddress, code: req.headers["x-code"] || "" }, store);
   console.log(req.method, req.url, r.status, `${Date.now() - t} ms`, `${r.body.length} bytes`);
   res.writeHead(r.status, { "content-type": r.type, ...cors, ...(r.headers || {}) }); res.end(r.body);
 }).listen(port, () => console.log(`server on http://127.0.0.1:${port}`));

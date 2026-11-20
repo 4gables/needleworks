@@ -19,7 +19,7 @@ import { next } from "./focus.js";
 import { nearOwn, ownedPalette, ownedSpools, owns, threadHtml, threadLabel } from "./threadui.js";
 import { mmText } from "./words.js";
 import { BUILD, pictureJobs } from "./engine.js";
-import { busy, escapeHtml, openDesign, paint, setMode, setView, showError, studio, warnUI } from "./app.js";   // (used when things happen, never while this file loads: app.js loads after it)
+import { askCode, busy, escapeHtml, openDesign, paint, setMode, setView, showError, studio, warnUI } from "./app.js";   // (used when things happen, never while this file loads: app.js loads after it)
 
 export const sizeLabel = (v) => mmText(v);
 // ---------- picture ----------
@@ -156,6 +156,8 @@ function pictureError(r) {
   $("empty").textContent = "";   // (not "Choose a picture" beside the error)
   if (r.code === "cross") msg.push(p.cross > 1.5 ? (bigger ? "Try smaller crosses or a bigger Size." : "Try smaller crosses.") : bigger ? "Try a bigger Size." : "");
   else if (r.code === "small" && !bigger) msg.push("It's as big as this hoop allows.");
+  // (the paid build: the day's free previews used up)
+  if (r.code === "daily") { showError(r.error, { label: "Enter a download code", run: () => askCode(null, makePicture) }); return; }
   showError(msg.filter(Boolean).join(" "), r.code === "small" && bigger ? { label: "Make it as big as fits", run: () => setSize(p.max) } : r.code === "skipped" ? { label: "Sew every thread", run: () => { p.skip = []; makePicture(); } } : undefined);
 }
 function setSize(mm) { state.pic.size = mm; $("pic-size").value = mm; $("pic-size-out").textContent = sizeLabel(mm); makePicture(); }

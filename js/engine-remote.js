@@ -6,8 +6,11 @@ import { API } from "./api.js";
 
 export const BUILD = "paid";
 
-export const pictureJobs = (opts) => jobQueue(new URL("./remote-picture.js", import.meta.url), opts);
-export const doctorJobs = (opts) => jobQueue(new URL("./remote-doctor.js", import.meta.url), opts);
+// (each job carries the visitor's download code when the page has one: state.js `store` keeps it as "nw:code")
+const code = () => { try { return String(JSON.parse(localStorage.getItem("nw:code")) || "").trim().slice(0, 64); } catch { return ""; } };
+const coded = (q) => ({ ...q, run: (msg) => q.run({ ...msg, $code: code() }) });
+export const pictureJobs = (opts) => coded(jobQueue(new URL("./remote-picture.js", import.meta.url), opts));
+export const doctorJobs = (opts) => coded(jobQueue(new URL("./remote-doctor.js", import.meta.url), opts));
 
 // The whole file of a job, for one use of a code: { ok, bytes, left } or { ok: false, error }.
 export async function wholeFile(job, code) {
