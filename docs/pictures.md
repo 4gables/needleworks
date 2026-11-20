@@ -657,9 +657,15 @@ A fresh picture starts in the style a person would pick (C5-AU): Line drawing wh
   fills beside satin O, U, S.
 - State at v45 (flagged of 36): bold sans 12 mm 5, 6 mm 5; regular sans 12 mm 4; slab serif 12 mm 21, 6 mm 11; a
   thick-and-thin serif 34 (nearly all fills).
-- Not done, each tried once and off: N and M (the centre line rounds their corners: an N sews as an "n", cover
-  0.6-0.9, so it stays a fill; `COLUMNS.apex` cuts the line into strokes at a sharp corner but also cut a small U and
-  an S: 0 until it tells a corner from a bend); slab serifs (`COLUMNS.serif`, `skeletonEdges` `stubs`: an I's top
-  serif sewed as its own bar, as a cap's does, but an E turned to a fill: 0). A fat letter's X (strokes half its
-  height) sews as satin with a knot at the crossing (corpus mascot_fox, look -1.1).
+- v46: a piece plain satin leaves uncovered (cover under 0.9, or under `COLUMNS.whole` 0.97 with `COLUMNS.gain` 0.03 to
+  win) is tried again two ways, kept only if it covers it: cut at its sharp corners (`COLUMNS.apex` 115 degrees, legs
+  straight over `COLUMNS.legs` 2.5 widths, `COLUMNS.sharp` 0.85 of the turn within a width: an N, M, V, W as strokes
+  that lap at the corners), and with its serif arms kept as strokes (`COLUMNS.serif` 0.9 widths, a dead end square to
+  one stroke and straight on from another: a slab I is a stem and two bars, as a cap's is sewn; only when it adds
+  strokes). Applied to every piece, the corner cut sewed a cat's thin eye askew (corpus art_line_cat, look 82.8 ->
+  80.9) and the serif arms made joints of three at a V's point. A stroke keeps its usual width within 1.5 widths of a
+  joint (a serif bar sewed long stitches down its stem).
+- Flagged of 36 at v46: bold sans 12 mm 5, 6 mm 3; regular 12 mm 3; slab 12 mm 14, 6 mm 11. Left: slab B H K L M P R
+  W (fills or a bare serif), the condensed face's F H K M N T V X Y, thick-and-thin serifs (nearly all fills), letters
+  whose legs are under two widths (the owner's logo, its 5 mm N, Y, M), a fat X's knot (mascot_fox).
 
