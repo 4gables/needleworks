@@ -28,23 +28,16 @@ import { sewAs, quiltDone, scaledFit, BORDERS, FABRICS, THREADS, SHAPES, TEXT_SH
 import { forNames as namesFor } from "./names.js";
 import { BLACK, BOLD, NAVY, RED, ROUND, SCRIPT, STARTERS, WHITE, appl, frame, ids, mono, motif, piece, text } from "./starters.js";
 export { STARTERS } from "./starters.js";
+import { COLORS, savedDesign } from "../common.js";
+export { COLORS, savedDesign };
 
 // thread weight in plain words, on the chips (the number is printed on the spool; a bigger number is a finer thread)
 const WT_TITLE = { auto: "Standard 40 weight thread, the usual machine embroidery thread", 30: "30 weight: a thicker thread, for bold letters",
   40: "40 weight: the usual machine embroidery thread", 60: "60 weight: a finer thread, for small letters and fine detail" };
 const SMALL_TIP = "Small letters come out crisper with 60 wt thread (a finer thread: the weight is printed on the spool, and a bigger number is finer) and a 65/9 or 70/10 needle (a fine needle: the size is on the needle pack), and with the machine slowed down.";
-export const COLORS = [RED, NAVY, "#00673e", "#770176", "#e8a900", "#f993bc", BLACK, "#f0f0f0"];
 
 // the least a frame is made, each way: the Width and Height sliders' (a circle is w across both ways)
 const FRAME_MIN = 20, frameH = (f) => (f.shape === "circle" ? f.w : f.h);
-
-// A design saved from here (.needleworks.json), from a file's bytes, or null: dropped on the page, shared to it, opened on
-// the Open tab or added with + Design file, it was called a damaged embroidery file.
-export function savedDesign(bytes) {
-  let i = 0; while (i < bytes.length && (bytes[i] === 0x20 || bytes[i] === 0x0a || bytes[i] === 0x0d || bytes[i] === 0x09 || bytes[i] === 0xef || bytes[i] === 0xbb || bytes[i] === 0xbf)) i++;
-  if (bytes[i] !== 0x7b) return null;   // ({)
-  try { const d = JSON.parse(new TextDecoder().decode(bytes)); return d?.needleworks === 1 && Array.isArray(d.pieces) ? d : null; } catch { return null; }
-}
 
 // api: { hoop(), setView(pattern, filename, look) (null pattern: nothing to show), showError(msg), busy(on, text),
 //        safeName(s, fb), escapeHtml(s), handOut(files, opts) (gate.js: the only way a file leaves), store, showStep(i), step(), setMode(mode),

@@ -1,17 +1,17 @@
 /*! Needleworks (c) 2026 4Gables. All rights reserved. Proprietary, see LICENSE. https://4gables.com/needleworks/ */
 // The Open tab: a design file opened, checked and shown, the fixes offered (sizes, colours, thinning, re-stitching
 // in the doctor's worker), and where a dropped or shared file goes. (Part of app.js until 2026-11.)
-import { turnPattern } from "./core/design.js";
+import { turnPattern } from "./core/turn.js";
 import { designStats, machineThreads, readEmbroidery, writePES } from "./core/formats.js";
 import { MARGIN } from "./core/machines.js";
 import { hexToRgb, nearestBrotherThread, pecThread } from "./core/threads.js";
-import { DST_COLOURS, checkup, fix, openedFile, pauses, shortJumps, sortedChanges } from "./doctor.js";
+import { DST_COLOURS, checkup, openedFile, pauses, shortJumps, sortedChanges } from "./checkup.js";
 import { HARD, MAX_BLOCKS, denseWords, moves } from "./quality.js";
 import { BLOCK, LOOK, TIP } from "./words.js";
-import { jobQueue } from "./jobs.js";
+import { doctorJobs } from "./engine.js";
 import { safeName } from "./core/typed.js";
 import { apart, lab } from "./core/brands.js";
-import { savedDesign } from "./studio/ui.js";
+import { savedDesign } from "./common.js";
 import { $, hoop, square, state, turned } from "./state.js";
 import { keepFocus } from "./focus.js";
 import { loadPicture } from "./picture.js";
@@ -70,7 +70,7 @@ export async function openDesign(file) {
 let docJobs = null, docSeq = 0, docBusy = 0;
 // (a fix past a minute and a half is stopped and said: nothing limited it, and "Re-stitching…" could spin for good)
 async function docJob(msg) {
-  docJobs ||= jobQueue(new URL("./doctor-worker.js", import.meta.url), { limit: 90000, slow: "it's taking too long at this size. Try a size nearer the design's own." });
+  docJobs ||= doctorJobs({ limit: 90000, slow: "it's taking too long at this size. Try a size nearer the design's own." });
   const r = await docJobs.run(msg);
   if (r.stale) return;
   if (r.died) { docIdle(); if (state.mode === "open") showError("Something went wrong while fixing this design. " + r.error); return; }

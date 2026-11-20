@@ -2,6 +2,8 @@
 // Binary-image tools: thinning, distance transform, labelling, and skeleton -> stroke graph.
 // A mask is { w, h, data: Uint8Array } with 1 = ink.
 import { smooth } from "./geom.js";
+import { distanceTransform, label } from "./grid.js";
+export { distanceTransform, label };
 
 
 // Zhang-Suen thinning (what skimage.skeletonize does for 2-D)
@@ -52,55 +54,6 @@ export function skeletonize(m) {
     }
   }
   return { w, h, data: d };
-}
-
-// exact Euclidean distance transform (Felzenszwalb & Huttenlocher), distance to nearest 0 pixel
-export function distanceTransform(m) {
-  const { w, h, data } = m, INF = 1e20, f = new Float64Array(Math.max(w, h));
-  const g = new Float64Array(w * h);
-  for (let i = 0; i < w * h; i++) g[i] = data[i] ? INF : 0;
-  const v = new Int32Array(Math.max(w, h)), z = new Float64Array(Math.max(w, h) + 1), dd = new Float64Array(Math.max(w, h));
-  // (one row or column of g: n values from `at`, `step` apart)
-  const pass = (n, at, step) => {
-    for (let q = 0; q < n; q++) f[q] = g[at + q * step];
-    let k = 0; v[0] = 0; z[0] = -INF; z[1] = INF;
-    for (let q = 1; q < n; q++) {
-      let s;
-      for (;;) {
-        const r = v[k];
-        s = (f[q] + q * q - (f[r] + r * r)) / (2 * q - 2 * r);
-        if (s <= z[k] && k > 0) k--; else break;
-      }
-      k++; v[k] = q; z[k] = s; z[k + 1] = INF;
-    }
-    k = 0;
-    for (let q = 0; q < n; q++) { while (z[k + 1] < q) k++; const r = v[k]; dd[q] = (q - r) * (q - r) + f[r]; }
-    for (let q = 0; q < n; q++) g[at + q * step] = dd[q];
-  };
-  for (let x = 0; x < w; x++) pass(h, x, w);
-  for (let y = 0; y < h; y++) pass(w, y * w, 1);
-  for (let i = 0; i < w * h; i++) g[i] = Math.sqrt(g[i]);
-  return g;
-}
-
-// 8-connected components. Returns { labels: Int32Array (0 = background), count }
-export function label(m, sel = null) {
-  const { w, h, data } = m, labels = new Int32Array(w * h), stack = [];
-  let count = 0;
-  for (let s = 0; s < w * h; s++) {
-    if (!data[s] || labels[s] || (sel && !sel[s])) continue;
-    count++; labels[s] = count; stack.push(s);
-    while (stack.length) {
-      const i = stack.pop(), x = i % w, y = (i - x) / w;
-      for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
-        const nx = x + dx, ny = y + dy;
-        if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
-        const j = ny * w + nx;
-        if (data[j] && !labels[j] && (!sel || sel[j])) { labels[j] = count; stack.push(j); }
-      }
-    }
-  }
-  return { labels, count };
 }
 
 const NB = [[-1, -1], [-1, 0], [-1, 1], [0, -1], [0, 1], [1, -1], [1, 0], [1, 1]]; // [dy, dx]

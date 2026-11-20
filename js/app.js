@@ -1,18 +1,20 @@
 /*! Needleworks (c) 2026 4Gables. All rights reserved. Proprietary, see LICENSE. https://4gables.com/needleworks/ */
-import { turnForMachine, turnPattern } from "./core/design.js";
+import { turnPattern } from "./core/turn.js";
 import { FONTS } from "./core/fonts.js";
-import { STITCH, designStats, machineThreads, readEmbroidery, validatePES, writePES } from "./core/formats.js";
+import { STITCH, designStats, machineThreads, readEmbroidery, writePES } from "./core/formats.js";
 import { DEFAULT_MACHINE, MACHINES, MAKERS, MARGIN, hoop as getHoop, hoopLabel } from "./core/machines.js";
 import { PEC_MATCH, PEC_THREADS, hexToRgb, nearestBrotherThread, pecThread, rgbToHex } from "./core/threads.js";
 import { CLOTHS, colorBlocks, draw } from "./render.js";
 import { TURNED, TURN_PIC, cutDXF, cutName, cutSVG, firstStep, sewSheet, sewTime, stepTime, told, youHtml } from "./sheet.js";
 import { handOut, judge } from "./gate.js";
-import { DST_COLOURS, blockLoads, checkup, fewerBlocks, fix, heat, openedFile, pauses, shortJumps, sortedChanges } from "./doctor.js";
+import { DST_COLOURS, blockLoads, checkup, heat, openedFile, pauses, shortJumps, sortedChanges } from "./checkup.js";
 import { HARD, MAX_BLOCKS, denseWords, moves, verdictOf } from "./quality.js";
 import { BLOCK, LOOK, LOOK_HEAD, TIP, TIP_HEAD, isolate, problemsHtml, problemsInline, problemsItems, problemsOf, shownOn, stopWords, stopsAt, mmText } from "./words.js";
 import { brief, monogramHelp, safeName, tidy, uniqueName, withSwash } from "./core/typed.js";
 import { BRANDS, apart, brotherNum, chartSpools, exampleSpools, lab, nearestSpool, nearestSpools, ownSpoolOf, spools } from "./core/brands.js";
-import { COLORS as LINE_THREADS, initStudio, savedDesign } from "./studio/ui.js";
+import { COLORS as LINE_THREADS, savedDesign } from "./common.js";
+// (everything that makes stitches comes through this one door: docs/app-ui.md "The engine's door")
+import { fixedCopy, initStudio } from "./engine.js";
 import { $, designHoop, designTurned, fileFormat, forgetPicture, hoop, keepPicture, kept, machineFormat, outName, shownHoop, square, state, store, toMachine, turnCut, turned, turnedFile } from "./state.js";
 import { OUT_FORMATS } from "./core/formats-out.js";
 import { keepFocus, keyboard, live, next } from "./focus.js";
@@ -545,31 +547,13 @@ $("download").onclick = () => {
   if (r.ok && v === state.views.design) studio.downloaded();
   downloaded(v, !!v.split, r.files, r.ok);
 };
-// A copy of a file that fails the quality check, fixed by the design doctor (thin to 24 hits/mm², drop tiny and
-// same-hole stitches, even out sparse satins; long stitches are always split), judged again, or null when that doesn't
-// make it pass. Each try adds what the last still failed (splitting long15.pes's stitches showed a same-hole stitch of
-// its own), the last every fix. Same blocks and pauses, so "How to stitch it" still holds.
-function fixedCopy(bytes, problems) {
-  const k = new Set(problems.map((p) => p.key));
-  try {
-    for (let pass = 0; pass < 3; pass++) {
-      const opts = pass === 2 ? { thin: true, tiny: true, satin: true } : { thin: k.has("dense"), tiny: k.has("tiny") || k.has("same"), satin: k.has("sparse") };
-      // (more thread changes than the machine handles: each thread's parts sewn together, if that's enough)
-      let src = readEmbroidery(bytes, "x.pes");
-      if (k.has("blocks") && !(src = fewerBlocks(src))) return null;
-      const p = fix(src, opts), out = writePES(p), left = verdictOf(out);
-      if (validatePES(out, p, hoop()).ok && !left.length) return { bytes: out, against: p };
-      for (const q of left) k.add(q.key);
-    }
-  } catch {}
-  return null;
-}
+// (a copy of a file that fails the quality check, fixed by the design doctor: engine.js `fixedCopy`)
 // (never "_fixed_fixed": "_fixed" once, at the end, whatever the name had: peace_fixed_80pct.pes -> peace_80pct_fixed.pes)
 export const fixedName = (name) => name.replace(/_fixed(?=[_.])/g, "").replace(/(\.\w+)$/, "_fixed$1");
 // files [{ name, bytes, problems }] that fail, with their fixed copies: the fixes and what's still wrong, in words
 function badFiles(files) {
   // (judged as another format, a file's PES is `pes`: the fix works on that)
-  return files.filter((f) => f.problems.length).map((f) => ({ ...f, fixed: fixedCopy(f.pes || f.bytes, f.problems) }));
+  return files.filter((f) => f.problems.length).map((f) => ({ ...f, fixed: fixedCopy(f.pes || f.bytes, f.problems, hoop()) }));
 }
 // the fixed copies saved: one file, or the whole zip again with the bad files swapped
 function saveFixed(files, bad, zipName) {

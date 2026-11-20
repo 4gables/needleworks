@@ -2,25 +2,23 @@
 // The Picture tab: a picture to stitches. The picture's worker jobs (newest kept, restarted when too slow), its
 // settings and sizes, the palette and thread swaps, what was left out and the fixes that bring it back, the sample
 // and the picture kept from the last visit. (Part of app.js until 2026-11.)
-import { turnPattern } from "./core/design.js";
+import { turnPattern } from "./core/turn.js";
 import { designStats, machineThreads, readEmbroidery } from "./core/formats.js";
-import { DENSITY, LEARN, MOST, contentBox, cutPart, findParts, lostMuch, picturePlan, pictureImage, sewSized } from "./core/digitize.js";
-import { applyAreas } from "./core/palette.js";
+import { DENSITY, LEARN, MOST, chooseStyle, contentBox, cutPart, findParts, lostMuch, picturePlan, pictureImage, sewSized } from "./core/picprep.js";
+import { applyAreas } from "./core/areas.js";
 import { PEC_MATCH, hexToRgb, nearestBrotherThread, pecThread } from "./core/threads.js";
-import { fix } from "./doctor.js";
 import { moves } from "./quality.js";
 import { LOOK, TIP, isolate } from "./words.js";
 import { safeName } from "./core/typed.js";
 import { colourWord, lab } from "./core/brands.js";
 import { MARGIN } from "./core/machines.js";
 import { artGuide, artSaid } from "./artwords.js";
-import { chooseStyle } from "./core/artcheck.js";
-import { COLORS as LINE_THREADS } from "./studio/ui.js";
+import { COLORS as LINE_THREADS } from "./common.js";
 import { $, forgetPicture, hoop, keepPicture, kept, square, state, store, turned } from "./state.js";
 import { next } from "./focus.js";
 import { nearOwn, ownedPalette, ownedSpools, owns, threadHtml, threadLabel } from "./threadui.js";
 import { mmText } from "./words.js";
-import { jobQueue } from "./jobs.js";
+import { pictureJobs } from "./engine.js";
 import { busy, escapeHtml, openDesign, paint, setMode, setView, showError, studio, warnUI } from "./app.js";   // (used when things happen, never while this file loads: app.js loads after it)
 
 export const sizeLabel = (v) => mmText(v);
@@ -29,7 +27,7 @@ export const sizeLabel = (v) => mmText(v);
 // photo once routed for over 5 minutes and every later change queued behind it): the worker is replaced and the
 // picture tab says what to try. `stop()` drops what's waiting and running (the checks of settings that just changed).
 function picWorker() {
-  const q = jobQueue(new URL("./worker.js", import.meta.url), { limit: 60000, eager: true, slow: "This picture is taking too long to stitch. Try fewer colours, a smaller size, or Line drawing." });
+  const q = pictureJobs({ limit: 60000, eager: true, slow: "This picture is taking too long to stitch. Try fewer colours, a smaller size, or Line drawing." });
   // (a worker that died says so in the picture tab's words)
   return { run: async (msg) => { const r = await q.run(msg); return r.died ? { ok: false, error: "Something went wrong while stitching this picture. " + r.error } : r; }, stop: q.stop };
 }

@@ -3,6 +3,8 @@
 import { COLOR_CHANGE, END, JUMP, STITCH, TRIM, writePES } from "./formats.js";
 import { MARGIN } from "./machines.js";
 import { EASE, LIMITS, LOCKS, TIE_INS } from "./recipes.js";
+import { turnPattern } from "./turn.js";
+export { turnPattern };
 import { Hits, threadBlocks } from "./density.js";
 import { pyRound } from "./threads.js";
 
@@ -409,9 +411,4 @@ export function relieve(st, limit = LIMITS.hits) {
 export function turnForMachine(p) {
   const t = turnPattern(p);
   return { ...t, stitches: relieve(t.stitches) };
-}
-
-// A quarter turn of a pattern (y down): clockwise turns a sideways design into the machine's hoop, and back.
-export function turnPattern(p, clockwise = true) {
-  return { ...p, stitches: p.stitches.map(([x, y, c]) => (clockwise ? [-y, x, c] : [y, -x, c])) };
 }

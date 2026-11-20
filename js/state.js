@@ -2,7 +2,7 @@
 // The app's shared state: what's kept in the browser (store, the kept picture), the page's state (tab, machine,
 // hoop, turn, view, thread brand, the picture's settings) and the hoop as each tab shows and sews it. Every part
 // of the app reads these. (Part of app.js until 2026-11.)
-import { turnForMachine } from "./core/design.js";
+import { turnForMachine } from "./engine.js";
 import { DEFAULT_MACHINE, MACHINES, hoop as getHoop } from "./core/machines.js";
 import { BRANDS, spools } from "./core/brands.js";
 import { OUT_FORMATS } from "./core/formats-out.js";

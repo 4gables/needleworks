@@ -4,7 +4,7 @@
 // (core/artcheck.js measures). Every number is recipes.js `ART` or one handed in (`most`: digitize.js `MOST`), never
 // typed here. Its own module, loaded with the Picture tab, so the first screen's words.js doesn't carry it; DOM-free,
 // so tests/browser/picture_corpus.html says the same words over the corpus.
-import { ART } from "./core/recipes.js";
+import { ART } from "./core/limits.js";
 
 const list = (a) => (a.length < 3 ? a.join(" and ") : `${a.slice(0, -1).join(", ")} and ${a.at(-1)}`);
 // The shapes a picture may be asked for in, as the AI tools offer them (width : height)
