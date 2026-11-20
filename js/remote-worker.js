@@ -9,6 +9,8 @@ const pipe = async (bytes, stream) => new Uint8Array(await new Response(new Blob
 // (a picture's copy crosses as its width, height and pixels: an ImageData has no fields JSON can see)
 const plain = (v) => (v && typeof v === "object" && v.data && v.width && !Array.isArray(v) ? { width: v.width, height: v.height, data: v.data } : v);
 const OFFLINE = "The stitching service couldn't be reached. Check your connection and try again.";
+// (a request holds 6 MB as the server gets it, a third bigger than these bytes: a photo at the hoop's full size can pass it)
+const MOST = 4.3 * 1024 * 1024, BIG = "This picture is too detailed to send at this Size. Try a smaller Size, or fewer colours.";
 
 export function serve(kind) {
   self.onmessage = async (e) => {
@@ -16,9 +18,12 @@ export function serve(kind) {
     let reply;
     try {
       for (const k of ["learn", "img"]) if (msg[k]) msg[k] = plain(msg[k]);
-      const res = await fetch(`${API}/job/${kind}`, { method: "POST", headers: { "content-type": "application/octet-stream" }, body: await pipe(pack(msg), new CompressionStream("gzip")) });
+      const sent = await pipe(pack(msg), new CompressionStream("gzip"));
+      if (sent.length > MOST) { self.postMessage({ ok: false, code: "big", error: BIG, id }); return; }
+      const res = await fetch(`${API}/job/${kind}`, { method: "POST", headers: { "content-type": "application/octet-stream" }, body: sent });
       const body = new Uint8Array(await res.arrayBuffer());
-      reply = (res.headers.get("content-type") || "").includes("json") ? JSON.parse(new TextDecoder().decode(body)) : unpack(await pipe(body, new DecompressionStream("gzip")));
+      if (res.status === 413) reply = { ok: false, code: "big", error: BIG };
+      else reply = (res.headers.get("content-type") || "").includes("json") ? JSON.parse(new TextDecoder().decode(body)) : unpack(await pipe(body, new DecompressionStream("gzip")));
     } catch (err) {
       reply = { ok: false, code: "offline", error: OFFLINE };
     }

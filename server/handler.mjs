@@ -18,7 +18,7 @@ import { verdictOf } from "../js/quality.js";
 import { pack, unpack } from "../js/wire.js";
 
 const JOBS = { picture: pictureJob, doctor: doctorJob };
-export const MAX_BODY = 5.5 * 1024 * 1024;   // (a Lambda request holds 6 MB)
+export const MAX_BODY = 4.4 * 1024 * 1024;   // (a Lambda request holds 6 MB, and bytes reach it as base64, a third bigger)
 
 const json = (status, o) => ({ status, type: "application/json", body: Buffer.from(JSON.stringify(o)) });
 const block = (o) => ({ status: 200, type: "application/octet-stream", body: gzipSync(Buffer.from(pack(o)), { level: 6 }) });
