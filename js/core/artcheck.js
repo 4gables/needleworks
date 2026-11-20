@@ -187,7 +187,7 @@ export function artShapes(a, res, crop = [0, 0, 1, 1], skip = []) {
     if (spread(g.map((p) => widthMm(p.d))) > 0.3) continue;
     const foot = med(g.map((p) => p.y1));
     if (g.filter((p) => Math.abs(p.y1 - foot) / res <= 0.15 * H).length < 0.7 * g.length) continue;
-    const pen = med(g.map((p) => widthMm(p.d))), row = { mm: H, col: g[0].col, box: [x0, Math.min(...g.map((p) => p.y0)), x1, Math.max(...g.map((p) => p.y1))] };
+    const pen = med(g.map((p) => widthMm(p.d))), row = { mm: H, n: g.length, col: g[0].col, box: [x0, Math.min(...g.map((p) => p.y0)), x1, Math.max(...g.map((p) => p.y1))] };
     // (letters joined to each other, a word's dot or comma: what lies in the line beside them is lettering too)
     for (let more = true; more;) {
       more = false;
@@ -241,7 +241,7 @@ export function artShapes(a, res, crop = [0, 0, 1, 1], skip = []) {
     // (need: the thinnest quarter of them reaching ART.line; a line's width is the mean of its ridge)
     thin: { n: thin.length, spots: thin.slice(0, SPOTS).map((t) => spot(rx0[t.c], ry0[t.c], rx1[t.c], ry1[t.c])), need: need(thinW, ART.line) },
     // (the rows themselves, working px: digitize.js sews small lettering by them, `smallText`)
-    rows: text.map((t) => ({ mm: t.mm, col: t.col, box: t.box.slice() })),
+    rows: text.map((t) => ({ mm: t.mm, n: t.n, col: t.col, box: t.box.slice() })),
     text: { n: text.length, mm: text.length ? +text[0].mm.toFixed(1) : 0, small: text.filter((t) => t.mm < ART.text).length,
       spots: text.filter((t) => t.mm < ART.text).slice(0, SPOTS).map((t) => spot(...t.box)), need: text.length && text[0].mm < ART.text ? +(ART.text / text[0].mm).toFixed(3) : 0 },
   };

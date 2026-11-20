@@ -555,7 +555,7 @@ function netStitches(net, start, sat) {
 //   C to H at whatever height the last stroke ended: the word read as one scribble). The machine leaves a jump that
 //   short uncut, so each is a thread to snip, as between the Design tab's print letters, and is counted.
 // Returns { labels (a copy when anything changed), px: 1 on every pixel of such a row, rows }.
-const TEXT = { small: 9, least: 2, pad: 0.4, word: 3, flat: 0.55, pen: 0.8, bold: 0.2, satin: 0.7, column: 5, line: 3.2, least2: 0.35, most: 0.7 };
+const TEXT = { small: 9, sure: 6, many: 6, least: 2, pad: 0.4, word: 3, flat: 0.55, pen: 0.8, bold: 0.2, satin: 0.7, column: 5, line: 3.2, least2: 0.35, most: 0.7 };
 // How wide (mm, needle to needle) a small letter's strokes are sewn, by the letters' height: thread is 0.4 mm thick, so
 // a satin shows 0.4 mm wider than it is sewn and a 0.6 mm satin made a 1 mm stroke on a 3 mm letter, every counter
 // shut (2026-11: SCHOOL OF MEDICINE at 3 mm read as blobs). Under TEXT.line mm tall a stroke is one line of thread three
@@ -576,7 +576,7 @@ function smallText(labels, w, h, colors, used, res) {
     if (best) to.set(q.id, best.id);
   }
   const L = to.size ? labels.map((v) => (to.has(v) ? to.get(v) : v)) : labels;
-  const rows = artShapes({ w, h, labels: L, colors }, res).rows.filter((r) => r.mm < TEXT.small && r.mm >= TEXT.least);   // (under 2 mm: flecks along a bold word's edge, on one line as letters are)
+  const rows = artShapes({ w, h, labels: L, colors }, res).rows.filter((r) => r.mm < TEXT.small && r.mm >= TEXT.least && (r.mm < TEXT.sure || r.n >= TEXT.many));   // (under 2 mm: flecks along a bold word's edge, on one line as letters are)
   if (!rows.length) return none;
   // (a word a space away is the row's too: a piece of the colour as tall as the letters, level with them, within
   // TEXT.word heights of the row's end. "OF" after "UNIVERSITY" was not in its row, and its F stayed half grey)

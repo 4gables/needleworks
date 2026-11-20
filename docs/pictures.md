@@ -316,7 +316,9 @@ Reference for this part of Needleworks: the rules, the reason for each (it stops
     blobs, "University of" sewed as "Universily ol", 2.5 mm was unreadable, a see-through picture's words were
     hairlines, white words on navy vanished; after: every row reads down to 3 mm, 2.5 mm reads in a plain face):
     - A see-through picture has no fabric colour: its rows are found all the same (they were skipped).
-    - Rows up to 9 mm (`small`, was 6): a 6 mm serif line, lower case 4 mm, fell to the fill and column rules.
+    - Rows up to 9 mm (`small`, was 6): a 6 mm serif line, lower case 4 mm, fell to the fill and column rules. From
+      6 mm (`sure`) a row needs six letters (`many`): three parts of a fox mascot's face, 7 mm tall and level, were
+      taken for a word and sewn as strokes (look 83 to 76, 32 mm² bare).
     - The stroke's width goes by the letters' height (`textWide`): thread is 0.4 mm thick, so a 0.6 mm satin made a
       1 mm stroke on a 3 mm letter. Under 3.2 mm (`line`) a stroke is one line of thread three times over (the
       owner's "single thread doesn't look good" was said of 4 mm letters, which stay satin); from there a satin
