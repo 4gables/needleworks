@@ -254,7 +254,9 @@ function mitres(c, ha, hb) {
     // (where the two legs' lines meet: a0 + u1 s = b0 - u2 r)
     const sA = ((b0[0] - a0[0]) * u2[1] - (b0[1] - a0[1]) * u2[0]) / cr, P = [a0[0] + u1[0] * sA, a0[1] + u1[1] * sA], side = cr > 0 ? 1 : -1;
     // (each leg's own width: the least where its direction was read, where the other leg isn't measured with it)
-    const least = (f, from, to) => { let m = Infinity; for (let k = Math.max(0, from); k <= Math.min(n - 1, to); k += 5) m = Math.min(m, f(k)); return m; };
+    // (not within half a width of the line's end, where a column narrows to its tip: a leg under 2.5 widths long took
+    // its tip's width, and an L's foot was sewn 0.8 mm wide from the corner out, full width only past the mitre)
+    const E = H >> 1, least = (f, from, to) => { let m = Infinity; for (let k = Math.max(E, from); k <= Math.min(n - 1 - E, to); k += 5) m = Math.min(m, f(k)); return m; };
     const fin = side > 0 ? ha : hb, fout = side > 0 ? hb : ha;
     out.push({ lo: i - d1, hi: i + d1, P, u1, u2, tan: Math.tan((Math.PI - turn) / 2), side, T1: sA, T2: (b0[0] - P[0]) * u2[0] + (b0[1] - P[1]) * u2[1],
       in1: least(fin, i - d2, i - d1), out1: least(fout, i - d2, i - d1), in2: least(fin, i + d1, i + d2), out2: least(fout, i + d1, i + d2) });

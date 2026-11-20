@@ -11,8 +11,8 @@
 // cache.
 // (`SET`: a fingerprint of the list below, written with the hashes. It is part of the cache's name, so a release whose
 // files changed can never install into the cache the running one is serving from, version number bumped or not.)
-const SET = "6a25911df46a";
-const CACHE = `needleworks-v43-${SET}`, SHARED = "needleworks-shared";
+const SET = "0978db5a0fb9";
+const CACHE = `needleworks-v44-${SET}`, SHARED = "needleworks-shared";
 const FILES = {
   "index.html": "3548c7c1922462dc061258df315b66d6318d45d014a973685caf0228f89d472f",
   "manifest.webmanifest": "82f627e1def5254866cf364a55a1c2a85e2c3dd61abeeb890829362969fcfb63",
@@ -51,7 +51,7 @@ const FILES = {
   "js/core/glyphs.js": "1aa94c2a28d8343fa6837d8f0591e325a9128063bfce81d968bf592feda6cbf3",
   "js/core/formats.js": "6c635b29d843e7eb112ad773f92f79b26ea0ad17769889104b271faa2915b76e",
   "js/core/formats-out.js": "6c340ec9036e5a7efc78ced8b6a7e3d9af9dd8e8773d230c8120302da33e333c",
-  "js/core/geom.js": "6185d2a0bbf6162d5adcce6430d4212aabf55b2823ea8de6e909bce44bf00474",
+  "js/core/geom.js": "67e8e62be163f9e2995e1c13d18bad7fb7e82646c132545d249668112c8c0c90",
   "js/core/colour.js": "ceb89ab0511bd2c9673945b2c90f71565ffd0a934bc5b299dab1279fc9758da2",
   "js/core/density.js": "fc507b2818e7cdb700d52d88ac328a784b89ddac6f609fcc469b95c4805a237e",
   "js/core/fill.js": "48d998b7c5188af34d929e04c4c5e28df9d9aeb462160232b64392c7ee4a54e4",

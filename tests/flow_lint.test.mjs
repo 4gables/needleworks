@@ -74,6 +74,17 @@ expect("rings()", lint(rings([circle, inner], (l) => [loop(run(l, 2, true))])), 
   console.log(`${failed.length ? "FAIL" : "ok  "} degenerate frames build: ${n - failed.length}/${n}${failed.length ? "\n  " + failed.slice(0, 10).join("\n  ") : ""}`);
 }
 
+// a mitred corner's short leg keeps its width (2026-11: an L's foot 2.5 widths long took the width of its own tip, and
+// was sewn 0.7 mm wide from the corner out: a sewn logo's three L's)
+{
+  const { resample } = await import("../js/core/geom.js");
+  const p = resample([[0, 0], [0, 8.6], [1.4, 10], [7, 10]], 0.1), L = 8.6 + Math.hypot(1.4, 1.4) + 5.6;
+  const st = satin(p, 2.8, 0.4, 0.2, false, true, null, (s) => { const w = Math.min(1.3, Math.max(0.25, (L - s) * 2), Math.max(0.25, s * 2)); return [w, w, 0]; }, { mitre: true });
+  let thin = 0;
+  for (let i = 1; i < st.length; i++) if (st[i][0] > 1.6 && st[i][0] < 6 && st[i - 1][0] > 1.6 && Math.abs(st[i][1] - st[i - 1][1]) < 2) thin++;
+  expect("an L's short foot is sewn its own width", { thin }, "thin", 0);
+}
+
 // reference: what the lint finds in our golden files and in professionally made files (not judged)
 const { readFileSync, readdirSync } = await import("fs");
 for (const dir of ["tests/fixtures/golden", "tests/external/pes"].filter(existsSync)) {
