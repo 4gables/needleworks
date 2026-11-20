@@ -525,7 +525,6 @@ function plain(nets) {
   const spread = wd.length < 10 ? 1 : wd[Math.floor(0.9 * (wd.length - 1))] / wd[Math.floor(0.1 * (wd.length - 1))];
   // (short strokes between junctions are a letter's when they are all one width, COLUMNS.letter: an E, an N, an M.
   // A ragged patch's are every width)
-  plain.last = `short ${(short / all).toFixed(2)} spread ${spread.toFixed(2)} n ${wd.length} lo ${wd[Math.floor(0.1 * (wd.length - 1))]?.toFixed(2)} hi ${wd[Math.floor(0.9 * (wd.length - 1))]?.toFixed(2)}`;
   if (short > COLUMNS.short * all) return wd.length >= 10 && spread <= COLUMNS.letter;
   if (wd.length < 10) return true;
   if (spread <= COLUMNS.even) return true;
@@ -899,22 +898,20 @@ function build(img, analysis, opts) {
         // (small lettering is satin from TEXT.satin mm, whatever its strokes' shapes: a letter is short strokes at
         // every angle, which `plain` and `cover` are there to refuse in a ragged patch)
         const text = !!lettered.px && lettered.px[q.px[0]] === col.id + 1 && !dot(c);
-        const DBG = (why, extra) => { (fine.dbg ||= []).push([why, +W.toFixed(2), +A.toFixed(1), whole ? 1 : 0, Math.round((q.px[0] % w) / res), Math.round(Math.floor(q.px[0] / w) / res), extra ?? ""].join(" ")); };
         if (text) {
           const tall = (rowAt(toMm([[q.px[0] % w, Math.floor(q.px[0] / w)]])[0]) || { mm: 0 }).mm >= TEXT.column;
           const nets = tall && W >= TEXT.satin && whole ? columnNets(q.px, [], w, h, own, res, toMm, false) : [];
-          DBG(nets.length ? "text-col" : "text-none", tall ? "tall" : "low");
           if (nets.length) { cols.push({ px: q.px, c, whole, nets, meant: true, text: true }); for (const i of q.px) { colPx[i] = 1; cl[i] = 0; mask.data[i] = 0; thin.data[i] = 0; } }
           continue;
         }
-        if (W < COLUMNS.min) { if (A > 2) DBG("narrow"); continue; }
+        if (W < COLUMNS.min) continue;
         // (nor a piece under COLUMNS.small mm²: a satin that small is all tie-in and tie-off, and the cap on thread per
         // square mm left a 1 mm dot only its locks, a knot. A mark that small stays as it was)
         if (A < COLUMNS.small) continue;
         const stroke = A / (W * W) >= COLUMNS.long;
         // (a part of a wider shape is a column only when it is a stroke: the corners an opening cuts off a fill stay
         // the fill's)
-        if (!whole && !stroke) { DBG("part-not-stroke"); continue; }
+        if (!whole && !stroke) continue;
         // (a dot only when it is a plain blob, nearly convex: a ragged patch sewn as one satin fanned every way)
         if (!stroke && solidity(q.px, w) < COLUMNS.solid) continue;
         // (a stroke cut off a fill reaches COLUMNS.into mm into it, so the two meet with no gap)
@@ -931,8 +928,7 @@ function build(img, analysis, opts) {
         const nets = columnNets(q.px, more, w, h, own, res, toMm, !stroke);
         // (and only when its columns cover the piece: thinning prunes a stroke shorter than it is wide as a spur, and a
         // slab F's middle arm was left bare)
-        if (!nets.length || nets.cover < COLUMNS.cover || (stroke && !plain(nets))) { DBG(!nets.length ? "no-nets" : nets.cover < COLUMNS.cover ? "cover" : "not-plain", nets.cover?.toFixed(2) + " " + nets.reduce((n, t) => n + t.edges.length, 0) + " " + plain.last); continue; }
-        DBG("col");
+        if (!nets.length || nets.cover < COLUMNS.cover || (stroke && !plain(nets))) continue;
         cols.push({ px: q.px, c, whole, nets, meant: dot(c) || (mark(c) && size[c] < 2 * dotPx) });
         for (const i of q.px) { colPx[i] = 1; cl[i] = 0; mask.data[i] = 0; thin.data[i] = 0; }
       }

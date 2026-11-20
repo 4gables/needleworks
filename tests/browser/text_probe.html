@@ -53,7 +53,7 @@ for (const [name, paint] of Object.entries(CASES)) for (const bg of ["clear", "w
     last = k2 === 0 || k2 === 1 ? p : null; }
   const div = Object.assign(document.createElement("div"), { className: "c" });
   div.append(Object.assign(document.createElement("div"), { textContent: `${name} / ${bg} / ${style} (words ${m.pick?.words}, thin ${JSON.stringify(m.pick?.thick?.slice?.(0,3))}): ${n} stitches, ${trims} trims, ${r.pattern.threads.length} threads, letters ${r.fine?.letters ?? "-"}, ${Math.round(performance.now() - t0)} ms` }), cv);
-  out.append(div); if (r.fine?.dbg) log("DBG " + r.fine.dbg.join(" | "));
+  out.append(div);
 }
 document.title = "DONE";
 </script>
