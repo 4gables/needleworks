@@ -29,7 +29,7 @@ export function artGuide({ sizeMm, w, h, colours = [], most, subject = "" }) {
     `Flat colours, ${ART.fewest} to ${most} of them: each colour is one thread${owned ? ", so use the colours of thread you own" : ""}.`,
     `Bold, clean outlines, at least ${ART.line} mm thick once stitched: ${px(ART.line)} px on a ${PX} px picture sewn ${sizeMm} mm long. Thinner lines sew as a single thread, or break.`,
     `No fine texture, soft gradients or shading: thread sews flat colour, so a blend becomes bands. Flat, pop-art, simple, silhouette and line-art styles sew well; crayon, sketch, watercolour and anime shading don't.`,
-    `No detail under ${ART.detail} mm across (${px(ART.detail)} px) and no words under ${ART.text} mm tall (${px(ART.text)} px). Better: leave words out and add them in Design your own, where lettering sews from much smaller.`,
+    `No detail under ${ART.detail} mm across (${px(ART.detail)} px) and no words under ${ART.text} mm tall (${px(ART.text)} px): smaller than that, thread is as thick as the letters' strokes.`,
     `A plain background in one colour, with nothing else in it, so it can be left as fabric.`,
     shape.ratio === "1:1" ? `A square picture: the hoop's shape.` : `Square, or ${shape.words} like the hoop, so the design can fill it.`,
     `Sewn smaller than ${sizeMm} mm, everything shrinks with it: keep it simpler still.`,
@@ -61,8 +61,8 @@ export function artSaid(art, c) {
   const bigger = (need) => { if (!(need > 1) || c.size >= c.max) return null; const s = Math.min(c.max, Math.ceil((c.size * need) / 5) * 5); return s * 1.0001 >= c.size * need ? { label: `Make it ${s} mm${s === c.max ? " (as big as fits)" : ""}`, over: { size: s } } : null; };
   const t = art.text || { n: 0 };
   if (t.small) bad.push({ id: "text", spots: t.spots, fix: bigger(t.need),
-    text: `The lettering is about ${t.mm} mm tall ${at}. Under ${ART.text} mm a picture's letters sew blotchy: their strokes are too thin to fill and the holes in them close up.`,
-    else: "Leave the words out of the picture and add them in Design your own, which sews lettering as lettering." });
+    text: `The lettering is about ${t.mm} mm tall ${at}. Under ${ART.text} mm letters are at the limit of what thread can do: they are sewn, but won't be crisp.`,
+    else: "Leave the smallest words out of the picture, or sew it on something that takes a bigger design." });
   else if (t.n) good.push(`lettering ${t.mm} mm tall`);
   const sm = art.small || { n: 0 };
   // (a photo's specks and lines are its texture, said by the verdict above: not counted one by one)

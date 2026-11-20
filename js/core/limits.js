@@ -38,9 +38,9 @@ export const ROWS = { solid: 0.2, standard: 0.25 };
 //   detail, dot: a separate piece under `dot` mm² and under `detail` mm across is a speck: left out, or sewn in the
 //            colour round it (digitize.js's specks and flecks: 4 mm² and 2.5 mm).
 //   gap:     mm. Gaps between parts of one colour narrower than this close up once sewn (digitize.js `MIN_GAP`).
-//   text:    mm tall. Lettering in a picture is sewn as filled shapes; a bold letter's strokes are about a sixth of its
-//            height, so under 6 mm they fall under `line` and its holes under `gap`. (Typed lettering in Design your
-//            own is sewn as lettering, from 4 mm: docs/lettering.md.)
+//   text:    mm tall. Lettering in a picture is sewn as lettering (digitize.js `smallText`): it reads down to 3 mm,
+//            where a stroke is one line of thread; under that the thread is as thick as the letters' parts. (6 until
+//            v42, when a picture's letters were sewn as filled shapes.)
 //   fewest:  thread colours a picture is asked for in the guide: 4 to digitize.js `MOST` (the Thread colours slider's
 //            top). Fewer than 4 flattens most illustrations; each one more is a thread change.
 //   blend:   share of a picture's ink in smooth colour ramps (gradients) over which they are said: they sew as bands.
@@ -48,7 +48,7 @@ export const ROWS = { solid: 0.2, standard: 0.25 };
 //            unsewn); under it the background is busy and sewn as part of the design.
 //   ask:     the guide's prompt asks for lines and details this many times the least, as shares of the picture: it
 //            is worked out for the hoop filled, and art is often sewn at half that; an AI tool's "thick" also varies.
-export const ART = { line: 1, detail: 2.5, dot: 4, gap: 0.5, text: 6, fewest: 4, blend: 0.12, page: 0.8, ask: 2 };
+export const ART = { line: 1, detail: 2.5, dot: 4, gap: 0.5, text: 3, fewest: 4, blend: 0.12, page: 0.8, ask: 2 };
 
 // The style a fresh picture starts in (artcheck.js `chooseStyle`, docs/pictures.md "Style chosen per picture"):
 //   line: share of the ink in thin strokes for a line drawing. Line art 0.92-1, etsy_7's doodle sheet 0.60; filled
