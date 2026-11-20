@@ -11,7 +11,7 @@
 // cache.
 // (`SET`: a fingerprint of the list below, written with the hashes. It is part of the cache's name, so a release whose
 // files changed can never install into the cache the running one is serving from, version number bumped or not.)
-const SET = "3638d44af15d";
+const SET = "2ee2b9b09df4";
 const CACHE = `needleworks-v42-${SET}`, SHARED = "needleworks-shared";
 const FILES = {
   "index.html": "3548c7c1922462dc061258df315b66d6318d45d014a973685caf0228f89d472f",
@@ -41,7 +41,7 @@ const FILES = {
   "fonts/Satisfy-Regular.woff2": "693c536670f722fc975f38664c4b87315e5b3b784e01200fe309ecaed9c090e3",
   "fonts/Yellowtail-Regular.woff2": "4be14e2b33416b292c558bbb36b6ca50ee7a44dab395fd475a7d45830c99b6f8",
   "fonts/ZillaSlab-SemiBold.woff2": "b7e8f316b83ba8889baf7a9993fb5805c845a04d985a08b3df483efddf9a99aa",
-  "js/app.js": "06876b22bc8253bafb4946b716c1fb23dbd070318c7b9fdc769bbae09769adba",
+  "js/app.js": "d678906ebc5226e0853ea187acddf97924f3cc4bce936234677dc9b6201c8e93",
   "js/words.js": "32351ae8626fa69c73fbb07762152d451d8c812b98a9172210705a9fa2fc6ac4",
   "js/core/brandcharts.js": "85f4772a2de19ab56691d984a8aad930b2c427cd34498c70f66933c6f09199be",
   "js/core/brands.js": "cb0a36b5fe3128de55654bdd350bdc86508f11fb089eb822bd73b7a26eba1c59",
