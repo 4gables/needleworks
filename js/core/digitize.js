@@ -555,14 +555,21 @@ function netStitches(net, start, sat) {
 //   C to H at whatever height the last stroke ended: the word read as one scribble). The machine leaves a jump that
 //   short uncut, so each is a thread to snip, as between the Design tab's print letters, and is counted.
 // Returns { labels (a copy when anything changed), px: 1 on every pixel of such a row, rows }.
-const TEXT = { small: 6, least: 2, pad: 0.4, word: 3, flat: 0.55, pen: 0.8, bold: 0.2, satin: 0.7, column: 5, narrow: 0.17, least2: 0.6, most: 0.9 };
+const TEXT = { small: 6, least: 2, pad: 0.4, word: 3, flat: 0.55, pen: 0.8, bold: 0.2, satin: 0.7, column: 5, line: 3.2, least2: 0.35, most: 0.7 };
+// How wide (mm, needle to needle) a small letter's strokes are sewn, by the letters' height: thread is 0.4 mm thick, so
+// a satin shows 0.4 mm wider than it is sewn and a 0.6 mm satin made a 1 mm stroke on a 3 mm letter, every counter
+// shut (2026-11: SCHOOL OF MEDICINE at 3 mm read as blobs). Under TEXT.line mm tall a stroke is one line of thread three
+// times over (0: no satin); from there the satin grows from TEXT.least2 to TEXT.most at TEXT.column mm.
+const textWide = (mm) => (mm < TEXT.line ? 0 : Math.min(TEXT.most, TEXT.least2 + ((TEXT.most - TEXT.least2) * (mm - TEXT.line)) / (TEXT.column - TEXT.line)));
 function smallText(labels, w, h, colors, used, res) {
   const fab = colors.find((c) => c.background), none = { labels, px: null, rows: 0 };
-  if (!fab || !used.length) return none;
-  const lab = (c) => srgbToLab(...hexToRgb(c.picture || c.hex)), e = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]), F = lab(fab);
+  if (!used.length) return none;
+  // (a see-through picture has no fabric colour, and so no colour in between it and the letters': its letters are
+  // found all the same. They were not, and words on a clear background sewed as hairlines: 2026-11)
+  const lab = (c) => srgbToLab(...hexToRgb(c.picture || c.hex)), e = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]), F = fab ? lab(fab) : null, bare0 = fab ? fab.id : -1;   // (bare fabric: the background's colour, or see-through)
   // each sewn colour's darker end: the sewn colour furthest from the fabric that it lies between the fabric and
   const to = new Map();
-  for (const q of used) {
+  for (const q of F ? used : []) {
     if (q.inside) continue;   // (the fabric's colour closed in by the design is no one's soft edge)
     let best = null, bd = e(F, lab(q));
     for (const c of used) if (c !== q && e(F, lab(c)) > bd && e(F, lab(q)) + e(lab(q), lab(c)) <= 1.25 * e(F, lab(c))) { best = c; bd = e(F, lab(c)); }
@@ -632,7 +639,7 @@ function smallText(labels, w, h, colors, used, res) {
     while (front.length) {
       const next = [], set = [];
       for (const i of front) if (id[i] > 0) around(i, (j) => {
-        const bare = !ink(j) && !soft(j) && (labels[j] === fab.id || labels[j] < 0);
+        const bare = !ink(j) && !soft(j) && (labels[j] === bare0 || labels[j] < 0);
         if (id[j] || px[j] !== r.col + 1 || !(ink(j) || (soft(j) && depth[i] < 3) || (bare && out2[i] < fat))) return;
         let k = 0, two = false; around(j, (q) => { if (id[q] > 0) { if (!k) k = id[q]; else if (id[q] !== k) two = true; } });
         set.push([j, two ? -1 : k, soft(j) ? depth[i] + 1 : depth[i], bare ? out2[i] + 1 : out2[i], bare]);
@@ -640,7 +647,7 @@ function smallText(labels, w, h, colors, used, res) {
       for (const [j, k, dp, o2, bare] of set) if (!id[j]) { id[j] = k; depth[j] = dp; out2[j] = o2; if (k > 0) { next.push(j); if (bare) out[j] = r.col; } }
       front = next;
     }
-    each((i) => { if (ink(i) || soft(i)) out[i] = id[i] > 0 ? r.col : fab.id; });
+    each((i) => { if (ink(i) || soft(i)) out[i] = id[i] > 0 ? r.col : bare0; });
   }
   return { labels: out, px, rows: rows.length, list: rows };
 }
@@ -1012,7 +1019,7 @@ function build(img, analysis, opts) {
         // the letters' height wide, 0.6-0.9 mm, whatever the stroke's own width. One line of thread, three times
         // over, was too thin to read as lettering (owner, 2026-11); a satin as wide as each stroke was drawn closed
         // the counters of 4 mm letters and ran R into P)
-        const row = t.text ? rowAt(t.mm[0][0][0]) : null, wide = row ? Math.max(TEXT.least2, Math.min(TEXT.most, TEXT.narrow * row.mm)) : 0;
+        const row = t.text ? rowAt(t.mm[0][0][0]) : null, wide = row ? textWide(row.mm) : 0;
         const paths = t.mm.map(([p, kind]) => {
           const q = followRun(p, 1.5, 0.1, 0.6);
           if (wide && kind === "run" && q.length > 1 && arclen(q).at(-1) >= 0.8) return [...q, ...q.slice(0, -1).reverse(), ...satin(q, wide, 0.4, 0, false, true), q.at(-1)];
