@@ -49,6 +49,14 @@ Reference for this part of Needleworks: the rules, the reason for each (it stops
 - Each leg's width is the least where its direction was read, but never within half a width of the line's end: a
   column narrows to its tip there, and a leg only 2.5 widths long took its tip's width (a sewn logo's L's,
   2026-11-20: each foot 0.7 mm wide from the corner out, full width only past the mitre). Guard: flow_lint.test.
+- No satin stitch of a picture's column ends off its ink (`netStitches` `keep`, `COLUMNS.past` 0.25 mm): an end out
+  there is drawn back along its stitch, and a stitch wholly off the ink is dropped. A mitred A's point stood 3.6 mm
+  over the letter and a V's foot under the line (owner, 2026-11-20: "the V is bigger than the other letters"); an
+  arm's end stood 0.8 mm past its ink. Guard: `tests/browser/picture_letters.html` (`out`).
+- Where three or more strokes meet, the two that run on through each other are the stroke and the rest are branches
+  (`columnNets`, `COLUMNS.lap` 0.4 mm): a branch's satin stops 0.4 mm inside the stroke it joins, the way to the node
+  a plain run, and it keeps its usual width by the joint. Sewn to the node, an E's arm and its stem lay across each
+  other over half the stem with both underlays: a knot at every joint.
 - On for a picture's satin columns only (`netStitches`). `columnNets` joins centre lines that meet at a node nothing
   else comes to, so a corner the skeleton put a node on lies inside one line.
 - Not for lettering (measured 2026-11-19, every font, A-Z a-z 0-9 at 25 mm): a letter's corners are mostly joins

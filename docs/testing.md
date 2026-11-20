@@ -25,6 +25,11 @@ Reference for this part of Needleworks: the rules, the reason for each (it stops
 - Small lettering in pictures, by eye: `tests/browser/text_probe.html` (words drawn at 6 to 2.5 mm in three faces and
   white on a colour, sewn as the Picture tab sews them and drawn large; `?only=`, `?bg=clear|white`, `?zoom=`,
   `?coarse` without the finer copy). It saves each file to the batch server for `pe900_check.py`.
+- A picture's large lettering, letter by letter: `tests/browser/picture_letters.html?face=sans|regular|slab|serif|cond&mm=12`
+  (`?chars=`, `?thin`, `?zoom=`). Per letter: satin share, bare ink %, thread off the ink %, how far it stands past the
+  ink's box (mm), most needle points in a 1 mm square; flags and a sheet saved to the batch server
+  (`letters_FACE_MM.json`, `.png`). Stitches are laid on the ink by the sewn part's own middle and scale, then the best
+  shift within 2 mm. On demand; the numbers at each release are in docs/pictures.md.
 - VM check (before shipping stitch changes): UTM "PESCHECK" with the PE-DESIGN 11 trial over VNC
   (`/Volumes/4TB_SSD/vm-pescheck/tools/vnc.py`); files in on an ISO (`hdiutil makehybrid -iso -joliet`, `cat` it over
   `vm-pescheck/files.iso`); `vm-pescheck/tools/boxcheck2.ps1` (box == stitch minimum: "FITS n/n"), then open them

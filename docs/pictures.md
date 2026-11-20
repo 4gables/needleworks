@@ -647,3 +647,19 @@ A fresh picture starts in the style a person would pick (C5-AU): Line drawing wh
 - Cross-stitch is never the start: the pet photos measured as clip art does (flat 0.84-0.90, blends 0.07-0.28, off
   their colours by 3.4 ΔE) and the gradient icon and sunset alike or more. Left: a photo measure that tells a photo
   from a soft-shaded illustration (fur texture at the picture's own pixel size), then a suggestion, not a default.
+
+## Lettering drawn large in a picture (2026-11-20, v45)
+- Measured letter by letter on `tests/browser/picture_letters.html` (docs/testing.md): every capital and digit in a
+  face, sewn as the Picture tab sews them, against the ink it was drawn with.
+- A letter with junctions (E, F, H, A, D) is satin: its short strokes between junctions pass `plain` when they are all
+  one width (`COLUMNS.letter` 1.6, 90th over 10th percentile, as measured before a joint evens a branch) and together
+  `COLUMNS.run` 6 widths long. Before, any piece over a fifth short strokes was a fill, and a logo's E, N, M sewed as
+  fills beside satin O, U, S.
+- State at v45 (flagged of 36): bold sans 12 mm 5, 6 mm 5; regular sans 12 mm 4; slab serif 12 mm 21, 6 mm 11; a
+  thick-and-thin serif 34 (nearly all fills).
+- Not done, each tried once and off: N and M (the centre line rounds their corners: an N sews as an "n", cover
+  0.6-0.9, so it stays a fill; `COLUMNS.apex` cuts the line into strokes at a sharp corner but also cut a small U and
+  an S: 0 until it tells a corner from a bend); slab serifs (`COLUMNS.serif`, `skeletonEdges` `stubs`: an I's top
+  serif sewed as its own bar, as a cap's does, but an E turned to a fill: 0). A fat letter's X (strokes half its
+  height) sews as satin with a knot at the crossing (corpus mascot_fox, look -1.1).
+
