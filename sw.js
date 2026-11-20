@@ -11,8 +11,8 @@
 // cache.
 // (`SET`: a fingerprint of the list below, written with the hashes. It is part of the cache's name, so a release whose
 // files changed can never install into the cache the running one is serving from, version number bumped or not.)
-const SET = "8191489e84e5";
-const CACHE = `needleworks-v46-${SET}`, SHARED = "needleworks-shared";
+const SET = "61317cc3c5e3";
+const CACHE = `needleworks-v47-${SET}`, SHARED = "needleworks-shared";
 const FILES = {
   "index.html": "3548c7c1922462dc061258df315b66d6318d45d014a973685caf0228f89d472f",
   "manifest.webmanifest": "82f627e1def5254866cf364a55a1c2a85e2c3dd61abeeb890829362969fcfb63",
@@ -46,7 +46,7 @@ const FILES = {
   "js/core/brandcharts.js": "85f4772a2de19ab56691d984a8aad930b2c427cd34498c70f66933c6f09199be",
   "js/core/brands.js": "cb0a36b5fe3128de55654bdd350bdc86508f11fb089eb822bd73b7a26eba1c59",
   "js/core/design.js": "616cd759d665209a80236e18de9b230675db3626efb8ea08846cffbd7bb15e18",
-  "js/core/digitize.js": "0cd4dc09d3f5f187a2f1059ae65cbf6d284d55fd3022a8400d92c26f5d13c9fe",
+  "js/core/digitize.js": "433ee0bc64a3002e8357e965d894dbdc1da0242ead87bfb07408a9e227417da8",
   "js/core/fonts.js": "eff92c64949a5983d3d2ae4804ff6cbf7ca1a6547998767f276c8d07b9cd26f9",
   "js/core/glyphs.js": "1aa94c2a28d8343fa6837d8f0591e325a9128063bfce81d968bf592feda6cbf3",
   "js/core/formats.js": "6c635b29d843e7eb112ad773f92f79b26ea0ad17769889104b271faa2915b76e",
@@ -56,10 +56,10 @@ const FILES = {
   "js/core/density.js": "fc507b2818e7cdb700d52d88ac328a784b89ddac6f609fcc469b95c4805a237e",
   "js/core/fill.js": "48d998b7c5188af34d929e04c4c5e28df9d9aeb462160232b64392c7ee4a54e4",
   "js/core/machines.js": "afd9fe6fc812a0b03d903fc54a374b3246ac27539c9cff7d5ea546ed9e81c135",
-  "js/core/artcheck.js": "9ef46c385020931906673772e4232d02a8f2a3c2c6fb531c9cbd85b98efb28d9",
+  "js/core/artcheck.js": "aa995e55eb070083db5a4320379ee97528c2bbd3eff1e610e91c5ff04a05b953",
   "js/core/palette.js": "be3c5634876b2154853b75ca866eb9dbf23d94e11ea6d04f17a5e43193755403",
-  "js/core/recipes.js": "07efbfb90f3d37c438f3776da39bff39f88a5812dce85940653c9acdd22347cf",
-  "js/core/raster.js": "f5fa83bac2367c0c730661b41c37658418d350cfa39b0d4ecfe0dda3fd2383c8",
+  "js/core/recipes.js": "248900199d85214885eacd103cad3de2e07e6f6aa21db30904cd30604db3b791",
+  "js/core/raster.js": "609e065daf5b3012dd78d5b552d721745c5efde44898a467024adabf82b76216",
   "js/core/regions.js": "4e24ba2c2d89c91a51bf3952db56ff4346d73783921a877911b97e1d45ad5813",
   "js/core/shade.js": "2eb89bf74a39de6a3d403d2e9e7c356931cc25fc8e7bd2351750f40ce30b477f",
   "js/core/text.js": "a253f11cfeafe6c9dd630fb3c2f010f0a88b37771923e92ffa9db70f32ff0378",
