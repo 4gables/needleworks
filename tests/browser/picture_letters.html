@@ -1,0 +1,91 @@
+<!doctype html><meta charset="utf-8"><title>picture letters</title>
+<style>body{font:12px system-ui;margin:8px;background:#fff} canvas{border:1px solid #ccc;display:block;margin:4px 0} .bad{color:#b00020}</style>
+<div id="out"></div>
+<script type="module">
+// Each letter of a picture's lettering, measured: letters drawn one to a cell at a known height, sewn as the Picture
+// tab sews them (Filled), and judged letter by letter against the ink they were drawn with.
+//   ?face=sans|regular|slab|serif|cond  ?mm=12 (capital height)  ?chars=ABC...  ?per= (letters a picture)
+// Per letter: kind (satin share of its stitches), bare (ink no thread covers, %), over (thread off the ink, % of the
+// ink), out (how far the stitches stand past the ink's own box, mm), peak (most needle points in a 1 mm square).
+// Saves letters_FACE_MM.json and .png to the batch server.
+import { DENSITY, LEARN, contentBox, finer, pictureImage, picturePlan, sewSized } from "../../js/core/picprep.js";
+import { hoop as getHoop } from "../../js/core/machines.js";
+const Q = new URLSearchParams(location.search), HOOP = getHoop(), PXMM = 12, MM = +Q.get("mm") || 12, PER = +Q.get("per") || Math.max(1, Math.floor(115 / (1.7 * MM)));   // (a picture no wider than the 5x7 hoop is sewn the size it is drawn)
+const FACES = { sans: "700 SIZE Arial, sans-serif", regular: "400 SIZE Arial, sans-serif", slab: "700 SIZE Rockwell, serif", serif: "700 SIZE Georgia, serif", cond: "400 SIZE Impact, sans-serif" };
+const faceName = Q.get("face") || "sans", FACE = FACES[faceName], CHARS = [...(Q.get("chars") || "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789")];
+const LIMIT = { satin: 0.5, bare: 3, over: 3, out: 0.6, peak: 20 };
+const worker = new Worker(new URL("../../js/worker.js", import.meta.url), { type: "module" }); let seq = 0;
+const job = (msg) => new Promise((ok) => { const id = ++seq; const h = (e) => { if (e.data.id === id) { worker.removeEventListener("message", h); ok(e.data); } }; worker.addEventListener("message", h); worker.postMessage({ ...msg, id }); });
+const out = document.getElementById("out"), log = (t, bad) => { out.append(Object.assign(document.createElement("div"), { textContent: t, className: bad ? "bad" : "" })); };
+const rows = [], S = 10;   // (S: px per mm of the masks)
+for (let at = 0; at < CHARS.length; at += PER) {
+  const chars = CHARS.slice(at, at + PER), cellW = Math.round(MM * 1.7 * PXMM), cellH = Math.round(MM * 1.9 * PXMM);
+  const c = new OffscreenCanvas(cellW * chars.length, cellH), g = c.getContext("2d");
+  g.font = FACE.replace("SIZE", "100px"); const cap = g.measureText("H").actualBoundingBoxAscent;
+  g.font = FACE.replace("SIZE", `${(100 * MM * PXMM) / cap}px`); g.fillStyle = "#0e1f7c"; g.textAlign = "center";
+  chars.forEach((ch, i) => g.fillText(ch, (i + 0.5) * cellW, Math.round(cellH * 0.5 + (MM * PXMM) / 2)));
+  const box = contentBox(c), key = `${faceName}:${at}:${Math.random()}`, k = LEARN / Math.max(box.sw, box.sh), W = c.width / PXMM, size = (W * box.sw) / c.width;
+  const learn = pictureImage(c, box, Math.max(1, Math.round(box.sw * k)), Math.max(1, Math.round(box.sh * k)));
+  const opts = { colors: 4, scale: k, removeBackground: true, fillAngle: 45, density: DENSITY.standard, skip: [], hoop: HOOP, turn: false, palette: null, style: "fill", cross: 2.5, details: "most", shade: "auto", inside: "auto" };
+  const m = await job({ key, learn, opts, pick: true });
+  if (!m.ok) { log(`${chars.join("")}: ${m.error}`, true); continue; }
+  let plan = null;
+  const r = await sewSized((pl) => (plan = pl, job)({ key, ref: key, learn, img: pictureImage(c, pl.crop, pl.w, pl.h), ...(finer(m.flat, pl.crop, pl.w) ? { img2: pictureImage(c, pl.crop, 2 * pl.w, 2 * pl.h) } : {}), crop: pl.frac, opts }), (fit) => picturePlan(box, m.boxes.filter((_, i) => !m.colors[i].background), size, HOOP, undefined, fit), { style: "fill" });
+  if (!r.ok) { log(`${chars.join("")}: ${r.error}`, true); continue; }
+  await fetch(`/save/letters_${faceName}_${MM}_${at}.pes`, { method: "POST", body: r.bytes });
+  // the ink, S px per mm
+  const iw = Math.ceil(W * S), ih = Math.ceil((c.height / PXMM) * S), ic = new OffscreenCanvas(iw, ih), ig = ic.getContext("2d");
+  ig.drawImage(c, 0, 0, iw, ih); const ink = ig.getImageData(0, 0, iw, ih).data, inkAt = (i) => ink[i * 4 + 3] > 127;
+  // the stitches (mm), the plain ones' thread 0.4 mm wide; laid over the ink by the two centres of mass
+  const st = r.pattern.stitches, seg = []; let last = null;
+  // (each stitch in the picture's own frame, mm as drawn: the pattern's 0,0 is the middle of the part that was sewn,
+  // K drawn mm to a sewn mm)
+  const K = (r.res * plan.crop.sw) / plan.w / PXMM, mx = (plan.crop.sx + plan.crop.sw / 2) / PXMM, my = (plan.crop.sy + plan.crop.sh / 2) / PXMM;
+  for (const s of st) { const p = [mx + (s[0] / 10) * K, my + (s[1] / 10) * K]; if (s[2] === 0 && last) seg.push([last, p, s[3] || 0]); last = s[2] === 0 || s[2] === 1 ? p : null; }
+  const mask = (dx, dy) => { const t = new OffscreenCanvas(iw, ih), tg = t.getContext("2d"); tg.lineWidth = 0.4 * S; tg.lineCap = "round"; tg.beginPath(); for (const [a, b] of seg) { tg.moveTo((a[0] + dx) * S, (a[1] + dy) * S); tg.lineTo((b[0] + dx) * S, (b[1] + dy) * S); } tg.stroke(); return tg.getImageData(0, 0, iw, ih).data; };
+  // (laid over the ink where the two agree most: from the content box's centre, the best of every shift up to 2 mm)
+  let dx = 0, dy = 0, sm = mask(dx, dy);
+  { const inkPx = []; for (let i = 0; i < iw * ih; i += 3) if (inkAt(i)) inkPx.push(i);
+    let best = -1, bx = 0, by = 0;
+    for (let oy = -20; oy <= 20; oy++) for (let ox = -20; ox <= 20; ox++) { let n = 0; for (const i of inkPx) { const x = (i % iw) - ox, y = Math.floor(i / iw) - oy; if (x >= 0 && y >= 0 && x < iw && y < ih && sm[(y * iw + x) * 4 + 3] > 127) n++; } if (n > best) { best = n; bx = ox; by = oy; } }
+    dx += bx / S; dy += by / S; sm = mask(dx, dy); }
+  // (thread counts as on the ink within 0.3 mm of it, and ink as covered within 0.2 mm of thread: a thread is 0.4 mm
+  // wide and lies half past its needle holes)
+  const grown = (on, r) => { const a = new Uint8Array(iw * ih), b = new Uint8Array(iw * ih); for (let i = 0; i < iw * ih; i++) a[i] = on(i) ? 1 : 0;
+    for (let y = 0; y < ih; y++) for (let x = 0; x < iw; x++) { let v = 0; for (let k = Math.max(0, x - r); k <= Math.min(iw - 1, x + r) && !v; k++) v = a[y * iw + k]; b[y * iw + x] = v; }
+    for (let y = 0; y < ih; y++) for (let x = 0; x < iw; x++) { let v = 0; for (let k = Math.max(0, y - r); k <= Math.min(ih - 1, y + r) && !v; k++) v = b[k * iw + x]; a[y * iw + x] = v; }
+    return a; };
+  const sewn = (i) => sm[i * 4 + 3] > 127, nearInk = grown(inkAt, 3), nearSewn = grown(sewn, 2);
+  // letter by letter
+  const cw = (cellW / PXMM) * S;
+  chars.forEach((ch, n) => {
+    const cx0 = Math.round(n * cw), cx1 = Math.min(iw, Math.round((n + 1) * cw));
+    let inkN = 0, bare = 0, over = 0, bx0 = Infinity, bx1 = -Infinity, by0 = Infinity, by1 = -Infinity, sx0 = Infinity, sx1 = -Infinity, sy0 = Infinity, sy1 = -Infinity;
+    for (let y = 0; y < ih; y++) for (let x = cx0; x < cx1; x++) { const i = y * iw + x, a = inkAt(i), b = sewn(i);
+      if (a) { inkN++; if (!nearSewn[i]) bare++; bx0 = Math.min(bx0, x); bx1 = Math.max(bx1, x); by0 = Math.min(by0, y); by1 = Math.max(by1, y); } else if (b && !nearInk[i]) over++; }
+    let zig = 0, all = 0, prev = null; const hits = new Map(); let peak = 0;
+    for (const [a, b] of seg) { const mx = ((a[0] + b[0]) / 2 + dx) * S; if (mx < cx0 || mx >= cx1) { prev = null; continue; }
+      for (const p of [a, b]) { const X = (p[0] + dx) * S, Y = (p[1] + dy) * S; sx0 = Math.min(sx0, X); sx1 = Math.max(sx1, X); sy0 = Math.min(sy0, Y); sy1 = Math.max(sy1, Y); }
+      const kx = Math.floor(b[0] + dx), ky = Math.floor(b[1] + dy), hk = kx * 4096 + ky, hv = (hits.get(hk) || 0) + 1; hits.set(hk, hv); peak = Math.max(peak, hv);
+      const v = [b[0] - a[0], b[1] - a[1]], L = Math.hypot(...v);
+      if (prev && L > 0.8 && prev.L > 0.8) { all++; if ((v[0] * prev.v[0] + v[1] * prev.v[1]) / (L * prev.L) < -0.5) zig++; }
+      prev = { v, L }; }
+    const outMm = inkN ? Math.max(0, bx0 - sx0, sx1 - bx1, by0 - sy0, sy1 - by1) / S : 0;
+    const row = { ch, satin: all ? +(zig / all).toFixed(2) : 0, bare: +((100 * bare) / (inkN || 1)).toFixed(1), over: +((100 * over) / (inkN || 1)).toFixed(1), out: +outMm.toFixed(2), peak };
+    row.flags = [row.satin < LIMIT.satin ? "fill" : "", row.bare > LIMIT.bare ? "bare" : "", row.over > LIMIT.over ? "over" : "", row.out > LIMIT.out ? "out" : "", row.peak > LIMIT.peak ? "peak" : ""].filter(Boolean);
+    rows.push(row);
+  });
+  // the sheet: ink pale, thread over it
+  const Z = +Q.get("zoom") || Math.max(6, Math.min(16, Math.round(160 / MM))), cv = document.createElement("canvas"); cv.width = W * Z; cv.height = (c.height / PXMM) * Z + 16; cv.style.width = cv.width / (window.devicePixelRatio || 1) + "px";
+  const d = cv.getContext("2d"); d.fillStyle = "#f4efe6"; d.fillRect(0, 0, cv.width, cv.height); d.globalAlpha = 0.18; d.drawImage(c, 0, 0, W * Z, (c.height / PXMM) * Z); d.globalAlpha = 1;
+  d.lineWidth = Q.has("thin") ? 1 : 0.4 * Z; d.lineCap = "round";
+  for (const [a, b, role] of seg) { d.strokeStyle = role === 1 ? "#d08a00" : "#0e1f7c"; d.beginPath(); d.moveTo((a[0] + dx) * Z, (a[1] + dy) * Z); d.lineTo((b[0] + dx) * Z, (b[1] + dy) * Z); d.stroke(); }
+  d.font = "11px system-ui"; chars.forEach((ch, n) => { const w = rows[at + n]; if (!w) return; d.fillStyle = w.flags.length ? "#b00020" : "#333"; d.fillText(`${ch} ${w.flags.join(",") || "ok"} s${w.satin} b${w.bare} o${w.over} x${w.out} p${w.peak}`, n * (cellW / PXMM) * Z + 2, cv.height - 4); });
+  out.append(cv);
+  const blob = await new Promise((ok) => cv.toBlob(ok)); await fetch(`/save/letters_${faceName}_${MM}_${at}.png`, { method: "POST", body: blob });
+}
+const bad = rows.filter((w) => w.flags.length);
+await fetch(`/save/letters_${faceName}_${MM}.json`, { method: "POST", body: JSON.stringify({ face: faceName, mm: MM, rows }) });
+log(`${faceName} ${MM} mm: ${rows.length} letters, ${bad.length} flagged: ${bad.map((w) => `${w.ch}(${w.flags.join(",")})`).join(" ")}`, bad.length > 0);
+document.title = `DONE ${rows.length} ${bad.length}`;
+</script>

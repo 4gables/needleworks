@@ -342,7 +342,7 @@ function columnNets(px, more, w, h, own, res, toMm, dotted) {
     }
     return false;
   };
-  if (!dotted) { es = skeletonEdges(pm, stroke, { spur: 1 }).filter((e) => e[2].length > 1 && (e[0] !== e[1] || loopLen(e[2]) >= 2 * stroke || rings(e[2]))); lineEnds(es, pm, stroke); }
+  if (!dotted) { es = skeletonEdges(pm, stroke, { spur: 1, stubs: COLUMNS.serif }).filter((e) => e[2].length > 1 && (e[0] !== e[1] || loopLen(e[2]) >= 2 * stroke || rings(e[2]))); lineEnds(es, pm, stroke); }
   if (!es.length) {
     // (the long axis: the shape's second moments)
     let n = 0, sx = 0, sy = 0, xx = 0, yy = 0, xy = 0;
@@ -369,9 +369,39 @@ function columnNets(px, more, w, h, own, res, toMm, dotted) {
       es = es.filter((_, k) => k !== ks[0] && k !== ks[1]); es.push(joined); again = true; break;
     }
   }
+  // (a centre line that doubles back at a point, COLUMNS.apex degrees or more: an N's or M's corners, a V's foot. The
+  // skeleton rounds the corner off and prunes its point as a spur, and sewn along it an N came out an "n", its corners
+  // bare (cover 0.6-0.9, so it stayed a fill). There the line is cut into its strokes, each carried on straight to the
+  // ink's edge, as a digitizer lays an N: three columns that lap at the corners)
+  if (!dotted && COLUMNS.apex) {
+    const k = Math.max(2, Math.ceil(stroke / (0.1 * res))), cut = [], unit = (a, b) => { const L = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1; return [(b[0] - a[0]) / L, (b[1] - a[1]) / L]; };
+    const grow = (p, u) => { const o = []; let [x, y] = p; for (let t = 0; t < 4 * stroke && at(x + u[0] * 0.5, y + u[1] * 0.5); t += 0.5) { x += u[0] * 0.5; y += u[1] * 0.5; o.push([x, y]); } return o; };
+    let n = 0;
+    for (const e of es) {
+      const q = resample(e[2], 0.1 * res), tops = [], pick = [];
+      if (e[0] !== e[1]) for (let i = 2 * k; i < q.length - 2 * k; i++) {
+        const u = unit(q[i - 2 * k], q[i - k]), v = unit(q[i + k], q[i + 2 * k]), t = Math.acos(Math.max(-1, Math.min(1, u[0] * v[0] + u[1] * v[1])));
+        if (t < (COLUMNS.apex * Math.PI) / 180) continue;
+        // (both legs straight where their directions are read: a U's bend turns as far, all the way round)
+        const h = k >> 1, bend = (a, m, b) => { const u1 = unit(a, m), u2 = unit(m, b); return Math.acos(Math.max(-1, Math.min(1, u1[0] * u2[0] + u1[1] * u2[1]))); };
+        if (Math.max(bend(q[i - 2 * k], q[i - k - h], q[i - k]), bend(q[i + k], q[i + k + h], q[i + 2 * k])) <= (COLUMNS.straight * Math.PI) / 180) tops.push([t, i]);
+      }
+      tops.sort((x, y) => y[0] - x[0] || x[1] - y[1]);
+      for (const [, i] of tops) if (!pick.some((j) => Math.abs(j - i) < 3 * k)) pick.push(i);
+      if (!pick.length) { cut.push(e); continue; }
+      pick.sort((x, y) => x - y);
+      let from = 0, a = e[0], lead = [];
+      for (const i of pick) {
+        cut.push([a, `apex${n}a`, [...lead, ...q.slice(from, i - k + 1), ...grow(q[i - k], unit(q[i - 2 * k], q[i - k]))], true]);
+        lead = grow(q[i + k], unit(q[i + 2 * k], q[i + k])).reverse(); from = i + k; a = `apex${n++}b`;
+      }
+      cut.push([a, e[1], [...lead, ...q.slice(from)], true]);
+    }
+    es = cut;
+  }
   const E = [], deg = new Map(), cov = new Uint8Array(cw * ch);
   for (const [a, b] of es) for (const k of [a, b]) deg.set(k, (deg.get(k) || 0) + 1);
-  for (const [a, b, p0] of es) {
+  for (const [a, b, p0, apex] of es) {
     let q = resample(p0, 0.1 * res);
     if (q.length < 2) continue;
     // (a sharp turn of the centre line, a star's point on its outline: the outer side reaches 1 / sin(half the
@@ -408,6 +438,8 @@ function columnNets(px, more, w, h, own, res, toMm, dotted) {
     // (evened over 0.2 mm either way: a pixel's stair is not the shape)
     const even = (r) => r.map((_, i) => { let s = 0, k = 0; for (let j = Math.max(0, i - 2); j <= Math.min(r.length - 1, i + 2); j++) { s += r[j]; k++; } return s / k / res; });
     const A = even(ra), B = even(rb);
+    // (a stroke cut at an apex is as wide as it usually is: at the corner its normal runs along the next stroke)
+    if (apex) for (const r of [A, B]) { const m = r.slice().sort((x, y) => x - y)[r.length >> 1] * 1.15; for (let i = 0; i < r.length; i++) if (r[i] > m) r[i] = m; }
     // (only a loose end stops short; a column narrower than `tip` between two others, a leaf's vein in its outline, is
     // sewn `tip` wide: cut out, the vein was lost)
     let i0 = 0, i1 = q.length - 1;
@@ -429,12 +461,33 @@ function columnNets(px, more, w, h, own, res, toMm, dotted) {
     const s = arclen(p), K = steadySlant(p, s, COLUMNS.steady * stroke / res);
     E.push({ a, b, p, s, K, A: A.slice(i0, i1 + 1).map((v) => Math.max(lo, v - in2)), B: B.slice(i0, i1 + 1).map((v) => Math.max(lo, v - in2)) });
   }
+  // (where three or more strokes meet, the two that run on through each other are one stroke, and the others are
+  // branches off it: an E's middle arm off its stem, an A's bar off each leg. A branch's satin stops COLUMNS.lap mm
+  // inside the stroke it joins. Sewn to the node at the stroke's middle, arm and stem lay across each other over half
+  // the stem's width with both their underlays, a knot of thread at every joint)
+  if (COLUMNS.lap) {
+    const ends = new Map(), dir = (e, atA) => { const p = atA ? e.p : e.p.slice().reverse(), s = arclen(p), far = Math.min(s[s.length - 1], stroke / res); let j = 1; while (j < p.length - 1 && s[j] < far) j++; const L = Math.hypot(p[j][0] - p[0][0], p[j][1] - p[0][1]) || 1; return [(p[j][0] - p[0][0]) / L, (p[j][1] - p[0][1]) / L]; };
+    const half = (e) => { const v = e.A.map((a, i) => a + e.B[i]).sort((x, y) => x - y); return v[v.length >> 1] / 2; };
+    for (const e of E) { if (e.a === e.b) continue; for (const atA of [true, false]) { const k = atA ? e.a : e.b; if (!ends.has(k)) ends.set(k, []); ends.get(k).push({ e, atA, u: dir(e, atA) }); } }
+    for (const list of ends.values()) {
+      if (list.length < 3) continue;
+      let best = -0.7, pair = null;
+      for (let i = 0; i < list.length; i++) for (let j = i + 1; j < list.length; j++) { const d = list[i].u[0] * list[j].u[0] + list[i].u[1] * list[j].u[1]; if (d < best) { best = d; pair = [list[i], list[j]]; } }
+      if (!pair) continue;
+      const cut = Math.max(0, Math.max(half(pair[0].e), half(pair[1].e)) - COLUMNS.lap);
+      // (and is as wide as the branch usually is: by the joint its normal runs along the stroke it joins)
+      for (const t of list) if (!pair.includes(t)) { t.e[t.atA ? "ta" : "tb"] = cut; t.e.A0 ||= t.e.A.slice(); t.e.B0 ||= t.e.B.slice(); for (const r of [t.e.A, t.e.B]) { const m = r.slice().sort((x, y) => x - y)[r.length >> 1] * 1.1; for (let i = 0; i < r.length; i++) if (r[i] > m) r[i] = m; } }
+    }
+  }
   // (connected sets of centre lines: each one walk)
   const root = new Map(), find = (k) => { while (root.get(k) !== k) k = root.get(k); return k; };
   for (const e of E) { for (const k of [e.a, e.b]) if (!root.has(k)) root.set(k, k); root.set(find(e.a), find(e.b)); }
   const nets = new Map();
   for (const e of E) { const k = find(e.a); if (!nets.has(k)) nets.set(k, []); nets.get(k).push(e); }
-  const out = [...nets.values()].map((edges) => ({ edges, W: stroke / res, dotted }));
+  // (whether a point, mm, lies on the piece's ink: `netStitches` keeps every satin stitch's ends on it)
+  const m0 = toMm([[ox, oy]])[0], m1 = toMm([[ox + 1, oy]])[0], m2 = toMm([[ox, oy + 1]])[0], det = (m1[0] - m0[0]) * (m2[1] - m0[1]) - (m2[0] - m0[0]) * (m1[1] - m0[1]);
+  const ink = (X, Y) => { const u = X - m0[0], v = Y - m0[1]; return at((u * (m2[1] - m0[1]) - v * (m2[0] - m0[0])) / det, (v * (m1[0] - m0[0]) - u * (m1[1] - m0[1])) / det); };
+  const out = [...nets.values()].map((edges) => ({ edges, W: stroke / res, dotted, ink }));
   let hit = 0;
   for (const i of px) { const x = i % w, y = (i - x) / w; if (cov[(y - oy) * cw + x - ox]) hit++; }
   out.cover = hit / px.length;
@@ -481,17 +534,24 @@ function solidity(px, w) {
 // leaf's half, 0 to 4 mm across, sewed as a fan; an outline is even). Else the piece stays a fill.
 function plain(nets) {
   let all = 0, short = 0;
-  const wd = [];
+  const wd = [], near = [];
   for (const net of nets) for (const e of net.edges) {
     const L = e.s[e.s.length - 1];
     all += L;
     if (e.a !== e.b && L < COLUMNS.stub * net.W) short += L;
-    for (let i = 0; i < e.s.length; i++) if (e.s[i] > net.W && L - e.s[i] > net.W) wd.push(e.A[i] + e.B[i]);
+    // (as measured, `A0`: not as a branch was evened by its joint)
+    const A = e.A0 || e.A, B = e.B0 || e.B;
+    for (let i = 0; i < e.s.length; i++) { if (e.s[i] > net.W && L - e.s[i] > net.W) wd.push(A[i] + B[i]); if (e.s[i] > net.W / 2 && L - e.s[i] > net.W / 2) near.push(A[i] + B[i]); }
   }
-  if (!all || short > COLUMNS.short * all) return false;
+  if (!all) return false;
+  const spreadOf = (v) => { v.sort((x, y) => x - y); return v.length < 10 ? 1 : v[Math.floor(0.9 * (v.length - 1))] / v[Math.floor(0.1 * (v.length - 1))]; };
+  // (short strokes between junctions are a letter's when they are all one width, COLUMNS.letter, and together
+  // COLUMNS.run widths long: an E, an H, an A. A ragged patch's are every width, and a fat letter's X is four stubs
+  // that sew as a knot. A small letter's strokes are each under two widths: measured from half a width off their ends)
+  if (short > COLUMNS.short * all) { const v = wd.length >= 10 ? wd : near; return v.length >= 10 && all >= COLUMNS.run * nets[0].W && spreadOf(v) <= COLUMNS.letter; }
+  const spread = spreadOf(wd);
   if (wd.length < 10) return true;
-  wd.sort((x, y) => x - y);
-  if (wd[Math.floor(0.9 * (wd.length - 1))] <= COLUMNS.even * wd[Math.floor(0.1 * (wd.length - 1))]) return true;
+  if (spread <= COLUMNS.even) return true;
   // (or uneven only as a taper is: along each centre line the width rises and falls at most `taper` times its range,
   // a brush stroke narrowing to its point (once) or a leaf's half swelling and narrowing again (twice); a ragged
   // patch's width goes up and down all along it)
@@ -532,13 +592,44 @@ function netStitches(net, start, sat) {
     const e = E[0], fwd = start === e.a, p = fwd ? e.p : e.p.slice().reverse(), c = column(e, p, fwd);
     return satin(p, c.W, sat.gap, COLUMNS.pull + sat.pull, false, true, null, (s) => [c.a(s), c.b(s), c.k(s)]);
   }
+  // (no satin stitch ends off the ink, COLUMNS.past mm at most: a stitch's end out there is drawn back along the
+  // stitch. A mitred A's point stood 3.6 mm over the letter, an arm's end 0.8 mm past its ink: 2026-11, the owner's
+  // "the V is bigger than the other letters")
+  const keep = (q) => {
+    if (!net.ink || !COLUMNS.past) return q;
+    for (let i = 0; i < q.length; i++) {
+      const o = q[i - 1] || q[i + 1]; if (!o) continue;
+      const L = Math.hypot(o[0] - q[i][0], o[1] - q[i][1]); if (L < 0.2) continue;
+      const u = [(o[0] - q[i][0]) / L, (o[1] - q[i][1]) / L];
+      let t = 0;
+      while (t < 0.6 * L && !net.ink(q[i][0] + u[0] * (t + COLUMNS.past), q[i][1] + u[1] * (t + COLUMNS.past))) t += 0.1;
+      if (t) { q[i][0] += u[0] * t; q[i][1] += u[1] * t; }
+    }
+    // (and a stitch wholly off the ink is not sewn: a mitre's point past a letter's flat top)
+    const on = ([x, y]) => { for (const [a, b] of [[0, 0], [1, 0], [-1, 0], [0, 1], [0, -1]]) if (net.ink(x + a * COLUMNS.past, y + b * COLUMNS.past)) return true; return false; };
+    for (let i = q.length - 1; i >= 0; i--) if (!on(q[i])) q.splice(i, 1);
+    return q;
+  };
+  // (the part of a line from s0 to s1 mm along it)
+  const span = (p, s0, s1) => {
+    const s = arclen(p), o = [], pt = (t) => { let j = 1; while (j < p.length - 1 && s[j] < t) j++; const f = s[j] > s[j - 1] ? (t - s[j - 1]) / (s[j] - s[j - 1]) : 0; return [p[j - 1][0] + (p[j][0] - p[j - 1][0]) * f, p[j - 1][1] + (p[j][1] - p[j - 1][1]) * f]; };
+    o.push(pt(s0)); for (let j = 0; j < p.length; j++) if (s[j] > s0 + 1e-6 && s[j] < s1 - 1e-6) o.push(p[j]); o.push(pt(s1));
+    return o;
+  };
   const out = [];
-  for (const [p, kind, k] of tour(E.map((e) => [e.a, e.b, e.p]), start)) {
-    const e = E[k], fwd = p[0] === e.p[0] && p[1] === e.p[1], c = column(e, p, fwd);
+  for (const [p0, kind, k] of tour(E.map((e) => [e.a, e.b, e.p]), start)) {
+    const e = E[k], fwd = p0[0] === e.p[0] && p0[1] === e.p[1], c0 = column(e, p0, fwd);
+    // (a branch's stitches start and stop short of the stroke it joins: the way to the node is a plain run)
+    let t0 = (fwd ? e.ta : e.tb) || 0, t1 = (fwd ? e.tb : e.ta) || 0;
+    if (c0.L - t0 - t1 < 1) t0 = t1 = 0;
+    const cutShort = t0 || t1, p = cutShort ? span(p0, t0, c0.L - t1) : p0;
+    const c = cutShort ? { ...c0, L: c0.L - t0 - t1, a: (s) => c0.a(s + t0), b: (s) => c0.b(s + t0), k: (s) => c0.k(s + t0) } : c0;
+    if (t0) out.push(...run(span(p0, 0, t0), 1.2));
     if (kind === "run") {
-      if (c.mid >= sat.zigzagFrom) out.push(p[0], ...satin(p, c.W, 2.5, 0, false, false, (t) => Math.max(0.05, c.a(t * c.L) + c.b(t * c.L) - 0.8)), p[p.length - 1]);
+      if (c.mid >= sat.zigzagFrom) out.push(p[0], ...keep(satin(p, c.W, 2.5, 0, false, false, (t) => Math.max(0.05, c.a(t * c.L) + c.b(t * c.L) - 0.8))), p[p.length - 1]);
       else out.push(...run(p, 1.2));
-    } else out.push(...satin(p, c.W, sat.gap, COLUMNS.pull + sat.pull, false, true, null, (s) => [c.a(s), c.b(s), c.k(s)], { mitre: true }));
+    } else out.push(...keep(satin(p, c.W, sat.gap, COLUMNS.pull + sat.pull, false, true, null, (s) => [c.a(s), c.b(s), c.k(s)], { mitre: true })));
+    if (t1) out.push(...run(span(p0, c0.L - t1, c0.L), 1.2));
   }
   return out;
 }
