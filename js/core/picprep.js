@@ -208,7 +208,8 @@ export function pictureImage(bitmap, box, w, h) {
 export function chooseStyle(f, size) {
   const { line, wide, inks } = STYLE, k = (wide * f.long) / 2;
   const thin = f.thick.reduce((a, v, r) => a + (r > 0 && r <= k ? v : 0), 0);
-  if (f.ink > 0 && thin >= line && (f.colours || 0) <= inks) {
+  // (a picture of words is sewn as lettering, Filled: picjob.js `wordsShare`)
+  if (f.ink > 0 && thin >= line && (f.colours || 0) <= inks && !(f.words >= 0.6)) {
     return { style: "line", start: true, line: +thin.toFixed(3), why: "Looks like a line drawing, so it's sewn as one." };
   }
   return { style: "fill", start: false, line: +thin.toFixed(3), why: "" };

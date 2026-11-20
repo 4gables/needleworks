@@ -13,6 +13,16 @@ import { artPicture, artShapes, artStyle } from "./core/artcheck.js";
 // fill settings reuse them), and the last labelled working copy (moving sliders that don't change it is fast); `ref`:
 // the learned copy labelled with the most colours, kept per picture, for what's left out (keptParts)
 let model = null, labelled = null, ref = null;
+// How much of a picture's ink is lettering (0-1): the share lying in rows of letters (artcheck.js `artShapes`, the
+// learned copy taken as 100 mm). A picture of words is not a line drawing, however thin its strokes: started as one,
+// its letters were joined by the lines between them (2026-11).
+function wordsShare(a) {
+  const bg = a.colors.find((c) => c.background)?.id ?? -2, rows = artShapes(a, Math.max(a.w, a.h) / 100).rows, inRow = new Uint8Array(a.w * a.h);
+  for (const r of rows) for (let y = Math.max(0, r.box[1]); y <= Math.min(a.h - 1, r.box[3]); y++) for (let x = Math.max(0, r.box[0]); x <= Math.min(a.w - 1, r.box[2]); x++) inRow[y * a.w + x] = 1;
+  let ink = 0, words = 0;
+  for (let i = 0; i < a.w * a.h; i++) if (a.labels[i] >= 0 && a.labels[i] !== bg) { ink++; words += inRow[i]; }
+  return ink ? +(words / ink).toFixed(3) : 0;
+}
 export function pictureJob(data) {
   const { key, learn, img, crop, opts, pick } = data;
   {
@@ -22,7 +32,7 @@ export function pictureJob(data) {
     // only the colours and where each lies: the page cuts and sizes the picture by what will be sewn
     if (!img) {
       // (`pick`: what the page needs to start a fresh picture in the style a person would pick, core/artcheck.js)
-      if (pick) { model.full ||= labelWith(learn, m); model.art ||= artPicture(learn, model.full); model.pick ||= { ...artStyle(learn, labelWith(learn, m, undefined, { inside: "none" })), flat: +m.flat.toFixed(3), blend: model.art.blend, colours: model.art.colours }; }
+      if (pick) { model.full ||= labelWith(learn, m); model.art ||= artPicture(learn, model.full); if (!model.pick) { const plain = labelWith(learn, m, undefined, { inside: "none" }); model.pick = { ...artStyle(learn, plain), words: wordsShare(plain), flat: +m.flat.toFixed(3), blend: model.art.blend, colours: model.art.colours }; } }
       return { measure: true, key, flat: +m.flat.toFixed(3), boxes: m.boxes, colors: m.colors.map(({ id: i, background, inside }) => ({ id: i, background, inside })), ...(pick ? { pick: model.pick } : {}) };
     }
     // (a line drawing draws the edges of colours: the fabric's colour inside the design stays fabric)
