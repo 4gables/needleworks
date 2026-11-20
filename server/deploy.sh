@@ -3,6 +3,7 @@
 # in (AWS CloudShell): bash server/deploy.sh [region]
 # Everything is named needleworks*, apart from the account's other things, and sized to stay inside the free
 # allowance: one Lambda (3 at once at most), one S3 bucket (files deleted after 30 days), one on-demand table.
+# (x86 with 3 GB: a 180 mm picture took 24 s on arm64 with 1.8 GB and 18 s so; this Mac takes 6. 2026-11-19)
 set -euo pipefail
 REGION=${1:-us-west-2}; NAME=needleworks; export AWS_DEFAULT_REGION=$REGION AWS_PAGER=""
 ACCT=$(aws sts get-caller-identity --query Account --output text)
@@ -39,10 +40,10 @@ rm -rf /tmp/nw /tmp/nw.zip; mkdir -p /tmp/nw; cp -r js server /tmp/nw/; echo '{"
 
 echo "== function $NAME"
 if aws lambda get-function --function-name "$NAME" >/dev/null 2>&1; then
-  aws lambda update-function-code --function-name "$NAME" --zip-file fileb:///tmp/nw.zip >/dev/null
+  aws lambda update-function-code --function-name "$NAME" --architectures x86_64 --zip-file fileb:///tmp/nw.zip >/dev/null
   aws lambda wait function-updated --function-name "$NAME"
 else
-  aws lambda create-function --function-name "$NAME" --runtime nodejs22.x --architectures arm64 --handler server/aws.handler --memory-size 1769 --timeout 60 \
+  aws lambda create-function --function-name "$NAME" --runtime nodejs22.x --architectures x86_64 --handler server/aws.handler --memory-size 3008 --timeout 60 \
     --role "arn:aws:iam::$ACCT:role/$ROLE" --environment "Variables={BUCKET=$BUCKET,TABLE=$TABLE,PER_MINUTE=60}" --zip-file fileb:///tmp/nw.zip >/dev/null
   aws lambda wait function-active --function-name "$NAME"
   aws lambda put-function-concurrency --function-name "$NAME" --reserved-concurrent-executions 3 >/dev/null
