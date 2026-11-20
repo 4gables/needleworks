@@ -4,7 +4,7 @@
 // tatami fill.
 // Other styles: line drawing (`lineArt`) and cross-stitch (`crossStitch`).
 import { labOf } from "./colour.js";
-import { Design } from "./design.js";
+import { Design, UNDER } from "./design.js";
 import { FILL, FILL_PATTERNS, SEWN, WORN, fillPolygon, makeRouter, routeBudget, routeFill, tatami } from "./fill.js";
 import { arclen, followRun, normals, resample, run, satin } from "./geom.js";
 import { MARGIN } from "./machines.js";
@@ -958,7 +958,9 @@ function build(img, analysis, opts) {
       const shaded = sh.rows(col.id, comp, mask, { spacing: o.density, stitch: 3.5, pull: widthMm < 2 ? 0.05 : PICTURES.pull });
       const under = shaded ? shaded.under : tatami(mask, comp, res, { angle: angle + 90, spacing: UNDERLAY.rows, stitch: 3, inset: 0.4, pull: 0 });
       const fill = shaded ? shaded.fill : tatami(mask, comp, res, { angle, spacing: o.density, stitch: 3.5, pull: widthMm < 2 ? 0.05 : PICTURES.pull });
-      blocks.push({ centre, paths: routeFill([under, fill], comp, mask, res, budget, WORN, false, 0, shaded && under2 ? cellOf(comp) : null, PICTURES.edge, shaded && under2 ? 90 : 30).map(toMm), kind: "fill", comp: comp.id, thread: fillThread(mine.length), meant: dot(comp.id) || (mark(comp.id) && size[comp.id] < 2 * dotPx) });
+      // (the underlay's points are marked as they turn into mm: core/design.js `UNDER`, the paid build's preview)
+      const lay = new Set(under.flat()), mmOf = (p) => p.map((q) => { const m = [(q[0] - cx) / res, (q[1] - cy) / res]; if (lay.has(q)) UNDER.add(m); return m; });
+      blocks.push({ centre, paths: routeFill([under, fill], comp, mask, res, budget, WORN, false, 0, shaded && under2 ? cellOf(comp) : null, PICTURES.edge, shaded && under2 ? 90 : 30).map(mmOf), kind: "fill", comp: comp.id, thread: fillThread(mine.length), meant: dot(comp.id) || (mark(comp.id) && size[comp.id] < 2 * dotPx) });
       filled[comp.id] = 1;
     }
     if (anyThin) {

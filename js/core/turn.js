@@ -3,5 +3,6 @@
 
 // A quarter turn of a pattern (y down): clockwise turns a sideways design into the machine's hoop, and back.
 export function turnPattern(p, clockwise = true) {
-  return { ...p, stitches: p.stitches.map(([x, y, c]) => (clockwise ? [-y, x, c] : [y, -x, c])) };
+  // (a stitch's fourth value, its role, goes with it: core/design.js `ROLE`)
+  return { ...p, stitches: p.stitches.map((s) => { const [x, y, c] = s, t = clockwise ? [-y, x, c] : [y, -x, c]; if (s.length > 3) t.push(s[3]); return t; }) };
 }
