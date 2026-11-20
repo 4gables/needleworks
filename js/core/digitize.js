@@ -555,7 +555,7 @@ function netStitches(net, start, sat) {
 //   C to H at whatever height the last stroke ended: the word read as one scribble). The machine leaves a jump that
 //   short uncut, so each is a thread to snip, as between the Design tab's print letters, and is counted.
 // Returns { labels (a copy when anything changed), px: 1 on every pixel of such a row, rows }.
-const TEXT = { small: 6, least: 2, pad: 0.4, word: 3, flat: 0.55, pen: 0.8, bold: 0.2, satin: 0.7, column: 5, line: 3.2, least2: 0.35, most: 0.7 };
+const TEXT = { small: 9, least: 2, pad: 0.4, word: 3, flat: 0.55, pen: 0.8, bold: 0.2, satin: 0.7, column: 5, line: 3.2, least2: 0.35, most: 0.7 };
 // How wide (mm, needle to needle) a small letter's strokes are sewn, by the letters' height: thread is 0.4 mm thick, so
 // a satin shows 0.4 mm wider than it is sewn and a 0.6 mm satin made a 1 mm stroke on a 3 mm letter, every counter
 // shut (2026-11: SCHOOL OF MEDICINE at 3 mm read as blobs). Under TEXT.line mm tall a stroke is one line of thread three
@@ -681,6 +681,16 @@ function build(img, analysis, opts) {
   const d = new Design(hoop, { ease: o.ease !== false });
   const used = colors.filter((c) => !c.background && c.area > 0 && !(o.skip || []).includes(c.id))
     .sort((a, b) => b.lightness - a.lightness);   // light first, dark details on top
+  // Small lettering on a filled colour is sewn after that colour, whichever is lighter: white words on a navy oval
+  // were sewn first and the navy's rows, which reach 0.2 mm past every edge, closed over their half-millimetre
+  // strokes (2026-11). The colour the row lies in: what most of its box is, the letters apart.
+  for (const r of lettered.list || []) {
+    const n = new Map();
+    for (let y = r.box[1]; y <= r.box[3]; y++) for (let x = r.box[0]; x <= r.box[2]; x++) { const v = labels[y * w + x]; if (v !== r.col) n.set(v, (n.get(v) || 0) + 1); }
+    const [on, most] = [...n].sort((a, b) => b[1] - a[1])[0] || [], all = [...n.values()].reduce((a, b) => a + b, 0);
+    const at = used.findIndex((c) => c.id === r.col), under = used.findIndex((c) => c.id === on);
+    if (under > at && at >= 0 && most > 0.6 * all) used.splice(under, 0, ...used.splice(at, 1));
+  }
   const summary = [], stitched = new Set(used.map((c) => c.id));
   const fine = { narrowMm2: 0, hairlines: 0, inkMm2: 0, folded, left: 0, columns: 0, paper: Math.round(paper.mm2), faint: faint.lines, shaded: Math.round(sh.area), shades: sh.found || 0, offer: sh.offer, ...(o.shadeDebug ? { shadeDebug: sh.debug } : {}) };   // details too small to stitch cleanly (shown as a hint)
   for (let i = 0; i < w * h; i++) if (stitched.has(labels[i])) fine.inkMm2++;
