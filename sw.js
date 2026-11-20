@@ -11,8 +11,8 @@
 // cache.
 // (`SET`: a fingerprint of the list below, written with the hashes. It is part of the cache's name, so a release whose
 // files changed can never install into the cache the running one is serving from, version number bumped or not.)
-const SET = "2ee2b9b09df4";
-const CACHE = `needleworks-v42-${SET}`, SHARED = "needleworks-shared";
+const SET = "6a25911df46a";
+const CACHE = `needleworks-v43-${SET}`, SHARED = "needleworks-shared";
 const FILES = {
   "index.html": "3548c7c1922462dc061258df315b66d6318d45d014a973685caf0228f89d472f",
   "manifest.webmanifest": "82f627e1def5254866cf364a55a1c2a85e2c3dd61abeeb890829362969fcfb63",
@@ -67,7 +67,7 @@ const FILES = {
   "js/core/threads.js": "2f843722671915cef7d2aad9344f171040e59d2cf70aa43b139da9dd4229fc1f",
   "js/doctor.js": "5653d26f544b9f11cd96ee2381bebae5c5c98ae74a6d78f690d70b2045820b83",
   "js/opened.js": "c0e40a9c5328d974ba46d62d25fcd49ce8308ef1b33f16ff829bef5fd225dc71",
-  "js/artwords.js": "2a11e7dd198bc1aeffab3bc276046b11cffc87ffc63279b966eb2cd8529937e3",
+  "js/artwords.js": "41c08b6a95918621f461dbb9a2eff08f808618b252c160d7316ce6da82c06751",
   "js/picture.js": "3a83bfec598bf043fb21133276ce05e5cc8c3ecbf9b243d253fea3772eacca81",
   "js/threadui.js": "8ceabd64367deaaa390dd1b99ff44ae7f6ee9a461d188c77e9c35263747af525",
   "js/along.js": "5877433450bc9b2e8c474a46829e506b62a16b805fee20dc6bd68284239e4c7c",
@@ -121,7 +121,7 @@ const FILES = {
   "js/wire.js": "425d2623b9bb3f28d35c109996c01d8ddf7f540c92f359ba3dcf1c9a6e57298f",
   "js/core/areas.js": "0e5729ec0ae789f426adc49ecc1f2d3e9a21b8c47dd3cc06639f8e9db49801e4",
   "js/core/grid.js": "c213a2103ab299554d805123c3172f7a2aa2a5283c894154aa8dda76008167cb",
-  "js/core/limits.js": "b71e5e934d1735cda51f8f4e7f131f4e3570cc08f57fb12f119afe2b2af09816",
+  "js/core/limits.js": "65e92548afe9e1278a38f87324de126048c83713e30c4eb6cdf66bd3dc8ced39",
   "js/core/picprep.js": "66d84de80b018aa3b1d5dcf440c668ca9650d75cbf82816a8c4cd506678e6bc8",
   "js/core/turn.js": "6b2c99d6192fef78e95e488126776194a368a0e89b1bd48009f2123ce7394081",
 };
