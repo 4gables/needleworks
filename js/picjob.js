@@ -23,7 +23,7 @@ export function pictureJob(data) {
     if (!img) {
       // (`pick`: what the page needs to start a fresh picture in the style a person would pick, core/artcheck.js)
       if (pick) { model.full ||= labelWith(learn, m); model.art ||= artPicture(learn, model.full); model.pick ||= { ...artStyle(learn, labelWith(learn, m, undefined, { inside: "none" })), flat: +m.flat.toFixed(3), blend: model.art.blend, colours: model.art.colours }; }
-      return { measure: true, key, boxes: m.boxes, colors: m.colors.map(({ id: i, background, inside }) => ({ id: i, background, inside })), ...(pick ? { pick: model.pick } : {}) };
+      return { measure: true, key, flat: +m.flat.toFixed(3), boxes: m.boxes, colors: m.colors.map(({ id: i, background, inside }) => ({ id: i, background, inside })), ...(pick ? { pick: model.pick } : {}) };
     }
     // (a line drawing draws the edges of colours: the fabric's colour inside the design stays fabric)
     // (`areas`: the areas the person set to sewn or empty, core/palette.js `applyAreas`)
@@ -34,7 +34,8 @@ export function pictureJob(data) {
     // a thread picked on a colour's chip (`swap`: id -> { hex: a Brother thread's }) sews that colour instead of the one it
     // was matched to; where it comes in the sewing order stays (its lightness is the picture's)
     const a = opts.swap ? { ...p, colors: p.colors.map((c) => (opts.swap[c.id] ? { ...c, hex: opts.swap[c.id].hex, thread: nearestBrotherThread(opts.swap[c.id].hex) } : c)) } : p;
-    const { design, summary, fine, res, origin, labels } = digitize(img, a, opts);
+    // (`img2`: the same cut of the picture twice as fine, for small lettering)
+    const { design, summary, fine, res, origin, labels } = digitize(img, a, data.img2 ? { ...opts, fine: data.img2 } : opts);
     // (what of the picture was left out, measured on the learned copy: the same parts at every Size and colour count)
     model.full ||= labelWith(learn, m);
     if (ref?.key !== data.ref) ref = { key: data.ref, ink: pictureInk(learn, labelWith(learn, learnColours(learn, { ...opts, colors: MOST }))) };

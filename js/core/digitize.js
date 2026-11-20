@@ -977,13 +977,36 @@ function build(img, analysis, opts) {
       const thick = { w, h, data: thin.data.slice() };
       // (not small lettering: a pixel thicker, letters a pixel or two apart joined)
       for (let i = 0; i < w * h; i++) if (thin.data[i] && !(lettered.px && lettered.px[i])) { const x = i % w; if (x < w - 1) thick.data[i + 1] = 1; if (i + w < w * h) thick.data[i + w] = 1; }
-      const walks = order(skeletonEdges(thick, 2, { spur: 1 })).map((seq) => {
+      // (small lettering apart: its short strokes are letters' parts, not thinning noise. A t's crossbar and an f's
+      // are a stroke's width long each side of the stem once thinned, and were cut as spurs: "University of" sewed
+      // as "Universily ol" (2026-11). Its dead ends are kept from half a stroke, and carried on to the ink's edge)
+      const inRow = lettered.px ? { w, h, data: thick.data.map((v, i) => (v && lettered.px[i] ? 1 : 0)) } : null;
+      const other = inRow ? { w, h, data: thick.data.map((v, i) => (v && !lettered.px[i] ? 1 : 0)) } : thick;
+      // Where the page sent the picture twice as fine (`o.fine`, flat pictures: picprep.js `finer`), the letters' centre
+      // lines are read from that copy: at 8 px a mm a 3 mm letter is 24 px tall and its strokes 2-3 px, so an M's
+      // notch, a crossbar and the gap between two letters are a pixel or none. A fine pixel is a letter's when it
+      // lies in a row of this colour and this colour is the nearest of the picture's to it (see-through: none).
+      const F = o.fine && o.fine.width === 2 * w && o.fine.height === 2 * h ? o.fine : null;
+      let textLines = [];
+      if (inRow && F) {
+        const rgb = colors.map((c) => hexToRgb(c.picture || c.hex)), mine = colors.indexOf(colors.find((c) => c.id === col.id)), hi = { w: 2 * w, h: 2 * h, data: new Uint8Array(4 * w * h) };
+        for (let Y = 0; Y < 2 * h; Y++) for (let X = 0; X < 2 * w; X++) {
+          if (lettered.px[(Y >> 1) * w + (X >> 1)] !== col.id + 1) continue;
+          const k = (Y * 2 * w + X) * 4, d = F.data; if (d[k + 3] <= 127) continue;
+          let best = -1, bd = Infinity;
+          for (let c = 0; c < rgb.length; c++) { const e = (d[k] - rgb[c][0]) ** 2 + (d[k + 1] - rgb[c][1]) ** 2 + (d[k + 2] - rgb[c][2]) ** 2; if (e < bd) { bd = e; best = c; } }
+          if (best === mine) hi.data[Y * 2 * w + X] = 1;
+        }
+        textLines = skeletonEdges(hi, 4, { spur: 0.5, reach: true, dots: true }).map(([a, b, p]) => [`t${a}`, `t${b}`, p.map(([x, y]) => [(x + 0.5) / 2 - 0.5, (y + 0.5) / 2 - 0.5])]);
+      } else if (inRow) textLines = skeletonEdges(inRow, 2, { spur: 0.5, reach: true, dots: true }).map(([a, b, p]) => [`t${a}`, `t${b}`, p]);
+      const lines = [...skeletonEdges(other, 2, { spur: 1 }), ...textLines];
+      const walks = order(lines).map((seq) => {
         const mm = seq.map(([p, kind]) => [toMm(p), kind]);
         return { mm, len: mm.reduce((a, [p, kind]) => a + (kind === "run" ? arclen(p).at(-1) : 0), 0) };
       // (a piece under 1.5 mm of line is a dot: sewn four times over with two locks and a trim, beside a bigger piece
       // too; 17-43 per picture were kept for being within LINK of one. Unless it is one dash of a line broken into
       // dashes, none of them 1.5 mm, that is GROUP mm long in all: below)
-      }).filter((t) => t.len >= 0.4);
+      }).filter((t) => t.len >= 0.4 || (t.len >= 0.15 && inText(t.mm[0][0][0])));
       // A piece counts with the pieces of this line colour within LINK of it (the letters of a word, the dashes of a
       // broken stem): a group under GROUP mm of line in all is a speck (each one a trim and two locks), dropped.
       const LINK = 2, GROUP = 6;
@@ -1010,7 +1033,7 @@ function build(img, analysis, opts) {
       walks.forEach((t, i) => { const r = find(i), e = ext.get(r) || [Infinity, Infinity, -Infinity, -Infinity]; for (const [p] of t.mm) for (const [x, y] of p) { e[0] = Math.min(e[0], x); e[1] = Math.min(e[1], y); e[2] = Math.max(e[2], x); e[3] = Math.max(e[3], y); } ext.set(r, e); });
       const lineLike = (r) => { const e = ext.get(r); return Math.hypot(e[2] - e[0], e[3] - e[1]) >= 0.5 * total.get(r); };
       const sewn = (r) => long.get(r) || (lineLike(r) ? total.get(r) : 0);
-      for (const t of walks) t.text = t.len >= 1 && inText(t.mm[0][0][0]);
+      for (const t of walks) t.text = inText(t.mm[0][0][0]);
       for (let i = walks.length - 1; i >= 0; i--) if (walks[i].len < 1.5 && !walks[i].text && (long.get(find(i)) || !lineLike(find(i)))) walks[i].drop = true;
       walks.forEach((t, i) => {
         if (t.drop || (!t.text && sewn(find(i)) < GROUP)) return;
