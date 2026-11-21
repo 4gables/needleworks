@@ -12,7 +12,7 @@
 // (`SET`: a fingerprint of the list below, written with the hashes. It is part of the cache's name, so a release whose
 // files changed can never install into the cache the running one is serving from, version number bumped or not.)
 const SET = "85b25a19c969";
-const CACHE = `needleworks-v50-${SET}`, SHARED = "needleworks-shared";
+const CACHE = `needleworks-v51-${SET}`, SHARED = "needleworks-shared";
 const FILES = {
   "index.html": "3548c7c1922462dc061258df315b66d6318d45d014a973685caf0228f89d472f",
   "manifest.webmanifest": "82f627e1def5254866cf364a55a1c2a85e2c3dd61abeeb890829362969fcfb63",
