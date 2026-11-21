@@ -474,7 +474,9 @@ The cause, named in 2026-11-13 and parked: we stitch from pixel edges. ZigZag tr
   sewn by our fill; beside ZigZag's. Go on only if ours is as clean by eye and passes the checker. Done 2026-11-21
   (`js/core/trace.js`, `tests/trace_one.mjs`): blind judge preferred ours on both (BYU Y 4/5, Louisville L 5/5:
   true colour, white left as fabric, no seams); both pass the checker (density 9 and 11, 3 and 2 tiny). Our edge is
-  still a little serrated where ZigZag's is straight.
+  still a little serrated where ZigZag's is straight. The Windows box check: both of ours fit; both of ZigZag's fail
+  it (their PEC design box is not at the stitch minimum, the bug that sewed a design shifted and cut in half on a
+  real PE900: AGENTS.md "PEC design box"), so ZigZag's files are not safe on a PE900 as written.
 - [ ] **T2 Trace**: every Filled picture from smooth outlines; white is fabric (spec 3.10, 3.7); specks by area,
   thin parts kept (3.9); thin parts to satin or run, never fill (spec 8: ZigZag's density failure).
 - [ ] **T3 Edges**: fill rows end on the smooth outline at v39's cover; no serration.
