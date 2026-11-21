@@ -34,7 +34,7 @@ for c in ("gold", "red"):
         if (L[ring] == cr).mean() > 0.97: L[m] = cr
 out = Image.fromarray(np.dstack([C[L].astype(np.uint8), a.astype(np.uint8) * 255]))
 # 4. FATHER & | DAUGHTER on an arc round (765, 921), baseline radius rb, either side of the tip
-font = ImageFont.truetype(f"{S}/logo/Poppins-SemiBold.ttf", int(round(cap * 1000 / 701)))
+font = ImageFont.truetype(f"{S}/logo/Poppins-SemiBold.ttf", int(round(max(cap, 1) * 1000 / 701)))
 cx, cy = 767, 768
 def arc_text(text, start_deg, direction):
     # lay glyphs along the arc; direction -1: text ends at start_deg (left of the tip), +1: starts there
@@ -51,11 +51,12 @@ def arc_text(text, start_deg, direction):
         px = cx + rb * math.sin(math.radians(mid)); py = cy - rb * math.cos(math.radians(mid))
         out.alpha_composite(r, (int(round(px - (M + wch / 2))), int(round(py - cap * 2))))
         phi += wch / rb * 180 / math.pi
-arc_text("FATHER &", -gap_deg, -1)
-arc_text("DAUGHTER", gap_deg, +1)
+if cap > 0:
+    arc_text("FATHER &", -gap_deg, -1)
+    arc_text("DAUGHTER", gap_deg, +1)
 # 5. snap the new letters' soft edges to navy or cream (one thread each)
 o = np.array(out); rgb = o[..., :3].astype(int)
 Lf = np.abs(rgb[:, :, None, :] - C[None, None]).sum(3).argmin(2)
 o[..., :3] = C[Lf]
 Image.fromarray(o).save(f"{S}/logo/improved.png")
-print("old subtitle parts removed:", gone, "cap mm at 120 mm:", round(cap / 12.8, 2))
+print("old subtitle parts removed:", gone, "cap mm at 120 mm:", round(cap / 12.8, 2) if cap else "no subtitle")
