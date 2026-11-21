@@ -356,7 +356,6 @@ function columnNets(px, more, w, h, own, res, toMm, dotted, serif = 0, apex = 0,
     // (a short dead end is a serif's arm when it lies square to one stroke at its node and straight on from another,
     // or from its own twin: an I's serif either side of its stem, an E's past its top arm. A V's or an A's point leaves
     // a dead end too, straight on from both legs and square to neither: dropped, or the point is a joint of three)
-    if (globalThis.SK) globalThis.SK.push({ serif, apex, stroke, cw, ch, mask: Array.from(pm.data).join(''), es: es.map((e) => [String(e[0]), String(e[1]), e[2].map((q) => [+q[0].toFixed(1), +q[1].toFixed(1)])]) });
     if (serif) {
       const deg = new Map(), dirAt = (e, k) => { const p = e[0] === k ? e[2] : e[2].slice().reverse(); let j = 1, d = 0; while (j < p.length - 1 && d < stroke) { d += Math.hypot(p[j][0] - p[j - 1][0], p[j][1] - p[j - 1][1]); j++; } const L = Math.hypot(p[j][0] - p[0][0], p[j][1] - p[0][1]) || 1; return [(p[j][0] - p[0][0]) / L, (p[j][1] - p[0][1]) / L]; };
       for (const e of es) for (const k of [e[0], e[1]]) deg.set(k, (deg.get(k) || 0) + 1);
@@ -369,7 +368,6 @@ function columnNets(px, more, w, h, own, res, toMm, dotted, serif = 0, apex = 0,
         return on && (square || deg.get(k) >= 4);
       });
     }
-    if (globalThis.SK) globalThis.SK.push({ after: es.map((e) => [String(e[0]), String(e[1]), e[2].length]) });
     lineEnds(es, pm, stroke); }
   if (!es.length) {
     // (the long axis: the shape's second moments)
@@ -682,7 +680,17 @@ function netStitches(net, start, sat) {
     const c = cutShort ? { ...c0, L: c0.L - t0 - t1, a: (s) => c0.a(s + t0), b: (s) => c0.b(s + t0), k: (s) => c0.k(s + t0) } : c0;
     if (t0) out.push(...run(span(p0, 0, t0), 1.2));
     if (kind === "run") {
-      if (c.mid >= sat.zigzagFrom) out.push(p[0], ...keep(satin(p, c.W, 2.5, 0, false, false, (t) => Math.max(0.05, c.a(t * c.L) + c.b(t * c.L) - 0.8))), p[p.length - 1]);
+      if (c.mid >= sat.zigzagFrom) {
+        // (from COLUMNS.edges mm across, an edge run 0.4 mm inside each side first, out along one and back along the
+        // other, then the zigzag out: sold designs hold a wide column's edges so, and the owner's sewn letters showed
+        // their satin's sides pulled in and the fabric between the stitches. Narrower, the zigzag alone)
+        if (COLUMNS.edges && c.mid >= COLUMNS.edges) {
+          const q = resample(p, 0.5), sq = arclen(q), nq = normals(q);
+          const side = (sg) => q.map((pt, i) => { const r = Math.max(0.1, (sg > 0 ? c.a(sq[i]) : c.b(sq[i])) - 0.4); return [pt[0] + nq[i][0] * sg * r, pt[1] + nq[i][1] * sg * r]; });
+          out.push(...keep(run(side(1), 2.0)), ...keep(run(side(-1).reverse(), 2.0)));
+        }
+        out.push(p[0], ...keep(satin(p, c.W, 2.5, 0, false, false, (t) => Math.max(0.05, c.a(t * c.L) + c.b(t * c.L) - 0.8))), p[p.length - 1]);
+      }
       else out.push(...run(p, 1.2));
     } else out.push(...keep(satin(p, c.W, sat.gap, COLUMNS.pull + sat.pull, false, true, null, (s) => [c.a(s), c.b(s), c.k(s)], { mitre: true })));
     if (t1) out.push(...run(span(p0, c0.L - t1, c0.L), 1.2));
@@ -1067,10 +1075,7 @@ function build(img, analysis, opts) {
           // (and only when it found serifs, more strokes than before: a thin arc gained no stroke, only a longer one
           // that "covered more" sewn askew, and a cat's eye came out a smear)
           // (a letter's may as well, by COLUMNS.gain: an Impact L's foot, shorter than its stem is wide, was left bare)
-          if (globalThis.DBG) globalThis.DBG.push({ alt: 1, n: alt.length, cover: +(alt.cover||0).toFixed(3), plain: alt.length ? plain(alt, letter) : null, edges: alt.map((n) => n.edges.map((e) => +(e.s[e.s.length - 1] / n.W).toFixed(2))) });
-          if (globalThis.DBG && letter && !plain(alt, letter)) for (const n of alt) for (const e of n.edges) { const v = (e.A0 || e.A).map((a, i) => a + (e.B0 || e.B)[i]); globalThis.DBG.push({ prof: v.filter((_, i) => i % 5 === 0).map((x) => +x.toFixed(2)), joins: e.joins, W: n.W }); }
           if (fine2(alt) && (count(alt) > count(nets) || letter) && (!fine2(nets) || alt.cover >= nets.cover + COLUMNS.gain)) nets = alt; }
-        if (globalThis.DBG) globalThis.DBG.push({ x: Math.round((q.px[0] % w) / res), A: +A.toFixed(1), W: +W.toFixed(2), whole, letter, cover: +(nets.cover||0).toFixed(3), plain: nets.length ? plain(nets, letter) : null, cut: cutAt, edges: nets.map((n) => n.edges.map((e) => +(e.s[e.s.length - 1] / n.W).toFixed(2))) });
         // (a letter is tried once more with its joints a short bridge apart made one, COLUMNS.knot strokes, and taken when
         // that leaves fewer joints and covers as much: where a fat X's strokes cross, thinning leaves two joints and a
         // bridge, and the X sewed as two bent strokes and a knot. Always so, an R's and an N's joints were bent)
