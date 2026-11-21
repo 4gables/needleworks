@@ -3,10 +3,9 @@
 // usage: node tests/trace_one.mjs RAW.rgba W H LONGEST_MM OUT.pes   (RAW: 8-bit RGBA rows, no header)
 import fs from "node:fs";
 import { Design } from "../js/core/design.js";
-import { fillPolygon } from "../js/core/fill.js";
 import { readEmbroidery, validatePES, writePES } from "../js/core/formats.js";
 import { hoop } from "../js/core/machines.js";
-import { FILLS, ROWS } from "../js/core/recipes.js";
+import { sewShape } from "../js/core/tracesew.js";
 import { tracePicture, TRACE } from "../js/core/trace.js";
 
 const [raw, Ws, Hs, mmS, out] = process.argv.slice(2);
@@ -27,16 +26,18 @@ console.log(`flat ${tr.flat.toFixed(3)}, traced in ${Date.now() - t0} ms: ${tr.c
 const all = tr.shapes.flatMap((s) => s.rings[0]), cx = (Math.min(...all.map((p) => p[0])) + Math.max(...all.map((p) => p[0]))) / 2, cy = (Math.min(...all.map((p) => p[1])) + Math.max(...all.map((p) => p[1]))) / 2;
 const d = new Design(hoop(undefined, "5x7"));
 // one block per colour, the colour with the most area first; each colour's shapes largest first
-const order = [...new Set(tr.shapes.map((s) => s.color))];
+const kinds = { satin: 0, fill: 0 }, order = [...new Set(tr.shapes.map((s) => s.color))];
 for (const c of order) {
   d.color(hex(tr.colors[c]));
   for (const s of tr.shapes.filter((q) => q.color === c)) {
     const rings = s.rings.map((l) => l.map(([x, y]) => [x - cx, y - cy]));
-    for (const p of fillPolygon(rings, { angle: 45, density: ROWS.solid, pull: FILLS.cotton.pull })) d.path(p);
+    const s2 = sewShape(rings); kinds[s2.kind]++;
+    for (const p of s2.paths) d.path(p);
   }
 }
 d.finish();
 const bytes = writePES(d.pattern()), v = validatePES(bytes, d.pattern(), hoop(undefined, "5x7"));
 if (!v.ok) { console.error("not written:", v.error); process.exit(1); }
 fs.writeFileSync(out, bytes);
+console.log(`sewn: ${kinds.satin} satin, ${kinds.fill} fill`);
 console.log(`${out}: ${readEmbroidery(bytes, out).stitches.filter((s) => s[2] === 0).length} stitches`);

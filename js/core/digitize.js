@@ -50,7 +50,7 @@ function boxOf({ w, h, data }, of = 1) {
   for (let y = 0, i = 0; y < h; y++) for (let x = 0; x < w; x++, i++) if (!data[i] === !of) { if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
   return x1 < 0 ? null : [x0, x1, y0, y1];
 }
-function distanceTransform(m) {
+export function distanceTransform(m) {
   const b = boxOf(m), { w, h } = m;
   return b ? cropDT(m, Math.max(0, b[0] - 1), Math.min(w - 1, b[1] + 1), Math.max(0, b[2] - 1), Math.min(h - 1, b[3] + 1), 0) : new Float64Array(w * h);
 }
@@ -326,7 +326,7 @@ function capJoint(r, s, atStart, zone, k) {
 // is measured across the shape along the normal (a round end narrows as the shape does; the distance to the edge
 // alone would sew it as a diamond), at most COLUMNS.cap times that distance at the centre line, so a junction's
 // other strokes don't count. A column stops where it is under COLUMNS.tip across.
-function columnNets(px, more, w, h, own, res, toMm, dotted, serif = 0, apex = 0, knots = 0, reachOut = false) {
+export function columnNets(px, more, w, h, own, res, toMm, dotted, serif = 0, apex = 0, knots = 0, reachOut = false) {
   let x0 = w, x1 = -1, y0 = h, y1 = -1;
   for (const i of [...px, ...more]) { const x = i % w, y = (i - x) / w; if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
   const ox = Math.max(0, x0 - 2), oy = Math.max(0, y0 - 2), cw = Math.min(w - 1, x1 + 2) - ox + 1, ch = Math.min(h - 1, y1 + 2) - oy + 1;
@@ -614,7 +614,7 @@ function smooth(e, turns, off = 0) {
 // Whether a stroke's centre lines make plain columns: few short strokes between junctions (a ragged patch thins to a
 // tangle of them, and each is a column turned its own way), and an even width along them away from their ends (a
 // leaf's half, 0 to 4 mm across, sewed as a fan; an outline is even). Else the piece stays a fill.
-function plain(nets, letter = false) {
+export function plain(nets, letter = false) {
   let all = 0, short = 0;
   const wd = [], near = [];
   for (const net of nets) for (const e of net.edges) {
@@ -658,7 +658,7 @@ function plain(nets, letter = false) {
 // across a zigzag 0.4 mm inside each edge, as lettering) and back as the satin, so a connected net sews in one go,
 // ending where it began (`tour`; the lettering engine's walk). A dot narrower than `zigzagFrom` is one satin from the
 // end the needle is at, with nothing under it.
-function netStitches(net, start, sat) {
+export function netStitches(net, start, sat) {
   const E = net.edges, pick = (arr, s, ss) => {
     let lo = 0, hi = ss.length - 1;
     if (s <= 0) return arr[0];
