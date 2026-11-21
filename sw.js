@@ -11,8 +11,8 @@
 // cache.
 // (`SET`: a fingerprint of the list below, written with the hashes. It is part of the cache's name, so a release whose
 // files changed can never install into the cache the running one is serving from, version number bumped or not.)
-const SET = "7fcf0c00d55d";
-const CACHE = `needleworks-v49-${SET}`, SHARED = "needleworks-shared";
+const SET = "85b25a19c969";
+const CACHE = `needleworks-v50-${SET}`, SHARED = "needleworks-shared";
 const FILES = {
   "index.html": "3548c7c1922462dc061258df315b66d6318d45d014a973685caf0228f89d472f",
   "manifest.webmanifest": "82f627e1def5254866cf364a55a1c2a85e2c3dd61abeeb890829362969fcfb63",
@@ -46,7 +46,7 @@ const FILES = {
   "js/core/brandcharts.js": "85f4772a2de19ab56691d984a8aad930b2c427cd34498c70f66933c6f09199be",
   "js/core/brands.js": "cb0a36b5fe3128de55654bdd350bdc86508f11fb089eb822bd73b7a26eba1c59",
   "js/core/design.js": "616cd759d665209a80236e18de9b230675db3626efb8ea08846cffbd7bb15e18",
-  "js/core/digitize.js": "db0cee68f9787d631c0019bcfce20294f78aa8179d535f1d5eff21f71cfafd06",
+  "js/core/digitize.js": "639b6cbfe07885e4778e21628ef1871793b4020c1c34f27389a70f28b68e1e61",
   "js/core/fonts.js": "eff92c64949a5983d3d2ae4804ff6cbf7ca1a6547998767f276c8d07b9cd26f9",
   "js/core/glyphs.js": "1aa94c2a28d8343fa6837d8f0591e325a9128063bfce81d968bf592feda6cbf3",
   "js/core/formats.js": "6c635b29d843e7eb112ad773f92f79b26ea0ad17769889104b271faa2915b76e",
@@ -58,7 +58,7 @@ const FILES = {
   "js/core/machines.js": "afd9fe6fc812a0b03d903fc54a374b3246ac27539c9cff7d5ea546ed9e81c135",
   "js/core/artcheck.js": "99346174e72d835c8f68fcf3ea48e781caa14b126328a6b7be804dd3d6f60aa4",
   "js/core/palette.js": "be3c5634876b2154853b75ca866eb9dbf23d94e11ea6d04f17a5e43193755403",
-  "js/core/recipes.js": "4a5cc98691645c39a40c7e26b8c8ceff32a1a71d94e21320693f3f133bc5baa0",
+  "js/core/recipes.js": "e6e3c690272684973585f0ec9f7fe96c31cac8a2c26dd9f33d534da602f07587",
   "js/core/raster.js": "fffd64cd4bf85d96ebbc3bb69f16a76f439415d176850625ea3294e9a9a54fa6",
   "js/core/regions.js": "4e24ba2c2d89c91a51bf3952db56ff4346d73783921a877911b97e1d45ad5813",
   "js/core/shade.js": "2eb89bf74a39de6a3d403d2e9e7c356931cc25fc8e7bd2351750f40ce30b477f",
