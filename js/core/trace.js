@@ -28,6 +28,8 @@ export const TRACE = {
   sigma: 0.5,        // wpx: smoothing along an outline between corners (spec 3.12)
   corner: 62.5,      // degrees: a turn this sharp over about 0.7 wpx is a corner, kept (spec 3.12)
   tol: 0.06,         // wpx: what simplifying may move a point
+  flat: 0.93,        // the share of solid pixels near a palette colour that makes a picture flat art (spec 3.3)
+  unexplained: 0.03, // share of ink further than RGB 40 from the palette and white: over it, not flat art
 };
 
 const lin = (v) => v / 255;
@@ -99,6 +101,73 @@ export function palette({ P, w, h }, k = TRACE.k) {
     }
   }
   return C.sort((a, b) => b.n - a.n).map((c) => c.c.map((v) => Math.round(v)));
+}
+
+// Colours found late (spec 3.5): a small accent may have had too few votes. A pixel is missing when it is solid, at
+// least RGB 25 from every palette colour and white, and its four neighbours are within 10 of it; missing pixels
+// within 20 of each other are one colour (running mean); a colour of enough pixels is added, most first, to 10.
+export function lateColours({ P, w, h }, pal, least = 3) {
+  const cs = [...pal, [255, 255, 255]], groups = [];
+  const px = (i) => [0, 1, 2].map((c) => (P[i * 4 + c] / Math.max(P[i * 4 + 3], 1e-6)) * 255);
+  const d = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
+  for (let y = 1; y < h - 1; y++) for (let x = 1; x < w - 1; x++) {
+    const i = y * w + x;
+    if (P[i * 4 + 3] < 0.98) continue;
+    const p = px(i);
+    if (cs.some((c) => d(p, c) < 25)) continue;
+    if ([i - 1, i + 1, i - w, i + w].some((j) => P[j * 4 + 3] < 0.98 || d(px(j), p) > 10)) continue;
+    const g = groups.find((q) => d(q.c, p) < 20);
+    if (g) { g.n++; g.c = g.c.map((v, t) => v + (p[t] - v) / g.n); } else groups.push({ c: p, n: 1 });
+  }
+  const out = pal.slice();
+  for (const g of groups.sort((a, b) => b.n - a.n)) {
+    if (out.length >= 10 || g.n < least) break;
+    if (out.some((c) => d(c, g.c) < TRACE.merge)) continue;
+    out.push(g.c.map((v) => Math.round(v)));
+  }
+  return out;
+}
+
+// The share of ink (solid, not white) that is more than RGB 40 from every palette colour and from white
+export function unexplainedInk({ P, w, h }, pal) {
+  const cs = [...pal, [255, 255, 255]];
+  let n = 0, far = 0;
+  // (inside solid areas only: a 3 x 3 neighbourhood varying under 60, as the flatness test; an edge pixel is a blend)
+  for (let y = 1; y < h - 1; y++) for (let x = 1; x < w - 1; x++) {
+    const i = y * w + x;
+    let ok = true, s = [0, 0, 0], q = 0;
+    for (let dy = -1; dy <= 1 && ok; dy++) for (let dx = -1; dx <= 1; dx++) {
+      const j = (i + dy * w + dx) * 4;
+      if (P[j + 3] < 0.98) { ok = false; break; }
+      for (let c = 0; c < 3; c++) { const v = (P[j + c] / P[j + 3]) * 255; s[c] += v; q += v * v; }
+    }
+    if (!ok || q / 9 - (s[0] ** 2 + s[1] ** 2 + s[2] ** 2) / 81 >= 60) continue;
+    const p = [0, 1, 2].map((c) => (P[i * 4 + c] / P[i * 4 + 3]) * 255);
+    if (p.every((v) => v >= TRACE.white)) continue;
+    n++;
+    if (!cs.some((c) => Math.hypot(p[0] - c[0], p[1] - c[1], p[2] - c[2]) < 40)) far++;
+  }
+  return n ? far / n : 0;
+}
+
+// Flat art or not (spec 3.3): the share of solid pixels (3 x 3 variance under 60) within RGB 22 of a palette colour
+// or white. Under TRACE.flat the picture is not traced here (a photo, a painted texture).
+export function flatness({ P, w, h }, pal) {
+  const cs = [...pal, [255, 255, 255]];
+  let n = 0, near = 0;
+  for (let y = 1; y < h - 1; y++) for (let x = 1; x < w - 1; x++) {
+    let ok = true, s = [0, 0, 0], q = 0;
+    for (let dy = -1; dy <= 1 && ok; dy++) for (let dx = -1; dx <= 1; dx++) {
+      const i = ((y + dy) * w + x + dx) * 4;
+      if (P[i + 3] < 0.98) { ok = false; break; }
+      for (let c = 0; c < 3; c++) { const v = (P[i + c] / P[i + 3]) * 255; s[c] += v; q += v * v; }
+    }
+    if (!ok || q / 9 - (s[0] ** 2 + s[1] ** 2 + s[2] ** 2) / 81 >= 60) continue;
+    n++;
+    const i = (y * w + x) * 4, p = [0, 1, 2].map((c) => (P[i + c] / P[i + 3]) * 255);
+    if (cs.some((c) => Math.hypot(p[0] - c[0], p[1] - c[1], p[2] - c[2]) < 22)) near++;
+  }
+  return n ? near / n : 0;
 }
 
 // Unmixing (spec 3.4): each pixel as one class or the best blend of two, the classes' shares summing to 1. Classes:
@@ -295,8 +364,15 @@ function rdpLoop(l, tol) {
 // The picture traced: { colors: [[r,g,b]...], shapes: [{ color, area (mm²), rings: [outer, ...holes] in mm }] },
 // largest first. `mmPerPx`: the size it is sewn at.
 export function tracePicture(rgba, W, H, mmPerPx, { k = TRACE.k, speck = TRACE.speck } = {}) {
-  const wk = working(rgba, W, H), { w, h, f } = wk, pal = palette(wk, k);
-  if (!pal.length) return { colors: [], shapes: [] };
+  const wk = working(rgba, W, H), { w, h, f } = wk, found = palette(wk, k);
+  const flat = found.length ? flatness(wk, found) : 0;
+  if (!found.length || flat < TRACE.flat) return { colors: found, shapes: [], flat };
+  // (an accent added late needs a speck's area of its own: fewer pixels are noise)
+  const pal = lateColours(wk, found, Math.max(3, (speck * speck) / (mmPerPx * f) ** 2));
+  // (ink the palette cannot explain: over 3 % of it more than RGB 40 from every colour and white is a painted or
+  // shaded picture, not flat art: a textured logo kept only its cream and navy)
+  const unexplained = unexplainedInk(wk, pal);
+  if (unexplained > TRACE.unexplained) return { colors: pal, shapes: [], flat, unexplained };
   const U = unmix(wk, pal);
   knockouts(U, w, h);
   const p = TRACE.pad, pw = w + 2 * p, ph = h + 2 * p;
@@ -329,5 +405,5 @@ export function tracePicture(rgba, W, H, mmPerPx, { k = TRACE.k, speck = TRACE.s
       shapes.push({ color: c, area: (s.a - s.holes.reduce((t, hl) => t + Math.abs(area(hl)), 0)) * mm * mm, rings });
     }
   }
-  return { colors: pal, shapes: shapes.sort((a, b) => b.area - a.area), fine: u, f, toMm };
+  return { colors: pal, shapes: shapes.sort((a, b) => b.area - a.area), flat, fine: u, f, toMm };
 }

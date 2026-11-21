@@ -21,7 +21,8 @@ for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
 const mmPerPx = +mmS / Math.max(x1 - x0 + 1, y1 - y0 + 1), t0 = Date.now();
 const tr = tracePicture(rgba, W, H, mmPerPx);
 const hex = (c) => "#" + c.map((v) => v.toString(16).padStart(2, "0")).join("");
-console.log(`traced in ${Date.now() - t0} ms: ${tr.colors.length} colours ${tr.colors.map(hex).join(" ")}, ${tr.shapes.length} shapes, upsampled x${tr.fine}, working /${tr.f}`);
+if (!tr.shapes.length) { console.log(`not flat art (flat ${tr.flat?.toFixed(3)}, unexplained ink ${tr.unexplained?.toFixed(3)}): left to the picture path`); process.exit(3); }
+console.log(`flat ${tr.flat.toFixed(3)}, traced in ${Date.now() - t0} ms: ${tr.colors.length} colours ${tr.colors.map(hex).join(" ")}, ${tr.shapes.length} shapes, upsampled x${tr.fine}, working /${tr.f}`);
 // centre the design on the hoop
 const all = tr.shapes.flatMap((s) => s.rings[0]), cx = (Math.min(...all.map((p) => p[0])) + Math.max(...all.map((p) => p[0]))) / 2, cy = (Math.min(...all.map((p) => p[1])) + Math.max(...all.map((p) => p[1]))) / 2;
 const d = new Design(hoop(undefined, "5x7"));
