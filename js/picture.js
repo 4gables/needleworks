@@ -298,16 +298,18 @@ function guideUI() {
   const colours = owns() ? [...new Map(ownedSpools().map((s) => [s.hex.toLowerCase(), { name: colourWord(s.hex), hex: s.hex }])).values()] : [];
   const g = artGuide({ sizeMm: Math.max(w, ht), w, h: ht, colours, most: MOST, subject: $("pic-guide-subject").value });
   $("pic-guide-rules").innerHTML = g.rules.map((t) => `<li>${escapeHtml(t)}</li>`).join("");
-  $("pic-guide-prompt").value = g.prompt; $("pic-guide-tip").textContent = g.tip;
+  $("pic-guide-prompt").value = g.prompt; $("pic-guide-redraw").value = g.redraw; $("pic-guide-tip").textContent = g.tip;
 }
 $("pic-guide").addEventListener("toggle", () => { if ($("pic-guide").open) guideUI(); });
 $("pic-guide-subject").addEventListener("input", guideUI);
-$("pic-guide-copy").onclick = async () => {
+const copyFrom = (box, out) => async () => {
   guideUI();
-  const t = $("pic-guide-prompt"), said = $("pic-guide-said");
+  const t = $(box), said = $(out);
   try { await navigator.clipboard.writeText(t.value); said.textContent = "Copied: paste it into your AI tool."; }
   catch { t.focus(); t.select(); said.textContent = "Selected: copy it with Ctrl+C (⌘C on a Mac)."; }
 };
+$("pic-guide-copy").onclick = copyFrom("pic-guide-prompt", "pic-guide-said");
+$("pic-guide-copy2").onclick = copyFrom("pic-guide-redraw", "pic-guide-said2");
 // The fabric's colour inside the design (white lettering on a badge, a jersey's white diamonds) is part of it and is
 // sewn; the same colour round the design is the fabric. Both said, with the one tap that leaves it out or sews it again:
 // white parts went unsewn with no word, and nothing on the page said why.
