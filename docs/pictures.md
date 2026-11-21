@@ -21,10 +21,10 @@ Reference for this part of Needleworks: the rules, the reason for each (it stops
   with nothing said): only the background's colour that the picture's edge (or a frame, or see-through) reaches is
   fabric (`labelWith`, a flood from the edge). What the design closes in is a colour of its own (`inside`, the
   background's thread; or the design colour that already has that thread) and is sewn in Filled and Cross-stitch; a
-  line drawing leaves it. Pieces that are dots (under 1.5 mm², or under 4 mm² and 2.5 mm across: the hole in a small
+  line drawing leaves it. Pieces that are dots (under 1.5 mmÂ², or under 4 mmÂ² and 2.5 mm across: the hole in a small
   e) or nowhere 0.6 mm across stay fabric, and a fleck of it is never folded into the colour round it (the letter's
   hole would fill with the letter's thread). It takes no turn in the alternating row angles (counted, a logo's navy
-  turned 90° and its apostrophe fell under the 8 mm lone-piece rule). The page says which white is fabric and which
+  turned 90Â° and its apostrophe fell under the 8 mm lone-piece rule). The page says which white is fabric and which
   is sewn, with "Leave it out" / "Sew it" (`state.pic.inside`). Tried and dropped: sewing it only where the ink
   round it is at least as thick as the piece (a white star in a red ring was left out, and bouquets still gained
   white). Known cost: the hole of a big O and gaps in a bouquet are sewn white until tapped off.
@@ -38,7 +38,7 @@ Reference for this part of Needleworks: the rules, the reason for each (it stops
   is fabric now too).
   - Only a drawing made of lines has paper (tester, 2026-11: "if the design is fully surrounded by a different
     colour the inside needs to be white, not transparent"). Where a quarter (`LINE_SOLID`) of the design's ink is
-    thick, every closed-in piece of 25 mm² (`LINE_SMALL`) or more is sewn whatever rings it: a mascot drawn in
+    thick, every closed-in piece of 25 mmÂ² (`LINE_SMALL`) or more is sewn whatever rings it: a mascot drawn in
     outline over block letters was fabric at 6 threads. Smaller pieces keep the rule above, so the o of thin small
     print stays open. Thick ink is counted through 0.4 mm (`LINE_EDGE`): the soft edge between a white letter and
     the solid oval round it is a ring of a third colour one pixel wide, which read as a thin line, and a white Y in
@@ -73,7 +73,7 @@ Reference for this part of Needleworks: the rules, the reason for each (it stops
 - The Thread colours count is every thread sewn, the closed-in colour included (owner, 2026-11-13: a BYU logo at one
   colour came out Ultramarine and White, at two Prussian Blue, Cornflower Blue and White). `learnColours`: when the
   design's own colours fill the count and 0.2 % or more of the learned copy is closed in, the design learned one
-  colour fewer is taken only if what it lost is a near-duplicate shade (`NEAR`, ΔE00 under 15 to every colour kept)
+  colour fewer is taken only if what it lost is a near-duplicate shade (`NEAR`, ÎE00 under 15 to every colour kept)
   or a blend of two colours kept (under 30; BYU at six learns Black and Dark Gray from soft edges). Else the model is
   `spare`: the closed-in colour stays fabric and the page offers "Sew it in white too (N + 1 threads)" (`inside`
   "all"; "auto" is the default, "none" is "Leave it out"). One colour is always `spare`. On the 9 samples at 1, 2,
@@ -110,7 +110,7 @@ Reference for this part of Needleworks: the rules, the reason for each (it stops
 - Swapping a thread: the six nearest, then "More colours" (every Brother thread by hue, less those other colours
   use) and any colour (the nearest thread no other colour uses: two colours never share one).
 - Holes (`picture_corpus.html` `holes`): sewn area 0.35 mm inside its shape with no thread within 0.45 mm. Baseline
-  v29: 20 bare patches (20.5 mm²) over 62 filled corpus cases; etsy_3 at 120 mm 48 patches (70 mm²), etsy_1 16,
+  v29: 20 bare patches (20.5 mmÂ²) over 62 filled corpus cases; etsy_3 at 120 mm 48 patches (70 mmÂ²), etsy_1 16,
   etsy_8 15. The 80 % rule passed all of them. Closing them is P1's (roadmap): dropped pieces handed to the
   neighbouring colour, thin bands absorbed, overlap both ways, a second underlay.
 - Threads: each group the nearest unique Brother thread no bigger group took (CIEDE2000, never 62-64; plain Lab sent
@@ -122,20 +122,20 @@ Reference for this part of Needleworks: the rules, the reason for each (it stops
     whichever distance chose it. A choice by another distance keeps this as long as it picks *an entry*, never a
     colour between entries.
   - Near-black (C5-CO): a colour's hue counts in full only from L 15, fading to none at L 0 (art_gradient_sunset's
-    #10002b palm, L 3, was Prussian Blue at ΔE00 15 over Black at 19: it reads black, and sews Black now). Lighter
+    #10002b palm, L 3, was Prussian Blue at ÎE00 15 over Black at 19: it reads black, and sews Black now). Lighter
     navies keep theirs (#1d3557, L 22, stays Ultramarine).
   - Far threads: each part's difference is capped at FAR for choosing, the uncapped value breaking ties (all capped,
     every far thread tied and the first PEC entry won: art_water_whale's pale blue #8eacd0 was Prussian Blue, now
     Lavender; art_flat_coffee's brown #6f4518 was Prussian Blue, now Dark Brown).
   - Whether a free thread is "worse" than the colour's own (then the colour joins the one that took it) is judged
     uncapped and with a chroma gain: a thread over 1.6 x the colour's chroma and 20 more costs up to 0.8 x more, in
-    full 20 past that (ΔE00 squeezes chroma at high chroma: art_photo_dog's mid-brown head rim #8d633b got bright
-    Reddish Brown at ΔE00 16 beside Light Brown's 12; judged over the bar, it joins the head). The gain judges only:
+    full 20 past that (ÎE00 squeezes chroma at high chroma: art_photo_dog's mid-brown head rim #8d633b got bright
+    Reddish Brown at ÎE00 16 beside Light Brown's 12; judged over the bar, it joins the head). The gain judges only:
     used for the choice too (tried at 0.5 x the excess over the colour's chroma), it fixed the framed flower's dusty
     red (Carmine -> Amber Red) and the owl's outline (Prussian Blue -> Dark Gray) but sent etsy_3's olive to Pewter
     and Harvest Gold, etsy_1's mauve to Black, a navy logo to Dark Gray and a leaf green to Seacrest.
 - Colours from thin lines: `cluster(..., lines)` also learns from pixels flat along a line and not a blend (a 1-2 px
-  line is never flat every way); those clusters take only pixels within ΔE 12 or not a blend of two others. Pale
+  line is never flat every way); those clusters take only pixels within ÎE 12 or not a blend of two others. Pale
   fringes (JPEG halos: 80 % within 3 px of a stronger colour over 1.5 SAME away) and soft shades (drop shadows: 70 % of
   the edge with the fabric soft over 5 px) are fabric unless the whole picture is soft. Colours under SAME apart
   merge whatever their size.
@@ -181,20 +181,20 @@ Reference for this part of Needleworks: the rules, the reason for each (it stops
     colour covering more of it: the pixel's own colour halved in *linear light* (halved in Lab, a pixel a fifth
     covered by a dark line was the line's: a mandala's 0.6 mm lines sewed 1 mm wide, look -5), grown outward from
     both sides a step at a time (by colour alone, pixels apart from their side made dots: etsy_1 +8 magenta starts).
-    Pieces of the band left under 3 mm² go the same way. "Embroidered Flowers" on etsy_8's panel was tan halo
+    Pieces of the band left under 3 mmÂ² go the same way. "Embroidered Flowers" on etsy_8's panel was tan halo
     around black; now black letters. Not between the fabric and a colour: there a band is a thin thing's edge as
     often as a blend (a stem's pale rim given to the fabric left the stem 1-2 px and broken: etsy_1 lost branches and
     gained 38 bare locks); build()'s own rule judges those.
-  - Flecks: a piece of a sewn colour under 3 mm², 80 % of its edge on sewn colours, joins the one with body (4 mm²,
-    1.5 mm wide somewhere) it touches most, smallest first. Kept on purpose: 0.3 mm² or more at ΔE00 25 or more from
+  - Flecks: a piece of a sewn colour under 3 mmÂ², 80 % of its edge on sewn colours, joins the one with body (4 mmÂ²,
+    1.5 mm wide somewhere) it touches most, smallest first. Kept on purpose: 0.3 mmÂ² or more at ÎE00 25 or more from
     that colour (an eye, a highlight, a letter's stroke; by shape and a count of 6, as `foldFlecks` keeps eyes, the
-    letters of etsy_8's title went into the tan round them). Into any neighbour, two specks came to over 1.5 mm² and
+    letters of etsy_8's title went into the tan round them). Into any neighbour, two specks came to over 1.5 mmÂ² and
     were sewn: etsy_1 +18 trims. `foldFlecks` still runs after it (fills with body only, eyes by count).
   - Smooth edges: one step of threshold dynamics (Merriman, Bence & Osher 1992): each colour's area blurred (three
     box passes, 0.5 mm across in all), each pixel to the strongest colour beside it. Pixel stairs and JPEG-ragged
     edges go, the colours still meet with no gap. Never moved: regions under 1 mm wide, a wide region's parts no
-    1 mm disc reaches (the blur took the hairlines off a script title), pieces under 4 mm² (an apostrophe rounded at
-    both ends fell under the 2 mm a mark needs and was left out) and closed-in fabric under 4 mm² (a counter). At
+    1 mm disc reaches (the blur took the hairlines off a script title), pieces under 4 mmÂ² (an apostrophe rounded at
+    both ends fell under the 2 mm a mark needs and was left out) and closed-in fabric under 4 mmÂ² (a counter). At
     0.8 mm the held-out pictures had 12 more wasted moves and 43 more bare locks.
   - Layers (`build`, research I3): a hole or bay in a colour's shapes under 3 mm across (`layer`: a closing of the
     colour) that only later colours fill is sewn under them, as a person sews the shape behind whole. Cut round,
@@ -208,7 +208,7 @@ Reference for this part of Needleworks: the rules, the reason for each (it stops
     81 -> 80, files at the density limit 6 -> 5, stitches -17 % (white closed in now fabric where no shade gave way).
     Five held-out pictures at the same three settings (Node): trims 1,593 -> 1,479, loose 75 -> 65, wasted 43 -> 32,
     ends 1,413 -> 1,391, bare locks 101 -> 104 (one more kept dot: each dot sewn on its own is 10-11 lock hits with no
-    body). Corpus (filled): trims 1,267 -> 1,180, loose 26 -> 23, holes 23.1 -> 22.0 mm² (21 -> 20 patches), every
+    body). Corpus (filled): trims 1,267 -> 1,180, loose 26 -> 23, holes 23.1 -> 22.0 mmÂ² (21 -> 20 patches), every
     file passing pe900_check; look by kind within 0.3 of PX0's baseline except shapes -1.6 (pc_framed_..._edge: the
     cream panel inside a sewn frame is closed-in colour and stays fabric at 3 colours, 86 -> 43), line art -1.3
     (art_line_mandala at 100 mm, 76 -> 70: colour part 0.60 -> 0.45, cause not found), watercolour -0.9, cartoon -0.8
@@ -224,9 +224,9 @@ Reference for this part of Needleworks: the rules, the reason for each (it stops
     change from one to the other (their Lab difference over the median rate of change along the border). A drawn edge,
     anti-aliased or not, measures about 1 mm; the corpus's soft borders 1.5-40 mm, its drawn ones 0.3-1.3. Blended only
     when it is shading over a meaningful area: border 8 mm long (`border`), both regions 6 mm across (`wide`: a
-    tabby's 3-4 mm stripes stay drawn; round 1 blended them into scribbles), threads 10-30 ΔE00 apart (`near`, `far`:
+    tabby's 3-4 mm stripes stay drawn; round 1 blended them into scribbles), threads 10-30 ÎE00 apart (`near`, `far`:
     nearer, the blend shows nothing and only redraws shapes (an icon's yellow ball went lumpy, look -0.5); further, rows
-    of the two side by side read as stripes, a whale's navy on pale blue), the band 25 mm² (`area`), and the picture
+    of the two side by side read as stripes, a whale's navy on pale blue), the band 25 mmÂ² (`area`), and the picture
     across it correlating 0.5 or better (`agree`) with a ramp from one colour to the other. Flat pictures have none: of
     the corpus's 254 files only 8 changed (gradient bar, sunset, icon, dog, flowers).
   - Threads: only the two that meet at that border. Each pixel sews its own colour's thread or the one across the
@@ -241,7 +241,7 @@ Reference for this part of Needleworks: the rules, the reason for each (it stops
     the change of thread is a comb). Stretches under 1 mm join their neighbour; where a row changes thread the one sewn
     first runs 0.3 mm under the next. Each thread's stretches are an ordinary fill (sewRows, routeFill, locks); the
     underlay is the first thread's, once under the group. A line screen, not two layers: the cloth is covered once and
-    each colour block is a fill at most as dense as a flat one (24 hits per mm² per block holds as for any fill;
+    each colour block is a fill at most as dense as a flat one (24 hits per mmÂ² per block holds as for any fill;
     pe900_check passes every corpus file).
   - Travel (C5-KE): a thread's stretches are combs reaching into the other thread's side, and the way between them
     lay over its own finished rows (v34's icon: Sky Blue 2 -> 7 trims). A blended fill's travel may also run where a
@@ -261,7 +261,7 @@ Reference for this part of Needleworks: the rules, the reason for each (it stops
     82.8 -> 83.0, watercolour 75.9 -> 75.7, photo 84.8 -> 84.8, every other kind the same to the decimal. By case:
     sunset 76.8 -> 78.9 and 77.6 -> 79.7, gradient bar 79.4 -> 80.3, dog 78.3 -> 79.1, icon 77.8 -> 77.3 (trims 6 ->
     11), flowers 72.4 -> 71.6 (its watercolour rings softened: outline 0.75 -> 0.73). The cat and whale are not blended
-    (their soft borders are narrow stripes or 24-29 ΔE apart). The gain is small because the palette already cuts a
+    (their soft borders are narrow stripes or 24-29 ÎE apart). The gain is small because the palette already cuts a
     gradient into a few threads; blending only their borders can't bring back colours never chosen.
 - Patents near shading (checked 2026-11 on Google Patents, claims read; not legal advice: the owner should check before
   shipping). Brother's photo-stitch family is live: US 7,693,598 (to 2028), 7,946,235 (2030), 8,200,357 (2031): a
@@ -286,18 +286,18 @@ Reference for this part of Needleworks: the rules, the reason for each (it stops
   needs a field that turns with it (the curved rows' field from the picture's gradients, whose middle is a
   singularity on radial fur, so it would fall back to straight rows there too).
 - Filled: shapes 1 mm or wider are a fill, a satin column or a satin dot (Stitch types, below); parts under 2 x
-  `THIN_PART` and lines under 1 mm sew a triple run, never dropped. Specks: under 4 mm² and 2.5 mm across, groups
+  `THIN_PART` and lines under 1 mm sew a triple run, never dropped. Specks: under 4 mmÂ² and 2.5 mm across, groups
   under 6 mm of line, walks under 1.5 mm (`lostLines` reports dropped fine lines). A group of nothing but walks
   under 1.5 mm that comes to 6 mm is a line the labelling broke into dashes and is sewn (each dash, straight
   stitches between). Lines too faint to label (`faintKept`, numbers `FAINT`; palette.js `faintLines`: unlike the
-  fabric by ΔE 20, 2 px clear of ink, fabric either side) 6 mm long or more are sewn in the sewn colour they are a
-  blend of with the fabric (their mean 0.3 or more of the way to it, within ΔE 15 of the line between): pc_rules at
+  fabric by ÎE 20, 2 px clear of ink, fabric either side) 6 mm long or more are sewn in the sewn colour they are a
+  blend of with the fabric (their mean 0.3 or more of the way to it, within ÎE 15 of the line between): pc_rules at
   60 mm sews its 1 px hairline, look 70.8 -> 75.4. Its 0.3 mm red rule is still lost: labelled as 16 dashes 3 mm
   apart, the gaps are blends too close to them to count as faint (palette's labelling, round C5-CO). Kept: text dots on the fabric (>= 0.8 mm across, 0.6
-  mm², within 5 mm of their colour or another such dot) and marks >= 2 mm long, 1.5x longer than wide, within 2 mm of a
+  mmÂ², within 5 mm of their colour or another such dot) and marks >= 2 mm long, 1.5x longer than wide, within 2 mm of a
   bigger piece of their colour (apostrophes). Thin shapes (< 2 mm) 0.05 mm
   pull, else 0.15. `OVERLAP` 0.35 mm under later colours, shape by shape (growing the raw mask merged specks);
-  neighbours alternate angle (+90°). With `direction: "auto"` (PX3; digitize.js's `form` on each part) each part takes
+  neighbours alternate angle (+90Â°). With `direction: "auto"` (PX3; digitize.js's `form` on each part) each part takes
   its own measured angle or curved rows, the alternation kept only where its shape doesn't say (`docs/stitch-model.md`
   "Direction that follows the form"); the Picture panel offers it as Follow the shape under More settings (Filled),
   off by default: on the corpus it saves 3 % of trims and stitches with look unchanged (79.1 -> 79.2), but one flat
@@ -318,7 +318,7 @@ Reference for this part of Needleworks: the rules, the reason for each (it stops
     - A see-through picture has no fabric colour: its rows are found all the same (they were skipped).
     - Rows up to 9 mm (`small`, was 6): a 6 mm serif line, lower case 4 mm, fell to the fill and column rules. From
       6 mm (`sure`) a row needs six letters (`many`): three parts of a fox mascot's face, 7 mm tall and level, were
-      taken for a word and sewn as strokes (look 83 to 76, 32 mm² bare).
+      taken for a word and sewn as strokes (look 83 to 76, 32 mmÂ² bare).
     - The stroke's width goes by the letters' height (`textWide`): thread is 0.4 mm thick, so a 0.6 mm satin made a
       1 mm stroke on a 3 mm letter. Under 3.2 mm (`line`) a stroke is one line of thread three times over (the
       owner's "single thread doesn't look good" was said of 4 mm letters, which stay satin); from there a satin
@@ -362,13 +362,13 @@ Reference for this part of Needleworks: the rules, the reason for each (it stops
   along its centre lines; a compact blob that narrow a satin dot along its long axis; anything wider a fill. Width is
   twice the 90th percentile of the distance to the edge (by the widest point, a mandala's 0.6 mm lines were over 1 mm
   where two cross, sewn twice as bold: look 74 -> 60).
-  - A stroke (area / width² >= 2) is a column only when it is `plain`: under 20 % of its centre lines in strokes
+  - A stroke (area / widthÂ² >= 2) is a column only when it is `plain`: under 20 % of its centre lines in strokes
     shorter than 3 widths, and its width away from the ends within 2.2x narrow to wide, or uneven only as a taper is
     (C5-SA, `taper`: along each centre line, smoothed over 0.4 mm, the width rises and falls at most 2.5x its range: a
     brush stroke narrowing to its point, a leaf's half swelling and narrowing again; a ragged patch goes up and down
     all along; only a single open line at least 4 widths long: a blob's short curl passed as a taper and sewed as a
-    starburst). Bold letters and ragged patches thin to stubby strokes each turned its own way; those stay fills. A dot needs 85 % of its convex hull (`solid`). Nothing under 3 mm² (`small`): a satin that small is all
-    tie-in and tie-off, and the cap of 19 hits per mm² left a 1 mm one only its locks, a knot. The columns must cover
+    starburst). Bold letters and ragged patches thin to stubby strokes each turned its own way; those stay fills. A dot needs 85 % of its convex hull (`solid`). Nothing under 3 mmÂ² (`small`): a satin that small is all
+    tie-in and tie-off, and the cap of 19 hits per mmÂ² left a 1 mm one only its locks, a knot. The columns must cover
     90 % of the piece (`cover`): thinning prunes a short arm as a spur, and a slab F's middle arm was left bare. The
     fabric's colour closed in by the design is never a column (white slivers between outlines sewed as fans).
   - A wider shape keeps its body as a fill where a disc 4 mm across fits (a morphological opening) and a stroke
@@ -401,7 +401,7 @@ Reference for this part of Needleworks: the rules, the reason for each (it stops
     tie-off (it lay across the satin, a bar). Travel may run inside a column of the colour and from it 0.35 mm under
     a later colour (a column doesn't grow under its neighbours as a fill does, and the way to them was cut).
   - Density: the picture's `Design` now counts hits (`ease`, as the Design tab): satin ends at junctions and fans
-    give way at 19 hits per mm² instead of being thinned afterwards; `finish({ untiny })` drops the 0.3 mm stitches
+    give way at 19 hits per mmÂ² instead of being thinned afterwards; `finish({ untiny })` drops the 0.3 mm stitches
     that leaves at tight tips (4 in the 12 samples). Files at the limit: 12 samples (Node) 7 -> 3, held-out 7 -> 5.
   - The Details choice counts a column along its whole walk (by its nodes alone an apostrophe beside a letter sewn
     as a column was no longer counted with it, and went) and a mark kept by a bigger piece is `meant` as a dot is. A
@@ -412,7 +412,7 @@ Reference for this part of Needleworks: the rules, the reason for each (it stops
     mascot 75.2 -> 76.7, pet photo 82.8 -> 82.7, photo 84.8 -> 85.6, shapes 73.0 -> 73.4, sticker 81.7 -> 82.3,
     stitched sheet 82.0 -> 82.7, watercolour 75.9 -> 76.2 (all 78.1 -> 78.9; outline 0.81 -> 0.83); no case 3 down,
     eight 3-8 up (a line cat 82.8 -> 90.8, polka dots 84 -> 90, crayon 81 -> 87, marker 84 -> 89). Stitches +3 %,
-    trims 1,405 -> 1,430, loose 26 -> 34, holes 22.0 -> 48.8 mm² (35 patches, 0.4 mm² a case: a satin outline's
+    trims 1,405 -> 1,430, loose 26 -> 34, holes 22.0 -> 48.8 mmÂ² (35 patches, 0.4 mmÂ² a case: a satin outline's
     outer corner at a star's point stops short of the drawn point). Browser batch, 12 samples: trims 1,104 -> 1,120,
     loose 54 -> 60, wasted 32 -> 32, ends 994 -> 1,014, bare locks 80 -> 86, at the limit 5 -> 3, stitches +1 %.
     Held-out 15 (Node): trims 1,479 -> 1,492, loose 65 -> 71, wasted 32 -> 31, bare locks 104 -> 115, at the limit
@@ -424,7 +424,7 @@ Reference for this part of Needleworks: the rules, the reason for each (it stops
     before a trim (a bar across it).
   - Proof of C5-SA (2026-11, v34 base, browser corpus 127 filled cases): look by kind within -0.2..+0.1 (line art
     -0.2, mascot -0.1, shapes and other +0.1, the rest 0); no case 3 down, the most -1.0 (a line cat at 100 mm) and
-    +1.3 (the star outline at 60 mm; +0.8 at 120). Holes 48.4 -> 42.9 mm² (35 -> 31 patches; star outline 5.4 ->
+    +1.3 (the star outline at 60 mm; +0.8 at 120). Holes 48.4 -> 42.9 mmÂ² (35 -> 31 patches; star outline 5.4 ->
     2.1). Filled corpus: stitches -0.2 %, trims 1,635 -> 1,633, loose 33 -> 34, wasted 56 -> 49, bare locks 43 -> 43,
     at the limit 1 -> 2 (very_dark at 60 mm: a small ring's stitches, square to the line's run, meet at 24 hits, not
     over). Browser batch, 12 samples: trims 1,120 -> 1,114, loose 60 -> 60, wasted 32 -> 32, ends 1,014 -> 1,007,
@@ -434,15 +434,15 @@ Reference for this part of Needleworks: the rules, the reason for each (it stops
     but one tie-in landed on a dense spot (etsy_8 at 170 mm 22 -> 24 hits). Mitre on any centre line and taper on any
     net: a blob's short curl sewed as a satin starburst at the density limit (etsy_4 at 170 mm 22 -> 24).
   - Not yet: back to front beyond light-first (PX1's measure stands); square column ends on bold letters (the holes
-    left are not satin: 18 of the 43 mm² are a sun's 1 mm rays the Details choice leaves out in two drawings, the rest
-    under 2 mm² a case); a corner of an E or a D's bowl round a small counter is still a fan (the stitch angle turns
+    left are not satin: 18 of the 43 mmÂ² are a sun's 1 mm rays the Details choice leaves out in two drawings, the rest
+    under 2 mmÂ² a case); a corner of an E or a D's bowl round a small counter is still a fan (the stitch angle turns
     with the line: a digitizer splits the letter into a stem sewn straight across and arms or a bowl, which needs
     the letter's strokes, not its skeleton); bare locks: about 60 of the batch's 86 are dots under 1 mm sewn as a fill of
     one row (tie-in, a stitch, tie-off: all lock, nothing over them; specks, not satin) and the rest fill tie-ins on
     a sharp tip (above; `Design`'s tie-in goes toward the first point); none are columns; a lone
     dot of a dot-only satin counts 10 bare lock hits (the scoreboard's lockOut).
   - Needs a sew-out (nothing here is proven on a machine): satin outlines 1-1.5 mm wide on cotton (do they close up
-    with 0.1 pull, and is 0.1 mm inside the drawn edge right?); a satin network's junctions eased to 19 hits/mm²; a
+    with 0.1 pull, and is 0.1 mm inside the drawn edge right?); a satin network's junctions eased to 19 hits/mmÂ²; a
     hybrid stem cut off a leaf (does the 0.6 mm reach leave a gap?); 2-4 mm satin dots (eyes) with their tie-in under
     the satin; zigzag underlay under 2-4 mm picture columns.
 - What other tools do (public manuals and guides, no code read): the picture is cleaned before any stitch is planned.
@@ -461,12 +461,12 @@ Reference for this part of Needleworks: the rules, the reason for each (it stops
   on purpose), 282 a part of a shape stranded behind its own finished rows. Every one of the 336 tiny stitches was a
   fill's row link; every one of the 164 zero ties a tie-in whose 0.7 mm point was the path's own next point; half the
   173 exposed locks sat on a fill's one-stitch first or last row.
-- Flecks (`foldFlecks`, numbers in `recipes.js` `PICTURES`): a piece of a sewn colour that is a dot, or under 3 mm² and
+- Flecks (`foldFlecks`, numbers in `recipes.js` `PICTURES`): a piece of a sewn colour that is a dot, or under 3 mmÂ² and
   1 mm wide or more, with 80 % of its edge against other colours' fills takes the colour it touches most, before
   anything is sewn. Left out, it was a hole in that fill (rows split round it); sewn, a trim and two locks. Up to 6
-  per colour stay (an eye). Only into a fill with body (4 mm², 1.5 mm wide somewhere): the blend round a dark letter
+  per colour stay (an eye). Only into a fill with body (4 mmÂ², 1.5 mm wide somewhere): the blend round a dark letter
   is a ring of a third colour and the letters took it. Lines under 1 mm wide are drawn on top and never folded,
-  only their dots. Worse: folding any piece under 3 mm² (short dashes of leaf veins and petal outlines went).
+  only their dots. Worse: folding any piece under 3 mmÂ² (short dashes of leaf veins and petal outlines went).
 - Fill travel along the edge (`routeFill(..., edge)`, 0.75 mm, at most 30 mm in one go): over finished rows travel may
   run inside the shape's own edge, beside the row ends in the same thread (Ink/Stitch's border travel). Stranded parts
   282 -> 107, trims -16 %, loose threads -39 % on the samples. Pictures only: patches and motifs pass no `edge`.
@@ -504,7 +504,7 @@ Reference for this part of Needleworks: the rules, the reason for each (it stops
   - Worse, a third choice "Main shapes only" (tried four ways, 2026-11). By thread alone (under 80 mm, or the
     smallest 30 % of a colour): trims -27 % on the samples, but the stems that join a sheet's sprigs, a bow and
     half a caption's letters went while specks stayed, and a pattern of equal dots lost a random third. Flecks to
-    12 mm² folded into the colour round them: a dog's eye went into its face, and at half-enclosed a vine through
+    12 mmÂ² folded into the colour round them: a dog's eye went into its face, and at half-enclosed a vine through
     a rose bed. Judged as asked of a main shape (things within 3 mm gathered whole, left out only when under
     3-8 mm across, touching no other colour): nothing more than the default leaves out, 1,132 trims against
     1,119. What is left of a picture's trims is whole sprigs, stems and letters: fewer means fewer colours or a
@@ -527,7 +527,7 @@ Reference for this part of Needleworks: the rules, the reason for each (it stops
 - Line drawing (`lineArt`; `opts.line` sews everything in that one thread, Auto = each line in its own colour's
   thread). C5-LN, from the review of the 15 worst line drawings (all one thread, one 0.4 mm run, inner lines lost):
   - Colours told apart finer than the threads (`fineColours`, `FINE`): seeds are each thread's colour and the fabric,
-    then farthest first any colour 10 ΔE00 from every seed that holds 0.5 mm² (flat pixels first, then any pixel that
+    then farthest first any colour 10 ÎE00 from every seed that holds 0.5 mmÂ² (flat pixels first, then any pixel that
     is not a blend between the colours 2 px either side and has 2 neighbours within 6: a pale pink doodle column was
     labelled fabric at 4 threads). Each added colour sews in the thread most of its pixels were labelled, or the thread
     it is a blend of with the fabric (a grey shadow had been given the orange thread). Within 8 of the fabric (white,
@@ -537,7 +537,7 @@ Reference for this part of Needleworks: the rules, the reason for each (it stops
     thread (and its bands as triple runs, not satin) when its threads walked apart cost over 1.5x the trims and 10 more:
     the batch's etsy pictures went 20 -> 68 trims (etsy_1), 25 -> 160 (etsy_8). A shape's outline on the fabric in a
     colour under 25 from it is sewn in the nearest colour within 30 that stands 35 out (a grey cat on a grey page).
-  - A line where colours meet: `ALIKE` 8 ΔE00 apart (15 lost the sky/teal ridge, 14.6, and an owl's outline from its
+  - A line where colours meet: `ALIKE` 8 ÎE00 apart (15 lost the sky/teal ridge, 14.6, and an owl's outline from its
     wing, 10.3); two shades of one thread `SHADE` 15, or 8 where the picture steps within a pixel (a dog's fur drew 40
     rings; a dinosaur's crisp spots stay). Only where the picture has a step: across 1 mm each side it changes by half
     the two colours' difference (`STEP`; a sunset's gradient drew a straight line across the sky; at 2 px a tabby's
@@ -560,7 +560,7 @@ Reference for this part of Needleworks: the rules, the reason for each (it stops
   - Unchanged: `closeSlivers`; `lineEnds` reach the ink's edge; pieces under 2 mm dropped (`spur: 1`: pruning cut
     letters apart); ends within 2 mm of another drawing joined (3 mm drew bars); a piece under 6 mm lying within 0.8 mm
     of a line twice its length for 4/5 of it is dropped (a fleck of a blend: ticks on a robot's corners). JPEG ringing
-    is fabric: thin pieces under 5 mm of a colour at least 30 ΔE00 from the fabric whose own pixels are under 30 % of
+    is fabric: thin pieces under 5 mm of a colour at least 30 ÎE00 from the fabric whose own pixels are under 30 % of
     that (40 % with no floor cut etsy_1's lavender).
   - Routing: each drawing is entered where it is also within 2 mm of a drawing still to sew (it ends where it began, so
     that is where the needle leaves it): trims 9.7 -> 8.8 a case.
@@ -576,7 +576,7 @@ Reference for this part of Needleworks: the rules, the reason for each (it stops
 - Cross-stitch (`cross` mm cells): a row is two diagonal zigzags out and back plus one straight stitch (climbing every
   edge drew bowties); runs chained by Dijkstra over cell corners, else a jump over 5 mm; a lone cell dropped only if
   nothing touches it.
-- `fine` (`narrowGaps`: gaps under 0.5 mm, at least 2 mm² and 1.5 % of the area) warns; notches under ~0.5 mm can't
+- `fine` (`narrowGaps`: gaps under 0.5 mm, at least 2 mmÂ² and 1.5 % of the area) warns; notches under ~0.5 mm can't
   be kept by thread. Errors carry `code` (small, cross, skipped, empty); only followable advice is offered.
 - A picture with nothing in it to stitch (`code: "empty"`: all one colour) is not kept for the next visit
   (`forgetPicture` in app.js). Kept like any other, a blank picture opened the tab on its own error every visit after,
@@ -596,21 +596,21 @@ Reference for this part of Needleworks: the rules, the reason for each (it stops
   - The check, in the v29 verdict box under the picture (`verdictUI`): the texture headline stays (smoothed / shaded
     like a photo / flat), then what won't sew well and why, each with "Show where" (its places ringed on the
     picture, drawn bigger while shown: at 64 px a ring was a dot) and its one-tap fix where one mends it, else what to
-    do; then "Sews well at N mm: …". Measured on the picture at the sewn size, in the worker beside `keptParts`:
+    do; then "Sews well at N mm: â¦". Measured on the picture at the sewn size, in the worker beside `keptParts`:
     `artPicture` once per picture and colour count on the learned copy, `artShapes` on the labelled working copy
     (`res` px per mm, the digitizer's own labels).
   | Finding | Measure | Said when | Fix |
   |---|---|---|---|
   | `text` | rows of 3+ letter-like pieces of one colour (0.8-40 mm tall, at most 1.6x as wide, stroke at most 0.45 of the height, 12-75 % of the box inked; neighbours overlapping half the smaller height, under 1.8x taller, under 0.8 of the taller apart; not all one size; strokes within 30 %; 7 in 10 on one baseline), joined letters beside them absorbed | the smallest row's middle height under `ART.text` 6 mm (any style) | the smallest Size in 5 mm steps that brings it to 6 mm, if the hoop holds it; else "add the words in Design your own" |
-  | `small` | pieces of one colour 0.5 mm² (keptParts' part) to `ART.dot` 4 mm² and under `ART.detail` 2.5 mm across, not lettering | 3 or more, Filled, not a photo, no left-out note (that one rings and fixes them) | the Size that brings three in four to 2.5 mm |
+  | `small` | pieces of one colour 0.5 mmÂ² (keptParts' part) to `ART.dot` 4 mmÂ² and under `ART.detail` 2.5 mm across, not lettering | 3 or more, Filled, not a photo, no left-out note (that one rings and fixes them) | the Size that brings three in four to 2.5 mm |
   | `thin` | ridges of each colour's own (3,4) chamfer distance under `ART.line` 1 mm wide along 3 mm or more, not lettering. A ridge: along x or y, both ways, the colour's edge within its own width and nothing deeper (a plain "local top" took stair-steps on slanted edges and every straight edge: 64 lines on a bold logo) | Filled, not a photo | the Size that brings three in four to 1 mm |
-  | `blend` | share of the ink in smooth ramps: over 17 px of the learned copy the colour moves 3-50 ΔE with no step over a third and no back and forth | flat picture, share at least `ART.blend` 0.12 (the corpus gradient 0.32; JPEG logos 0.06-0.11, clean art under 0.03) | `ART.fewest` 4 thread colours: fewer, bolder bands |
-  | `colours` | flat pixels (under 4 ΔE to their four neighbours) grouped 12 apart, groups of 1 % or more | flat picture, more than the colours sewn (not asked: the fabric's colour closed in is one more) | as many thread colours as that, up to 8 |
+  | `blend` | share of the ink in smooth ramps: over 17 px of the learned copy the colour moves 3-50 ÎE with no step over a third and no back and forth | flat picture, share at least `ART.blend` 0.12 (the corpus gradient 0.32; JPEG logos 0.06-0.11, clean art under 0.03) | `ART.fewest` 4 thread colours: fewer, bolder bands |
+  | `colours` | flat pixels (under 4 ÎE to their four neighbours) grouped 12 apart, groups of 1 % or more | flat picture, more than the colours sewn (not asked: the fabric's colour closed in is one more) | as many thread colours as that, up to 8 |
   | `background` | the picture's border (1 % deep) grouped 10 apart: its main group's share | under `ART.page` 0.8, not see-through, no frame, background left unstitched | leave out the sewn colours holding 10 % of the border or more |
   - Texture and photos are the headline's (`flatShare`): for a photo the specks and thin lines are its texture and
     are not counted one by one; colours and blends are judged only on a flat picture.
   - What the external pictures and the corpus get: `picture_corpus.sh ... "art"` logs it under each case (and
-    `ext=etsy_1,…&fillonly&art` for `tests/external/images`). Guard: the corpus's `check: { say, never }` per drawing
+    `ext=etsy_1,â¦&fillonly&art` for `tests/external/images`). Guard: the corpus's `check: { say, never }` per drawing
     (a bold logo and one colour say nothing; the gradient says `blend`, the thin logo `text` and `thin`, `busy_back`
     `background`, polka dots' 5 mm "dots" `text`).
   - Known: a row of three florets on one baseline can read as lettering (etsy_3); script lettering joined into one
@@ -620,10 +620,10 @@ Reference for this part of Needleworks: the rules, the reason for each (it stops
 
 The owner's patch logo (an AI picture drawn to look embroidered: thread texture, dashed "stitching", shadows, a
 512 px PNG with 2 mm subtitle lettering at 100 mm) is what makers bring. Traced as it was, every program made it
-worse: ZigZag sewed it with 95 thread colours and 79 hits per mm²; our tracer kept only cream and navy (its red and
+worse: ZigZag sewed it with 95 thread colours and 79 hits per mmÂ²; our tracer kept only cream and navy (its red and
 gold threads are thin and textured, so too few solid pixels voted for them). Flattened first, ours beat ZigZag
-blind (3/5) and kept all six colours. The steps, in order (scratchpad tool `logo/flatten.py` of that session; to be
-built into the Picture tab as one step, roadmap Cycle 7):
+blind (3/5) and kept all six colours. The steps, in order (`tests/art_ready/flatten.py`, then `retype.py` for the
+badge's words; to be built into the Picture tab as one step, roadmap Cycle 7):
 
 | Step | Why | Number used |
 |---|---|---|
@@ -631,11 +631,13 @@ built into the Picture tab as one step, roadmap Cycle 7):
 | Scale the picture up (Lanczos) | 512 px over 120 mm is 4 px per mm: edges and 2 mm letters are a few pixels | x3, 12.8 px per mm |
 | Edge-keeping smoothing (median) | removes painted thread texture and fabric weave, keeps colour edges | 5 px median, twice |
 | A fixed palette of the art's real thread colours, sampled by hue | k-means on a mostly-cream picture gave six creams and lost red, gold and green | cream, navy, red, gold, green, grey; near-black merged into navy |
-| Nearest colour in CIELAB, then a mode filter | ΔE, not RGB, is what the eye and the thread chart agree on; the mode filter closes speckle | 7 px mode |
-| Parts under a speck's area go to the colour round them | a speck is a trim and a tie-in each | 1 mm² at the sewn size |
+| Nearest colour in CIELAB, then a mode filter | ÎE, not RGB, is what the eye and the thread chart agree on; the mode filter closes speckle | 7 px mode |
+| Parts under a speck's area go to the colour round them | a speck is a trim and a tie-in each | 1 mmÂ² at the sewn size |
 | Painted shadows and glows go | they trace as thin grey slivers round every shape | grey kept only on its largest part (the needle) |
 | Painted "stitching" goes | dashed lines become dozens of tiny separate fills | small gold parts 0.80-0.97 of the radius |
-| Words checked at the sewn size | the source's 2 mm subtitle stays the weak spot after all of this | redraw it larger in the art, or drop it |
+| Thin lines thickened to 1 mm (`ART.line`) | the red and gold thread strands were 0.8 mm: thinner sews as one thread | grown 2 px (0.16 mm a side) into the background only |
+| Sparkles and dots under 3 mm with only background round them removed | each sews as a knot of trims and tie-ins | x marks gone; berries on stems kept |
+| Words set again as type | painted 2.7 mm script ("Daughtor", "Embroıdery" in the source) can't be rescued by filtering | shortened to FATHER & DAUGHTER in a bold sans (Poppins SemiBold), split either side of the delta's tip on the badge's arc: 4.5 mm capitals, the most the badge holds at 120 mm (under `ART.text` 6 mm: said, not hidden) |
 
 What to tell a maker before any of this: ask the AI tool for flat art, not for embroidery (`js/artwords.js`: the
 rule and the prompt say so, and "Have a picture already?" gives the redraw prompt for one they have).
@@ -669,7 +671,7 @@ A fresh picture starts in the style a person would pick (C5-AU): Line drawing wh
   and under 0.4 by share of the picture: its strokes are 2-2.5 % of the picture, line art's 1-1.5 %.
 - Colour count keeps photos of embroidered wildflower sheets Filled: as thin as line art (0.58-0.73) in 8-13 colours.
 - Cross-stitch is never the start: the pet photos measured as clip art does (flat 0.84-0.90, blends 0.07-0.28, off
-  their colours by 3.4 ΔE) and the gradient icon and sunset alike or more. Left: a photo measure that tells a photo
+  their colours by 3.4 ÎE) and the gradient icon and sunset alike or more. Left: a photo measure that tells a photo
   from a soft-shaded illustration (fur texture at the picture's own pixel size), then a suggestion, not a default.
 
 ## Lettering drawn large in a picture (2026-11-20, v45)
