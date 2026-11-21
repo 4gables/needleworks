@@ -186,3 +186,10 @@ Reference for this part of Needleworks: the rules, the reason for each (it stops
 - Sewing words explained where first used (words.js `GLOSSARY`): basting, floating, fusible web, cutter file, tacking
   down, satin, wt.
 - Long read-outs go under their slider (`.range.wide`): beside it an opened design's size slider was 4 px wide.
+
+### Pages beside the app
+- `guide.html` ("Make It Sew Guide", https://4gables.com/needleworks/guide.html, 2026-11-21): how to prepare a picture
+  for embroidery and check a PES, written so a person or an AI tool can follow it; its first prompt links to itself.
+  Its rules and prompts are the app's (`js/artwords.js` `artGuide`, `docs/pictures.md` "Making a picture
+  embroidery-ready"): change them together. Like `privacy.html` it is outside `sw.js` FILES (served from the network,
+  so editing it needs no cache bump). Images in `assets/guide/`.
