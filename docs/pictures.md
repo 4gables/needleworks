@@ -711,6 +711,14 @@ A fresh picture starts in the style a person would pick (C5-AU): Line drawing wh
   zigzag or centre run alone. Satin stays 0.38 mm same-edge (Brother-made files measure 0.30-0.42).
 - Flagged of 36 at pass 5 (pass 4): slab 6 mm 3 (18); condensed 6 mm 4 (14); bold sans 6 mm 1 (7); serif 12 mm 5
   (13); serif 6 mm 13 (7: the figures are lettering now, and lettering at 6 mm peaks at 21-24 needle points in a
-  1 mm square, under the checker's 24); the rest level. Left: a fat condensed W (a U with spurs, 5.9 % bare), a serif
-  A (fill), beak and ball ends on G and Y's arms (3-6 % bare).
+  1 mm square, under the checker's 24); the rest level.
+- Pass 6. A letter its strokes leave uncovered is tried with strokes grown out to the ink no centre line reaches
+  (`columnNets` `reachOut`): the largest such patch, `COLUMNS.reach` 0.6 strokes square or more, gets a straight
+  stroke on the ink from the nearest point of a centre line to its far end, then the rest again, `COLUMNS.grow` 4
+  times at most; kept when it covers `COLUMNS.gain` more. A serif A's centre line ran round its counter and never up
+  into its apex (cover 0.75, a fill; 0.96 grown). Corpus level (mean +0.00, trims 2638 -> 2637).
+- Flagged of 36 at pass 6: serif 12 mm 4 (A, B, G, Y: 3-6 % bare at ball, beak and arm ends); bold sans 12 mm 0;
+  condensed 12 mm 6 (K, M, W, X, 4, 5 bare; the W a U with spurs); slab 6 mm 3; the rest as pass 5. Known: a word
+  fused to a ring of its own colour (corpus art_logo_mountain) has letters no column reaches (its E sews as a C);
+  sending a column's uncovered ink back to the fill cost 102 trims over the corpus and did not reach them.
 

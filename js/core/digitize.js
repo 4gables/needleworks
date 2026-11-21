@@ -326,7 +326,7 @@ function capJoint(r, s, atStart, zone, k) {
 // is measured across the shape along the normal (a round end narrows as the shape does; the distance to the edge
 // alone would sew it as a diamond), at most COLUMNS.cap times that distance at the centre line, so a junction's
 // other strokes don't count. A column stops where it is under COLUMNS.tip across.
-function columnNets(px, more, w, h, own, res, toMm, dotted, serif = 0, apex = 0, knots = 0) {
+function columnNets(px, more, w, h, own, res, toMm, dotted, serif = 0, apex = 0, knots = 0, reachOut = false) {
   let x0 = w, x1 = -1, y0 = h, y1 = -1;
   for (const i of [...px, ...more]) { const x = i % w, y = (i - x) / w; if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
   const ox = Math.max(0, x0 - 2), oy = Math.max(0, y0 - 2), cw = Math.min(w - 1, x1 + 2) - ox + 1, ch = Math.min(h - 1, y1 + 2) - oy + 1;
@@ -380,6 +380,38 @@ function columnNets(px, more, w, h, own, res, toMm, dotted, serif = 0, apex = 0,
     if (!(t1 > t0)) { t0 = -0.5; t1 = 0.5; }
     es = [["a", "b", [[cx + u[0] * t0, cy + u[1] * t0], [cx + u[0] * t1, cy + u[1] * t1]]]];
     dotted = true;
+  }
+  // (`reachOut`: ink no centre line reaches, COLUMNS.reach strokes square or more, gets a stroke of its own, straight
+  // from the nearest point of a centre line to its far end: a serif A's line ran round its counter and never up into
+  // its apex, which was bare, and the letter a fill)
+  if (reachOut && !dotted && es.length) for (let n = 0, grown = true; grown && n < COLUMNS.grow; n++) {
+    grown = false;
+    const near = new Uint8Array(cw * ch);
+    for (const e of es) for (const [x, y] of e[2]) { const r = ownAt(x, y) + 1.5; for (let dy = -Math.ceil(r); dy <= r; dy++) for (let dx = -Math.ceil(r); dx <= r; dx++) { if (dx * dx + dy * dy > r * r) continue; const X = Math.round(x + dx), Y = Math.round(y + dy); if (X >= 0 && Y >= 0 && X < cw && Y < ch) near[Y * cw + X] = 1; } }
+    // (the largest such patch each time, then the rest again: one patch can be an apex and a leg's far side)
+    const seen = new Uint8Array(cw * ch);
+    let blob = [];
+    for (let s0 = 0; s0 < cw * ch; s0++) {
+      if (!pm.data[s0] || near[s0] || seen[s0]) continue;
+      const b = [s0], st = [s0]; seen[s0] = 1;
+      while (st.length) { const i = st.pop(), x = i % cw; for (const j of [x > 0 ? i - 1 : -1, x < cw - 1 ? i + 1 : -1, i - cw, i + cw]) if (j >= 0 && j < cw * ch && pm.data[j] && !near[j] && !seen[j]) { seen[j] = 1; st.push(j); b.push(j); } }
+      if (b.length > blob.length) blob = b;
+    }
+    if (blob.length < (COLUMNS.reach * stroke) ** 2) break;
+    let cx = 0, cy = 0; for (const i of blob) { cx += i % cw; cy += Math.floor(i / cw); } cx /= blob.length; cy /= blob.length;
+    let best = null;
+    es.forEach((e, k) => e[2].forEach(([x, y], j) => { const d = (x - cx) ** 2 + (y - cy) ** 2; if (!best || d < best.d) best = { d, k, j }; }));
+    const e = es[best.k], P = e[2][best.j];
+    let tip = null, far = -1; for (const i of blob) { const x = i % cw, y = Math.floor(i / cw), d = (x - P[0]) ** 2 + (y - P[1]) ** 2; if (d > far) { far = d; tip = [x, y]; } }
+    const L = Math.sqrt(far), u = [(tip[0] - P[0]) / L, (tip[1] - P[1]) / L], end = L - Math.min(ownAt(...tip) + 1, 0.3 * stroke);
+    if (end < 0.5 * stroke) break;
+    // (the new stroke runs on the ink all the way, or it is no stroke)
+    const line = []; for (let t = 0; t <= end; t += 1) { const q = [P[0] + u[0] * t, P[1] + u[1] * t]; if (!at(q[0], q[1])) break; line.push(q); }
+    if (line.length < 0.5 * stroke) break;
+    let node;
+    if (best.j === 0) node = e[0]; else if (best.j === e[2].length - 1) node = e[1];
+    else { node = `o${n}`; es.splice(best.k, 1, [e[0], node, e[2].slice(0, best.j + 1)], [node, e[1], e[2].slice(best.j)]); }
+    es.push([node, `o${n}t`, line]); grown = true;
   }
   // (two centre lines that meet at a node nothing else comes to are one line: left as two, each ended at the node as
   // a column's end does, and where the node sat on a corner of an outline both fanned round it: `satin`'s mitre
@@ -1076,6 +1108,8 @@ function build(img, analysis, opts) {
           // that "covered more" sewn askew, and a cat's eye came out a smear)
           // (a letter's may as well, by COLUMNS.gain: an Impact L's foot, shorter than its stem is wide, was left bare)
           if (fine2(alt) && (count(alt) > count(nets) || letter) && (!fine2(nets) || alt.cover >= nets.cover + COLUMNS.gain)) nets = alt; }
+        // (and with strokes grown out to ink its centre lines don't reach, when that covers COLUMNS.gain more)
+        if (letter && COLUMNS.reach && (!fine2(nets) || nets.cover < COLUMNS.whole)) { const alt = columnNets(q.px, more, w, h, own, res, toMm, false, COLUMNS.serif, cutAt, 0, true); if (fine2(alt) && (!fine2(nets) || alt.cover >= nets.cover + COLUMNS.gain)) nets = alt; }
         // (a letter is tried once more with its joints a short bridge apart made one, COLUMNS.knot strokes, and taken when
         // that leaves fewer joints and covers as much: where a fat X's strokes cross, thinning leaves two joints and a
         // bridge, and the X sewed as two bent strokes and a knot. Always so, an R's and an N's joints were bent)
