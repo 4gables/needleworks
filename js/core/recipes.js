@@ -94,6 +94,8 @@ export const SHAPES = { band: 0.5, between: 1.25, side: 0.2, fleck: 3, enclosed:
 // (artShapes) the strokes need run only this many widths together, not `run` (a fat condensed T is 5.97).
 // `knot`: a letter is also tried with joints under this many strokes apart made one (a fat X's crossing). `edges`:
 // a picture satin column this wide (mm) or more has an edge run inside each side under its zigzag.
+// `reach`, `grow`: a letter is also tried with strokes grown into ink its centre lines miss, patches `reach` strokes
+// square or more, `grow` at most (a serif A's apex).
 export const COLUMNS = { min: 1.0, wide: 4, long: 2, into: 0.6, cap: 1.4, tip: 0.5, solid: 0.85, stub: 3, short: 0.2, even: 2.2, pull: 0.1, thread: 0.2, small: 3, cover: 0.9, mitre: 0.25, taper: 2.5, steady: 0.75, letter: 1.6, run: 6, apex: 115, sharp: 0.85, legs: 2.5, past: 0.25, lap: 0.4, serif: 0.9, whole: 0.97, gain: 0.03, straight: 12, serifs: 1.5, point: 0.9, word: 4, knot: 1.2, edges: 2, reach: 0.6, grow: 4 };
 //   pull:     how far a fill's rows run past the shape's edge at both ends (mm; shapes under 2 mm across 0.05, or
 //             the gaps between thin letters close). 0.15 until 2026-11: a fill sewn on a sweatshirt drew back from its
