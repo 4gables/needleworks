@@ -616,6 +616,30 @@ Reference for this part of Needleworks: the rules, the reason for each (it stops
   - Known: a row of three florets on one baseline can read as lettering (etsy_3); script lettering joined into one
     piece is not found as lettering; the colour count of a soft picture is high, so it is said only on flat ones.
 
+## Making a picture embroidery-ready (2026-11-21)
+
+The owner's patch logo (an AI picture drawn to look embroidered: thread texture, dashed "stitching", shadows, a
+512 px PNG with 2 mm subtitle lettering at 100 mm) is what makers bring. Traced as it was, every program made it
+worse: ZigZag sewed it with 95 thread colours and 79 hits per mm²; our tracer kept only cream and navy (its red and
+gold threads are thin and textured, so too few solid pixels voted for them). Flattened first, ours beat ZigZag
+blind (3/5) and kept all six colours. The steps, in order (scratchpad tool `logo/flatten.py` of that session; to be
+built into the Picture tab as one step, roadmap Cycle 7):
+
+| Step | Why | Number used |
+|---|---|---|
+| Decide the sewn size first | every other number follows from it; small words decide it | 120 mm (5x7, the circle fills 126 mm less margin); a word under 6 mm (`ART.text`) is redrawn bigger or dropped |
+| Scale the picture up (Lanczos) | 512 px over 120 mm is 4 px per mm: edges and 2 mm letters are a few pixels | x3, 12.8 px per mm |
+| Edge-keeping smoothing (median) | removes painted thread texture and fabric weave, keeps colour edges | 5 px median, twice |
+| A fixed palette of the art's real thread colours, sampled by hue | k-means on a mostly-cream picture gave six creams and lost red, gold and green | cream, navy, red, gold, green, grey; near-black merged into navy |
+| Nearest colour in CIELAB, then a mode filter | ΔE, not RGB, is what the eye and the thread chart agree on; the mode filter closes speckle | 7 px mode |
+| Parts under a speck's area go to the colour round them | a speck is a trim and a tie-in each | 1 mm² at the sewn size |
+| Painted shadows and glows go | they trace as thin grey slivers round every shape | grey kept only on its largest part (the needle) |
+| Painted "stitching" goes | dashed lines become dozens of tiny separate fills | small gold parts 0.80-0.97 of the radius |
+| Words checked at the sewn size | the source's 2 mm subtitle stays the weak spot after all of this | redraw it larger in the art, or drop it |
+
+What to tell a maker before any of this: ask the AI tool for flat art, not for embroidery (`js/artwords.js`: the
+rule and the prompt say so, and "Have a picture already?" gives the redraw prompt for one they have).
+
 ## Style chosen per picture
 
 A fresh picture starts in the style a person would pick (C5-AU): Line drawing when it is one, else Filled.

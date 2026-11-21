@@ -28,6 +28,11 @@ browser; nothing to install.
 
 ## Other designs
 - **Picture to stitches**: logos, clip art and simple drawings with a few solid colours (not photos).
+  First ask what size it will be sewn: words under 6 mm tall at that size won't read. If her picture was made to
+  look embroidered (thread texture, dashed "stitching", shadows: AI tools do this when asked for a patch), it will
+  sew badly: have her paste "Make art that stitches well" > "Have a picture already?" into her AI tool with the
+  picture attached, or ask for flat art from the start. The steps behind it: `docs/pictures.md` "Making a picture
+  embroidery-ready".
   **Rotate picture** turns it a quarter turn; **Turn hoop** lays the hoop sideways so a wide design can use the
   long side (the file still loads the right way on the machine). The 4x4 hoop can be picked at the top.
 - **Open a design**: preview any PES/PEC/DST she already has, check it fits the 5x7 hoop, or convert DST to PES.

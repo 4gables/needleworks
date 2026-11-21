@@ -30,6 +30,9 @@ export function artGuide({ sizeMm, w, h, colours = [], most, subject = "" }) {
     `Bold, clean outlines, at least ${ART.line} mm thick once stitched: ${px(ART.line)} px on a ${PX} px picture sewn ${sizeMm} mm long. Thinner lines sew as a single thread, or break.`,
     `No fine texture, soft gradients or shading: thread sews flat colour, so a blend becomes bands. Flat, pop-art, simple, silhouette and line-art styles sew well; crayon, sketch, watercolour and anime shading don't.`,
     `No detail under ${ART.detail} mm across (${px(ART.detail)} px) and no words under ${ART.text} mm tall (${px(ART.text)} px): smaller than that, thread is as thick as the letters' strokes.`,
+    // (2026-11-21: a logo drawn to look embroidered, thread texture, dashed "stitching" and shadows, traced as grey
+    // slivers and dozens of tiny dashes; the embroidery is what the machine adds, not what the picture shows)
+    `Drawn as flat art, not as embroidery: no thread texture, no dashed "stitch" lines, no patch edges, no drop shadows or glows round shapes. Asking an AI tool for an "embroidered" or "patch" look gets exactly those.`,
     `A plain background in one colour, with nothing else in it, so it can be left as fabric.`,
     shape.ratio === "1:1" ? `A square picture: the hoop's shape.` : `Square, or ${shape.words} like the hoop, so the design can fill it.`,
     `Sewn smaller than ${sizeMm} mm, everything shrinks with it: keep it simpler still.`,
@@ -41,12 +44,23 @@ export function artGuide({ sizeMm, w, h, colours = [], most, subject = "" }) {
     `A simple flat illustration of ${what}, for machine embroidery.`,
     `${palette || `Use only ${ART.fewest} to ${most} solid colours.`} No gradients, shading, shadows, highlights, texture or noise: every area is one flat colour.`,
     `Flat vector or pop-art style, not crayon, sketch, watercolour or painterly.`,
+    `Draw it as flat artwork, not as embroidery or a patch: no thread texture, stitch marks, dashed lines, fabric texture or drop shadows.`,
     `Bold, clean shapes with smooth edges and thick, even outlines, at least ${px(ART.ask * ART.line)} px thick on a ${PX} px image.`,
     `No detail smaller than ${px(ART.ask * ART.detail)} px across, no thin lines, no small text.`,
     `Centred on a plain white background with nothing else in it.`,
     shape.ask,
   ].join(" ");
-  return { rules, prompt, tip: `Midjourney: add --ar ${shape.ratio} --style raw at the end. If the picture comes back with shading or a busy background, ask again: "flatter, fewer colours, plain background".` };
+  // A picture they already have (often one made to look embroidered), redrawn: the same design, everything that
+  // traces badly taken out (2026-11-21: the steps that made a painted patch logo sew cleanly, docs/pictures.md
+  // "Making a picture embroidery-ready")
+  const redraw = [
+    `Redraw the attached image as clean flat vector artwork for machine embroidery. Keep the same design, layout, words and colours.`,
+    `${palette || `Use only ${ART.fewest} to ${most} solid colours`.concat(".")} Every area one flat colour.`,
+    `Remove all thread texture, stitch marks, dashed "stitching" lines, fabric texture, shading, highlights, drop shadows and glows.`,
+    `Make outlines and lines at least ${px(ART.ask * ART.line)} px thick on a ${PX} px image, and every word at least ${px(ART.ask * ART.text)} px tall; drop any word or detail that can't be that big.`,
+    `Plain white or transparent background, nothing outside the design.`,
+  ].join(" ");
+  return { rules, prompt, redraw, tip: `Midjourney: add --ar ${shape.ratio} --style raw at the end. If the picture comes back with shading or a busy background, ask again: "flatter, fewer colours, plain background".` };
 }
 
 // What the check of a picture says (core/artcheck.js `art`, as the worker returns it). `c`: { size (mm, as sewn),
