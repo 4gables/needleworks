@@ -13,6 +13,7 @@ import { hoop as getHoop } from "../../js/core/machines.js";
 const Q = new URLSearchParams(location.search), HOOP = getHoop(), PXMM = 12, MM = +Q.get("mm") || 12, PER = +Q.get("per") || Math.max(1, Math.floor(115 / (1.4 * MM)));   // (a picture no wider than the 5x7 hoop is sewn the size it is drawn)
 const FACES = { sans: "700 SIZE Arial, sans-serif", regular: "400 SIZE Arial, sans-serif", slab: "700 SIZE Rockwell, serif", serif: "700 SIZE Georgia, serif", cond: "400 SIZE Impact, sans-serif" };
 const faceName = Q.get("face") || "sans", FACE = FACES[faceName], CHARS = [...(Q.get("chars") || "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789")];
+if (Q.has("dbg")) { globalThis.DBG = []; globalThis.SK = []; }
 const LIMIT = { satin: 0.5, bare: 3, over: 3, out: 0.6, peak: 20 };
 const worker = new Worker(new URL("../../js/worker.js", import.meta.url), { type: "module" }); let seq = 0;
 // (?inline: the job runs on this page, so what digitize.js leaves on globalThis can be read; debugging only)

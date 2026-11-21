@@ -326,7 +326,7 @@ function capJoint(r, s, atStart, zone, k) {
 // is measured across the shape along the normal (a round end narrows as the shape does; the distance to the edge
 // alone would sew it as a diamond), at most COLUMNS.cap times that distance at the centre line, so a junction's
 // other strokes don't count. A column stops where it is under COLUMNS.tip across.
-function columnNets(px, more, w, h, own, res, toMm, dotted, serif = 0, apex = 0) {
+function columnNets(px, more, w, h, own, res, toMm, dotted, serif = 0, apex = 0, knots = 0) {
   let x0 = w, x1 = -1, y0 = h, y1 = -1;
   for (const i of [...px, ...more]) { const x = i % w, y = (i - x) / w; if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
   const ox = Math.max(0, x0 - 2), oy = Math.max(0, y0 - 2), cw = Math.min(w - 1, x1 + 2) - ox + 1, ch = Math.min(h - 1, y1 + 2) - oy + 1;
@@ -352,10 +352,11 @@ function columnNets(px, more, w, h, own, res, toMm, dotted, serif = 0, apex = 0)
     }
     return false;
   };
-  if (!dotted) { es = skeletonEdges(pm, stroke, { spur: 1, stubs: serif, forks: true }).filter((e) => e[2].length > 1 && (e[0] !== e[1] || loopLen(e[2]) >= 2 * stroke || rings(e[2])));
+  if (!dotted) { es = skeletonEdges(pm, stroke, { spur: 1, stubs: serif, forks: true, knots: knots * stroke }).filter((e) => e[2].length > 1 && (e[0] !== e[1] || loopLen(e[2]) >= 2 * stroke || rings(e[2])));
     // (a short dead end is a serif's arm when it lies square to one stroke at its node and straight on from another,
     // or from its own twin: an I's serif either side of its stem, an E's past its top arm. A V's or an A's point leaves
     // a dead end too, straight on from both legs and square to neither: dropped, or the point is a joint of three)
+    if (globalThis.SK) globalThis.SK.push({ serif, apex, stroke, cw, ch, mask: Array.from(pm.data).join(''), es: es.map((e) => [String(e[0]), String(e[1]), e[2].map((q) => [+q[0].toFixed(1), +q[1].toFixed(1)])]) });
     if (serif) {
       const deg = new Map(), dirAt = (e, k) => { const p = e[0] === k ? e[2] : e[2].slice().reverse(); let j = 1, d = 0; while (j < p.length - 1 && d < stroke) { d += Math.hypot(p[j][0] - p[j - 1][0], p[j][1] - p[j - 1][1]); j++; } const L = Math.hypot(p[j][0] - p[0][0], p[j][1] - p[0][1]) || 1; return [(p[j][0] - p[0][0]) / L, (p[j][1] - p[0][1]) / L]; };
       for (const e of es) for (const k of [e[0], e[1]]) deg.set(k, (deg.get(k) || 0) + 1);
@@ -364,9 +365,11 @@ function columnNets(px, more, w, h, own, res, toMm, dotted, serif = 0, apex = 0)
         const k = deg.get(e[0]) === 1 ? e[1] : deg.get(e[1]) === 1 ? e[0] : null; if (k === null || deg.get(k) < 3) return true;
         const u = dirAt(e, k); let on = false, square = false;
         for (const o of es) if (o !== e && (o[0] === k || o[1] === k)) { const v = dirAt(o, k), d = u[0] * v[0] + u[1] * v[1]; if (d < -0.8) on = true; if (Math.abs(d) < 0.5) square = true; }
-        return on && square;
+        // (or a crossing's arm, straight on through a joint of four: a fat X's shorter arms, cut by thinning under a stroke)
+        return on && (square || deg.get(k) >= 4);
       });
     }
+    if (globalThis.SK) globalThis.SK.push({ after: es.map((e) => [String(e[0]), String(e[1]), e[2].length]) });
     lineEnds(es, pm, stroke); }
   if (!es.length) {
     // (the long axis: the shape's second moments)
@@ -1043,10 +1046,11 @@ function build(img, analysis, opts) {
             front = next;
           }
         }
+        const letter = stroke && inWords(q.px, col.id);
         let nets = columnNets(q.px, more, w, h, own, res, toMm, !stroke);
         // (and only when its columns cover the piece: thinning prunes a stroke shorter than it is wide as a spur, and a
         // slab F's middle arm was left bare)
-        const letter = stroke && inWords(q.px, col.id), fine2 = (n) => n.length && n.cover >= COLUMNS.cover && (!stroke || plain(n, letter));
+        const fine2 = (n) => n.length && n.cover >= COLUMNS.cover && (!stroke || plain(n, letter));
         // (a piece its strokes don't cover is tried cut at its sharp corners, COLUMNS.apex: an N, an M, a V. Only then:
         // cut everywhere, a cat's thin eye that sewed well was cut at its curl and sewn askew, look 82.8 -> 80.9)
         let cutAt = 0;
@@ -1061,7 +1065,17 @@ function build(img, analysis, opts) {
           // (and only when it found serifs, more strokes than before: a thin arc gained no stroke, only a longer one
           // that "covered more" sewn askew, and a cat's eye came out a smear)
           // (a letter's may as well, by COLUMNS.gain: an Impact L's foot, shorter than its stem is wide, was left bare)
+          if (globalThis.DBG) globalThis.DBG.push({ alt: 1, n: alt.length, cover: +(alt.cover||0).toFixed(3), plain: alt.length ? plain(alt, letter) : null, edges: alt.map((n) => n.edges.map((e) => +(e.s[e.s.length - 1] / n.W).toFixed(2))) });
           if (fine2(alt) && (count(alt) > count(nets) || letter) && (!fine2(nets) || alt.cover >= nets.cover + COLUMNS.gain)) nets = alt; }
+        if (globalThis.DBG) globalThis.DBG.push({ x: Math.round((q.px[0] % w) / res), A: +A.toFixed(1), W: +W.toFixed(2), whole, letter, cover: +(nets.cover||0).toFixed(3), plain: nets.length ? plain(nets, letter) : null, cut: cutAt, edges: nets.map((n) => n.edges.map((e) => +(e.s[e.s.length - 1] / n.W).toFixed(2))) });
+        // (a letter is tried once more with its joints a short bridge apart made one, COLUMNS.knot strokes, and taken when
+        // that leaves fewer joints and covers as much: where a fat X's strokes cross, thinning leaves two joints and a
+        // bridge, and the X sewed as two bent strokes and a knot. Always so, an R's and an N's joints were bent)
+        if (letter && COLUMNS.knot && fine2(nets)) {
+          const joints = (n) => { const d = new Map(); for (const x of n) for (const e of x.edges) for (const k of [e.a, e.b]) d.set(k, (d.get(k) || 0) + 1); return [...d.values()].filter((v) => v >= 3).length; };
+          const alt = columnNets(q.px, more, w, h, own, res, toMm, false, COLUMNS.serif, cutAt, COLUMNS.knot);
+          if (fine2(alt) && joints(alt) < joints(nets) && alt.cover >= nets.cover) nets = alt;
+        }
         if (!fine2(nets)) continue;
         cols.push({ px: q.px, c, whole, nets, meant: dot(c) || (mark(c) && size[c] < 2 * dotPx) });
         for (const i of q.px) { colPx[i] = 1; cl[i] = 0; mask.data[i] = 0; thin.data[i] = 0; }
