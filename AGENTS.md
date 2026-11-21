@@ -145,6 +145,22 @@ Read the topic's file before changing its code; each holds the rules, their reas
 - A lesson goes in its topic file with its reason and number; superseded text is removed. No round logs. This
   file stays short: only rules that hold everywhere.
 
+## Judging quality (owner, 2026-11-21: weeks of passes lost a blind bake-off to ZigZag 5 of 8)
+Our own scores went up while customers' files got worse: the look score blurred away ragged edges, baselines were
+re-saved ten times, and nine releases tuned letters on a home-made sheet. So:
+- **An outside reference decides.** Stitch quality is judged against another program's files (ZigZag, PE-DESIGN,
+  sold designs) on a fixed set of real customer pictures, rendered the same way, compared blind in pairs. A stitch
+  release must not lose pairs it won before. A score of our own is a tool for finding problems, never the target.
+- **Never re-save a baseline to absorb a drop.** A worse number is a finding to fix or to state in the release row.
+- **Look before building.** Before a round builds, put one result beside the reference and show it. A round whose
+  first picture doesn't beat the reference by eye stops and re-diagnoses; no second pass on the same idea.
+- **Cause, not case.** Name the stage that makes the defect (sizing, tracing, colours, stitch choice, stitching).
+  Two passes that don't move the outside comparison end the approach.
+- **The machine has the last word.** A screen render can mislead (v39: open mesh scored as solid). A change a
+  customer would see is sewn before it is called done.
+- **Push back.** When the owner asks for a fix to a symptom, say which stage causes it and what question would
+  find that out, before building.
+
 ## What to run
 - `zsh tests/check.sh [ref] [baseline_dir]`: CI tests, files_flow, ui_sweep --quick, monkey (3 seeds x 4 starts); the
   batches + pe900_check + byte compare when stitch code changed (then the VM); steps_lint / entry_state / said_flow /

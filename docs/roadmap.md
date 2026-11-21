@@ -458,6 +458,26 @@ Limits accepted: the code and its history have been public (0 forks, 0 stars on 
 keeps the old engine in its offline cache until its next visit; preview stitches can still be read out of the page;
 every setting change is a round trip.
 
+## Cycle 7: as good as ZigZag on a customer's logo, and it sews (owner, 2026-11-21)
+
+The bake-off (8 customer pictures, blind judge): ZigZag first on 5 (clean logos, a wordmark, a letter sheet), ours on
+3 (busy art, flowers, a typed bookmark). Every ZigZag file failed our PE900 limits; every one of ours passed. ZigZag's
+picture fed to our engine came last 5 times: our loss is in how we trace, not in what we are given. Past releases:
+v33-v37 had smoother logo edges than v39-v50 (the solid-fill change serrated every edge); lettering is best now.
+The cause, named in 2026-11-13 and parked: we stitch from pixel edges. ZigZag traces to smooth outlines first
+(`docs/zigzag-trace-spec.md`, clean room).
+
+- [ ] **T0 Judge**: the bake-off pictures plus the corpus' real customer pictures (20-30), our file and ZigZag's,
+  one renderer, blind pairs; a stitch release keeps every pair it won. Our look score adds an unblurred edge
+  measure and a "page sewn as thread" count, and learns from the pairs.
+- [ ] **T1 One picture**: the Louisville L and the BYU Y traced to smooth outlines (spec 3.4, 3.8, 3.9, 3.12) and
+  sewn by our fill; beside ZigZag's. Go on only if ours is as clean by eye and passes the checker.
+- [ ] **T2 Trace**: every Filled picture from smooth outlines; white is fabric (spec 3.10, 3.7); specks by area,
+  thin parts kept (3.9); thin parts to satin or run, never fill (spec 8: ZigZag's density failure).
+- [ ] **T3 Edges**: fill rows end on the smooth outline at v39's cover; no serration.
+- [ ] **T4 Words**: lettering read from a picture re-set by the lettering engine.
+- [ ] **T5 Sewn**: the owner sews ours and ZigZag's of two logos; that result overrides every screen judgment.
+
 ## Verdict
 Strong, and kept: the machine layer (locked writer, PEC box, palette, locks, the 5 mm loose-thread rule, 24 hits
 per mm² at every offset), the 4 mm satin border and staggered seams (both from real sew-outs), the exit gate, the
