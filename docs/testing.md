@@ -36,7 +36,11 @@ Reference for this part of Needleworks: the rules, the reason for each (it stops
 - VM check (before shipping stitch changes): UTM "PESCHECK" with the PE-DESIGN 11 trial over VNC
   (`/Volumes/4TB_SSD/vm-pescheck/tools/vnc.py`); files in on an ISO (`hdiutil makehybrid -iso -joliet`, `cat` it over
   `vm-pescheck/files.iso`); `vm-pescheck/tools/boxcheck2.ps1` (box == stitch minimum: "FITS n/n"), then open them
-  in PE-DESIGN.
+  in PE-DESIGN. Files in without a restart: `vm-pescheck/tools/hmp.py` speaks to the running VM's QEMU monitor
+  (`eject -f <drive>`, then `drive_add 0 if=none,id=xfer,file=…/files.iso,format=raw,file.locking=off` and
+  `device_add usb-storage,drive=xfer,id=xferdev,removable=on`: a USB stick appears; `device_del xferdev` before
+  rewriting the image). QEMU, sandboxed, opens only files it was started with: reuse `files.iso` (a FAT32 image from
+  `newfs_msdos` works as well as an ISO).
 - Quit UTM after a VM check (`osascript -e 'quit app "UTM"'`; `utmctl stop` leaves the app open). With it open,
   files_flow hung at 0 % CPU on "a starter picked while the design is the picture" (the page never answered again;
   v36 and v37 hung the same way, 2026-11-17) and passed the moment it was quit.
