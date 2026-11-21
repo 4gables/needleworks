@@ -1022,6 +1022,8 @@ function build(img, analysis, opts) {
           // (cut at its sharp corners where that covers COLUMNS.gain more, as larger letters: a 6 mm N's corners and a
           // V's and a W's points were left bare, 9-12 % of the letter)
           if (nets.length && COLUMNS.apex && nets.cover < COLUMNS.whole) { const alt = columnNets(q.px, [], w, h, own, res, toMm, false, 0, COLUMNS.apex); if (alt.length && alt.cover >= nets.cover + COLUMNS.gain) nets = alt; }
+          // (and with its serifs kept as bars, as larger letters: a 6 mm slab face's feet were bare, 18 letters of 36)
+          if (nets.length && COLUMNS.serif && nets.cover < COLUMNS.whole) { const alt = columnNets(q.px, [], w, h, own, res, toMm, false, COLUMNS.serif, COLUMNS.apex); if (alt.length && alt.cover >= nets.cover + COLUMNS.gain) nets = alt; }
           if (nets.length) { cols.push({ px: q.px, c, whole, nets, meant: true, text: true }); for (const i of q.px) { colPx[i] = 1; cl[i] = 0; mask.data[i] = 0; thin.data[i] = 0; } }
           continue;
         }
