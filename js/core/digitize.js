@@ -1068,6 +1068,7 @@ function build(img, analysis, opts) {
           // that "covered more" sewn askew, and a cat's eye came out a smear)
           // (a letter's may as well, by COLUMNS.gain: an Impact L's foot, shorter than its stem is wide, was left bare)
           if (globalThis.DBG) globalThis.DBG.push({ alt: 1, n: alt.length, cover: +(alt.cover||0).toFixed(3), plain: alt.length ? plain(alt, letter) : null, edges: alt.map((n) => n.edges.map((e) => +(e.s[e.s.length - 1] / n.W).toFixed(2))) });
+          if (globalThis.DBG && letter && !plain(alt, letter)) for (const n of alt) for (const e of n.edges) { const v = (e.A0 || e.A).map((a, i) => a + (e.B0 || e.B)[i]); globalThis.DBG.push({ prof: v.filter((_, i) => i % 5 === 0).map((x) => +x.toFixed(2)), joins: e.joins, W: n.W }); }
           if (fine2(alt) && (count(alt) > count(nets) || letter) && (!fine2(nets) || alt.cover >= nets.cover + COLUMNS.gain)) nets = alt; }
         if (globalThis.DBG) globalThis.DBG.push({ x: Math.round((q.px[0] % w) / res), A: +A.toFixed(1), W: +W.toFixed(2), whole, letter, cover: +(nets.cover||0).toFixed(3), plain: nets.length ? plain(nets, letter) : null, cut: cutAt, edges: nets.map((n) => n.edges.map((e) => +(e.s[e.s.length - 1] / n.W).toFixed(2))) });
         // (a letter is tried once more with its joints a short bridge apart made one, COLUMNS.knot strokes, and taken when
