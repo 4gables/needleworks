@@ -300,6 +300,10 @@ export function skeletonEdges(mask, stroke, { spur = 1.3, dots = false, sk = nul
     return [a, b, smooth(pts, Math.max(3, Math.floor(stroke * 0.8) | 1))];
   });
   if (forked) for (const e of out) for (const atA of [true, false]) if (forked.has(atA ? e[0] : e[1])) straightOn(e, atA, mask, stroke);
+  // (with serifs kept, every loose end runs on to the ink too: a condensed E's and F's arms, shorter than the stroke is
+  // wide, stopped half a stroke short and their ends were bare)
+  if (stubs) { const deg = new Map(); for (const e of out) for (const k of [e[0], e[1]]) deg.set(k, (deg.get(k) || 0) + 1);
+    for (const e of out) if (e[0] !== e[1]) for (const atA of [true, false]) { const k = atA ? e[0] : e[1]; if (deg.get(k) === 1 && !(forked && forked.has(k)) && !String(k).startsWith("foot")) straightOn(e, atA, mask, stroke); } }
   // (`before`: the strokes before the ends reach out; lettering is sized by them, so a word keeps the size it had)
   const done = () => {
     if (!reach) return out;

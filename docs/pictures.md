@@ -686,6 +686,18 @@ A fresh picture starts in the style a person would pick (C5-AU): Line drawing wh
   corners too.
 - Flagged of 36 at pass 3, on the word-spaced sheet (v46 on the same sheet): serif 12 mm 14 (31), 6 mm 7 (5, peaks
   of 21-23 within the noise); slab 12 mm 5 (13), 6 mm 18 (18); bold sans 12 mm 4 (5), 6 mm 7 (8); regular 12 mm 3 (2);
-  condensed 12 mm 14 (14). Left: a serif's ball and beak ends (C, G, S, 2), its oldstyle figures (off the baseline, no
-  row), small slab serifs, the condensed face, a 6 mm W's and N's corners and Q's tail.
+  condensed 12 mm 14 (14).
+- Pass 4, fat letters (Impact as the condensed face). A piece is letter-like by its pen, the middle of its centre
+  line's widths (`artShapes`, the ridge of the distance to its edge), and up to 92 % of its box inked: Impact's H
+  inks 91 %, and its V's flat foot is 0.46 of its height, so the row was never found. The row's own tests (strokes of
+  one width, the pen a joined piece may have) keep the widest point: by the ridge a serif face's thick-and-thin
+  letters spread past 0.3 and serif 12 mm went from 14 flagged to 26. In a row whose pen is under `COLUMNS.wide`, no
+  part is cut off as a body to fill: where two 3 mm strokes meet, or at a V's foot, the ink holds a 4-5.7 mm disc, and
+  an H, K, V and W were cut at their joints and filled. A letter's strokes run `COLUMNS.word` 4 widths together, not
+  6 (Impact's T is 5.97), and it takes the serif-arms way when that covers `COLUMNS.gain` more even with no more
+  strokes (an Impact L's foot is one bent stroke). With serif arms kept, every loose end runs on to the ink
+  (`straightOn`): an E's and F's arms, shorter than the stroke is wide, stopped half a stroke short.
+- Flagged of 36 at pass 4 (pass 3): condensed 12 mm 6 (14); bold sans 12 mm 1 (4); slab 12 mm 1 (2); the rest level.
+  Left: a serif's ball and beak ends (C, G, S, 2), its oldstyle figures (off the baseline, no row), small slab serifs,
+  a fat X's crossing (satin, a knot at the middle) and W, a 6 mm W's and N's corners and Q's tail.
 

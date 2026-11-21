@@ -601,8 +601,10 @@ function plain(nets, letter = false) {
   // and hairline bars, all fills when every stroke had to be one width. Each stroke's width turns at most once per
   // COLUMNS.serifs widths of its length, as a pen's does; a ragged patch's goes up and down all along it)
   // (as well as, not instead of, the rules below: alone it turned a bold logo's small line from satin to fill)
-  if (letter && COLUMNS.serifs && all >= COLUMNS.run * nets[0].W && nets.every((net) => net.edges.every((e) => smooth(e, Math.max(COLUMNS.taper, e.s[e.s.length - 1] / (COLUMNS.serifs * net.W)), net.W)))) return true;
-  if (short > COLUMNS.short * all) { const v = wd.length >= 10 ? wd : near; return v.length >= 10 && all >= COLUMNS.run * nets[0].W && spreadOf(v) <= COLUMNS.letter; }
+  // (in a row of letters, COLUMNS.word widths are enough: a condensed face's strokes are fat, and Impact's T is 5.97)
+  const run = (letter ? COLUMNS.word : COLUMNS.run) * nets[0].W;
+  if (letter && COLUMNS.serifs && all >= run && nets.every((net) => net.edges.every((e) => smooth(e, Math.max(COLUMNS.taper, e.s[e.s.length - 1] / (COLUMNS.serifs * net.W)), net.W)))) return true;
+  if (short > COLUMNS.short * all) { const v = wd.length >= 10 ? wd : near; return v.length >= 10 && all >= run && spreadOf(v) <= COLUMNS.letter; }
   const spread = spreadOf(wd);
   if (wd.length < 10) return true;
   if (spread <= COLUMNS.even) return true;
@@ -991,8 +993,11 @@ function build(img, analysis, opts) {
     const cols = [], colPx = new Uint8Array(w * h);
     // (not the fabric's colour closed in by the design: its leftover slivers between outlines sewed as white fans)
     if (COLUMNS.wide && count && !col.inside) {
-      const r = (COLUMNS.wide / 2) * res, notCore = { w, h, data: new Uint8Array(w * h) };
-      for (let i = 0; i < w * h; i++) notCore.data[i] = cl[i] && own[i] > r ? 0 : 1;
+      // (nor in a row of letters whose pen is under COLUMNS.wide: where two strokes meet, and at a V's flat foot, the
+      // ink holds a wider disc than either stroke, and an Impact H, K, V and W were cut there and filled)
+      const r = (COLUMNS.wide / 2) * res, notCore = { w, h, data: new Uint8Array(w * h) }, word = new Uint8Array(w * h);
+      for (const row of words) if (row.col === col.id && row.pen <= COLUMNS.wide) for (let y = row.box[1]; y <= row.box[3]; y++) word.fill(1, y * w + row.box[0], y * w + row.box[2] + 1);
+      for (let i = 0; i < w * h; i++) notCore.data[i] = cl[i] && own[i] > r && !word[i] ? 0 : 1;
       const toCore = distanceTo(notCore, r + 1), part = { w, h, data: new Uint8Array(w * h) }, thick = new Uint8Array(count + 1);
       for (let i = 0; i < w * h; i++) if (cl[i]) { if (toCore[i] > r + 0.5) part.data[i] = 1; else thick[cl[i]] = 1; }
       const { labels: pl, count: pc } = label(part);
@@ -1055,7 +1060,8 @@ function build(img, analysis, opts) {
         if (stroke && COLUMNS.serif && (!fine2(nets) || nets.cover < COLUMNS.whole)) { const alt = columnNets(q.px, more, w, h, own, res, toMm, false, COLUMNS.serif, cutAt || (fine2(nets) ? 0 : COLUMNS.apex)); const count = (n) => n.reduce((t, x) => t + x.edges.length, 0);
           // (and only when it found serifs, more strokes than before: a thin arc gained no stroke, only a longer one
           // that "covered more" sewn askew, and a cat's eye came out a smear)
-          if (fine2(alt) && count(alt) > count(nets) && (!fine2(nets) || alt.cover >= nets.cover + COLUMNS.gain)) nets = alt; }
+          // (a letter's may as well, by COLUMNS.gain: an Impact L's foot, shorter than its stem is wide, was left bare)
+          if (fine2(alt) && (count(alt) > count(nets) || letter) && (!fine2(nets) || alt.cover >= nets.cover + COLUMNS.gain)) nets = alt; }
         if (!fine2(nets)) continue;
         cols.push({ px: q.px, c, whole, nets, meant: dot(c) || (mark(c) && size[c] < 2 * dotPx) });
         for (const i of q.px) { colPx[i] = 1; cl[i] = 0; mask.data[i] = 0; thin.data[i] = 0; }
