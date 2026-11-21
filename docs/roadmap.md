@@ -487,6 +487,10 @@ The cause, named in 2026-11-13 and parked: we stitch from pixel edges. ZigZag tr
   lettering (2-4 mm: strokes about 0.5 mm, too thin for the column test, left to 45 degree fill whose row ends serrate
   each edge) and one painted (non-flat) picture. Next: small text found in the traced shapes and sewn as v50 sews
   it (centre run and a narrow satin along each stroke), then the same jury on both sets.
+  Against Ink/Stitch 3.3 (Inkscape 1.4.4 Trace Bitmap, colours matched per picture, Ink/Stitch defaults; same jury):
+  bake-off 7 of 10 ours (6 of 9 without the derby, where Ink/Stitch wrote an error marker), held-out 4 of 6. All
+  16 Ink/Stitch files fail the PE900 checker (density to 59, tiny to 25 %). Its wins: the BYU Y, the cougar (cleaner
+  edges, no travel lines), the letter sheet, the badge and the crest (small text): the same two causes as ZigZag's wins.
 - [ ] **T3 Edges**: fill rows end on the smooth outline at v39's cover; no serration.
 - [ ] **T4 Words**: lettering read from a picture re-set by the lettering engine.
 - [ ] **T5 Sewn**: the owner sews ours and ZigZag's of two logos; that result overrides every screen judgment.
