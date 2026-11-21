@@ -470,8 +470,11 @@ The cause, named in 2026-11-13 and parked: we stitch from pixel edges. ZigZag tr
 - [ ] **T0 Judge**: the bake-off pictures plus the corpus' real customer pictures (20-30), our file and ZigZag's,
   one renderer, blind pairs; a stitch release keeps every pair it won. Our look score adds an unblurred edge
   measure and a "page sewn as thread" count, and learns from the pairs.
-- [ ] **T1 One picture**: the Louisville L and the BYU Y traced to smooth outlines (spec 3.4, 3.8, 3.9, 3.12) and
-  sewn by our fill; beside ZigZag's. Go on only if ours is as clean by eye and passes the checker.
+- [x] **T1 One picture**: the Louisville L and the BYU Y traced to smooth outlines (spec 3.4, 3.8, 3.9, 3.12) and
+  sewn by our fill; beside ZigZag's. Go on only if ours is as clean by eye and passes the checker. Done 2026-11-21
+  (`js/core/trace.js`, `tests/trace_one.mjs`): blind judge preferred ours on both (BYU Y 4/5, Louisville L 5/5:
+  true colour, white left as fabric, no seams); both pass the checker (density 9 and 11, 3 and 2 tiny). Our edge is
+  still a little serrated where ZigZag's is straight.
 - [ ] **T2 Trace**: every Filled picture from smooth outlines; white is fabric (spec 3.10, 3.7); specks by area,
   thin parts kept (3.9); thin parts to satin or run, never fill (spec 8: ZigZag's density failure).
 - [ ] **T3 Edges**: fill rows end on the smooth outline at v39's cover; no serration.
