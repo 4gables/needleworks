@@ -1,0 +1,172 @@
+<!doctype html>
+<!-- Needleworks (c) 2026 4Gables. All rights reserved. Proprietary, see LICENSE. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="copyright" content="(c) 2026 4Gables. All rights reserved.">
+<link rel="license" href="https://github.com/4gables/needleworks/blob/main/LICENSE">
+<link rel="canonical" href="https://4gables.com/needleworks/guide.html">
+<title>Make It Sew Guide · Needleworks</title>
+<meta name="description" content="How to prepare a picture for machine embroidery on a Brother PE900, and how to tell whether a PES file is safe to sew. Written to be followed by a person or an AI.">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=Inter:wght@400;600&family=JetBrains+Mono:wght@400&display=swap">
+<style>
+/* Layout: one reading column; rules as numbered steps (they are a real order); tables for every number */
+:root{--bg:#ffffff;--panel:#f4f6fa;--fg:#17203a;--muted:#55607a;--line:#dde2ec;--accent:#b8862f;--navy:#22304f;--ok:#2f7a4a;--bad:#a8323a;
+--display:"Space Grotesk",system-ui,sans-serif;--body:Inter,system-ui,sans-serif;--mono:"JetBrains Mono",ui-monospace,monospace}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#11151f;--panel:#1a2030;--fg:#e9ecf3;--muted:#a2abc0;--line:#2b3347;--accent:#e0b25a;--navy:#9db3e6;--ok:#6cc08b;--bad:#ec7a80;color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#11151f;--panel:#1a2030;--fg:#e9ecf3;--muted:#a2abc0;--line:#2b3347;--accent:#e0b25a;--navy:#9db3e6;--ok:#6cc08b;--bad:#ec7a80;color-scheme:dark}
+body{background:var(--bg);color:var(--fg);font-family:var(--body);font-size:16px;line-height:1.6;padding-block:28px 56px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+main{max-width:760px;margin:0 auto;display:flex;flex-direction:column;gap:34px}
+h1{font-family:var(--display);font-size:2.3rem;line-height:1.15;margin:0;text-wrap:balance}
+h2{font-family:var(--display);font-size:1.35rem;margin:0 0 10px;text-wrap:balance;color:var(--navy)}
+h3{font-family:var(--display);font-size:1.05rem;margin:18px 0 6px}
+p,li{max-width:68ch}p{margin:0 0 10px}
+.lede{color:var(--muted);font-size:1.05rem}
+.step{font-family:var(--mono);font-size:.8rem;letter-spacing:.06em;text-transform:uppercase;color:var(--accent)}
+code,.mono{font-family:var(--mono);font-size:.88em}
+.prompt{background:var(--panel);border:1px solid var(--line);border-left:4px solid var(--accent);border-radius:6px;padding:14px 16px;font-family:var(--mono);font-size:.85rem;white-space:pre-wrap;word-break:break-word;margin:0}
+.copyrow{display:flex;gap:10px;align-items:center;margin-top:8px;flex-wrap:wrap}
+button{font:600 .9rem var(--body);color:var(--bg);background:var(--navy);border:0;border-radius:6px;padding:8px 14px;cursor:pointer}
+button:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+.said{color:var(--muted);font-size:.9rem}
+.tablewrap{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:.93rem;font-variant-numeric:tabular-nums}
+th,td{text-align:left;padding:8px 10px;border-top:1px solid var(--line);vertical-align:top}
+th{font-family:var(--display);font-weight:500;color:var(--muted);border-top:0}
+ol,ul{padding-left:1.2em;margin:0}li{margin:4px 0}
+.pair{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+@media (max-width:560px){.pair{grid-template-columns:1fr}}
+figure{margin:0;display:flex;flex-direction:column;gap:6px;min-width:0}
+figure img{border:1px solid var(--line);border-radius:6px;background:#fff}
+figcaption{font-size:.88rem;color:var(--muted)}
+.good{color:var(--ok);font-weight:600}.badw{color:var(--bad);font-weight:600}
+hr{border:0;border-top:1px solid var(--line);margin:0}
+body{margin:0}
+footer{max-width:760px;margin:40px auto 0;color:var(--muted);font-size:.85rem}
+</style>
+</head>
+<body>
+<main>
+<header style="display:flex;flex-direction:column;gap:12px">
+<span class="step">Needleworks · lessons from real sew-outs and a blind bake-off</span>
+<h1>Make it sew: preparing a picture for machine embroidery</h1>
+<p class="lede">What we learned turning customers' logos into stitch files for a Brother PE900, written so a person or an AI image tool can follow it. A picture that follows these rules sews cleanly; one that doesn't will look fine on screen and sew badly.</p>
+</header>
+
+<section>
+<h2>Use this page in a prompt</h2>
+<p>Attach your picture to an AI chat or image tool and paste this. It prepares the art. Then open the prepared picture in <a href="https://4gables.com/needleworks/">Needleworks</a> to get the PES file.</p>
+<pre class="prompt" id="p1">Prepare the attached image for machine embroidery, following every rule on this page: https://4gables.com/needleworks/guide.html
+It will be sewn about [size] mm across on a Brother PE900 ([4x4 or 5x7] hoop).
+Give me back one flat PNG at 1024 px or more. List any word or detail you had to enlarge or drop, and why.</pre>
+<div class="copyrow"><button type="button" id="c1">Copy this prompt</button><span class="said" id="s1" role="status"></span></div>
+<h3>Why not ask the AI for the PES file itself?</h3>
+<p>A general AI writes stitch files with generic code. In our tests that code put the PES design box in the wrong place, which makes a PE900 sew the design shifted and cut off. It also packed up to 79 needle hits into one square millimetre, where sold designs stay at or under 24, and left up to 16 % of stitches under 0.3 mm. Those stitches break thread and nest. Rules on a page can't fix how a program stitches. Use a program built and tested for the machine.</p>
+</section>
+
+<section>
+<span class="step">Step 1</span>
+<h2>Decide the sewn size first</h2>
+<p>Every other rule depends on it. Words and fine lines that read on screen can be thinner than the thread at the size you sew.</p>
+<div class="tablewrap"><table>
+<tr><th>Hoop (PE900)</th><th>Sewing field</th><th>Largest design (2 mm margin)</th></tr>
+<tr><td>4x4</td><td>100 x 100 mm</td><td>96 x 96 mm</td></tr>
+<tr><td>5x7</td><td>130 x 180 mm</td><td>126 x 176 mm</td></tr>
+</table></div>
+<h3>Smallest things that sew, at the sewn size</h3>
+<div class="tablewrap"><table>
+<tr><th>Feature</th><th>At least</th><th>On a 1024 px picture sewn 120 mm across</th><th>Why</th></tr>
+<tr><td>Word height (capital letters)</td><td>6 mm</td><td>51 px</td><td>below this the thread is as thick as the strokes; letters fill in</td></tr>
+<tr><td>Line or outline thickness</td><td>1 mm</td><td>9 px</td><td>thinner sews as a single thread, or breaks</td></tr>
+<tr><td>Any detail across</td><td>2.5 mm</td><td>21 px</td><td>smaller pieces become knots of trims and tie-ins</td></tr>
+<tr><td>Any separate piece</td><td>1 mm²</td><td>73 px²</td><td>smaller is dropped or merged; each piece costs a trim</td></tr>
+<tr><td>Colours</td><td>4 to 8</td><td></td><td>each colour is one thread change</td></tr>
+</table></div>
+<p>Ask an AI tool for about twice these numbers: art is often sewn smaller than planned.</p>
+</section>
+
+<section>
+<span class="step">Step 2</span>
+<h2>Draw flat art, not embroidery</h2>
+<ol>
+<li><strong>Flat colours only.</strong> 4 to 8 solid colours, each one a thread. No gradients, shading, highlights or noise.</li>
+<li><strong>Don't draw it as embroidery.</strong> No thread texture, no dashed "stitching" lines, no patch edges, no fabric weave, no drop shadows or glows. If you ask an AI tool for an "embroidered" or "patch" look, it draws all of these, and every one sews badly. The machine adds the embroidery.</li>
+<li><strong>Bold, clean shapes</strong> with smooth edges and even outlines, thicker than the minimums above.</li>
+<li><strong>Few words, big words.</strong> Every word at least 6 mm tall at the sewn size, or drop it.</li>
+<li><strong>A plain white or see-through background</strong> with nothing else on it. That area is left as fabric.</li>
+<li><strong>The hoop's shape</strong>: square for 4x4, or about 2:3 (taller than wide) for 5x7.</li>
+</ol>
+<h3>Prompt for new art (pixel numbers worked out for about 120 mm; say your size)</h3>
+<pre class="prompt" id="p2">A simple flat illustration of [what you want], for machine embroidery, to be sewn about [size] mm across. Use only 4 to 6 solid colours, each clearly different from the others (no two shades of one colour). No gradients, shading, shadows, highlights, texture or noise: every area is one flat colour. Flat vector or pop-art style, not crayon, sketch, watercolour or painterly. Draw it as flat artwork, not as embroidery or a patch: no thread texture, stitch marks, dashed or dotted lines, fabric texture, drop shadows or glows. Bold, clean shapes with smooth edges and thick, even outlines and lines, at least 17 px thick on a 1024 px image. No detail, dot, sparkle or star smaller than 43 px across; leave small decorations out. Words only if they matter, as few as possible, in a bold simple font, every letter at least 51 px tall; no small taglines or subtitles. Centred on a plain white background with nothing else in it. Square image (1:1).</pre>
+<div class="copyrow"><button type="button" id="c2">Copy this prompt</button><span class="said" id="s2" role="status"></span></div>
+</section>
+
+<section>
+<span class="step">Step 3</span>
+<h2>Fix a picture you already have</h2>
+<p>Most pictures that sew badly are pictures of embroidery: an AI patch, or a photo of a sewn piece. Redraw them flat first.</p>
+<pre class="prompt" id="p3">Redraw the attached image as clean flat vector artwork for machine embroidery, to be sewn about [size] mm across. Keep the same design, layout and colours. Use only 4 to 6 solid colours, each clearly different from the others. Every area one flat colour. Remove all thread texture, stitch marks, dashed or dotted &quot;stitching&quot; lines, fabric texture, shading, highlights, drop shadows and glows. Thicken every outline and line to at least 17 px on a 1024 px image. Remove sparkles, stars and dots smaller than 43 px that stand alone. Every word at least 51 px tall in a bold simple font; shorten or remove any word, tagline or subtitle that can&#x27;t be that big. Plain white or transparent background, nothing outside the design.</pre>
+<div class="copyrow"><button type="button" id="c3">Copy this prompt</button><span class="said" id="s3" role="status"></span></div>
+<h3>What the redraw has to do (if you do it by hand or in code)</h3>
+<div class="tablewrap"><table>
+<tr><th>Step</th><th>Why</th><th>What we used</th></tr>
+<tr><td>Scale it up smoothly</td><td>a 512 px picture sewn 120 mm is only 4 px per mm; letters are a few pixels</td><td>3x, Lanczos</td></tr>
+<tr><td>Smooth the texture away, keep the edges</td><td>painted thread and weave become specks</td><td>5 px median filter, twice</td></tr>
+<tr><td>Pick the real thread colours by hue</td><td>automatic colour picking on a mostly-cream picture gave six creams and lost red, gold and green</td><td>sample each hue family; merge near-black into the dark colour</td></tr>
+<tr><td>Snap every pixel to its nearest thread colour</td><td>flat areas, one thread each</td><td>nearest in CIELAB, then a 7 px mode filter</td></tr>
+<tr><td>Remove painted shadows and glows</td><td>they sew as thin slivers round every shape</td><td>keep a colour only where it's a real part (the needle's grey)</td></tr>
+<tr><td>Remove painted stitching</td><td>dashes become dozens of tiny fills, each with trims</td><td>drop small dashes along borders</td></tr>
+<tr><td>Remove specks</td><td>each one is a trim and a tie-in</td><td>pieces under 1 mm² at the sewn size</td></tr>
+<tr><td>Thicken thin lines to 1 mm</td><td>thinner lines sew as a single thread</td><td>grow them into the background only</td></tr>
+<tr><td>Remove sparkles and dots under 3 mm that stand alone</td><td>each sews as a knot of trims and tie-ins</td><td>keep dots that belong to something (berries on a stem)</td></tr>
+<tr><td>Set words again as real type</td><td>small painted lettering can't be rescued by filtering</td><td>shorten the words, use a bold sans, as large as the space allows; split them around anything in the way</td></tr>
+</table></div>
+<h3>Example: the Needleworks patch logo</h3>
+<div class="pair">
+<figure><img src="assets/guide/before.jpg" alt="The original logo, painted to look like an embroidered patch with thread texture, dashed stitching and shadows"><figcaption><span class="badw">Before.</span> An AI picture painted to look embroidered: thread texture, dashed stitching, shadows. ZigZag sewed it with 95 thread colours and 79 hits per mm².</figcaption></figure>
+<figure><img src="assets/guide/after.jpg" alt="The same logo redrawn in six flat thread colours with no texture, shadows or painted stitching"><figcaption><span class="good">After.</span> Six flat thread colours; no texture, shadows, painted stitching or sparkles; thread strands thickened to 1 mm; the 2.7 mm script subtitle removed: at 120 mm no wording of it could reach 6 mm in the space, so it went (the rule: shorten or drop words that can't be big enough).</figcaption></figure>
+</div>
+</section>
+
+<section>
+<span class="step">Step 4</span>
+<h2>Make the PES and check it before you sew</h2>
+<p>Open the prepared picture in <a href="https://4gables.com/needleworks/">Needleworks</a>, set the size and hoop, and download the PES. Every download passes these checks. If you have a PES from anywhere else, these are the ones to ask about:</p>
+<div class="tablewrap"><table>
+<tr><th>Check</th><th>Limit</th><th>What goes wrong otherwise</th></tr>
+<tr><td>PEC design box</td><td>the box's top-left equals the stitches' minimum</td><td>the PE900 sews the design shifted and clipped</td></tr>
+<tr><td>Needle hits per 1 mm square, per colour</td><td>24 or fewer, at any 0.1 mm offset</td><td>thread breaks, bird's nests, needle breaks; 24 is the densest spot in sold designs</td></tr>
+<tr><td>Stitches 0.3 mm or shorter</td><td>2 % or less</td><td>shredded thread and holes</td></tr>
+<tr><td>Same hole hit twice in a row</td><td>1 % or less</td><td>holes in the fabric</td></tr>
+<tr><td>Longest stitch</td><td>12.1 mm or less</td><td>loose loops that snag</td></tr>
+<tr><td>Colour blocks</td><td>99 or fewer</td><td>the PE900 refuses the file</td></tr>
+<tr><td>Every trim locked</td><td>a short tie-off before each cut</td><td>cut threads work loose</td></tr>
+<tr><td>Jumps of 1 to 5 mm</td><td>expected and counted</td><td>the PE900 doesn't trim them: snip by hand</td></tr>
+</table></div>
+</section>
+
+<section>
+<span class="step">Step 5</span>
+<h2>Believe the fabric, not the screen</h2>
+<p>A file can look solid and crisp on screen and sew as an open mesh or with jagged edges: it happened to us. Sew a small test on scrap with the right stabilizer before a real piece, look at edges and small letters up close, and trust that over any preview or score.</p>
+</section>
+
+<hr>
+<section>
+<h2>What we compared, and how</h2>
+<ul>
+<li>Ten real customer pictures (logos, a wordmark, a letter sheet, busy art and the logo above), each sewn by ZigZag 0.1.2 and by Needleworks at the same size and drawn the same way.</li>
+<li>A judge who didn't know which program made which picked the better file of each pair.</li>
+<li>Needleworks tracing to smooth outlines (Nov 2026) won 6 of 10. Every ZigZag file failed at least one machine limit above. Every Needleworks file passed.</li>
+<li>Where ZigZag still wins: very small lettering, which needs satin columns rather than fill. That's the next thing we're fixing.</li>
+</ul>
+</section>
+</main>
+<footer>© 2026 4Gables. All rights reserved. <a href="./">Needleworks</a> · <a href="privacy.html">Privacy and terms</a></footer>
+<script>
+const copy=(src,out)=>async()=>{const t=document.getElementById(src),s=document.getElementById(out);try{await navigator.clipboard.writeText(t.textContent);s.textContent="Copied.";}catch{const r=document.createRange();r.selectNodeContents(t);const sel=getSelection();sel.removeAllRanges();sel.addRange(r);s.textContent="Selected: press Ctrl+C (Cmd+C on a Mac).";}};
+[["c1","p1","s1"],["c2","p2","s2"],["c3","p3","s3"]].forEach(([b,p,s])=>document.getElementById(b).addEventListener("click",copy(p,s)));
+</script>
+</body>
+</html>
