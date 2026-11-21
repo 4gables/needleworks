@@ -469,7 +469,10 @@ The cause, named in 2026-11-13 and parked: we stitch from pixel edges. ZigZag tr
 
 - [ ] **T0 Judge**: the bake-off pictures plus the corpus' real customer pictures (20-30), our file and ZigZag's,
   one renderer, blind pairs; a stitch release keeps every pair it won. Our look score adds an unblurred edge
-  measure and a "page sewn as thread" count, and learns from the pairs.
+  measure and a "page sewn as thread" count, and learns from the pairs. Judged by three blind judges
+  each with its own shuffle, majority per pair: one judge flipped two pairs whose files were byte-identical between
+  runs (2026-11-21), so a single verdict is noise. Held-out pictures (drawn before any stitch was seen, never tuned
+  on) are scored apart from the bake-off set; a change wins only if it wins on both.
 - [x] **T1 One picture**: the Louisville L and the BYU Y traced to smooth outlines (spec 3.4, 3.8, 3.9, 3.12) and
   sewn by our fill; beside ZigZag's. Go on only if ours is as clean by eye and passes the checker. Done 2026-11-21
   (`js/core/trace.js`, `tests/trace_one.mjs`): blind judge preferred ours on both (BYU Y 4/5, Louisville L 5/5:
@@ -479,6 +482,11 @@ The cause, named in 2026-11-13 and parked: we stitch from pixel edges. ZigZag tr
   real PE900: AGENTS.md "PEC design box"), so ZigZag's files are not safe on a PE900 as written.
 - [ ] **T2 Trace**: every Filled picture from smooth outlines; white is fabric (spec 3.10, 3.7); specks by area,
   thin parts kept (3.9); thin parts to satin or run, never fill (spec 8: ZigZag's density failure).
+  State 2026-11-21 (branch trace1): flat art traced and sewn, strokes as satin (`js/core/tracesew.js`). Three
+  blind judges, majority: bake-off set 7 of 10 (v50: 3 of 8), held-out set 3 of 6. Every unanimous loss is small
+  lettering (2-4 mm: strokes about 0.5 mm, too thin for the column test, left to 45 degree fill whose row ends serrate
+  each edge) and one painted (non-flat) picture. Next: small text found in the traced shapes and sewn as v50 sews
+  it (centre run and a narrow satin along each stroke), then the same jury on both sets.
 - [ ] **T3 Edges**: fill rows end on the smooth outline at v39's cover; no serration.
 - [ ] **T4 Words**: lettering read from a picture re-set by the lettering engine.
 - [ ] **T5 Sewn**: the owner sews ours and ZigZag's of two logos; that result overrides every screen judgment.
