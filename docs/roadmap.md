@@ -458,6 +458,43 @@ Limits accepted: the code and its history have been public (0 forks, 0 stars on 
 keeps the old engine in its offline cache until its next visit; preview stitches can still be read out of the page;
 every setting change is a round trip.
 
+## Cycle 7: as good as ZigZag on a customer's logo, and it sews (owner, 2026-11-21)
+
+The bake-off (8 customer pictures, blind judge): ZigZag first on 5 (clean logos, a wordmark, a letter sheet), ours on
+3 (busy art, flowers, a typed bookmark). Every ZigZag file failed our PE900 limits; every one of ours passed. ZigZag's
+picture fed to our engine came last 5 times: our loss is in how we trace, not in what we are given. Past releases:
+v33-v37 had smoother logo edges than v39-v50 (the solid-fill change serrated every edge); lettering is best now.
+The cause, named in 2026-11-13 and parked: we stitch from pixel edges. ZigZag traces to smooth outlines first
+(`docs/zigzag-trace-spec.md`, clean room).
+
+- [ ] **T0 Judge**: the bake-off pictures plus the corpus' real customer pictures (20-30), our file and ZigZag's,
+  one renderer, blind pairs; a stitch release keeps every pair it won. Our look score adds an unblurred edge
+  measure and a "page sewn as thread" count, and learns from the pairs. Judged by three blind judges
+  each with its own shuffle, majority per pair: one judge flipped two pairs whose files were byte-identical between
+  runs (2026-11-21), so a single verdict is noise. Held-out pictures (drawn before any stitch was seen, never tuned
+  on) are scored apart from the bake-off set; a change wins only if it wins on both.
+- [x] **T1 One picture**: the Louisville L and the BYU Y traced to smooth outlines (spec 3.4, 3.8, 3.9, 3.12) and
+  sewn by our fill; beside ZigZag's. Go on only if ours is as clean by eye and passes the checker. Done 2026-11-21
+  (`js/core/trace.js`, `tests/trace_one.mjs`): blind judge preferred ours on both (BYU Y 4/5, Louisville L 5/5:
+  true colour, white left as fabric, no seams); both pass the checker (density 9 and 11, 3 and 2 tiny). Our edge is
+  still a little serrated where ZigZag's is straight. The Windows box check: both of ours fit; both of ZigZag's fail
+  it (their PEC design box is not at the stitch minimum, the bug that sewed a design shifted and cut in half on a
+  real PE900: AGENTS.md "PEC design box"), so ZigZag's files are not safe on a PE900 as written.
+- [ ] **T2 Trace**: every Filled picture from smooth outlines; white is fabric (spec 3.10, 3.7); specks by area,
+  thin parts kept (3.9); thin parts to satin or run, never fill (spec 8: ZigZag's density failure).
+  State 2026-11-21 (branch trace1): flat art traced and sewn, strokes as satin (`js/core/tracesew.js`). Three
+  blind judges, majority: bake-off set 7 of 10 (v50: 3 of 8), held-out set 3 of 6. Every unanimous loss is small
+  lettering (2-4 mm: strokes about 0.5 mm, too thin for the column test, left to 45 degree fill whose row ends serrate
+  each edge) and one painted (non-flat) picture. Next: small text found in the traced shapes and sewn as v50 sews
+  it (centre run and a narrow satin along each stroke), then the same jury on both sets.
+  Against Ink/Stitch 3.3 (Inkscape 1.4.4 Trace Bitmap, colours matched per picture, Ink/Stitch defaults; same jury):
+  bake-off 7 of 10 ours (6 of 9 without the derby, where Ink/Stitch wrote an error marker), held-out 4 of 6. All
+  16 Ink/Stitch files fail the PE900 checker (density to 59, tiny to 25 %). Its wins: the BYU Y, the cougar (cleaner
+  edges, no travel lines), the letter sheet, the badge and the crest (small text): the same two causes as ZigZag's wins.
+- [ ] **T3 Edges**: fill rows end on the smooth outline at v39's cover; no serration.
+- [ ] **T4 Words**: lettering read from a picture re-set by the lettering engine.
+- [ ] **T5 Sewn**: the owner sews ours and ZigZag's of two logos; that result overrides every screen judgment.
+
 ## Verdict
 Strong, and kept: the machine layer (locked writer, PEC box, palette, locks, the 5 mm loose-thread rule, 24 hits
 per mm² at every offset), the 4 mm satin border and staggered seams (both from real sew-outs), the exit gate, the

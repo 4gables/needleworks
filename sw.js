@@ -11,10 +11,10 @@
 // cache.
 // (`SET`: a fingerprint of the list below, written with the hashes. It is part of the cache's name, so a release whose
 // files changed can never install into the cache the running one is serving from, version number bumped or not.)
-const SET = "85b25a19c969";
-const CACHE = `needleworks-v50-${SET}`, SHARED = "needleworks-shared";
+const SET = "dabf1e249cf6";
+const CACHE = `needleworks-v51-${SET}`, SHARED = "needleworks-shared";
 const FILES = {
-  "index.html": "3548c7c1922462dc061258df315b66d6318d45d014a973685caf0228f89d472f",
+  "index.html": "0bbc8e63ae598185316bb178efb6045d0984089e48b2601e2646baffa41498ff",
   "manifest.webmanifest": "82f627e1def5254866cf364a55a1c2a85e2c3dd61abeeb890829362969fcfb63",
   "css/app.css": "1c7d8c982f85243b3f2e3c6cd910a7b1601d1b2c9362adfa518f114061165938",
   "assets/icon-192.png": "19ae131e0ea47270a4cd0eefdac045f1811f7b3b25966a08d27e3c94b3262c76",
@@ -46,7 +46,7 @@ const FILES = {
   "js/core/brandcharts.js": "85f4772a2de19ab56691d984a8aad930b2c427cd34498c70f66933c6f09199be",
   "js/core/brands.js": "cb0a36b5fe3128de55654bdd350bdc86508f11fb089eb822bd73b7a26eba1c59",
   "js/core/design.js": "616cd759d665209a80236e18de9b230675db3626efb8ea08846cffbd7bb15e18",
-  "js/core/digitize.js": "639b6cbfe07885e4778e21628ef1871793b4020c1c34f27389a70f28b68e1e61",
+  "js/core/digitize.js": "78293d960a42795e238568d30720d66e1a8dadb842f9712652bb3f4d3b9b82ef",
   "js/core/fonts.js": "eff92c64949a5983d3d2ae4804ff6cbf7ca1a6547998767f276c8d07b9cd26f9",
   "js/core/glyphs.js": "1aa94c2a28d8343fa6837d8f0591e325a9128063bfce81d968bf592feda6cbf3",
   "js/core/formats.js": "6c635b29d843e7eb112ad773f92f79b26ea0ad17769889104b271faa2915b76e",
@@ -67,8 +67,8 @@ const FILES = {
   "js/core/threads.js": "2f843722671915cef7d2aad9344f171040e59d2cf70aa43b139da9dd4229fc1f",
   "js/doctor.js": "5653d26f544b9f11cd96ee2381bebae5c5c98ae74a6d78f690d70b2045820b83",
   "js/opened.js": "c0e40a9c5328d974ba46d62d25fcd49ce8308ef1b33f16ff829bef5fd225dc71",
-  "js/artwords.js": "41c08b6a95918621f461dbb9a2eff08f808618b252c160d7316ce6da82c06751",
-  "js/picture.js": "3a83bfec598bf043fb21133276ce05e5cc8c3ecbf9b243d253fea3772eacca81",
+  "js/artwords.js": "121c1065e3de5d8e0b28f0d3dffb4805439bc8b09768b90a7024c72d31bb1946",
+  "js/picture.js": "20ffd4f6309f6d7932a51d5fcf68b0e2e0f483b2b4aa3636df3e72198458e7d3",
   "js/threadui.js": "8ceabd64367deaaa390dd1b99ff44ae7f6ee9a461d188c77e9c35263747af525",
   "js/along.js": "5877433450bc9b2e8c474a46829e506b62a16b805fee20dc6bd68284239e4c7c",
   "js/onitem.js": "e8f881bc81209ff19ee6a80c75afa0abb9a2f120077228d9370b5c864e054f6d",
@@ -124,6 +124,8 @@ const FILES = {
   "js/core/limits.js": "65e92548afe9e1278a38f87324de126048c83713e30c4eb6cdf66bd3dc8ced39",
   "js/core/picprep.js": "66d84de80b018aa3b1d5dcf440c668ca9650d75cbf82816a8c4cd506678e6bc8",
   "js/core/turn.js": "6b2c99d6192fef78e95e488126776194a368a0e89b1bd48009f2123ce7394081",
+  "js/core/trace.js": "f973669092f869253fccfed1e9f5aa0b64cd782b0578d855881a38cc8585f65e",
+  "js/core/tracesew.js": "758bd488bc07f160b4df9cce8a3ece0617882ceb5baae4f807010f7fe7f0b4af",
 };
 const hex = (buf) => [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, "0")).join("");
 self.addEventListener("install", (e) => {
