@@ -698,6 +698,19 @@ A fresh picture starts in the style a person would pick (C5-AU): Line drawing wh
   strokes (an Impact L's foot is one bent stroke). With serif arms kept, every loose end runs on to the ink
   (`straightOn`): an E's and F's arms, shorter than the stroke is wide, stopped half a stroke short.
 - Flagged of 36 at pass 4 (pass 3): condensed 12 mm 6 (14); bold sans 12 mm 1 (4); slab 12 mm 1 (2); the rest level.
-  Left: a serif's ball and beak ends (C, G, S, 2), its oldstyle figures (off the baseline, no row), small slab serifs,
-  a fat X's crossing (satin, a knot at the middle) and W, a 6 mm W's and N's corners and Q's tail.
+- Pass 5. Small lettering (`smallText` rows) tries its serifs as bars too, as larger letters do: a 6 mm slab face's
+  feet were bare. A row may be letters that share a band 0.45 of their height instead of a baseline: Georgia's
+  oldstyle figures (3 4 5 7 9 hang below the line) were no row and every one a fill. A letter's width may swing thick
+  to thin once per `COLUMNS.serifs` 1.5 widths (2.5 before: a figure's arc, ball and flag swing 3.5 times in 5.4
+  widths). A letter is tried once more with joints under `COLUMNS.knot` 1.2 strokes apart made one, kept only when
+  that leaves fewer joints and covers as much (a fat X's crossing is two joints and a bridge, sewn as two bent
+  strokes and a knot; made one always, an R's and N's joints bent), and a dead end straight on through a joint of
+  four is an arm, not a serif (thinning cut a fat X's arms under a stroke).
+- A picture's satin column from `COLUMNS.edges` 2 mm across is sewn over an edge run 0.4 mm inside each side (out
+  along one, back along the other) and then its zigzag, as sold designs hold a wide column's edges; narrower, the
+  zigzag or centre run alone. Satin stays 0.38 mm same-edge (Brother-made files measure 0.30-0.42).
+- Flagged of 36 at pass 5 (pass 4): slab 6 mm 3 (18); condensed 6 mm 4 (14); bold sans 6 mm 1 (7); serif 12 mm 5
+  (13); serif 6 mm 13 (7: the figures are lettering now, and lettering at 6 mm peaks at 21-24 needle points in a
+  1 mm square, under the checker's 24); the rest level. Left: a fat condensed W (a U with spurs, 5.9 % bare), a serif
+  A (fill), beak and ball ends on G and Y's arms (3-6 % bare).
 

@@ -326,7 +326,7 @@ function capJoint(r, s, atStart, zone, k) {
 // is measured across the shape along the normal (a round end narrows as the shape does; the distance to the edge
 // alone would sew it as a diamond), at most COLUMNS.cap times that distance at the centre line, so a junction's
 // other strokes don't count. A column stops where it is under COLUMNS.tip across.
-function columnNets(px, more, w, h, own, res, toMm, dotted, serif = 0, apex = 0) {
+function columnNets(px, more, w, h, own, res, toMm, dotted, serif = 0, apex = 0, knots = 0) {
   let x0 = w, x1 = -1, y0 = h, y1 = -1;
   for (const i of [...px, ...more]) { const x = i % w, y = (i - x) / w; if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
   const ox = Math.max(0, x0 - 2), oy = Math.max(0, y0 - 2), cw = Math.min(w - 1, x1 + 2) - ox + 1, ch = Math.min(h - 1, y1 + 2) - oy + 1;
@@ -352,7 +352,7 @@ function columnNets(px, more, w, h, own, res, toMm, dotted, serif = 0, apex = 0)
     }
     return false;
   };
-  if (!dotted) { es = skeletonEdges(pm, stroke, { spur: 1, stubs: serif, forks: true }).filter((e) => e[2].length > 1 && (e[0] !== e[1] || loopLen(e[2]) >= 2 * stroke || rings(e[2])));
+  if (!dotted) { es = skeletonEdges(pm, stroke, { spur: 1, stubs: serif, forks: true, knots: knots * stroke }).filter((e) => e[2].length > 1 && (e[0] !== e[1] || loopLen(e[2]) >= 2 * stroke || rings(e[2])));
     // (a short dead end is a serif's arm when it lies square to one stroke at its node and straight on from another,
     // or from its own twin: an I's serif either side of its stem, an E's past its top arm. A V's or an A's point leaves
     // a dead end too, straight on from both legs and square to neither: dropped, or the point is a joint of three)
@@ -364,7 +364,8 @@ function columnNets(px, more, w, h, own, res, toMm, dotted, serif = 0, apex = 0)
         const k = deg.get(e[0]) === 1 ? e[1] : deg.get(e[1]) === 1 ? e[0] : null; if (k === null || deg.get(k) < 3) return true;
         const u = dirAt(e, k); let on = false, square = false;
         for (const o of es) if (o !== e && (o[0] === k || o[1] === k)) { const v = dirAt(o, k), d = u[0] * v[0] + u[1] * v[1]; if (d < -0.8) on = true; if (Math.abs(d) < 0.5) square = true; }
-        return on && square;
+        // (or a crossing's arm, straight on through a joint of four: a fat X's shorter arms, cut by thinning under a stroke)
+        return on && (square || deg.get(k) >= 4);
       });
     }
     lineEnds(es, pm, stroke); }
@@ -679,7 +680,17 @@ function netStitches(net, start, sat) {
     const c = cutShort ? { ...c0, L: c0.L - t0 - t1, a: (s) => c0.a(s + t0), b: (s) => c0.b(s + t0), k: (s) => c0.k(s + t0) } : c0;
     if (t0) out.push(...run(span(p0, 0, t0), 1.2));
     if (kind === "run") {
-      if (c.mid >= sat.zigzagFrom) out.push(p[0], ...keep(satin(p, c.W, 2.5, 0, false, false, (t) => Math.max(0.05, c.a(t * c.L) + c.b(t * c.L) - 0.8))), p[p.length - 1]);
+      if (c.mid >= sat.zigzagFrom) {
+        // (from COLUMNS.edges mm across, an edge run 0.4 mm inside each side first, out along one and back along the
+        // other, then the zigzag out: sold designs hold a wide column's edges so, and the owner's sewn letters showed
+        // their satin's sides pulled in and the fabric between the stitches. Narrower, the zigzag alone)
+        if (COLUMNS.edges && c.mid >= COLUMNS.edges) {
+          const q = resample(p, 0.5), sq = arclen(q), nq = normals(q);
+          const side = (sg) => q.map((pt, i) => { const r = Math.max(0.1, (sg > 0 ? c.a(sq[i]) : c.b(sq[i])) - 0.4); return [pt[0] + nq[i][0] * sg * r, pt[1] + nq[i][1] * sg * r]; });
+          out.push(...keep(run(side(1), 2.0)), ...keep(run(side(-1).reverse(), 2.0)));
+        }
+        out.push(p[0], ...keep(satin(p, c.W, 2.5, 0, false, false, (t) => Math.max(0.05, c.a(t * c.L) + c.b(t * c.L) - 0.8))), p[p.length - 1]);
+      }
       else out.push(...run(p, 1.2));
     } else out.push(...keep(satin(p, c.W, sat.gap, COLUMNS.pull + sat.pull, false, true, null, (s) => [c.a(s), c.b(s), c.k(s)], { mitre: true })));
     if (t1) out.push(...run(span(p0, c0.L - t1, c0.L), 1.2));
@@ -1019,6 +1030,8 @@ function build(img, analysis, opts) {
           // (cut at its sharp corners where that covers COLUMNS.gain more, as larger letters: a 6 mm N's corners and a
           // V's and a W's points were left bare, 9-12 % of the letter)
           if (nets.length && COLUMNS.apex && nets.cover < COLUMNS.whole) { const alt = columnNets(q.px, [], w, h, own, res, toMm, false, 0, COLUMNS.apex); if (alt.length && alt.cover >= nets.cover + COLUMNS.gain) nets = alt; }
+          // (and with its serifs kept as bars, as larger letters: a 6 mm slab face's feet were bare, 18 letters of 36)
+          if (nets.length && COLUMNS.serif && nets.cover < COLUMNS.whole) { const alt = columnNets(q.px, [], w, h, own, res, toMm, false, COLUMNS.serif, COLUMNS.apex); if (alt.length && alt.cover >= nets.cover + COLUMNS.gain) nets = alt; }
           if (nets.length) { cols.push({ px: q.px, c, whole, nets, meant: true, text: true }); for (const i of q.px) { colPx[i] = 1; cl[i] = 0; mask.data[i] = 0; thin.data[i] = 0; } }
           continue;
         }
@@ -1043,10 +1056,11 @@ function build(img, analysis, opts) {
             front = next;
           }
         }
+        const letter = stroke && inWords(q.px, col.id);
         let nets = columnNets(q.px, more, w, h, own, res, toMm, !stroke);
         // (and only when its columns cover the piece: thinning prunes a stroke shorter than it is wide as a spur, and a
         // slab F's middle arm was left bare)
-        const letter = stroke && inWords(q.px, col.id), fine2 = (n) => n.length && n.cover >= COLUMNS.cover && (!stroke || plain(n, letter));
+        const fine2 = (n) => n.length && n.cover >= COLUMNS.cover && (!stroke || plain(n, letter));
         // (a piece its strokes don't cover is tried cut at its sharp corners, COLUMNS.apex: an N, an M, a V. Only then:
         // cut everywhere, a cat's thin eye that sewed well was cut at its curl and sewn askew, look 82.8 -> 80.9)
         let cutAt = 0;
@@ -1062,6 +1076,14 @@ function build(img, analysis, opts) {
           // that "covered more" sewn askew, and a cat's eye came out a smear)
           // (a letter's may as well, by COLUMNS.gain: an Impact L's foot, shorter than its stem is wide, was left bare)
           if (fine2(alt) && (count(alt) > count(nets) || letter) && (!fine2(nets) || alt.cover >= nets.cover + COLUMNS.gain)) nets = alt; }
+        // (a letter is tried once more with its joints a short bridge apart made one, COLUMNS.knot strokes, and taken when
+        // that leaves fewer joints and covers as much: where a fat X's strokes cross, thinning leaves two joints and a
+        // bridge, and the X sewed as two bent strokes and a knot. Always so, an R's and an N's joints were bent)
+        if (letter && COLUMNS.knot && fine2(nets)) {
+          const joints = (n) => { const d = new Map(); for (const x of n) for (const e of x.edges) for (const k of [e.a, e.b]) d.set(k, (d.get(k) || 0) + 1); return [...d.values()].filter((v) => v >= 3).length; };
+          const alt = columnNets(q.px, more, w, h, own, res, toMm, false, COLUMNS.serif, cutAt, COLUMNS.knot);
+          if (fine2(alt) && joints(alt) < joints(nets) && alt.cover >= nets.cover) nets = alt;
+        }
         if (!fine2(nets)) continue;
         cols.push({ px: q.px, c, whole, nets, meant: dot(c) || (mark(c) && size[c] < 2 * dotPx) });
         for (const i of q.px) { colPx[i] = 1; cl[i] = 0; mask.data[i] = 0; thin.data[i] = 0; }

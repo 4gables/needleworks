@@ -115,7 +115,8 @@ export function artPicture(img, full) {
 //          a stroke at most 0.45 of its height, 12-92 % of its box inked (Impact's H is 91 %: a blob's stroke is its
 //          height, so the stroke rule keeps them out); neighbours overlapping half the smaller
 //          height, under 1.8 times taller, apart by under 0.8 of the taller; not all one size, as dots in a row are;
-//          strokes within 30 % of each other's width; seven in ten on one baseline).
+//          strokes within 30 % of each other's width; seven in ten on one baseline, or all sharing a band 0.45 of the
+//          height: oldstyle figures).
 //          `mm`: the row's middle letter height, the smallest row's said.
 // Each: { n, spots, need } (need: how many times bigger the Size must be for three in four of them to pass).
 export function artShapes(a, res, crop = [0, 0, 1, 1], skip = []) {
@@ -198,7 +199,9 @@ export function artShapes(a, res, crop = [0, 0, 1, 1], skip = []) {
     // (one pen: a font's strokes are much of a width, a bunch of flowers' are not)
     if (spread(g.map((p) => widthMm(p.d))) > 0.3) continue;
     const foot = med(g.map((p) => p.y1));
-    if (g.filter((p) => Math.abs(p.y1 - foot) / res <= 0.15 * H).length < 0.7 * g.length) continue;
+    // (or all share a band 0.45 of their height, from the line to the x-height: oldstyle figures, 3 4 5 7 9 hanging
+    // below the line and 6 8 standing on it, were no row and every one a fill)
+    if (g.filter((p) => Math.abs(p.y1 - foot) / res <= 0.15 * H).length < 0.7 * g.length && (Math.min(...g.map((p) => p.y1)) - Math.max(...g.map((p) => p.y0)) + 1) / res < 0.45 * H) continue;
     const pen = med(g.map((p) => widthMm(p.d))), row = { mm: H, n: g.length, col: g[0].col, pen: med(g.map((p) => widthMm(p.pen))), box: [x0, Math.min(...g.map((p) => p.y0)), x1, Math.max(...g.map((p) => p.y1))] };
     // (letters joined to each other, a word's dot or comma: what lies in the line beside them is lettering too)
     for (let more = true; more;) {
