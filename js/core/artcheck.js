@@ -112,7 +112,8 @@ export function artPicture(img, full) {
 //   thin:  lines narrower than ART.line along 3 mm or more of their length (ridges of each colour's own distance to
 //          its edge, so an outline joined to a filled shape counts too), not in lettering.
 //   text:  rows of three or more letter-like pieces of one colour (each 0.8-40 mm tall, at most 1.8 times as wide (a bold serif W is 1.67),
-//          a stroke at most 0.45 of its height, 12-75 % of its box inked; neighbours overlapping half the smaller
+//          a stroke at most 0.45 of its height, 12-92 % of its box inked (Impact's H is 91 %: a blob's stroke is its
+//          height, so the stroke rule keeps them out); neighbours overlapping half the smaller
 //          height, under 1.8 times taller, apart by under 0.8 of the taller; not all one size, as dots in a row are;
 //          strokes within 30 % of each other's width; seven in ten on one baseline).
 //          `mm`: the row's middle letter height, the smallest row's said.
@@ -160,9 +161,20 @@ export function artShapes(a, res, crop = [0, 0, 1, 1], skip = []) {
       }
     }
   }
+  // (a piece is letter-like by its pen, the middle of its centre line's widths, the ridge of D: by its widest point an
+  // Impact V's flat foot, 0.46 of its height, was no letter and broke the row in two. The row's own tests keep the
+  // widest point: a serif face's pens are its thick and its hairline strokes in any mix, and its rows were lost)
+  const tops = P.map(() => []);
+  for (let i = 0; i < n; i++) {
+    if (!cl[i]) continue;
+    const x = i % w; let top = true;
+    for (let dy = -1; dy <= 1 && top; dy++) for (let dx = -1; dx <= 1; dx++) { const X = x + dx, j = i + dy * w + dx; if ((dx || dy) && X >= 0 && X < w && j >= 0 && j < n && cl[j] === cl[i] && D[j] > D[i]) { top = false; break; } }
+    if (top) tops[cl[i] - 1].push(D[i]);
+  }
+  for (const p of P) { const v = tops[p.id - 1].sort((a, b) => a - b); p.pen = v.length ? v[v.length >> 1] : p.d; }
   const mm2 = (p) => p.area / (res * res), wd = (p) => (p.x1 - p.x0 + 1) / res, ht = (p) => (p.y1 - p.y0 + 1) / res;
   // lettering
-  const letter = (p) => { const H = ht(p), W = wd(p), fill = p.area / ((p.x1 - p.x0 + 1) * (p.y1 - p.y0 + 1)); return H >= 0.8 && H <= 40 && W <= 1.8 * H && fill >= 0.12 && fill <= 0.75 && widthMm(p.d) <= 0.45 * H; };
+  const letter = (p) => { const H = ht(p), W = wd(p), fill = p.area / ((p.x1 - p.x0 + 1) * (p.y1 - p.y0 + 1)); return H >= 0.8 && H <= 40 && W <= 1.8 * H && fill >= 0.12 && fill <= 0.92 && widthMm(p.pen) <= 0.45 * H; };
   const L = P.filter(letter).sort((p, q) => p.x0 - q.x0), up = new Map(L.map((p) => [p.id, p.id]));
   const find = (k) => { while (up.get(k) !== k) { up.set(k, up.get(up.get(k))); k = up.get(k); } return k; };
   for (let i = 0; i < L.length; i++) for (let j = i + 1; j < L.length; j++) {
@@ -187,7 +199,7 @@ export function artShapes(a, res, crop = [0, 0, 1, 1], skip = []) {
     if (spread(g.map((p) => widthMm(p.d))) > 0.3) continue;
     const foot = med(g.map((p) => p.y1));
     if (g.filter((p) => Math.abs(p.y1 - foot) / res <= 0.15 * H).length < 0.7 * g.length) continue;
-    const pen = med(g.map((p) => widthMm(p.d))), row = { mm: H, n: g.length, col: g[0].col, box: [x0, Math.min(...g.map((p) => p.y0)), x1, Math.max(...g.map((p) => p.y1))] };
+    const pen = med(g.map((p) => widthMm(p.d))), row = { mm: H, n: g.length, col: g[0].col, pen: med(g.map((p) => widthMm(p.pen))), box: [x0, Math.min(...g.map((p) => p.y0)), x1, Math.max(...g.map((p) => p.y1))] };
     // (letters joined to each other, a word's dot or comma: what lies in the line beside them is lettering too)
     for (let more = true; more;) {
       more = false;
@@ -241,7 +253,7 @@ export function artShapes(a, res, crop = [0, 0, 1, 1], skip = []) {
     // (need: the thinnest quarter of them reaching ART.line; a line's width is the mean of its ridge)
     thin: { n: thin.length, spots: thin.slice(0, SPOTS).map((t) => spot(rx0[t.c], ry0[t.c], rx1[t.c], ry1[t.c])), need: need(thinW, ART.line) },
     // (the rows themselves, working px: digitize.js sews small lettering by them, `smallText`)
-    rows: text.map((t) => ({ mm: t.mm, n: t.n, col: t.col, box: t.box.slice() })),
+    rows: text.map((t) => ({ mm: t.mm, n: t.n, col: t.col, pen: t.pen, box: t.box.slice() })),
     text: { n: text.length, mm: text.length ? +text[0].mm.toFixed(1) : 0, small: text.filter((t) => t.mm < ART.text).length,
       spots: text.filter((t) => t.mm < ART.text).slice(0, SPOTS).map((t) => spot(...t.box)), need: text.length && text[0].mm < ART.text ? +(ART.text / text[0].mm).toFixed(3) : 0 },
   };
